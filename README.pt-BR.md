@@ -219,6 +219,32 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` agora é single-flight, de modo que varreduras sobrepostas em uma frota grande não disparam mais o mesmo gatilho várias vezes para a mesma atualização.** Uma varredura que nunca termina agora compete contra um prazo, para que não possa travar os próximos ciclos do cron. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Um gatilho `once=true` não dispara mais horas depois para uma atualização de tag que já havia anunciado, quando um registro limita a taxa da consulta de digest**, porque a chave do histórico de notificações agora permanece estável diante dessa falha, em vez de alternar entre dois formatos de hash. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Os banners de descontinuação da UI para as variáveis de ambiente `DD_TRIGGER_*` removidas e a substituição do healthcheck baseada em curl agora dizem que essas coisas já foram removidas**, em vez de apontar para um prazo de remoção que já passou. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Uma auditoria de documentação corrigiu o README, o DEPRECATIONS.md e a documentação de configuração/gatilhos/registros/API/monitoramento/agentes em relação ao código real desta árvore**, e os trechos de Get Started do site de marketing agora implantam uma instância que realmente fica saudável. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
+<summary><strong>Destaques da v1.7.0-rc.8</strong></summary>
+
+- **Os caminhos de atualização nativa do Docker e do Compose agora fixam um digest imutável da imagem baixada antes da verificação de assinatura, da varredura e da substituição**, fechando a janela de retag de registro em ambos os caminhos. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **A autoatualização não reverte mais uma substituição verificada por saúde quando a limpeza do contêiner antigo falha**, e o manipulador de snapshot do watcher para de tratar uma lista de contêineres vazia como uma remoção em massa. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` agora se aplica a contêineres reportados por agentes de transporte Docker do controlador**, para que contêineres reportados pelo Portwing respeitem a mesma substituição de registro que os observados localmente. ([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` não cria mais um agente fantasma chamado `allow`**, e um contêiner marcado como `unknown` antes de seu registro ser configurado agora se recupera na atualização. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))
+- **Os dumps de depuração agora redigem URLs de serviço do Apprise, IDs de usuário do Rocket.Chat e IDs de chat do Telegram**, fechando a última lacuna de credenciais específica de provedor nesse endpoint. ([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **Chegam quatro correções da varredura de QA da rc.6**: um aviso do Trivy corrigido, uma página 404 real, contagens de busca de auditoria precisas e um painel de servidores que respeita seu próprio botão Atualizar. ([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.7</strong></summary>
 
 - **A paginação dos registros agora segue o cursor de cada registro**, evitando pular páginas ou parar cedo. ([#927](https://github.com/CodesWhat/drydock/pull/927))

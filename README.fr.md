@@ -219,6 +219,32 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` est désormais à exécution unique (single-flight), si bien que des scans qui se chevauchent sur une grande flotte ne déclenchent plus le même déclencheur plusieurs fois pour une seule mise à jour.** Un scan qui ne se termine jamais est désormais confronté à une échéance pour qu'il ne puisse plus bloquer les cycles cron suivants. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Un déclencheur `once=true` ne se redéclenche plus des heures plus tard pour une mise à jour de tag déjà annoncée, lorsqu'un registre limite le débit de la recherche de digest**, car la clé de l'historique des notifications reste désormais stable face à cet échec au lieu d'alterner entre deux formats de hash. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Les bannières de dépréciation de l'interface pour les variables d'environnement `DD_TRIGGER_*` supprimées et la surcharge du healthcheck basée sur curl indiquent désormais que ces éléments ont déjà disparu**, au lieu de pointer vers une échéance de suppression déjà passée. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Un audit de la documentation a corrigé le README, DEPRECATIONS.md et la documentation de configuration/déclencheurs/registres/API/supervision/agents par rapport au code réel de cet arbre**, et les extraits Get Started du site marketing déploient désormais une instance qui devient réellement saine. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
+<summary><strong>Points forts de la v1.7.0-rc.8</strong></summary>
+
+- **Les chemins de mise à jour Docker natif et Compose épinglent désormais un digest immuable de l'image récupérée avant la vérification de signature, l'analyse et le remplacement**, fermant la fenêtre de retag de registre sur les deux chemins. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **Une auto-mise à jour n'annule plus un remplacement vérifié par le contrôle de santé lorsque le nettoyage de l'ancien conteneur échoue**, et le gestionnaire d'instantané du watcher ne traite plus une liste de conteneurs vide comme une suppression massive. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` s'applique désormais aux conteneurs signalés par les agents à transport Docker du contrôleur**, afin que les conteneurs signalés par Portwing respectent le même contournement de registre que ceux surveillés localement. ([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` ne crée plus d'agent fantôme nommé `allow`**, et un conteneur marqué `unknown` avant la configuration de son registre se rétablit désormais à l'actualisation. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))
+- **Les vidages de débogage occultent désormais les URL de service Apprise, les ID utilisateur Rocket.Chat et les ID de discussion Telegram**, comblant la dernière lacune d'identifiants propre à un fournisseur dans ce point de terminaison. ([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **Quatre correctifs du balayage QA de la rc.6 arrivent** : un avis Trivy corrigé, une vraie page 404, des comptes de recherche d'audit exacts et un panneau de serveurs qui respecte son propre bouton Actualiser. ([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Points forts de la v1.7.0-rc.7</strong></summary>
 
 - **La pagination des registres suit désormais le curseur propre à chaque registre**, sans sauter de pages ni s’arrêter trop tôt. ([#927](https://github.com/CodesWhat/drydock/pull/927))
