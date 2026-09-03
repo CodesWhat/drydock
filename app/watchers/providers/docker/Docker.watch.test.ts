@@ -249,6 +249,125 @@ describe('Docker Watcher', () => {
       expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('Cron finished'));
     });
 
+    test('names the scan trigger in the started log line via the reason field', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+      const mockLog = createMockLog(['info']);
+      docker.log = mockLog;
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      await docker.watchFromCron({ reason: 'docker-event' });
+
+      expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('reason: docker-event'));
+    });
+
+    // Single-flight coalescing (#972): a full scan on a large fleet can take
+    // minutes, and the cron schedule, the docker-events debounce, the
+    // discovery-settle timer and the startup timer can all ask for a scan
+    // while one is already running. Without a guard each overlapping call
+    // ran its own watch(), and a tag first seen mid-burst passed the
+    // once=true history check in every one of them before any of them
+    // recorded it, firing the same trigger once per overlapping scan.
+    test('coalesces overlapping watchFromCron calls into a single follow-up scan', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+      const mockLog = createMockLog(['info']);
+      docker.log = mockLog;
+
+      let resolveFirstWatch: (value: unknown[]) => void = () => undefined;
+      const firstWatch = new Promise<unknown[]>((resolve) => {
+        resolveFirstWatch = resolve;
+      });
+      const watchMock = vi
+        .fn()
+        .mockImplementationOnce(() => firstWatch)
+        .mockResolvedValue([]);
+      docker.watch = watchMock;
+
+      // Three overlapping requests while the first watch() is still pending.
+      const call1 = docker.watchFromCron({ reason: 'schedule' });
+      const call2 = docker.watchFromCron({ reason: 'docker-event' });
+      const call3 = docker.watchFromCron({ reason: 'discovery-settle' });
+
+      // Let the coalesced calls register synchronously before resolving.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchMock).toHaveBeenCalledTimes(1);
+      expect(mockLog.info).toHaveBeenCalledWith(
+        expect.stringContaining('Cron scan requested (docker-event) while one is already running'),
+      );
+      expect(mockLog.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Cron scan requested (discovery-settle) while one is already running',
+        ),
+      );
+
+      const firstReports = [{ container: { updateAvailable: false, error: undefined } }];
+      resolveFirstWatch(firstReports);
+
+      // All three coalesced callers receive the SAME running scan's result.
+      const [result1, result2, result3] = await Promise.all([call1, call2, call3]);
+      expect(result1).toBe(firstReports);
+      expect(result2).toBe(firstReports);
+      expect(result3).toBe(firstReports);
+
+      // Exactly one follow-up scan runs after the running scan finishes,
+      // even though three callers asked for a rescan.
+      await vi.waitFor(() => expect(watchMock).toHaveBeenCalledTimes(2));
+    });
+
+    test('coalesces a request silently when logging is unavailable', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+      docker.log = {}; // no info() — must not throw while coalescing
+
+      let resolveFirstWatch: (value: unknown[]) => void = () => undefined;
+      const firstWatch = new Promise<unknown[]>((resolve) => {
+        resolveFirstWatch = resolve;
+      });
+      docker.watch = vi
+        .fn()
+        .mockImplementationOnce(() => firstWatch)
+        .mockResolvedValue([]);
+
+      const call1 = docker.watchFromCron();
+      const call2 = docker.watchFromCron();
+
+      resolveFirstWatch([]);
+      await expect(Promise.all([call1, call2])).resolves.toBeDefined();
+    });
+
+    test('swallows a rejection from the fire-and-forget follow-up scan', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+      docker.log = createMockLog(['info']);
+
+      let resolveFirstWatch: (value: unknown[]) => void = () => undefined;
+      const firstWatch = new Promise<unknown[]>((resolve) => {
+        resolveFirstWatch = resolve;
+      });
+      const watchMock = vi
+        .fn()
+        .mockImplementationOnce(() => firstWatch)
+        .mockImplementationOnce(() => Promise.reject(new Error('follow-up watch failed')));
+      docker.watch = watchMock;
+
+      // call2 requests a rescan; the follow-up it triggers after call1's
+      // scan finishes is fire-and-forget and must not surface as an
+      // unhandled rejection when its own watch() call fails.
+      const call1 = docker.watchFromCron();
+      const call2 = docker.watchFromCron();
+
+      resolveFirstWatch([]);
+      await Promise.all([call1, call2]);
+
+      await vi.waitFor(() => expect(watchMock).toHaveBeenCalledTimes(2));
+    });
+
     test('should report container statistics', async () => {
       await docker.register('watcher', 'docker', 'test', {
         cron: '0 * * * *',
@@ -1084,6 +1203,7 @@ describe('Docker Watcher', () => {
 
       expect(docker.watchFromCron).toHaveBeenCalledWith({
         ignoreMaintenanceWindow: true,
+        reason: 'maintenance-window',
       });
     });
 

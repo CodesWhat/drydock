@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`watchFromCron()` had no re-entrancy guard, so overlapping scans on a large fleet fired the same trigger multiple times for one update.** A full scan can take minutes, and the cron schedule, the docker-events debounce, the discovery-settle timer, and the startup timer could all start one while the previous scan was still running. Each overlapping call ran its own `watch()`, and a tag first seen mid-burst passed the `once=true` history check in every one of them before any of them recorded it, so a trigger like Telegram fired once per overlapping scan for the same update. `watchFromCron()` is now single-flight: a request while a scan is running does not start a second one, it records that a rescan was requested, and exactly one follow-up scan runs once the current scan finishes, so a docker event that arrives mid-scan is not lost. The "Cron started" log line now also names what triggered the scan (schedule, docker-event, discovery-settle, startup, or maintenance-window). Reported by [@tarzan77cz](https://github.com/tarzan77cz) in [#972](https://github.com/CodesWhat/drydock/issues/972).
+
 ## [1.7.0-rc.8] — 2026-09-03
 
 ### Fixed

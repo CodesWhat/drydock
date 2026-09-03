@@ -23,7 +23,6 @@ import log from '../../../log/index.js';
 import { type Container, type ContainerReport, fullName } from '../../../model/container.js';
 import {
   getLoggerInitFailureCounter,
-  getMaintenanceSkipCounter,
   getWatchContainerGauge,
 } from '../../../prometheus/watcher.js';
 import type { ComponentConfiguration } from '../../../registry/Component.js';
@@ -60,6 +59,11 @@ import {
   endDigestCachePollCycleForRegistries,
   startDigestCachePollCycleForRegistries,
 } from './digest-cache-lifecycle.js';
+import {
+  type CronWatchOptions,
+  type CronWatchOrchestrationWatcher,
+  watchFromCronOrchestration,
+} from './docker-cron-watch.js';
 import {
   invalidateDockerEventStreamOrchestration,
   listenDockerEventsOrchestration,
@@ -315,7 +319,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public declare dockerApi: Dockerode;
   public watchCron?: ScheduledTask;
   public watchCronTimeout?: ReturnType<typeof setTimeout>;
-  public watchCronDebounced?: () => void;
+  public watchCronDebounced?: (reason?: string) => void;
   public listenDockerEventsTimeout?: ReturnType<typeof setTimeout>;
   public dockerEventsReconnectTimeout?: ReturnType<typeof setTimeout>;
   public dockerEventsReconnectDelayMs: number = DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS;
@@ -332,6 +336,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
+  // Single-flight state for watchFromCron, mutated through the
+  // asCronWatchWatcher() cast by docker-cron-watch.ts: the in-flight scan's
+  // promise, plus whether a caller asked for a rescan while it was running.
+  // See watchFromCronOrchestration() for the coalescing contract.
+  public cronWatchInFlight?: Promise<ContainerReport[]>;
+  public cronWatchRescanRequested: boolean = false;
+  public cronWatchRescanReason?: string;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
@@ -596,6 +607,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }
       await this.watchFromCron({
         ignoreMaintenanceWindow: true,
+        reason: 'maintenance-window',
       });
     } catch (e: unknown) {
       this.ensureLogger();
@@ -615,9 +627,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     await warnIfCurlHealthcheckOverride(this.log);
     await this.initWatcher();
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
-    this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
-      maxRandomDelay: this.configuration.jitter,
-    });
+    this.watchCron = cron.schedule(
+      this.configuration.cron,
+      () => this.watchFromCron({ reason: 'schedule' }),
+      {
+        maxRandomDelay: this.configuration.jitter,
+      },
+    );
 
     this.unregisterContainerUpdateApplied = event.registerContainerUpdateApplied(
       async (containerName) => {
@@ -627,12 +643,18 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
 
     // Watch at startup after all components have been registered.
-    this.watchCronTimeout = setTimeout(this.watchFromCron.bind(this), START_WATCHER_DELAY_MS);
+    this.watchCronTimeout = setTimeout(
+      () => this.watchFromCron({ reason: 'startup' }),
+      START_WATCHER_DELAY_MS,
+    );
 
     // listen to docker events
     if (this.configuration.watchevents) {
       this.isDockerEventsListenerActive = true;
-      this.watchCronDebounced = debounce(this.watchFromCron.bind(this), DEBOUNCED_WATCH_CRON_MS);
+      this.watchCronDebounced = debounce(
+        (reason: string = 'docker-event') => void this.watchFromCron({ reason }),
+        DEBOUNCED_WATCH_CRON_MS,
+      );
       this.listenDockerEventsTimeout = setTimeout(
         this.listenDockerEvents.bind(this),
         START_WATCHER_DELAY_MS,
@@ -844,8 +866,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.pendingDiscoverySettleTimeout = setTimeout(() => {
       delete this.pendingDiscoverySettleTimeout;
       // watchCronDebounced only exists when watchevents is on — else watch directly.
-      const watch = this.watchCronDebounced ?? (() => this.watchFromCron().catch(() => undefined));
-      watch();
+      const watch =
+        this.watchCronDebounced ??
+        ((reason?: string) => {
+          void this.watchFromCron({ reason }).catch(() => undefined);
+        });
+      watch('discovery-settle');
     }, delayMs);
   }
 
@@ -1045,62 +1071,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   }
 
   /**
-   * Watch containers (called by cron scheduled tasks).
+   * Watch containers (called by cron scheduled tasks). Single-flight: see
+   * watchFromCronOrchestration() in docker-cron-watch.ts for the coalescing
+   * contract (#972).
    * @returns {Promise<*[]>}
    */
-  async watchFromCron(options: { ignoreMaintenanceWindow?: boolean } = {}) {
-    const { ignoreMaintenanceWindow = false } = options;
-    this.ensureLogger();
-    if (!this.log || typeof this.log.info !== 'function') {
-      return [];
-    }
+  watchFromCron(options: CronWatchOptions = {}): Promise<ContainerReport[]> {
+    return watchFromCronOrchestration(this.asCronWatchWatcher(), options);
+  }
 
-    // Check maintenance window before proceeding
-    if (
-      !ignoreMaintenanceWindow &&
-      this.configuration.maintenancewindow &&
-      !this.isMaintenanceWindowOpen()
-    ) {
-      this.queueMaintenanceWindowWatch();
-      this.log.info('Skipping update check - outside maintenance window');
-      const counter = getMaintenanceSkipCounter();
-      if (counter) {
-        counter.labels({ type: this.type, name: this.name }).inc();
-      }
-      return [];
-    }
-    this.clearMaintenanceWindowQueue();
-
-    this.log.info(`Cron started (${this.configuration.cron})`);
-
-    // Get container reports
-    this.isCronWatchInProgress = true;
-    let containerReports: ContainerReport[] = [];
-    try {
-      containerReports = await this.watch();
-    } finally {
-      this.isCronWatchInProgress = false;
-    }
-
-    // Count container reports
-    const containerReportsCount = containerReports.length;
-
-    // Count container available updates
-    const containerUpdatesCount = containerReports.filter(
-      (containerReport) => containerReport.container.updateAvailable,
-    ).length;
-
-    // Count container errors
-    const containerErrorsCount = containerReports.filter(
-      (containerReport) => containerReport.container.error !== undefined,
-    ).length;
-
-    const stats = `${containerReportsCount} containers watched, ${containerErrorsCount} errors, ${containerUpdatesCount} available updates`;
-    this.ensureLogger();
-    if (this.log && typeof this.log.info === 'function') {
-      this.log.info(`Cron finished (${stats})`);
-    }
-    return containerReports;
+  private asCronWatchWatcher(): CronWatchOrchestrationWatcher {
+    return this as unknown as CronWatchOrchestrationWatcher;
   }
 
   /**
