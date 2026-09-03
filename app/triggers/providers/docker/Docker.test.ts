@@ -21,6 +21,8 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   autoremovetimeout: 10000,
+  pulltimeout: 600000,
+  helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:
     '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
@@ -154,73 +156,75 @@ vi.mock('./compose-file-sync.js', () => ({
 
 vi.mock('../../../registry', () => ({
   getState() {
-    return {
-      watcher: {
-        'docker.test': {
-          getId: () => 'docker.test',
-          watch: () => Promise.resolve(),
-          dockerApi: {
-            getContainer: (id) => {
-              if (id === '123456789') {
-                return Promise.resolve({
-                  inspect: () =>
-                    Promise.resolve({
-                      Name: '/container-name',
-                      Id: '123456798',
-                      State: {
-                        Running: true,
+    const dockerWatcher = {
+      getId: () => 'docker.test',
+      watch: () => Promise.resolve(),
+      dockerApi: {
+        getContainer: (id) => {
+          if (id === '123456789') {
+            return Promise.resolve({
+              inspect: () =>
+                Promise.resolve({
+                  Name: '/container-name',
+                  Id: '123456798',
+                  State: {
+                    Running: true,
+                  },
+                  NetworkSettings: {
+                    Networks: {
+                      test: {
+                        Aliases: ['9708fc7b44f2', 'test'],
                       },
-                      NetworkSettings: {
-                        Networks: {
-                          test: {
-                            Aliases: ['9708fc7b44f2', 'test'],
-                          },
-                        },
-                      },
-                    }),
-                  stop: () => Promise.resolve(),
-                  remove: () => Promise.resolve(),
-                  start: () => Promise.resolve(),
-                  rename: () => Promise.resolve(),
-                });
-              }
-              return Promise.reject(new Error('Error when getting container'));
-            },
-            createContainer: (container) => {
-              if (container.name === 'container-name') {
-                return Promise.resolve({
-                  start: () => Promise.resolve(),
-                  inspect: () =>
-                    Promise.resolve({
-                      Id: 'new-container-id',
-                      State: { Health: { Status: 'healthy' } },
-                    }),
-                  stop: () => Promise.resolve(),
-                  remove: () => Promise.resolve(),
-                });
-              }
-              return Promise.reject(new Error('Error when creating container'));
-            },
-            pull: (image) => {
-              if (image === 'test/test:1.2.3' || image === 'my-registry/test/test:4.5.6') {
+                    },
+                  },
+                }),
+              stop: () => Promise.resolve(),
+              remove: () => Promise.resolve(),
+              start: () => Promise.resolve(),
+              rename: () => Promise.resolve(),
+            });
+          }
+          return Promise.reject(new Error('Error when getting container'));
+        },
+        createContainer: (container) => {
+          if (container.name === 'container-name') {
+            return Promise.resolve({
+              start: () => Promise.resolve(),
+              inspect: () =>
+                Promise.resolve({
+                  Id: 'new-container-id',
+                  State: { Health: { Status: 'healthy' } },
+                }),
+              stop: () => Promise.resolve(),
+              remove: () => Promise.resolve(),
+            });
+          }
+          return Promise.reject(new Error('Error when creating container'));
+        },
+        pull: (image) => {
+          if (image === 'test/test:1.2.3' || image === 'my-registry/test/test:4.5.6') {
+            return Promise.resolve();
+          }
+          return Promise.reject(new Error('Error when pulling image'));
+        },
+        getImage: (image) =>
+          Promise.resolve({
+            remove: () => {
+              if (image === 'test/test:1.2.3') {
                 return Promise.resolve();
               }
-              return Promise.reject(new Error('Error when pulling image'));
+              return Promise.reject(new Error('Error when removing image'));
             },
-            getImage: (image) =>
-              Promise.resolve({
-                remove: () => {
-                  if (image === 'test/test:1.2.3') {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('Error when removing image'));
-                },
-              }),
-            modem: {
-              followProgress: (pullStream, res) => res(),
-            },
-          },
+          }),
+        modem: {
+          followProgress: (pullStream, res) => res(),
         },
+      },
+    };
+    return {
+      watcher: {
+        'docker.test': dockerWatcher,
+        'docker.local': dockerWatcher,
       },
       registry: {
         hub: {
@@ -411,6 +415,10 @@ beforeEach(async () => {
   vi.resetAllMocks();
   docker.configuration = configurationValid;
   docker.log = log;
+  docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+    id: '123456789',
+    name: 'container-name',
+  });
   mockGetServerConfiguration.mockReturnValue({ port: 3000 });
   mockGetSecurityConfiguration.mockReturnValue({
     enabled: false,
@@ -2520,15 +2528,15 @@ describe('additional docker trigger coverage', () => {
 
   test('maybeNotifySelfUpdate should notify immediately for drydock image', async () => {
     const logContainer = createMockLog('info');
-
-    await docker.maybeNotifySelfUpdate(
-      {
-        image: {
-          name: 'drydock',
-        },
+    const container = {
+      id: '123456789',
+      image: {
+        name: 'drydock',
       },
-      logContainer,
-    );
+    };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+
+    await docker.maybeNotifySelfUpdate(container, logContainer);
 
     expect(logContainer.info).toHaveBeenCalledWith(
       'Self-update detected — notifying UI before proceeding',
@@ -3375,12 +3383,41 @@ describe('executeContainerUpdate', () => {
 // --- Self-update ---
 
 describe('isSelfUpdate', () => {
-  test('should return true for drydock image', () => {
-    expect(docker.isSelfUpdate({ image: { name: 'drydock' } })).toBe(true);
+  const originalResolveSelfContainerIdentity =
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity;
+
+  beforeEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: 'self-container-id',
+      name: 'drydock',
+    });
   });
 
-  test('should return true for namespaced drydock image', () => {
-    expect(docker.isSelfUpdate({ image: { name: 'codeswhat/drydock' } })).toBe(true);
+  afterEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity =
+      originalResolveSelfContainerIdentity;
+  });
+
+  test('should return true for drydock image', async () => {
+    const container = { id: 'self-container-id', image: { name: 'drydock' } };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    expect(docker.isSelfUpdate(container)).toBe(true);
+  });
+
+  test('should return true for namespaced drydock image', async () => {
+    const container = { id: 'self-container-id', image: { name: 'codeswhat/drydock' } };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    expect(docker.isSelfUpdate(container)).toBe(true);
+  });
+
+  test('should return false for a peer running a drydock image', async () => {
+    const container = {
+      id: 'peer-container-id',
+      name: 'drydock-peer',
+      image: { name: 'codeswhat/drydock' },
+    };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    expect(docker.isSelfUpdate(container)).toBe(false);
   });
 
   test('should return false for non-drydock image', () => {
@@ -3434,9 +3471,12 @@ describe('resolveHelperImage for infrastructure updates', () => {
   });
 
   test('should return undefined for self-update containers', async () => {
-    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+    const container = {
+      id: '123456789',
       image: { name: 'ghcr.io/codeswhat/drydock' },
-    });
+    };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.(container);
     expect(resolved).toBeUndefined();
   });
 
@@ -4283,6 +4323,11 @@ describe('executeSelfUpdate', () => {
     // First call is createContainer for the new drydock container (via spy on docker.createContainer)
     // Second call is dockerApi.createContainer for the helper — make it fail
     context.dockerApi.createContainer.mockRejectedValue(new Error('helper spawn failed'));
+    context.dockerApi.getContainer.mockReturnValue({
+      inspect: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('helper absent'), { statusCode: 404 })),
+    });
 
     await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
       'helper spawn failed',
@@ -4397,6 +4442,51 @@ describe('extracted lifecycle delegation', () => {
       status: 'failed',
       lastError: 'pull failed: connection refused',
     });
+  });
+
+  test('finalizeObservedHelperOperation durably records helper success, rollback, and failure', async () => {
+    mockMarkOperationTerminal
+      .mockReturnValueOnce({ id: 'op-success', status: 'succeeded' })
+      .mockReturnValueOnce({ id: 'op-rollback', status: 'rolled-back' })
+      .mockReturnValueOnce({ id: 'op-failed', status: 'failed' })
+      .mockReturnValueOnce({ id: 'op-failed-without-error', status: 'failed' });
+
+    await docker.finalizeObservedHelperOperation('op-success', 'succeeded');
+    await docker.finalizeObservedHelperOperation(
+      'op-rollback',
+      'rolled-back',
+      'Self-update helper completed rollback',
+    );
+    await docker.finalizeObservedHelperOperation('op-failed', 'failed', 'helper deadline');
+    await docker.finalizeObservedHelperOperation('op-failed-without-error', 'failed');
+
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(1, 'op-success', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(2, 'op-rollback', {
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      lastError: 'Self-update helper completed rollback',
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(3, 'op-failed', {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'helper deadline',
+    });
+  });
+
+  test('finalizeObservedHelperOperation rejects missing or conflicting durable state', async () => {
+    mockMarkOperationTerminal
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({ id: 'op-conflict', status: 'failed' });
+
+    await expect(docker.finalizeObservedHelperOperation('op-missing', 'succeeded')).rejects.toThrow(
+      'Failed to durably finalize observed helper operation op-missing',
+    );
+    await expect(
+      docker.finalizeObservedHelperOperation('op-conflict', 'rolled-back'),
+    ).rejects.toThrow('Failed to durably finalize observed helper operation op-conflict');
   });
 
   test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {
@@ -4675,8 +4765,13 @@ describe('extracted lifecycle delegation', () => {
         },
       });
       const res = createMockResponse();
+      mockMarkOperationTerminal.mockReturnValueOnce({
+        id: 'op-self-1',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-self-1', {
         status: 'succeeded',
@@ -4865,6 +4960,241 @@ describe('extracted lifecycle delegation', () => {
       }
     });
 
+    test('marks operation failed with a rollback-failed phase when compose reports a failed rollback', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(
+        new Error('compose refresh failed after replacement start'),
+        {
+          composeRollbackOutcome: {
+            status: 'rollback-failed',
+            phase: 'rollback-failed',
+            rollbackReason: 'compose_runtime_refresh_failed',
+            lastError: 'restoring the previous compose image failed',
+          },
+        },
+      );
+      const run = vi.fn().mockRejectedValue(composeRollbackError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({
+        id: 'compose-container-id',
+        name: 'web',
+        result: { digest: 'sha256:bad-target' },
+      });
+      (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(container);
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-failed-1',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-failed-1',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-failed-1', {
+          status: 'failed',
+          phase: 'rollback-failed',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'restoring the previous compose image failed',
+        });
+        // A failed rollback leaves the container in an unknown state, so the
+        // rolled-back marker must not be persisted: the update-eligibility gate
+        // reads it to decide the target is known-bad and blocks the retry.
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-rollback-failed-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('persists an empty rollback reason when the compose outcome omits one', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          lastError: 'compose refresh failed after replacement start',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({
+        id: 'compose-container-id',
+        name: 'web',
+        result: { digest: 'sha256:bad-target' },
+      });
+      (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(container);
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-no-reason',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-no-reason',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-no-reason', {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          lastError: 'compose refresh failed after replacement start',
+        });
+        const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(saved.updateRollback.reason).toBe('');
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('drops a blank rollback reason from a rollback-failed terminal patch', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rollback-failed',
+          phase: 'rollback-failed',
+          rollbackReason: '   ',
+          lastError: 'restoring the previous compose image failed',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({ id: 'compose-container-id', name: 'web' });
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-failed-blank',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-failed-blank',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-failed-blank', {
+          status: 'failed',
+          phase: 'rollback-failed',
+          lastError: 'restoring the previous compose image failed',
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('skips rollback-state persistence when the operation carries no container id', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({ id: undefined, name: 'web' });
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-no-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-no-container-id',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        // The outcome carries no lastError, so the terminal patch falls back to
+        // the thrown error's own message.
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-compose-rollback-no-container-id',
+          {
+            status: 'rolled-back',
+            phase: 'rolled-back',
+            rollbackReason: 'compose_runtime_refresh_failed',
+            lastError: 'compose refresh failed',
+          },
+        );
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('tolerates an executor with no rollback-state persistence dependency', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const originalPersistRollbackState = docker.containerUpdateExecutor.persistRollbackState;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: '   ',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      docker.containerUpdateExecutor.persistRollbackState = undefined;
+      const container = createTriggerContainer({ id: 'compose-container-id', name: 'web' });
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-no-persist',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-no-persist',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-no-persist', {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'compose refresh failed',
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      } finally {
+        docker.containerUpdateExecutor.persistRollbackState = originalPersistRollbackState;
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
     test('keeps duplicate-style failure failed when only another agent has a recent success', async () => {
       const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
       const docker404Error = Object.assign(new Error('No such container: web'), {
@@ -4909,6 +5239,77 @@ describe('extracted lifecycle delegation', () => {
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
         mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('ignores a compose rollback outcome with an unrecognized status', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'partially-rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'compose refresh failed after replacement start',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({ id: 'compose-container-id', name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-unknown',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-unknown',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        // An outcome status the mapper doesn't recognize must not be guessed at:
+        // the operation terminalizes through the ordinary failure path instead.
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-unknown', {
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'compose refresh failed',
+        });
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('scopes the duplicate-update lookup by watcher alone for a controller-owned operation', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(docker404Error) };
+      const container = createTriggerContainer({ name: 'web', watcher: 'local' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-404-controller-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+        container: { id: 'c-controller', name: 'web', watcher: 'local' },
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-controller-1' }),
+        ).rejects.toThrow('No such container');
+
+        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+          'web',
+          expect.any(Number),
+          { watcher: 'local' },
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
       }
     });
 
@@ -5620,7 +6021,7 @@ describe('persistRollbackState callback', () => {
 describe('trigger self-update routing', () => {
   test('should route to executeSelfUpdate for drydock image', async () => {
     stubTriggerFlow({ running: true });
-    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
     const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
 
     await docker.trigger(

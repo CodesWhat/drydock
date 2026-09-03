@@ -1,0 +1,93 @@
+---
+title: "Portainer"
+description: "The portainer trigger updates Portainer-managed Docker Compose stacks through the Portainer stack redeploy API."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The `portainer` trigger lets Drydock apply tag updates to Portainer-managed Docker Compose stacks while keeping Portainer as the stack owner. It is a controller-local action: Portainer triggers are not registered in agent mode and cannot update containers discovered through an agent.
+
+Portainer compatibility is intentionally narrow. The container must have non-empty `com.docker.compose.project` and `com.docker.compose.service` labels. Generic Docker containers, containers with only partial Compose labels, digest-only updates, Drydock's own container, and containers marked `dd.update.mode=infrastructure` are rejected by the Portainer trigger. Configure a Docker action alongside Portainer when Drydock itself or infrastructure containers need the normal Docker self-update transition. Drydock pulls and scans the image locally, then tells Portainer to redeploy with image pulling disabled, so the verified local image is used. Portainer disables Drydock's automatic rollback monitor. Its normal lifecycle backup metadata is retained for history, but a Portainer-originated backup is rejected by the inherited Docker stop-remove-recreate rollback path; Docker-originated backups remain manually rollback-able when a Docker action is configured.
+
+The trigger will:
+
+- Resolve the Portainer stack from the container's Compose labels, using `dd.portainer.stack-id` only to disambiguate matching stacks
+- Fetch the current Portainer stack file and stack env
+- Update either a stack env variable or the service image in the stack file
+- Ask Portainer to redeploy the stack using the locally pulled and scanned image
+- Run the normal Drydock update lifecycle gates around that redeploy
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_ACTION_PORTAINER_{trigger_name}_URL` | ✅ | Portainer server URL | HTTPS URL by default; HTTP only with `ALLOWHTTP=true` | |
+| `DD_ACTION_PORTAINER_{trigger_name}_APIKEY` | ✅ | Portainer API key | | |
+| `DD_ACTION_PORTAINER_{trigger_name}_ALLOWHTTP` | ⚪ | Explicitly permit plaintext HTTP for a private or isolated network | `true`, `false` | `false` |
+| `DD_ACTION_PORTAINER_{trigger_name}_UPDATEMODE` | ⚪ | How Drydock mutates the Portainer stack before redeploy | `auto`, `env`, `compose` | `auto` |
+| `DD_ACTION_PORTAINER_{trigger_name}_VERSIONVARLABEL` | ⚪ | Container label that names the Portainer stack env variable to update | Label name | `dd.portainer.version-var` |
+| `DD_ACTION_PORTAINER_{trigger_name}_UPDATEMODELABEL` | ⚪ | Container label that overrides the update mode for one container | Label name | `dd.portainer.update-mode` |
+| `DD_ACTION_PORTAINER_{trigger_name}_PRUNESTACK` | ⚪ | Ask Portainer to prune services that are no longer referenced by the stack | `true`, `false` | `false` |
+| `DD_ACTION_PORTAINER_{trigger_name}_REDEPLOYTIMEOUT` | ⚪ | Maximum time in milliseconds to wait for every running replica to converge after a Portainer redeploy | Positive integer | `300000` |
+| `DD_ACTION_PORTAINER_{trigger_name}_PRUNE` | ⚪ | If the old local Docker image must be pruned after upgrade | `true`, `false` | `false` |
+| `DD_ACTION_PORTAINER_{trigger_name}_DRYRUN` | ⚪ | Validate and preview the update without redeploying through Portainer | `true`, `false` | `false` |
+| `DD_ACTION_PORTAINER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
+
+This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).
+
+The env var keys for `ALLOWHTTP`, `UPDATEMODE`, `VERSIONVARLABEL`, `UPDATEMODELABEL`, and `PRUNESTACK` are case-insensitive. The camelCase forms are accepted too.
+
+<Callout type="warn">Portainer uses HTTPS by default. Setting `ALLOWHTTP=true` permits the API key to cross the network without transport encryption. Use it only on a trusted, isolated network and prefer HTTPS or a TLS-terminating reverse proxy.</Callout>
+
+## Labels
+
+| Label | Description | Supported values |
+| --- | --- | --- |
+| `dd.action.include` | Include this Portainer trigger for the container | Trigger id or name, e.g. `portainer` |
+| `dd.action.auto` | Allow automatic execution when the trigger uses `AUTO=onauto` | Trigger id or name |
+| `dd.portainer.update-mode` | Override the trigger-level update mode for one container | `auto`, `env`, `compose` |
+| `dd.portainer.version-var` | Portainer stack env variable to update in `env` mode | Env var name |
+| `dd.portainer.stack-id` | Explicit Portainer stack id when the stack cannot be inferred from Compose labels | Numeric stack id |
+| `dd.portainer.endpoint-id` | Explicit Portainer endpoint id override when a stack is available on more than one Portainer endpoint | Positive integer endpoint id |
+
+## Update Modes
+
+`auto` is the default. Drydock inspects the service image in Portainer's stack file:
+
+- If the image tag is declared as an env variable such as `pihole/pihole:${PIHOLE_TAG:-2026.05.0}`, and that variable is referenced nowhere else in the Compose file, Drydock updates the Portainer stack env variable and leaves the compose file unchanged.
+- If the image tag is hardcoded such as `pihole/pihole:2026.05.0`, Drydock patches only the target service's `image` value in the Portainer stack file.
+
+`env` updates a Portainer stack env variable only when the selected variable is referenced exclusively by the selected service's image tag. References in another service, another image, or any other Compose value fail closed. Set `dd.portainer.version-var` to name the variable when it is not detected, but the selected service image must still use that variable as its tag. Git-backed stacks, including stacks with GitOps metadata, aren't supported by the file-stack update path.
+
+`compose` always patches the service image in the Portainer stack file. The patch uses the same service-scoped, formatting-preserving compose mutation helper as the Docker Compose trigger.
+
+<Callout type="info">For Portainer-managed stacks, prefer including the `portainer` action explicitly with `dd.action.include=portainer` so Drydock chooses this trigger instead of a generic Docker or Docker Compose action. Manual/API requests still pass through normal update-eligibility and action-policy checks. Automatic requests additionally require the trigger's `AUTO` policy and the global update mode to permit automatic updates. After Portainer accepts the redeploy, Drydock waits for the matching local Compose service to report the target tag; a timeout fails the request.</Callout>
+
+<Callout type="info">Portainer stack ownership and the local Docker watcher are part of this contract. The `dd.portainer.endpoint-id` label selects the Portainer endpoint used for the stack update, while the container's local Compose labels select the service. Remote agent execution, self-update, infrastructure update, and digest-only update remain outside this trigger's scope. Automatic rollback is disabled for Portainer, and Portainer-originated backups are rejected by the backup API because applying them would inherit Docker stop-remove-recreate semantics. Configure a Docker action when manual rollback is required; that path remains available for Docker-originated backups. See [Discussion #864](https://github.com/CodesWhat/drydock/discussions/864) for the integration context.</Callout>
+
+## Example
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_ACTION_PORTAINER_LOCAL_URL=https://portainer.lan
+      - DD_ACTION_PORTAINER_LOCAL_APIKEY__FILE=/run/secrets/portainer_api_key
+      - DD_ACTION_PORTAINER_LOCAL_AUTO=oninclude
+      - DD_ACTION_PORTAINER_LOCAL_UPDATEMODE=auto
+```
+
+For a stack service using a Portainer env variable:
+
+```yaml
+services:
+  pihole:
+    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}
+    labels:
+      dd.watch: "true"
+      dd.action.include: "portainer"
+      dd.portainer.version-var: "PIHOLE_TAG"
+```
+
+When Drydock updates the container, Portainer's stack env receives the new `PIHOLE_TAG`, and Portainer redeploys the stack.

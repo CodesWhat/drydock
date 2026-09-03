@@ -130,17 +130,6 @@ describe('Basic Authentication', () => {
     expect(basic).toBeInstanceOf(Basic);
   });
 
-  test('should return basic strategy', async () => {
-    basic.configuration = {
-      user: 'testuser',
-      hash: createArgon2Hash('password'),
-    };
-
-    const strategy = basic.getStrategy();
-    expect(strategy).toBeDefined();
-    expect(strategy.name).toBe('basic');
-  });
-
   test('should return strategy description', async () => {
     const description = basic.getStrategyDescription();
     expect(description).toEqual({
@@ -487,21 +476,6 @@ describe('Basic Authentication', () => {
     expect(() => basic.validateConfiguration({})).toThrow('"user" is required');
   });
 
-  test('should delegate authentication through strategy callback', async () => {
-    basic.configuration = {
-      user: 'testuser',
-      hash: createArgon2Hash('password'),
-    };
-
-    const strategy = basic.getStrategy();
-    await new Promise<void>((resolve) => {
-      strategy._verify('testuser', 'password', (err, result) => {
-        expect(result).toEqual({ username: 'testuser' });
-        resolve();
-      });
-    });
-  });
-
   test('should reject authentication when argon2id derivation fails', async () => {
     basic.configuration = {
       user: 'testuser',
@@ -632,6 +606,86 @@ describe('Basic Authentication', () => {
         expect(result).toBe(false);
         resolve();
       });
+    });
+  });
+
+  describe('getAuthenticator / authenticateRequest', () => {
+    function encodeBasic(value: string): string {
+      return `Basic ${Buffer.from(value).toString('base64')}`;
+    }
+
+    beforeEach(async () => {
+      await basic.register('authentication', 'basic', 'default', {
+        user: 'testuser',
+        hash: createArgon2Hash('password'),
+      });
+    });
+
+    test('declares its registry id and refuses to persist a session', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(authenticator.id).toBe('basic.default');
+      expect(authenticator.persistsSession).toBe(false);
+    });
+
+    test('resolves valid credentials to a basic principal', async () => {
+      const authenticator = basic.getAuthenticator();
+
+      await expect(
+        authenticator.authenticate({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).resolves.toEqual({ kind: 'basic', username: 'testuser' });
+    });
+
+    test('declines a wrong password', async () => {
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('testuser:wrong') },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('declines an unknown user', async () => {
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('someoneelse:password') },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('declines a request carrying no Authorization header', async () => {
+      await expect(basic.authenticateRequest({ headers: {} } as never)).resolves.toBeUndefined();
+    });
+
+    test('declines a request with no headers at all', async () => {
+      await expect(basic.authenticateRequest({} as never)).resolves.toBeUndefined();
+    });
+
+    test('declines another scheme without inspecting it', async () => {
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: 'Bearer abcdef' },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('asks the chain for 400 on a syntactically broken header', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(
+        authenticator.getFailureStatus?.({ headers: { authorization: 'Basic' } } as never),
+      ).toBe(400);
+    });
+
+    test('leaves the chain on its default status for valid credentials', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(
+        authenticator.getFailureStatus?.({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).toBeUndefined();
     });
   });
 

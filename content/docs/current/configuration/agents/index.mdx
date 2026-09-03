@@ -388,7 +388,7 @@ services:
       - DD_ACTION_DOCKER_LOCAL_PRUNE=true
 ```
 
-<Callout type="warn">**Do not configure notification triggers (Slack, SMTP, etc.) on agents.** Only `docker` and `dockercompose` triggers are supported in agent mode. Notification triggers must be configured on the controller.</Callout>
+<Callout type="warn">**Do not configure notification triggers (Slack, SMTP, etc.) or Portainer triggers on agents.** Only `docker` and `dockercompose` triggers are supported in traditional agent mode. Portainer requires the controller's local Docker watcher and a local Compose identity. Notification triggers must be configured on the controller.</Callout>
 
 <Callout type="info">**You do not need to define `DD_ACTION_DOCKER_*` on the controller for each agent.** During the handshake, the controller automatically discovers the agent's triggers and creates internal proxies. The controller only needs its own `DD_ACTION_DOCKER_*` for updating containers on its local host.</Callout>
 

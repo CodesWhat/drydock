@@ -7,12 +7,6 @@ vi.mock('express', () => ({
   },
 }));
 
-vi.mock('passport', () => ({
-  default: {
-    authenticate: vi.fn(() => 'auth-middleware'),
-  },
-}));
-
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../prometheus', () => ({
@@ -25,14 +19,20 @@ vi.mock('../configuration', () => ({
   })),
 }));
 
+const { mockRequireAuthentication } = vi.hoisted(() => ({
+  mockRequireAuthentication: vi.fn(),
+}));
 vi.mock('./auth', () => ({
-  getAllIds: vi.fn(() => ['basic.default']),
+  requireAuthentication: mockRequireAuthentication,
 }));
 
-import passport from 'passport';
+const { mockRateLimit } = vi.hoisted(() => ({
+  mockRateLimit: vi.fn(() => 'metrics-auth-limiter'),
+}));
+vi.mock('express-rate-limit', () => ({ default: mockRateLimit }));
+
 import { getServerConfiguration } from '../configuration/index.js';
 import { output } from '../prometheus/index.js';
-import * as auth from './auth.js';
 import * as prometheusRouter from './prometheus.js';
 
 describe('Prometheus Router', () => {
@@ -43,14 +43,32 @@ describe('Prometheus Router', () => {
     });
   });
 
-  test('should initialize router with auth by default', async () => {
+  test('should initialize router with the authenticator chain by default', async () => {
     const router = prometheusRouter.init();
 
     expect(router).toBeDefined();
-    expect(auth.getAllIds).toHaveBeenCalled();
-    expect(passport.authenticate).toHaveBeenCalledWith(['basic.default']);
-    expect(router.use).toHaveBeenCalledWith('auth-middleware');
+    expect(router.use).toHaveBeenCalledWith(mockRequireAuthentication);
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+  });
+
+  test('should charge only failed attempts against the credential fallback budget', () => {
+    const router = prometheusRouter.init();
+
+    expect(mockRateLimit).toHaveBeenCalledWith({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      skipSuccessfulRequests: true,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    });
+    // The budget has to sit in front of the credential check, or a guess is
+    // answered before it is counted.
+    const useArguments = router.use.mock.calls.map(([middleware]) => middleware);
+    expect(useArguments.indexOf('metrics-auth-limiter')).toBeGreaterThanOrEqual(0);
+    expect(useArguments.indexOf('metrics-auth-limiter')).toBeLessThan(
+      useArguments.indexOf(mockRequireAuthentication),
+    );
   });
 
   test('should allow unauthenticated metrics when disabled in configuration', async () => {
@@ -63,7 +81,8 @@ describe('Prometheus Router', () => {
     const router = prometheusRouter.init();
 
     expect(router).toBeDefined();
-    expect(passport.authenticate).not.toHaveBeenCalled();
+    expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
+    expect(mockRateLimit).not.toHaveBeenCalled();
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
   });
 
@@ -110,8 +129,10 @@ describe('Prometheus Router', () => {
     test('should use bearer token middleware when token is configured', () => {
       const router = prometheusRouter.init();
 
-      expect(passport.authenticate).not.toHaveBeenCalled();
+      expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
       expect(router.use).toHaveBeenCalledWith(prometheusRouter.authenticateMetricsToken);
+      // A single configured secret compared in constant time; no budget needed.
+      expect(mockRateLimit).not.toHaveBeenCalled();
     });
 
     test('should return 200 for valid bearer token', () => {
@@ -177,7 +198,7 @@ describe('Prometheus Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
     });
 
-    test('should fall back to passport auth when token is empty string', () => {
+    test('should fall back to the authenticator chain when token is empty string', () => {
       getServerConfiguration.mockReturnValue({
         metrics: {
           auth: true,
@@ -187,8 +208,7 @@ describe('Prometheus Router', () => {
 
       const router = prometheusRouter.init();
 
-      expect(passport.authenticate).toHaveBeenCalledWith(['basic.default']);
-      expect(router.use).toHaveBeenCalledWith('auth-middleware');
+      expect(router.use).toHaveBeenCalledWith(mockRequireAuthentication);
     });
 
     test('should use timing-safe comparison to prevent timing attacks', () => {

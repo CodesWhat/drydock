@@ -92,6 +92,23 @@ describe('auth-remember-me', () => {
   });
 
   describe('setRememberMe', () => {
+    test.each([undefined, null, 'true', 1, {}])('rejects malformed remember=%j', (remember) => {
+      const req = createMockRequest({
+        body: { remember } as any,
+        session: {
+          cookie: { maxAge: 12345, expires: new Date() },
+          rememberMe: true,
+        },
+      } as Partial<AuthRequest>);
+      const res = createMockResponse();
+
+      setRememberMe(req, res);
+
+      expect(req.session!.rememberMe).toBe(true);
+      expect(req.session!.cookie.maxAge).toBe(12345);
+      expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'remember must be a boolean');
+    });
+
     test('stores remember=true in session and applies cookie', () => {
       const req = createMockRequest({
         body: { remember: true },
@@ -127,7 +144,7 @@ describe('auth-remember-me', () => {
       expect((res.status as Mock).mock.calls[0][0]).toBe(200);
     });
 
-    test('treats missing body.remember as false', () => {
+    test('rejects a missing body.remember value', () => {
       const req = createMockRequest({
         body: {},
         session: {
@@ -139,10 +156,11 @@ describe('auth-remember-me', () => {
 
       setRememberMe(req, res);
 
-      expect(req.session!.rememberMe).toBe(false);
+      expect(req.session!.rememberMe).toBeUndefined();
+      expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'remember must be a boolean');
     });
 
-    test('treats undefined body as false', () => {
+    test('rejects an undefined body', () => {
       const req = createMockRequest({
         body: undefined,
         session: {
@@ -154,7 +172,8 @@ describe('auth-remember-me', () => {
 
       setRememberMe(req, res);
 
-      expect(req.session!.rememberMe).toBe(false);
+      expect(req.session!.rememberMe).toBeUndefined();
+      expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'remember must be a boolean');
     });
 
     test('sends 500 error when session is missing', () => {

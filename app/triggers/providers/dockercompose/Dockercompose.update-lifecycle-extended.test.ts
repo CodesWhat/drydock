@@ -562,6 +562,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         composeFileOnceApplied: false,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
     expect(runContainerUpdateLifecycleSpy).toHaveBeenNthCalledWith(
       2,
@@ -570,7 +571,163 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         composeFileOnceApplied: true,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
+  });
+
+  test('applyComposeFileMutationsByWritableFile should reject a repository changed after resolution before mutation', async () => {
+    const container = makeContainer({
+      name: 'nginx',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const changedComposeFileContent = ['services:', '  nginx:', '    image: postgres:16', ''].join(
+      '\n',
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(changedComposeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+
+    await expect(
+      trigger.applyComposeFileMutationsByWritableFile(
+        '/opt/drydock/test/stack.yml',
+        [
+          {
+            container,
+            service: 'nginx',
+            runtimeImage: 'nginx:1.1.0',
+            current: 'nginx:1.1.0',
+            update: 'nginx:1.2.0',
+            currentNormalized: 'nginx:1.1.0',
+            composeUpdate: 'nginx:1.2.0',
+            composeUpdateNormalized: 'nginx:1.2.0',
+          },
+        ],
+        ['/opt/drydock/test/stack.yml'],
+        new Map([
+          ['/opt/drydock/test/stack.yml', { services: { nginx: { image: 'nginx:1.1.0' } } }],
+        ]),
+      ),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('applyComposeFileMutationsByWritableFile should reject a fresh non-object service before mutation', async () => {
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx: []', ''].join('\n')),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+
+    await expect(
+      trigger.applyComposeFileMutationsByWritableFile(
+        composeFile,
+        [
+          {
+            container,
+            service: 'nginx',
+            runtimeImage: 'nginx:1.1.0',
+            current: 'nginx:1.1.0',
+            update: 'nginx:1.2.0',
+            currentNormalized: 'nginx:1.1.0',
+            composeUpdate: 'nginx:1.2.0',
+            composeUpdateNormalized: 'nginx:1.2.0',
+          },
+        ],
+        [composeFile],
+        new Map([[composeFile, { services: { nginx: { image: 'nginx:1.1.0' } } }]]),
+      ),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('applyComposeFileMutationsByWritableFile should preserve inherited service fields while adding an image', async () => {
+    const composeFile = '/opt/drydock/test/stack.override.yml';
+    const baseFile = '/opt/drydock/test/stack.yml';
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'getComposeFile').mockImplementation(async (filePath) =>
+      Buffer.from(
+        filePath === composeFile
+          ? ['services:', '  nginx:', '    environment:', '      FOO: bar', ''].join('\n')
+          : ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n'),
+      ),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+
+    await expect(
+      trigger.applyComposeFileMutationsByWritableFile(
+        composeFile,
+        [
+          {
+            container,
+            service: 'nginx',
+            runtimeImage: 'nginx:1.1.0',
+            current: 'nginx:1.1.0',
+            update: 'nginx:1.2.0',
+            currentNormalized: 'nginx:1.1.0',
+            composeUpdate: 'nginx:1.2.0',
+            composeUpdateNormalized: 'nginx:1.2.0',
+          },
+        ],
+        [baseFile, composeFile],
+        new Map([
+          [baseFile, { services: { nginx: { image: 'nginx:1.1.0' } } }],
+          [composeFile, { services: { nginx: { environment: { FOO: 'bar' } } } }],
+        ]),
+      ),
+    ).resolves.toEqual(expect.objectContaining({ filePath: composeFile }));
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      composeFile,
+      expect.stringContaining('image: nginx:1.2.0'),
+    );
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      composeFile,
+      expect.stringContaining('FOO: bar'),
+    );
+  });
+
+  test('applyComposeFileMutationsByWritableFile should reject a fresh non-target base repository before mutation', async () => {
+    trigger.configuration.backup = true;
+    const composeFile = '/opt/drydock/test/stack.override.yml';
+    const baseFile = '/opt/drydock/test/stack.yml';
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'getComposeFile').mockImplementation(async (filePath) =>
+      Buffer.from(
+        filePath === composeFile
+          ? ['services:', '  nginx:', '    environment:', '      FOO: bar', ''].join('\n')
+          : ['services:', '  nginx:', '    image: postgres:16', ''].join('\n'),
+      ),
+    );
+    const backupSpy = vi.spyOn(trigger, 'backup').mockResolvedValue();
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+
+    await expect(
+      trigger.applyComposeFileMutationsByWritableFile(
+        composeFile,
+        [
+          {
+            container,
+            service: 'nginx',
+            runtimeImage: 'nginx:1.1.0',
+            current: 'nginx:1.1.0',
+            update: 'nginx:1.2.0',
+            currentNormalized: 'nginx:1.1.0',
+            composeUpdate: 'nginx:1.2.0',
+            composeUpdateNormalized: 'nginx:1.2.0',
+          },
+        ],
+        [baseFile, composeFile],
+        new Map([
+          [baseFile, { services: { nginx: { image: 'nginx:1.1.0' } } }],
+          [composeFile, { services: { nginx: { environment: { FOO: 'bar' } } } }],
+        ]),
+      ),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+
+    expect(backupSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
   });
 
   test('processComposeFile should pre-pull once for repeated compose services in compose-file-once mode', async () => {

@@ -9,7 +9,7 @@ function buildContainer(overrides: Partial<Container> = {}): Container {
 }
 
 describe('getTriggerCategoryForType', () => {
-  test.each(['docker', 'dockercompose', 'command'])(
+  test.each(['docker', 'dockercompose', 'portainer', 'command'])(
     'classifies %s as an action trigger',
     (type) => {
       expect(getTriggerCategoryForType(type)).toBe('action');

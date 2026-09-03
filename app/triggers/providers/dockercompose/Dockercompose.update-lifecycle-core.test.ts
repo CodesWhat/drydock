@@ -118,11 +118,16 @@ describe('Dockercompose Trigger', () => {
     trigger.configuration.dryrun = false;
 
     const container = makeContainer({
+      id: '123456789abc',
       name: 'drydock',
       imageName: 'codeswhat/drydock',
       tagValue: '1.0.0',
       remoteValue: '1.1.0',
       labels: { 'com.docker.compose.service': 'drydock' },
+    });
+    trigger.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: container.id,
+      name: container.name,
     });
 
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
@@ -133,7 +138,7 @@ describe('Dockercompose Trigger', () => {
     );
     vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
     const notifySpy = vi.spyOn(trigger, 'maybeNotifySelfUpdate').mockResolvedValue();
-    const executeSelfUpdateSpy = vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeSelfUpdateSpy = vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(false);
     const postHookSpy = vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);

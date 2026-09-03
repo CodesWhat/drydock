@@ -5,6 +5,7 @@ import * as uiPreferencesStore from '../store/ui-preferences.js';
 import type { AuthRequest } from './auth-types.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
+import { ANONYMOUS_USERNAME, getIdentityUsername } from './principal.js';
 import { broadcastPreferencesUpdated } from './sse.js';
 
 const router = express.Router();
@@ -40,15 +41,14 @@ interface PreferencesResponseEnvelope {
 
 /**
  * Resolve the current request's username, falling back to 'anonymous'.
- * req.user is undefined for real anonymous sessions — passport-anonymous's
- * Strategy.authenticate() calls this.pass() with no arguments, it never
- * synthesizes { username: 'anonymous' }. That literal only appears as a
- * response-body fallback in auth.ts's GET /auth/user handler. Reimplemented
- * here since this router reads req.user directly.
+ * Anonymous access carries a principal whose kind says it holds no identity,
+ * so getIdentityUsername() returns undefined for it and preferences stay
+ * filed under the shared 'anonymous' key rather than under the placeholder
+ * username the principal reports to GET /auth/user.
  * @param req
  */
 function getUsernameOrAnonymous(req: AuthRequest): string {
-  return req.user?.username?.trim() || 'anonymous';
+  return getIdentityUsername(req)?.trim() || ANONYMOUS_USERNAME;
 }
 
 function buildEnvelope(

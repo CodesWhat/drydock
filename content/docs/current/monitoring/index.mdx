@@ -89,7 +89,7 @@ The `/metrics` endpoint supports three authentication modes, evaluated in order:
          - targets: ['drydock:3000']
    ```
 
-2. **Session / basic auth fallback** — When no `DD_SERVER_METRICS_TOKEN` is set and `DD_SERVER_METRICS_AUTH` is not `false`, the endpoint falls back to the same session/basic auth used by the rest of the API.
+2. **Registered authenticator chain fallback** — When no `DD_SERVER_METRICS_TOKEN` is set and `DD_SERVER_METRICS_AUTH` is not `false`, the endpoint falls back to the registered authenticator chain used by the rest of the API, including the session authenticator plus configured providers such as Basic or OIDC. Because this mode accepts a user password, failed attempts are capped at 100 per IP per 15 minutes. Only failures count, so a scrape that authenticates is never charged against the budget however often it runs.
 
 3. **No auth** — Set `DD_SERVER_METRICS_AUTH=false` to expose metrics without any authentication (suitable for isolated networks):
 

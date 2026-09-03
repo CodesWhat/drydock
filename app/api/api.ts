@@ -31,6 +31,7 @@ import * as previewRouter from './preview.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
+  isRequestAuthenticated,
 } from './rate-limit-key.js';
 import * as registryRouter from './registry.js';
 import * as selfUpdateRouter from './self-update.js';
@@ -47,9 +48,7 @@ import * as webhooksRouter from './webhooks.js';
 
 function shouldSkipOuterApiRateLimit(req: Request): boolean {
   const isSafeRead = req.method === 'GET' || req.method === 'HEAD';
-  const isAuthenticated =
-    typeof req.isAuthenticated === 'function' && req.isAuthenticated() === true;
-  return isAuthenticated && isSafeRead && isIconProxyApiPath(req.path);
+  return isRequestAuthenticated(req) && isSafeRead && isIconProxyApiPath(req.path);
 }
 
 /**

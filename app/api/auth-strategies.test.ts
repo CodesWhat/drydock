@@ -1,23 +1,19 @@
 import type { Application, Request, Response } from 'express';
-import type { Strategy } from 'passport';
 import { describe, expect, type Mock, test, vi } from 'vitest';
 import type Authentication from '../authentications/providers/Authentication.js';
 import type { StrategyDescription } from '../authentications/providers/Authentication.js';
+import type { Authenticator } from './authenticator-chain.js';
 
 const {
-  mockPassportUse,
   mockGetState,
   mockGetAuthenticationRegistrationErrors,
   mockGetRegistrationWarnings,
+  mockWarn,
 } = vi.hoisted(() => ({
-  mockPassportUse: vi.fn(),
   mockGetState: vi.fn(),
   mockGetAuthenticationRegistrationErrors: vi.fn().mockReturnValue([]),
   mockGetRegistrationWarnings: vi.fn().mockReturnValue([]),
-}));
-
-vi.mock('passport', () => ({
-  default: { use: mockPassportUse },
+  mockWarn: vi.fn(),
 }));
 
 vi.mock('../registry/index.js', () => ({
@@ -29,32 +25,41 @@ vi.mock('../registry/index.js', () => ({
 vi.mock('../log/index.js', () => ({
   default: {
     child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
-    warn: vi.fn(),
+    warn: mockWarn,
   },
 }));
 
 import {
-  getAllIds,
   getAuthStatus,
   getLogoutRedirectUrl,
   getStrategies,
-  registerStrategies,
-  resetStrategyIdsForTests,
+  isAuthenticationReady,
+  registerAuthenticators,
+  resetAuthenticatorsForTests,
 } from './auth-strategies.js';
+import { getAuthenticators } from './authenticator-chain.js';
+import { SESSION_AUTHENTICATOR_ID } from './session-principal.js';
+
+function createAuthenticator(id: string): Authenticator {
+  return {
+    id,
+    persistsSession: false,
+    authenticate: () => Promise.resolve(undefined),
+  };
+}
 
 function createMockAuthentication(overrides: {
   id: string;
-  strategy?: Strategy;
   description: StrategyDescription;
-  throwOnGetStrategy?: boolean;
+  throwOnGetAuthenticator?: boolean;
 }): Authentication {
   return {
     getId: () => overrides.id,
-    getStrategy: overrides.throwOnGetStrategy
+    getAuthenticator: overrides.throwOnGetAuthenticator
       ? () => {
           throw new Error('strategy error');
         }
-      : () => overrides.strategy ?? ({} as Strategy),
+      : () => createAuthenticator(overrides.id),
     getStrategyDescription: () => overrides.description,
   } as unknown as Authentication;
 }
@@ -64,49 +69,30 @@ function createMockResponse(): Response {
   return res as unknown as Response;
 }
 
+function getRegisteredIds(): string[] {
+  return getAuthenticators().map((authenticator) => authenticator.id);
+}
+
 describe('auth-strategies', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetStrategyIdsForTests();
+    resetAuthenticatorsForTests();
   });
 
-  describe('getAllIds', () => {
-    test('returns empty array initially', () => {
-      expect(getAllIds()).toEqual([]);
-    });
-
-    test('returns a copy of the strategy IDs array', () => {
+  describe('registerAuthenticators', () => {
+    test('puts the session authenticator after every provider', () => {
       const auth = createMockAuthentication({
         id: 'basic.local',
         description: { type: 'basic', name: 'Local' },
       });
       mockGetState.mockReturnValue({ authentication: { local: auth } });
 
-      registerStrategies({} as Application);
+      registerAuthenticators({} as Application);
 
-      const ids = getAllIds();
-      ids.push('mutated');
-      expect(getAllIds()).toEqual(['basic.local']);
-    });
-  });
-
-  describe('registerStrategies', () => {
-    test('registers each authentication strategy with passport', () => {
-      const strategy = {} as Strategy;
-      const auth = createMockAuthentication({
-        id: 'basic.local',
-        strategy,
-        description: { type: 'basic', name: 'Local' },
-      });
-      mockGetState.mockReturnValue({ authentication: { local: auth } });
-
-      registerStrategies({} as Application);
-
-      expect(mockPassportUse).toHaveBeenCalledWith('basic.local', strategy);
-      expect(getAllIds()).toEqual(['basic.local']);
+      expect(getRegisteredIds()).toEqual(['basic.local', SESSION_AUTHENTICATOR_ID]);
     });
 
-    test('registers multiple strategies', () => {
+    test('registers multiple providers in registry order', () => {
       const auth1 = createMockAuthentication({
         id: 'basic.local',
         description: { type: 'basic', name: 'Local' },
@@ -117,42 +103,117 @@ describe('auth-strategies', () => {
       });
       mockGetState.mockReturnValue({ authentication: { local: auth1, google: auth2 } });
 
-      registerStrategies({} as Application);
+      registerAuthenticators({} as Application);
 
-      expect(mockPassportUse).toHaveBeenCalledTimes(2);
-      expect(getAllIds()).toEqual(['basic.local', 'oidc.google']);
+      expect(getRegisteredIds()).toEqual(['basic.local', 'oidc.google', SESSION_AUTHENTICATOR_ID]);
     });
 
-    test('catches and logs errors from getStrategy without crashing', () => {
+    test('puts credentialless anonymous authentication after the session fallback', () => {
+      const basic = createMockAuthentication({
+        id: 'basic.local',
+        description: { type: 'basic', name: 'Local' },
+      });
+      const anonymous = createMockAuthentication({
+        id: 'anonymous',
+        description: { type: 'anonymous', name: 'Anonymous' },
+      });
+      const oidc = createMockAuthentication({
+        id: 'oidc.google',
+        description: { type: 'oidc', name: 'Google' },
+      });
+      mockGetState.mockReturnValue({ authentication: { basic, anonymous, oidc } });
+
+      registerAuthenticators({} as Application);
+
+      expect(getRegisteredIds()).toEqual([
+        'basic.local',
+        'oidc.google',
+        SESSION_AUTHENTICATOR_ID,
+        'anonymous',
+      ]);
+    });
+
+    test('catches and logs errors from getAuthenticator without crashing', () => {
       const auth = createMockAuthentication({
         id: 'broken.auth',
-        throwOnGetStrategy: true,
+        throwOnGetAuthenticator: true,
         description: { type: 'basic', name: 'Broken' },
       });
       mockGetState.mockReturnValue({ authentication: { broken: auth } });
 
-      registerStrategies({} as Application);
+      registerAuthenticators({} as Application);
 
-      expect(mockPassportUse).not.toHaveBeenCalled();
-      expect(getAllIds()).toEqual([]);
+      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID]);
+      expect(mockWarn).toHaveBeenCalledWith(
+        'Unable to apply authentication broken.auth (strategy error)',
+      );
     });
 
-    test('registers healthy strategies even when one fails', () => {
+    test('registers healthy providers even when one fails', () => {
       const healthy = createMockAuthentication({
         id: 'basic.local',
         description: { type: 'basic', name: 'Local' },
       });
       const broken = createMockAuthentication({
         id: 'broken.auth',
-        throwOnGetStrategy: true,
+        throwOnGetAuthenticator: true,
         description: { type: 'basic', name: 'Broken' },
       });
       mockGetState.mockReturnValue({ authentication: { local: healthy, broken } });
 
-      registerStrategies({} as Application);
+      registerAuthenticators({} as Application);
 
-      expect(mockPassportUse).toHaveBeenCalledTimes(1);
-      expect(getAllIds()).toEqual(['basic.local']);
+      expect(getRegisteredIds()).toEqual(['basic.local', SESSION_AUTHENTICATOR_ID]);
+    });
+
+    test('hands the express app to each provider so it can mount its routes', () => {
+      const app = {} as Application;
+      const getAuthenticator = vi.fn(() => createAuthenticator('oidc.google'));
+      mockGetState.mockReturnValue({
+        authentication: {
+          google: {
+            getId: () => 'oidc.google',
+            getAuthenticator,
+            getStrategyDescription: () => ({ type: 'oidc', name: 'Google' }),
+          } as unknown as Authentication,
+        },
+      });
+
+      registerAuthenticators(app);
+
+      expect(getAuthenticator).toHaveBeenCalledWith(app);
+    });
+  });
+
+  describe('isAuthenticationReady', () => {
+    test('is false before anything is registered', () => {
+      expect(isAuthenticationReady()).toBe(false);
+    });
+
+    test('is false when every provider failed and only the session entry survives', () => {
+      const broken = createMockAuthentication({
+        id: 'broken.auth',
+        throwOnGetAuthenticator: true,
+        description: { type: 'basic', name: 'Broken' },
+      });
+      mockGetState.mockReturnValue({ authentication: { broken } });
+
+      registerAuthenticators({} as Application);
+
+      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID]);
+      expect(isAuthenticationReady()).toBe(false);
+    });
+
+    test('is true once a provider joins the chain', () => {
+      const auth = createMockAuthentication({
+        id: 'basic.local',
+        description: { type: 'basic', name: 'Local' },
+      });
+      mockGetState.mockReturnValue({ authentication: { local: auth } });
+
+      registerAuthenticators({} as Application);
+
+      expect(isAuthenticationReady()).toBe(true);
     });
   });
 
@@ -272,19 +333,19 @@ describe('auth-strategies', () => {
     });
   });
 
-  describe('resetStrategyIdsForTests', () => {
-    test('clears strategy IDs', () => {
+  describe('resetAuthenticatorsForTests', () => {
+    test('empties the chain', () => {
       const auth = createMockAuthentication({
         id: 'basic.local',
         description: { type: 'basic', name: 'Local' },
       });
       mockGetState.mockReturnValue({ authentication: { local: auth } });
-      registerStrategies({} as Application);
-      expect(getAllIds()).toHaveLength(1);
+      registerAuthenticators({} as Application);
+      expect(getAuthenticators()).toHaveLength(2);
 
-      resetStrategyIdsForTests();
+      resetAuthenticatorsForTests();
 
-      expect(getAllIds()).toEqual([]);
+      expect(getAuthenticators()).toEqual([]);
     });
   });
 });

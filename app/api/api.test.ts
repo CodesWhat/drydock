@@ -7,6 +7,7 @@ const {
   mockRouterCallLog,
   mockCreateAuthenticatedRouteRateLimitKeyGenerator,
   mockIsIdentityAwareRateLimitKeyingEnabled,
+  mockIsRequestAuthenticated,
   resetMockRouterCallLog,
 } = vi.hoisted(() => {
   const jsonMiddleware = vi.fn();
@@ -39,6 +40,9 @@ const {
     mockRouterCallLog,
     mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
     mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
+    mockIsRequestAuthenticated: vi.fn(
+      (req: { principal?: unknown }) => req.principal !== undefined,
+    ),
     resetMockRouterCallLog: () => {
       mockRouterCallLog.length = 0;
     },
@@ -89,6 +93,7 @@ vi.mock('./csrf', () => ({
 vi.mock('./rate-limit-key.js', () => ({
   createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
+  isRequestAuthenticated: mockIsRequestAuthenticated,
 }));
 
 const mockGetExperimentalPortwingEnabled = vi.hoisted(() => vi.fn(() => false));
@@ -505,8 +510,8 @@ describe('API Router', () => {
     expect(limiterOptions).toBeDefined();
     expect(typeof limiterOptions.skip).toBe('function');
 
-    const authenticated = { isAuthenticated: () => true };
-    const unauthenticated = { isAuthenticated: () => false };
+    const authenticated = { principal: { kind: 'basic', username: 'alice' } };
+    const unauthenticated = { principal: undefined };
 
     expect(
       await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/icons/selfhst/docker' }),

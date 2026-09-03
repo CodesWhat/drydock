@@ -40,7 +40,13 @@ const featureRows: FeatureRow[] = [
     portainer: "no",
   },
   { label: "Dry-run + rollback", drydock: "yes", watchtower: "no", diun: "no", portainer: "no" },
-  { label: "Distributed agents", drydock: "yes", watchtower: "no", diun: "no", portainer: "no" },
+  {
+    label: "Distributed agents",
+    drydock: "yes",
+    watchtower: "no",
+    diun: "no",
+    portainer: "partial",
+  },
 ];
 
 function ViewAllLink() {

@@ -29,7 +29,11 @@ export function setRememberMe(req: AuthRequest, res: Response): void {
     sendErrorResponse(res, 500, 'Unable to access session');
     return;
   }
-  req.session.rememberMe = req.body?.remember === true;
+  if (typeof req.body?.remember !== 'boolean') {
+    sendErrorResponse(res, 400, 'remember must be a boolean');
+    return;
+  }
+  req.session.rememberMe = req.body.remember;
   applyRememberMe(req);
   res.status(200).json({ ok: true });
 }

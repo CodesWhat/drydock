@@ -15,7 +15,7 @@ Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
 REST API|None (gRPC CLI only)|Full REST API|self
 Prometheus metrics|Yes (since v4.32.0)|Full /metrics endpoint + Grafana template|self
-MQTT / Home Assistant|Yes|Yes|tie
+MQTT / Home Assistant|Partial|Yes|self
 Image backup & rollback|No|Pre-update backup with retention + auto rollback|self
 Container grouping|No|Smart stack detection with batch actions|self
 Lifecycle hooks|No|Pre/post-update shell commands|self
@@ -23,7 +23,7 @@ Webhook API|No|Token-authenticated webhooks for CI/CD|self
 Container actions|No|Start/stop/restart from UI/API|self
 Distributed agents|No (one instance per host)|SSE-based agent architecture|self
 Kubernetes support|Yes|Planned (v2.0.0)|competitor
-Semver-aware updates|Yes|Yes|tie
+Semver-aware updates|Partial|Yes|self
 Audit log|No|Yes, with REST API|self
 License|MIT|AGPL-3.0|tie
 `,

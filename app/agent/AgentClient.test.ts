@@ -812,6 +812,65 @@ describe('AgentClient', () => {
       );
     });
 
+    test.each([
+      ['another agent', { agent: 'other-agent' }],
+      ['the controller', {}],
+    ])(
+      'handleContainerSync(): an id owned by %s never reaches the prune',
+      async (_ownerKind, ownerFields) => {
+        // The prune runs before the ingest gate, so a foreign id in the frame
+        // used to take part in the keep-set and in the #496 replacement-identity
+        // match: naming a container this agent does not own was enough to turn
+        // the removal of one of its own rows into a replacement, which retains
+        // the update policy and skips the Home Assistant discovery cleanup.
+        vi.mocked(storeContainer.getContainers).mockReturnValue([
+          {
+            id: 'stale-1',
+            name: 'web',
+            watcher: 'local',
+            agent: 'test-agent',
+          },
+        ] as never);
+        vi.mocked(storeContainer.getContainer).mockImplementation((id: string) =>
+          id === 'foreign-1'
+            ? ({ id: 'foreign-1', name: 'web', watcher: 'local', ...ownerFields } as never)
+            : undefined,
+        );
+
+        await client.handleContainerSync([
+          { id: 'foreign-1', name: 'web', watcher: 'local' } as never,
+        ]);
+
+        expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1');
+        expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('stale-1', {
+          replacementExpected: true,
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+        expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            `owned by ${ownerFields.agent === undefined ? 'controller' : ownerFields.agent}`,
+          ),
+        );
+      },
+    );
+
+    test('handleContainerSync(): the agent owns the replacement identity of its own containers', async () => {
+      // Positive control for the prune filter above: a same-identity row this
+      // agent does own is still flagged as a replacement rather than a removal.
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        { id: 'stale-1', name: 'web', watcher: 'local', agent: 'test-agent' },
+      ] as never);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => c);
+
+      await client.handleContainerSync([{ id: 'fresh-1', name: 'web', watcher: 'local' } as never]);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1', {
+        replacementExpected: true,
+      });
+    });
+
     test('watch(): an agent recheck of its own container still updates the store', async () => {
       vi.mocked(storeContainer.getContainer).mockReturnValue({
         id: 'c1',
@@ -1378,7 +1437,10 @@ describe('AgentClient', () => {
       client.pruneOldContainers(newContainers);
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledTimes(15);
-      expect(newIdReads).toBeLessThanOrEqual(80);
+      // Three reads per incoming container: the ownership filter, the keep-set,
+      // and the identity-key spread. The bound this guards is quadratic
+      // rescanning, which for 30 by 30 would be 900 reads, not the constant.
+      expect(newIdReads).toBeLessThanOrEqual(100);
       expect(storeIdReads).toBeLessThanOrEqual(80);
     });
 
@@ -3175,6 +3237,7 @@ describe('AgentClient', () => {
         operationId: 'remote-op-active',
         containerName: 'local_nginx',
         containerId: 'c1',
+        triggerName: 'test-agent.docker.update',
         status: 'in-progress',
         phase: 'pulling',
       });
@@ -3185,6 +3248,7 @@ describe('AgentClient', () => {
           kind: 'container-update',
           containerName: 'local_nginx',
           containerId: 'c1',
+          triggerName: 'test-agent.docker.update',
           status: 'in-progress',
           phase: 'pulling',
         }),
@@ -6070,6 +6134,36 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('qualifyAgentTriggerName', () => {
+    test('qualifies an unscoped update trigger id with the agent name', () => {
+      expect((client as any).qualifyAgentTriggerName('docker.update')).toBe(
+        'test-agent.docker.update',
+      );
+    });
+
+    test('leaves an already-qualified update trigger id unchanged', () => {
+      expect((client as any).qualifyAgentTriggerName('test-agent.docker.update')).toBe(
+        'test-agent.docker.update',
+      );
+    });
+
+    test('qualifies a two-part trigger id without treating its first part as an agent', () => {
+      expect((client as any).qualifyAgentTriggerName('portainer.docker')).toBe(
+        'test-agent.portainer.docker',
+      );
+    });
+
+    test('preserves an unknown trigger type when it is qualified for this agent', () => {
+      expect((client as any).qualifyAgentTriggerName('test-agent.future.update')).toBe(
+        'test-agent.future.update',
+      );
+    });
+
+    test('rejects a trigger id qualified for a different agent', () => {
+      expect((client as any).qualifyAgentTriggerName('other-agent.docker.update')).toBeUndefined();
+    });
+  });
+
   describe('getStoredContainerForAgentOperation', () => {
     test('finds one agent-owned container by name when payload ids are absent', () => {
       const row = { id: 'container-1', name: 'nginx', agent: 'test-agent' };
@@ -6162,6 +6256,32 @@ describe('AgentClient', () => {
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
     });
 
+    test('preserves controller trigger provenance when updating an existing active row', () => {
+      const controllerRow = {
+        id: 'uuid-controller-trigger',
+        status: 'in-progress',
+        containerName: 'tautulli',
+        triggerName: 'test-agent.docker.update',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-trigger') return controllerRow as any;
+        return undefined;
+      });
+
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-trigger',
+        containerName: 'tautulli',
+        triggerName: 'docker.update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'uuid-controller-trigger',
+        expect.objectContaining({ triggerName: 'test-agent.docker.update' }),
+      );
+    });
+
     test('marks the controller-issued row terminal when agent echoes back the controller operationId', () => {
       const controllerRow = {
         id: 'uuid-controller-1',
@@ -6182,6 +6302,60 @@ describe('AgentClient', () => {
         'uuid-controller-1',
         expect.objectContaining({ status: 'succeeded' }),
       );
+    });
+
+    test('preserves controller trigger provenance when marking a terminal row', () => {
+      const controllerRow = {
+        id: 'uuid-controller-terminal-trigger',
+        status: 'in-progress',
+        containerName: 'tautulli',
+        triggerName: 'test-agent.docker.update',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-terminal-trigger') return controllerRow as any;
+        return undefined;
+      });
+
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-terminal-trigger',
+        containerName: 'tautulli',
+        triggerName: 'docker.update',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'uuid-controller-terminal-trigger',
+        expect.objectContaining({ triggerName: 'test-agent.docker.update' }),
+      );
+    });
+
+    test('ignores an active event qualified for a different agent', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-wrong-agent-active',
+        containerName: 'tautulli',
+        triggerName: 'other-agent.docker.update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('ignores a terminal event qualified for a different agent', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-wrong-agent-terminal',
+        containerName: 'tautulli',
+        triggerName: 'other-agent.docker.update',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
     });
 
     test('falls back to agent-scoped id and inserts new row when no controller row exists', () => {
@@ -8878,6 +9052,111 @@ describe('AgentClient', () => {
               name: 'hub.public',
               url: 'https://registry-1.docker.io/v2',
             },
+          }),
+        }),
+      );
+    });
+
+    test('marker-mode inventory honors a dd.registry.lookup.image label, diverting to the real upstream registry', async () => {
+      await registerAnonymousHub();
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      // Same shape as #336: a private mirror running the same tag as upstream,
+      // labeled to point registry lookups at the real image on Docker Hub.
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'nextcloud-update-test',
+          watcher: 'docker',
+          labels: { 'dd.registry.lookup.image': 'library/nextcloud' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'myPrivateRegistry' },
+            name: 'myPrivateRegistry/nextcloud',
+            tag: { value: '32.0.6-apache', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            // The deploy identity is untouched — only the registry query target
+            // (registry.name/lookupImage) is diverted to the real upstream image.
+            name: 'myPrivateRegistry/nextcloud',
+            registry: expect.objectContaining({
+              name: 'hub.public',
+              url: 'myPrivateRegistry',
+              lookupImage: 'library/nextcloud',
+            }),
+          }),
+        }),
+      );
+    });
+
+    test('marker-mode inventory never overwrites a lookupImage the agent already reported', async () => {
+      await registerAnonymousHub();
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'nextcloud-update-test',
+          watcher: 'docker',
+          labels: { 'dd.registry.lookup.image': 'library/from-label' },
+          image: {
+            id: 'sha256:current',
+            registry: {
+              name: 'unknown',
+              url: 'myPrivateRegistry',
+              lookupImage: 'library/nextcloud',
+            },
+            name: 'myPrivateRegistry/nextcloud',
+            tag: { value: '32.0.6-apache', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            registry: expect.objectContaining({ lookupImage: 'library/nextcloud' }),
           }),
         }),
       );

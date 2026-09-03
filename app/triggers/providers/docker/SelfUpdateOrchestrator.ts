@@ -1,8 +1,16 @@
 import crypto from 'node:crypto';
 import {
+  resolveSelfContainerIdentity,
+  type SelfContainerIdentity,
+} from './SelfContainerIdentity.js';
+import {
   executeSelfUpdateTransition,
   findDockerSocketBind as findDockerSocketBindFromSpec,
 } from './SelfUpdateTransitionShared.js';
+import {
+  clearSelfUpdateHelperCompletion,
+  waitForSelfUpdateHelperCompletion,
+} from './self-update-helper-completion.js';
 import type {
   SelfUpdateConfiguration,
   SelfUpdateContainerRef,
@@ -11,10 +19,13 @@ import type {
   SelfUpdateDockerApi,
   SelfUpdateExecutionContext,
   SelfUpdateLogger,
+  SelfUpdateObservedHelperRuntime,
   SelfUpdateRuntimeConfigManager,
 } from './self-update-types.js';
 
 const SELF_UPDATE_ACK_TIMEOUT_MS = 3_000;
+
+export type SelfUpdateClassification = 'current' | 'peer' | 'indeterminate';
 
 interface SelfUpdateStartingPayload {
   opId: string;
@@ -51,6 +62,12 @@ interface SelfUpdateOrchestratorDependencies {
   createOperationId: () => string;
   resolveFinalizeUrl: () => string;
   resolveFinalizeSecret: (operationId: string) => string;
+  resolveSelfContainerIdentity: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
+  finalizeObservedHelperOperation: (
+    operationId: string,
+    status: 'succeeded' | 'rolled-back' | 'failed',
+    lastError?: string,
+  ) => Promise<void> | void;
 }
 
 interface SelfUpdateOrchestratorConstructorOptions {
@@ -78,6 +95,14 @@ interface SelfUpdateOrchestratorConstructorOptions {
   createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
   resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
   resolveFinalizeSecret?: (operationId: string) => string;
+  resolveSelfContainerIdentity?: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
+  finalizeObservedHelperOperation?: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
+  waitForObservedHelperCompletion?: typeof waitForSelfUpdateHelperCompletion;
+  resolveObserverNetworkMode?: () => Promise<string>;
+  resolveObservedHelperRuntime?: (
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+  ) => Promise<SelfUpdateObservedHelperRuntime>;
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
   touchOperation?: (operationId: string) => void;
 }
@@ -106,6 +131,21 @@ class SelfUpdateOrchestrator {
   resolveFinalizeUrl: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
 
   resolveFinalizeSecret: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
+
+  resolveSelfContainerIdentity: SelfUpdateOrchestratorDependencies['resolveSelfContainerIdentity'];
+
+  finalizeObservedHelperOperation: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
+
+  waitForObservedHelperCompletion: typeof waitForSelfUpdateHelperCompletion;
+
+  resolveObserverNetworkMode: () => Promise<string>;
+
+  resolveObservedHelperRuntime: (
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+  ) => Promise<SelfUpdateObservedHelperRuntime>;
+
+  private readonly selfUpdateClassifications = new WeakMap<object, SelfUpdateClassification>();
 
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 
@@ -138,12 +178,94 @@ class SelfUpdateOrchestrator {
     this.resolveFinalizeSecret =
       options.resolveFinalizeSecret ||
       ((_operationId: string) => 'missing-self-update-finalize-secret');
+    this.resolveSelfContainerIdentity =
+      options.resolveSelfContainerIdentity ||
+      ((dockerApi) => resolveSelfContainerIdentity(dockerApi as never));
+    this.finalizeObservedHelperOperation =
+      options.finalizeObservedHelperOperation ||
+      (() => missingDependency('finalizeObservedHelperOperation'));
+    this.waitForObservedHelperCompletion =
+      options.waitForObservedHelperCompletion || waitForSelfUpdateHelperCompletion;
+    this.resolveObserverNetworkMode =
+      options.resolveObserverNetworkMode ||
+      (async () => missingDependency('resolveObserverNetworkMode'));
+    this.resolveObservedHelperRuntime =
+      options.resolveObservedHelperRuntime ||
+      (async () => missingDependency('resolveObservedHelperRuntime'));
     this.resolveHelperImage = options.resolveHelperImage;
     this.touchOperation = options.touchOperation;
   }
 
+  async classifySelfUpdate(
+    container: SelfUpdateContainerRef,
+    dockerApi: unknown,
+    identityScope: 'authoritative' | 'peer' = 'authoritative',
+  ): Promise<SelfUpdateClassification> {
+    const imageName = container.image?.name;
+    if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      this.selfUpdateClassifications.set(container, 'peer');
+      return 'peer';
+    }
+    if (identityScope === 'peer') {
+      this.selfUpdateClassifications.set(container, 'peer');
+      return 'peer';
+    }
+
+    let selfContainerIdentity: SelfContainerIdentity | null;
+    try {
+      selfContainerIdentity = await this.resolveSelfContainerIdentity(dockerApi);
+    } catch {
+      selfContainerIdentity = null;
+    }
+    if (!selfContainerIdentity) {
+      this.selfUpdateClassifications.set(container, 'indeterminate');
+      return 'indeterminate';
+    }
+
+    return this.classifySelfUpdateFromIdentity(container, selfContainerIdentity);
+  }
+
+  classifySelfUpdateFromIdentity(
+    container: SelfUpdateContainerRef,
+    selfContainerIdentity: SelfContainerIdentity,
+  ): SelfUpdateClassification {
+    const containerId = typeof container.id === 'string' ? container.id.trim() : '';
+    const containerName =
+      typeof container.name === 'string' ? container.name.trim().replace(/^\/+/, '') : '';
+    const identityId = selfContainerIdentity.id.trim();
+    const identityName = selfContainerIdentity.name.trim().replace(/^\/+/, '');
+    if ((!containerId && !containerName) || !identityId || !identityName) {
+      this.selfUpdateClassifications.set(container, 'indeterminate');
+      return 'indeterminate';
+    }
+    const idMatches =
+      containerId === identityId ||
+      (/^[a-f0-9]{12,64}$/i.test(containerId) &&
+        /^[a-f0-9]{12,64}$/i.test(identityId) &&
+        (containerId.startsWith(identityId) || identityId.startsWith(containerId)));
+    const classification: SelfUpdateClassification =
+      idMatches || (!!containerName && containerName === identityName) ? 'current' : 'peer';
+    this.selfUpdateClassifications.set(container, classification);
+    return classification;
+  }
+
+  classifySelfUpdateAsIndeterminate(container: SelfUpdateContainerRef): SelfUpdateClassification {
+    this.selfUpdateClassifications.set(container, 'indeterminate');
+    return 'indeterminate';
+  }
+
   isSelfUpdate(container: SelfUpdateContainerRef): boolean {
-    return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
+    return this.selfUpdateClassifications.get(container) === 'current';
+  }
+
+  getSelfUpdateClassification(
+    container: SelfUpdateContainerRef,
+  ): SelfUpdateClassification | undefined {
+    return this.selfUpdateClassifications.get(container);
+  }
+
+  clearSelfUpdateClassification(container: SelfUpdateContainerRef): void {
+    this.selfUpdateClassifications.delete(container);
   }
 
   isInfrastructureUpdate(container: SelfUpdateContainerRef): boolean {
@@ -184,6 +306,12 @@ class SelfUpdateOrchestrator {
     logContainer: SelfUpdateLogger,
     operationId?: string,
   ): Promise<boolean> {
+    const classification =
+      this.getSelfUpdateClassification(container) ||
+      (await this.classifySelfUpdate(container, context.dockerApi));
+    if (classification === 'indeterminate') {
+      throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
+    }
     const resolveHelperImage = this.resolveHelperImage;
     return executeSelfUpdateTransition(
       {
@@ -201,6 +329,12 @@ class SelfUpdateOrchestrator {
         resolveFinalizeSecret: this.resolveFinalizeSecret,
         resolveHelperImage: resolveHelperImage ? () => resolveHelperImage(container) : undefined,
         touchOperation: this.touchOperation,
+        observeHelperCompletion:
+          classification === 'peer' && this.isInfrastructureUpdate(container),
+        finalizeObservedHelperOperation: this.finalizeObservedHelperOperation,
+        waitForObservedHelperCompletion: this.waitForObservedHelperCompletion,
+        clearObservedHelperCompletion: clearSelfUpdateHelperCompletion,
+        resolveObservedHelperRuntime: this.resolveObservedHelperRuntime,
       },
       context,
       container,

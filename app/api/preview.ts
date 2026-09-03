@@ -2,10 +2,12 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { type ActionPolicyTrigger, selectActionTrigger } from '../model/action-policy.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import type Docker from '../triggers/providers/docker/Docker.js';
 import { recordAuditEvent } from './audit-events.js';
-import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import {
   classifyPreviewError,
   sanitizePreviewErrorReason,
@@ -32,10 +34,15 @@ async function previewContainer(req: Request, res: Response) {
     return;
   }
 
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
-    triggerTypes: ['docker', 'dockercompose'],
-  });
-  if (!trigger) {
+  const selection = selectActionTrigger(
+    registry.getState().trigger as unknown as Record<string, ActionPolicyTrigger> | undefined,
+    container,
+    {
+      requireAuto: false,
+      triggerTypes: ['docker', 'dockercompose', 'portainer'],
+    },
+  );
+  if (!selection || selection.state === 'blocked') {
     log.warn(`${NO_DOCKER_TRIGGER_FOUND_ERROR} (${sanitizeLogParam(id)})`);
     sendPreviewError(res, 404, {
       code: 'no-trigger-configured',
@@ -44,6 +51,8 @@ async function previewContainer(req: Request, res: Response) {
     });
     return;
   }
+
+  const trigger = selection.trigger as unknown as Docker;
 
   try {
     const preview = await trigger.preview(container);
@@ -61,7 +70,7 @@ async function previewContainer(req: Request, res: Response) {
       });
       sendPreviewError(res, 404, {
         code: 'container-runtime-not-found',
-        message: 'Container was not found by the configured Docker watcher',
+        message: 'Container was not found by the configured update provider',
       });
       return;
     }

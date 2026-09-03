@@ -55,6 +55,7 @@ import { getRequestedOperationId } from '../triggers/providers/docker/update-run
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
+import { ddRegistryLookupImage, ddRegistryLookupUrl } from '../watchers/providers/docker/label.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -234,6 +235,7 @@ interface RemoteTriggerErrorPayload {
 interface AgentUpdateOperationChangedPayload {
   operationId: string;
   containerName: string;
+  triggerName?: string;
   status: ContainerUpdateOperationStatus;
   containerId?: string;
   newContainerId?: string;
@@ -620,7 +622,17 @@ export class AgentClient {
       query.watcher = watcher;
     }
     const containersInStore = storeContainer.getContainers(query);
-    const newContainerIds = new Set(newContainers.map((container) => container.id));
+    // Every caller prunes before handing the same list to
+    // processAuthoritativeContainer(s), so the ownership gate there has not run
+    // yet. Apply the same rule silently here (the ingest pass logs each
+    // rejection): an id this agent may not write must not take part in the
+    // keep-set, nor in the #496 replacement-identity match below, where naming
+    // a foreign container would otherwise turn the removal of one of this
+    // agent's own rows into a replacement.
+    const ownedNewContainers = newContainers.filter(
+      (container) => this.getAuthoritativeIngestRejection(container) === undefined,
+    );
+    const newContainerIds = new Set(ownedNewContainers.map((container) => container.id));
 
     const containersToRemove = containersInStore.filter(
       (containerInStore) => !newContainerIds.has(containerInStore.id),
@@ -632,7 +644,7 @@ export class AgentClient {
     // (and, as before, lets Hass keep the state topic alive across the swap). A name that is
     // genuinely gone stays unflagged so its HA discovery topics are still cleaned up.
     const newContainerIdentityKeys = new Set(
-      newContainers
+      ownedNewContainers
         .map((container) =>
           deriveContainerIdentityKey({
             ...container,
@@ -643,7 +655,7 @@ export class AgentClient {
         .filter((key): key is string => key !== undefined),
     );
     const newUnscopedContainerNames = new Set(
-      newContainers
+      ownedNewContainers
         .filter((container) => !container.watcher && !watcher)
         .map((container) => container.name)
         .filter((name): name is string => typeof name === 'string' && name !== ''),
@@ -807,6 +819,7 @@ export class AgentClient {
       this.controllerDockerTransportWatchers.has(container.watcher) &&
       container.image?.registry?.url
     ) {
+      container = this.applyRegistryLookupLabels(container);
       container = normalizeContainer(container);
     }
     container = this.preserveControllerDockerEnrichment(container);
@@ -858,6 +871,38 @@ export class AgentClient {
     }
 
     return containerReport;
+  }
+
+  /**
+   * `normalizeContainer()` (called just after this, for controller-Docker-transport
+   * agents only) picks a registry provider by reading `image.registry.lookupImage` —
+   * it never derives that field from labels itself. The local-watcher pipeline
+   * (`container-init.ts`) does that translation for containers the controller watches
+   * directly, but nothing in the agent path ever ran it, so `dd.registry.lookup.image`
+   * (and its legacy alias `dd.registry.lookup.url`) silently did nothing for any
+   * agent-reported container. Mirrors `container-init.ts`'s own label precedence
+   * (`dd.registry.lookup.image` before the legacy `dd.registry.lookup.url` alias) and
+   * never overwrites a value the agent already reported.
+   */
+  private applyRegistryLookupLabels(container: Container): Container {
+    if (container.image.registry.lookupImage || container.image.registry.lookupUrl) {
+      return container;
+    }
+    const labels = container.labels ?? {};
+    const lookupImage = labels[ddRegistryLookupImage] || labels[ddRegistryLookupUrl];
+    if (!lookupImage) {
+      return container;
+    }
+    return {
+      ...container,
+      image: {
+        ...container.image,
+        registry: {
+          ...container.image.registry,
+          lookupImage,
+        },
+      },
+    };
   }
 
   private preserveControllerDockerEnrichment(container: Container): Container {
@@ -932,29 +977,35 @@ export class AgentClient {
    * container id, which a rename doesn't change, so the record is never
    * pruned and never retried. Updates would just stop landing with no
    * error surfaced.
+   *
+   * Returns the reason a container may not be ingested, or undefined when it
+   * may. Two consumers: `canIngestAuthoritativeContainer`, which logs the
+   * reason and drops the container, and `pruneOldContainers`, which runs
+   * before ingestion and needs the same rule without a second log line.
    */
-  private canIngestAuthoritativeContainer(container: Container): boolean {
-    if (typeof container.id !== 'string' || container.id.length === 0) {
-      this.log.warn(
-        `Ignoring authoritative container ingest without an id from agent ${this.name}`,
-      );
-      return false;
+  private getAuthoritativeIngestRejection(container: Container): string | undefined {
+    const containerId = container.id;
+    if (typeof containerId !== 'string' || containerId.length === 0) {
+      return `Ignoring authoritative container ingest without an id from agent ${this.name}`;
     }
 
-    const existing = storeContainer.getContainer(container.id);
+    const existing = storeContainer.getContainer(containerId);
     if (!existing) {
       if (this.claimsControllerLocalWatcherNamespace(container.watcher)) {
-        this.log.warn(
-          `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`,
-        );
-        return false;
+        return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`;
       }
-      return true;
+      return undefined;
     }
     if (existing.agent !== this.name) {
-      this.log.warn(
-        `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
-      );
+      return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`;
+    }
+    return undefined;
+  }
+
+  private canIngestAuthoritativeContainer(container: Container): boolean {
+    const rejection = this.getAuthoritativeIngestRejection(container);
+    if (rejection) {
+      this.log.warn(rejection);
       return false;
     }
     return true;
@@ -1663,6 +1714,25 @@ export class AgentClient {
     return trimmed.startsWith(prefix) ? trimmed : `${prefix}${trimmed}`;
   }
 
+  private qualifyAgentTriggerName(
+    triggerName: string | undefined,
+    existingTriggerName?: string,
+  ): string | undefined {
+    if (existingTriggerName !== undefined) {
+      return existingTriggerName;
+    }
+    if (triggerName === undefined) {
+      return undefined;
+    }
+    if (triggerName.startsWith(`${this.name}.`)) {
+      return triggerName;
+    }
+    if (triggerName.indexOf('.') !== triggerName.lastIndexOf('.')) {
+      return undefined;
+    }
+    return `${this.name}.${triggerName}`;
+  }
+
   /**
    * Resolve the operation id to use when processing a lifecycle event from
    * the agent.
@@ -1691,7 +1761,12 @@ export class AgentClient {
     const payload = data as Record<string, unknown>;
     const operationId = toNonEmptyString(payload.operationId);
     const containerName = toNonEmptyString(payload.containerName);
+    const triggerName = toOptionalString(payload.triggerName);
     if (!operationId || !containerName || !isContainerUpdateOperationStatus(payload.status)) {
+      return undefined;
+    }
+    const normalizedTriggerName = this.qualifyAgentTriggerName(triggerName);
+    if (triggerName !== undefined && normalizedTriggerName === undefined) {
       return undefined;
     }
 
@@ -1699,6 +1774,7 @@ export class AgentClient {
       operationId,
       containerName,
       status: payload.status,
+      ...(normalizedTriggerName !== undefined ? { triggerName: normalizedTriggerName } : {}),
       ...(toOptionalString(payload.containerId) !== undefined
         ? { containerId: toOptionalString(payload.containerId) }
         : {}),
@@ -1749,6 +1825,7 @@ export class AgentClient {
   private buildAgentOperationBase(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     containerId?: string;
     newContainerId?: string;
     container?: Record<string, unknown>;
@@ -1766,6 +1843,9 @@ export class AgentClient {
       id: this.resolveAgentOperationId(payload.operationId),
       kind: 'container-update' as const,
       containerName: payload.containerName,
+      ...(this.qualifyAgentTriggerName(payload.triggerName) !== undefined
+        ? { triggerName: this.qualifyAgentTriggerName(payload.triggerName) }
+        : {}),
       agent: this.name,
       ...(watcher !== undefined ? { watcher } : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
@@ -1777,6 +1857,7 @@ export class AgentClient {
   private ensureAgentOperationForTerminal(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     containerId?: string;
     newContainerId?: string;
     container?: Record<string, unknown>;
@@ -1809,6 +1890,15 @@ export class AgentClient {
         if (isActiveContainerUpdateOperationStatus(existing.status)) {
           updateOperationStore.updateOperation(operationId, {
             containerName: payload.containerName,
+            ...(this.qualifyAgentTriggerName(payload.triggerName, existing.triggerName) !==
+            undefined
+              ? {
+                  triggerName: this.qualifyAgentTriggerName(
+                    payload.triggerName,
+                    existing.triggerName,
+                  ),
+                }
+              : {}),
             agent: base.agent,
             /* v8 ignore next -- watcher is optional when an agent event lacks container metadata. */
             ...(base.watcher !== undefined ? { watcher: base.watcher } : {}),
@@ -1845,6 +1935,7 @@ export class AgentClient {
   private markAgentOperationTerminal(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     status: TerminalContainerUpdateOperationStatus;
     containerId?: string;
     newContainerId?: string;
@@ -1860,6 +1951,11 @@ export class AgentClient {
     updateOperationStore.markOperationTerminal(operationId, {
       status: payload.status,
       containerName: payload.containerName,
+      ...(this.qualifyAgentTriggerName(payload.triggerName, existing?.triggerName) !== undefined
+        ? {
+            triggerName: this.qualifyAgentTriggerName(payload.triggerName, existing?.triggerName),
+          }
+        : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),

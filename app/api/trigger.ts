@@ -51,7 +51,7 @@ const triggerRequestBodySchema = joi
   .unknown(true);
 
 const INVALID_TRIGGER_REQUEST_BODY_ERROR = 'Invalid trigger request body';
-const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
 function validateTriggerRequestBody(body: unknown): {
   value?: TriggerRequestBody;

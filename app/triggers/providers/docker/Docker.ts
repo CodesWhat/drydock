@@ -33,13 +33,14 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
-import { isMemoryStore } from '../../../store/index.js';
+import { isMemoryStore, save as saveStore } from '../../../store/index.js';
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { getDockerWatcherSourceKey } from '../../../watchers/providers/docker/container-init.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
@@ -51,16 +52,22 @@ import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
-import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import SelfUpdateOrchestrator, { type SelfUpdateClassification } from './SelfUpdateOrchestrator.js';
+import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
-import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
+import type { SelfUpdateDockerApi, SelfUpdateObservedHelperRuntime } from './self-update-types.js';
+import UpdateLifecycleExecutor, {
+  type SelfUpdateLifecycleResult,
+} from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
+const DEFAULT_PULL_TIMEOUT_MS = 600_000;
+const MAX_SIGNED_32_BIT_TIMEOUT_MS = 2_147_483_647;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
@@ -70,19 +77,30 @@ type ComposeRollbackTerminalPatch =
       status: 'rolled-back';
       phase: 'rolled-back';
       rollbackReason?: string;
-      lastError?: string;
+      lastError: string;
     }
   | {
       status: 'failed';
       phase: 'rollback-failed';
       rollbackReason?: string;
-      lastError?: string;
+      lastError: string;
     };
+
+function isSelfUpdateLifecycleResult(value: unknown): value is SelfUpdateLifecycleResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as SelfUpdateLifecycleResult).updated === 'boolean' &&
+    typeof (value as SelfUpdateLifecycleResult).operationId === 'string'
+  );
+}
 
 export interface DockerTriggerConfiguration extends TriggerConfiguration {
   prune: boolean;
   dryrun: boolean;
   autoremovetimeout: number;
+  pulltimeout: number;
+  helpercompletiontimeout: number;
   backupcount: number;
 }
 
@@ -92,6 +110,48 @@ type ContainerFullNameReference = {
   name: string;
   watcher?: unknown;
 };
+
+type DirectLocalDockerWatcher = {
+  agent?: unknown;
+  configuration?: {
+    host?: unknown;
+    socket?: unknown;
+    protocol?: unknown;
+    port?: unknown;
+  };
+  dockerApi: unknown;
+};
+
+type AuthoritativeLocalDockerRuntime = {
+  dockerApi: unknown;
+  identity: { id: string; name: string };
+  sourceKey: string;
+};
+
+function normalizeNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized === '' ? undefined : normalized;
+}
+
+function isDirectLocalDockerWatcher(
+  registryId: string,
+  watcher: unknown,
+): watcher is DirectLocalDockerWatcher {
+  if (!registryId.startsWith('docker.') || !watcher || typeof watcher !== 'object') {
+    return false;
+  }
+  const candidate = watcher as DirectLocalDockerWatcher;
+  if (normalizeNonEmptyString(candidate.agent)) {
+    return false;
+  }
+  if (normalizeNonEmptyString(candidate.configuration?.host)) {
+    return false;
+  }
+  return !!candidate.dockerApi;
+}
 
 function getPreferredLabelValue(labels, ddKey, _logger?) {
   return labels?.[ddKey];
@@ -113,12 +173,10 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
   }
 
   const record = outcome as Record<string, unknown>;
-  /* v8 ignore next 7 -- rollback outcome metadata is populated by compose rollback helpers. */
   const rollbackReason =
     typeof record.rollbackReason === 'string' && record.rollbackReason.trim() !== ''
       ? record.rollbackReason
       : undefined;
-  /* v8 ignore next 4 -- rollback outcome metadata normally carries a nonblank lastError. */
   const lastError =
     typeof record.lastError === 'string' && record.lastError.trim() !== ''
       ? record.lastError
@@ -128,13 +186,11 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
     return {
       status: 'rolled-back',
       phase: 'rolled-back',
-      /* v8 ignore next -- blank rollback reasons are omitted from terminal patches. */
       ...(rollbackReason ? { rollbackReason } : {}),
       lastError,
     };
   }
 
-  /* v8 ignore next 9 -- rollback-failed outcomes are integration-covered through compose recovery. */
   if (record.status === 'rollback-failed') {
     return {
       status: 'failed',
@@ -144,7 +200,6 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
     };
   }
 
-  /* v8 ignore next -- unknown rollback outcome statuses are defensive malformed-error handling. */
   return undefined;
 }
 
@@ -174,7 +229,6 @@ function getOperationIdentityFilter(operation: {
         ? operation.agent
         : undefined;
 
-  /* v8 ignore next 4 -- watcher-scoped identity construction is covered by update execution tests. */
   return {
     ...(agent !== undefined ? { agent } : {}),
     watcher,
@@ -405,8 +459,13 @@ class Docker<
       emitSelfUpdateStarting,
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
       resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
+      resolveObserverNetworkMode: () => this.resolveObserverNetworkMode(),
+      resolveObservedHelperRuntime: (context, container) =>
+        this.resolveObservedHelperRuntime(context, container),
+      finalizeObservedHelperOperation: (operationId, status, lastError) =>
+        this.finalizeObservedHelperOperation(operationId, status, lastError),
       resolveHelperImage: (container) => {
-        if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
+        if (this.isSelfUpdate(container)) {
           return undefined;
         }
         const drydockContainer = storeContainer
@@ -678,6 +737,18 @@ class Docker<
       prune: this.joi.boolean().default(false),
       dryrun: this.joi.boolean().default(false),
       autoremovetimeout: this.joi.number().default(10_000),
+      pulltimeout: this.joi
+        .number()
+        .integer()
+        .positive()
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .default(DEFAULT_PULL_TIMEOUT_MS),
+      helpercompletiontimeout: this.joi
+        .number()
+        .integer()
+        .positive()
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
     });
   }
@@ -864,29 +935,79 @@ class Docker<
   async pullImage(dockerApi, auth, newImage, logContainer) {
     logContainer.info(`Pull image ${newImage}`);
     try {
-      const pullStream = await dockerApi.pull(newImage, {
-        authconfig: auth,
-      });
       const pullProgressLogger = this.createPullProgressLogger(logContainer, newImage);
+      const pullTimeout = this.configuration.pulltimeout ?? DEFAULT_PULL_TIMEOUT_MS;
+      const abortController = new AbortController();
+      let pullStream;
 
-      await new Promise((resolve, reject) =>
-        dockerApi.modem.followProgress(
-          pullStream,
-          (error, output) => {
-            if (Array.isArray(output) && output.length > 0) {
-              pullProgressLogger.onDone(output.at(-1));
-            }
-            if (error) {
-              reject(error);
-            } else {
-              resolve(undefined);
-            }
-          },
-          (progressEvent) => {
-            pullProgressLogger.onProgress(progressEvent);
-          },
-        ),
-      );
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (error?: unknown) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        };
+        const destroyPullStream = (stream) => {
+          if (typeof stream?.destroy !== 'function') {
+            return;
+          }
+          try {
+            stream.destroy();
+          } catch {
+            // The timeout remains the authoritative failure if stream cleanup throws.
+          }
+        };
+        const timeout = setTimeout(() => {
+          const timeoutError = new Error(`Pull image ${newImage} timed out after ${pullTimeout}ms`);
+          settle(timeoutError);
+          abortController.abort(timeoutError);
+          destroyPullStream(pullStream);
+        }, pullTimeout);
+
+        void dockerApi
+          .pull(newImage, {
+            authconfig: auth,
+            abortSignal: abortController.signal,
+          })
+          .then(
+            (stream) => {
+              pullStream = stream;
+              if (settled) {
+                destroyPullStream(stream);
+                return;
+              }
+              try {
+                dockerApi.modem.followProgress(
+                  stream,
+                  (error, output) => {
+                    if (settled) {
+                      return;
+                    }
+                    if (Array.isArray(output) && output.length > 0) {
+                      pullProgressLogger.onDone(output.at(-1));
+                    }
+                    settle(error);
+                  },
+                  (progressEvent) => {
+                    if (!settled) {
+                      pullProgressLogger.onProgress(progressEvent);
+                    }
+                  },
+                );
+              } catch (error: unknown) {
+                settle(error);
+              }
+            },
+            (error) => settle(error),
+          );
+      });
       logContainer.info(`Image ${newImage} pulled with success`);
     } catch (e: unknown) {
       logContainer.warn(`Error when pulling image ${newImage} (${getErrorMessage(e)})`);
@@ -1453,6 +1574,139 @@ class Docker<
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
+  async classifySelfUpdate(container) {
+    const imageName = container?.image?.name;
+    if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    let candidateWatcher: unknown;
+    try {
+      candidateWatcher = this.getWatcher(container);
+    } catch {
+      candidateWatcher = undefined;
+    }
+    if (!candidateWatcher) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'authoritative');
+    }
+    const candidateRegistryId = container?.agent
+      ? `${container.agent}.docker.${container.watcher}`
+      : `docker.${container.watcher}`;
+    if (!isDirectLocalDockerWatcher(candidateRegistryId, candidateWatcher)) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      return this.selfUpdateOrchestrator.classifySelfUpdateAsIndeterminate(container);
+    }
+    const candidateSourceKey = getDockerWatcherSourceKey(candidateWatcher as never);
+    if (candidateSourceKey !== localRuntime.sourceKey) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    return this.selfUpdateOrchestrator.classifySelfUpdateFromIdentity(
+      container,
+      localRuntime.identity,
+    );
+  }
+
+  async resolveAuthoritativeLocalDockerRuntime(): Promise<AuthoritativeLocalDockerRuntime | null> {
+    const uniqueSources = new Map<string, DirectLocalDockerWatcher>();
+    for (const [registryId, watcher] of Object.entries(getState().watcher)) {
+      if (!isDirectLocalDockerWatcher(registryId, watcher)) {
+        continue;
+      }
+      uniqueSources.set(getDockerWatcherSourceKey(watcher as never), watcher);
+    }
+    if (uniqueSources.size !== 1) {
+      return null;
+    }
+    const [sourceKey, watcher] = uniqueSources.entries().next().value as [
+      string,
+      DirectLocalDockerWatcher,
+    ];
+    let identity: { id: string; name: string } | null;
+    try {
+      identity = await this.selfUpdateOrchestrator.resolveSelfContainerIdentity(watcher.dockerApi);
+    } catch {
+      identity = null;
+    }
+    if (!identity?.id || !identity.name) {
+      return null;
+    }
+    return { dockerApi: watcher.dockerApi, identity, sourceKey };
+  }
+
+  async resolveObserverNetworkMode(): Promise<string> {
+    const directLocalWatchers = Object.entries(getState().watcher).filter(([registryId, watcher]) =>
+      isDirectLocalDockerWatcher(registryId, watcher),
+    );
+    if (directLocalWatchers.length === 0) {
+      throw new Error('Observed self-update requires an authoritative local Docker watcher');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      throw new Error('Observed self-update could not resolve the local Drydock container');
+    }
+    return `container:${localRuntime.identity.id}`;
+  }
+
+  async resolveObservedHelperRuntime(context, container): Promise<SelfUpdateObservedHelperRuntime> {
+    if (normalizeNonEmptyString(container?.agent)) {
+      throw new Error('Infrastructure helper updates are unsupported for agent-owned watchers');
+    }
+    let targetWatcher: unknown;
+    try {
+      targetWatcher = this.getWatcher(container);
+    } catch (error: unknown) {
+      throw new Error(`Infrastructure helper watcher is unavailable: ${getErrorMessage(error)}`);
+    }
+    const targetWatcherRuntime = targetWatcher as DirectLocalDockerWatcher;
+    if (normalizeNonEmptyString(targetWatcherRuntime.agent)) {
+      throw new Error('Infrastructure helper updates are unsupported for agent-owned watchers');
+    }
+    if (
+      normalizeNonEmptyString(targetWatcherRuntime.configuration?.host) &&
+      !this.findDockerSocketBind(context.currentContainerSpec)
+    ) {
+      throw new Error('Infrastructure helper updates are unsupported for remote Docker watchers');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      throw new Error('Infrastructure helper update requires one direct local Docker watcher');
+    }
+    const stableDockerApi = localRuntime.dockerApi as SelfUpdateDockerApi;
+    if (
+      typeof stableDockerApi.createContainer !== 'function' ||
+      typeof stableDockerApi.getContainer !== 'function'
+    ) {
+      throw new Error('Infrastructure helper update requires stable local Docker control');
+    }
+    const targetId = context.currentContainerSpec?.Id;
+    const targetName = context.currentContainerSpec?.Name?.replace(/^\/+/, '');
+    let targetInspect: { Id?: unknown; Name?: unknown };
+    try {
+      const targetHandle = (await Promise.resolve(stableDockerApi.getContainer(targetId))) as {
+        inspect?: () => Promise<{ Id?: unknown; Name?: unknown }>;
+      };
+      if (typeof targetHandle?.inspect !== 'function') {
+        throw new Error('stable Docker target handle is not inspectable');
+      }
+      targetInspect = await targetHandle.inspect();
+    } catch (error: unknown) {
+      throw new Error(
+        `Infrastructure target is not proven on the local Docker daemon: ${getErrorMessage(error)}`,
+      );
+    }
+    const inspectedName =
+      typeof targetInspect.Name === 'string' ? targetInspect.Name.replace(/^\/+/, '') : '';
+    if (targetInspect.Id !== targetId || inspectedName !== targetName) {
+      throw new Error('Infrastructure target identity does not match the local Docker daemon');
+    }
+    return {
+      dockerApi: stableDockerApi,
+      networkMode: `container:${localRuntime.identity.id}`,
+    };
+  }
+
   isInfrastructureUpdate(container) {
     return this.selfUpdateOrchestrator.isInfrastructureUpdate(container);
   }
@@ -1491,6 +1745,7 @@ class Docker<
       context,
       triggerName: this.getId(),
       runtimeContext,
+      isCurrentProcess: this.isSelfUpdate(container),
     });
   }
 
@@ -1514,6 +1769,34 @@ class Docker<
 
   async markSelfUpdateOperationSkipped(operationId: string, lastError: string): Promise<void> {
     markSelfUpdateOperationSkippedFromStore(operationId, lastError);
+  }
+
+  async finalizeObservedHelperOperation(
+    operationId: string,
+    status: 'succeeded' | 'rolled-back' | 'failed',
+    lastError?: string,
+  ): Promise<void> {
+    const operation =
+      status === 'succeeded'
+        ? updateOperationStore.markOperationTerminal(operationId, {
+            status: 'succeeded',
+            phase: 'succeeded',
+          })
+        : status === 'rolled-back'
+          ? updateOperationStore.markOperationTerminal(operationId, {
+              status: 'rolled-back',
+              phase: 'rolled-back',
+              ...(lastError ? { lastError } : {}),
+            })
+          : updateOperationStore.markOperationTerminal(operationId, {
+              status: 'failed',
+              phase: 'failed',
+              ...(lastError ? { lastError } : {}),
+            });
+    if (!operation || operation.status !== status) {
+      throw new Error(`Failed to durably finalize observed helper operation ${operationId}`);
+    }
+    await saveStore();
   }
 
   async persistSecurityState(container, securityPatch: SecurityStatePatch, logContainer) {
@@ -1690,14 +1973,39 @@ class Docker<
    * Delegates the actual runtime update to `performContainerUpdate()` which
    * subclasses can override.
    */
-  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const bypassGlobalCap = this.isSelfUpdate(container) || this.isInfrastructureUpdate(container);
-    return withContainerUpdateLocks(
+  async runContainerUpdateLifecycle(
+    container,
+    runtimeContext?: unknown,
+    options?: {
+      lifecycleAlreadyAcquired?: boolean;
+      selfUpdateClassification?: SelfUpdateClassification;
+      onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
+    },
+  ) {
+    const selfUpdateClassification =
+      options?.selfUpdateClassification ?? (await this.classifySelfUpdate(container));
+    if (selfUpdateClassification === 'indeterminate') {
+      this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
+      throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
+    }
+    const selfUpdate = selfUpdateClassification === 'current';
+    const exclusiveUpdate = selfUpdate || this.isInfrastructureUpdate(container);
+    let exclusiveUpdateOperationId: string | undefined;
+    const lifecycle = withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
         try {
-          const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);
+          const lifecycleResult: unknown = await this.updateLifecycleExecutor.run(
+            container,
+            runtimeContext,
+          );
+          let result: unknown = lifecycleResult;
+          if (isSelfUpdateLifecycleResult(lifecycleResult)) {
+            exclusiveUpdateOperationId = lifecycleResult.operationId;
+            options?.onSelfUpdateOperationId?.(exclusiveUpdateOperationId, lifecycleResult.updated);
+            result = lifecycleResult.updated;
+          }
           if (result !== false && requestedOperationId) {
             const operation = updateOperationStore.getOperationById(requestedOperationId);
             if (
@@ -1713,6 +2021,10 @@ class Docker<
           }
           return result;
         } catch (error: unknown) {
+          if (selfUpdate && error instanceof RetainSelfUpdateLifecycleError) {
+            exclusiveUpdateOperationId = error.operationId;
+            options?.onSelfUpdateOperationId?.(error.operationId, true);
+          }
           const operation = requestedOperationId
             ? updateOperationStore.getOperationById(requestedOperationId)
             : undefined;
@@ -1751,7 +2063,6 @@ class Docker<
           const composeRollbackPatch = getComposeRollbackTerminalPatch(error);
           if (composeRollbackPatch) {
             updateOperationStore.markOperationTerminal(operation.id, composeRollbackPatch);
-            /* v8 ignore next 11 -- rollback-state persistence is covered through compose recovery tests. */
             if (composeRollbackPatch.status === 'rolled-back') {
               const rollbackContainerId = getRollbackStateContainerId(operation, container);
               if (rollbackContainerId) {
@@ -1760,7 +2071,7 @@ class Docker<
                   'rolled-back',
                   {
                     reason: composeRollbackPatch.rollbackReason ?? '',
-                    lastError: composeRollbackPatch.lastError ?? getErrorMessage(error),
+                    lastError: composeRollbackPatch.lastError,
                   },
                 );
               }
@@ -1790,8 +2101,26 @@ class Docker<
           throw error;
         }
       },
-      { bypassGlobalCap },
+      {
+        bypassGlobalCap: exclusiveUpdate,
+        exclusive: exclusiveUpdate,
+        skipLifecycleGate: options?.lifecycleAlreadyAcquired === true,
+        skipUpdateLocks: options?.lifecycleAlreadyAcquired === true,
+        retainExclusiveOnResult: (result) =>
+          selfUpdate && result === true && exclusiveUpdateOperationId
+            ? { operationId: exclusiveUpdateOperationId }
+            : undefined,
+        retainExclusiveOnError: (error) =>
+          error instanceof RetainSelfUpdateLifecycleError
+            ? { operationId: error.operationId }
+            : undefined,
+      },
     );
+    try {
+      return await lifecycle;
+    } finally {
+      this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
+    }
   }
 
   /**

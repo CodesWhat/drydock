@@ -824,10 +824,24 @@ class BaseRegistry<
   }
 
   /**
-   * Common URL pattern matching
+   * Match an image's registry host against one or more base hosts, exactly or
+   * as a subdomain.
+   *
+   * A prefix lookalike must never match: the caller is about to attach the
+   * operator's credentials to a request aimed at whatever host the image
+   * reference names, so `evilghcr.io` matching `ghcr.io` sends a real
+   * credential to an attacker-chosen host.
    */
-  matchUrlPattern(image: Pick<ContainerImage, 'registry'>, pattern: RegExp): boolean {
-    return pattern.test(image.registry.url);
+  matchRegistryHost(image: Pick<ContainerImage, 'registry'>, ...baseHosts: string[]): boolean {
+    const registryUrl = image?.registry?.url;
+    if (typeof registryUrl !== 'string') {
+      return false;
+    }
+    const host = this.getRegistryHostname(registryUrl);
+    if (!/^[a-z0-9.-]+$/.test(host)) {
+      return false;
+    }
+    return baseHosts.some((baseHost) => host === baseHost || host.endsWith(`.${baseHost}`));
   }
 
   /**

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Response } from 'express';
-import passport from 'passport';
 import log from '../log/index.js';
 import {
   recordAuthLogin,
@@ -12,10 +11,11 @@ import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
-import { getAllIds } from './auth-strategies.js';
-import type { AuthRequest, UserWithUsername } from './auth-types.js';
+import type { AuthRequest } from './auth-types.js';
+import { authenticateRequest } from './authenticator-chain.js';
 import { sendErrorResponse } from './error-response.js';
 import { getFirstHeaderValue } from './header-value.js';
+import { type AuthenticatedPrincipal, isLoginSessionEligible } from './principal.js';
 
 const MS_PER_MINUTE = 60 * 1000;
 const DEFAULT_LOCKOUT_WINDOW_MINUTES = 15;
@@ -473,7 +473,11 @@ function sendLockoutResponse(
   sendErrorResponse(res, 423, LOGIN_LOCKOUT_ERROR_MESSAGE);
 }
 
-export function authenticateLogin(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authenticateLogin(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const loginIdentity = getLoginIdentity(req);
   const accountLockoutKey = normalizeIdentity(loginIdentity);
   const ipLockoutKey = normalizeIdentity(req.ip);
@@ -503,76 +507,76 @@ export function authenticateLogin(req: AuthRequest, res: Response, next: NextFun
     activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
   };
 
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  const hasAuthorizationHeader = typeof authorization === 'string' && authorization.trim() !== '';
+  const isBasicAuthorization =
+    hasAuthorizationHeader && authorization.toLowerCase().startsWith('basic ');
+
+  const rejectFailedLogin = (): void => {
+    const failedAt = Date.now();
+    const accountLockoutAfterFailure = registerFailedLoginAttempt(
+      accountLoginLockouts,
+      accountLockoutPolicy,
+      accountLockoutKey,
+      failedAt,
+    );
+    const ipLockoutAfterFailure = registerFailedLoginAttempt(
+      ipLoginLockouts,
+      ipLockoutPolicy,
+      ipLockoutKey,
+      failedAt,
+    );
+    const lockoutUntil = Math.max(accountLockoutAfterFailure ?? 0, ipLockoutAfterFailure ?? 0);
+    if (lockoutUntil > failedAt) {
+      sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
+      return;
+    }
+
+    recordLoginAuditEvent(
+      req,
+      'error',
+      'Authentication failed (invalid credentials)',
+      loginIdentity,
+    );
+    sendUnauthorized(res);
+  };
+
+  if (hasAuthorizationHeader && !isBasicAuthorization) {
+    finishAttempt();
+    rejectFailedLogin();
+    return;
+  }
+
+  // The chain leaves the principal on the request, so there is nothing to hand
+  // forward here and nothing that could persist a session on the way past:
+  // the login route establishes the session itself, once, after the concurrent
+  // session limit has been enforced.
+  let principal: AuthenticatedPrincipal | undefined;
   try {
-    passport.authenticate(
-      getAllIds(),
-      { session: false },
-      (error: unknown, user: UserWithUsername | false | null) => {
-        finishAttempt();
-        if (error) {
-          next(error);
-          return;
-        }
-
-        if (!user) {
-          const failedAt = Date.now();
-          const accountLockoutAfterFailure = registerFailedLoginAttempt(
-            accountLoginLockouts,
-            accountLockoutPolicy,
-            accountLockoutKey,
-            failedAt,
-          );
-          const ipLockoutAfterFailure = registerFailedLoginAttempt(
-            ipLoginLockouts,
-            ipLockoutPolicy,
-            ipLockoutKey,
-            failedAt,
-          );
-          const lockoutUntil = Math.max(
-            accountLockoutAfterFailure ?? 0,
-            ipLockoutAfterFailure ?? 0,
-          );
-          if (lockoutUntil > failedAt) {
-            sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
-            return;
-          }
-
-          recordLoginAuditEvent(
-            req,
-            'error',
-            'Authentication failed (invalid credentials)',
-            loginIdentity,
-          );
-          sendUnauthorized(res);
-          return;
-        }
-
-        clearLoginLockout(accountLoginLockouts, accountLockoutKey);
-        clearLoginLockout(ipLoginLockouts, ipLockoutKey);
-
-        const continueWithUser = (authenticatedUser: UserWithUsername): void => {
-          req.user = authenticatedUser;
-          next();
-        };
-
-        if (typeof req.login !== 'function') {
-          continueWithUser(user);
-          return;
-        }
-
-        req.login(user, { session: false }, (loginError: unknown) => {
-          if (loginError) {
-            next(loginError);
-            return;
-          }
-          continueWithUser(user);
-        });
-      },
-    )(req, res, next);
+    principal = await authenticateRequest(req);
   } catch (error: unknown) {
     finishAttempt();
     next(error);
+    return;
   }
+
+  finishAttempt();
+  if (principal === undefined) {
+    rejectFailedLogin();
+    return;
+  }
+
+  if (
+    !isLoginSessionEligible(principal) ||
+    (hasAuthorizationHeader && principal.kind !== 'basic')
+  ) {
+    rejectFailedLogin();
+    return;
+  }
+
+  clearLoginLockout(accountLoginLockouts, accountLockoutKey);
+  clearLoginLockout(ipLoginLockouts, ipLockoutKey);
+  next();
 }
 
 export function resetLoginLockoutStateForTests(): void {

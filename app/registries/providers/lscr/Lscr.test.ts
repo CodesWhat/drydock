@@ -150,3 +150,14 @@ test('should authenticate against ghcr.io token endpoint for lscr.io images', as
   });
   expect(result.headers.Authorization).toBe('Bearer xxxxx');
 });
+
+test.each(['evillscr.io', 'lscrXio', 'lscr.io.attacker.com'])(
+  'match should reject the lscr.io lookalike %s',
+  (registryUrl) => {
+    expect(lscr.match({ registry: { url: registryUrl } })).toBe(false);
+  },
+);
+
+test.each(['lscr.io'])('match should still accept %s', (registryUrl) => {
+  expect(lscr.match({ registry: { url: registryUrl } })).toBe(true);
+});

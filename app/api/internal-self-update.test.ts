@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import { waitForSelfUpdateHelperCompletion } from '../triggers/providers/docker/self-update-helper-completion.js';
 import {
   createFinalizeSelfUpdateHandler,
   getSelfUpdateFinalizeSecret,
@@ -14,10 +15,21 @@ import {
 
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
+const mockReleaseRetainedSelfUpdateLifecycle = vi.hoisted(() => vi.fn());
+const mockSaveStore = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: (...args: unknown[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: unknown[]) => mockMarkOperationTerminal(...args),
+}));
+
+vi.mock('../updates/update-locks.js', () => ({
+  releaseRetainedSelfUpdateLifecycle: (...args: unknown[]) =>
+    mockReleaseRetainedSelfUpdateLifecycle(...args),
+}));
+
+vi.mock('../store/index.js', () => ({
+  save: (...args: unknown[]) => mockSaveStore(...args),
 }));
 
 describe('internal-self-update', () => {
@@ -25,6 +37,56 @@ describe('internal-self-update', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMarkOperationTerminal.mockImplementation((id, patch) => ({ id, ...patch }));
+    mockSaveStore.mockResolvedValue(undefined);
+  });
+
+  test('awaits durable store save before releasing helper completion', async () => {
+    let finishSave: () => void = () => {};
+    mockSaveStore.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
+    const res = createMockResponse();
+
+    const finalizing = createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({
+        body: { operationId: 'op-123', status: 'succeeded', phase: 'succeeded' },
+      }),
+      res,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledOnce();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalledWith(202);
+    finishSave();
+    await finalizing;
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
+    expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  test('does not release or claim success when durable store save fails', async () => {
+    mockSaveStore.mockRejectedValueOnce(new Error('disk unavailable'));
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
+    const res = createMockResponse();
+
+    await createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({
+        body: { operationId: 'op-123', status: 'succeeded', phase: 'succeeded' },
+      }),
+      res,
+    );
+
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Self-update terminal state was not saved' });
   });
 
   function createActiveSelfUpdateOp(overrides: Record<string, unknown> = {}) {
@@ -62,8 +124,10 @@ describe('internal-self-update', () => {
     expect(isLoopbackAddress(undefined)).toBe(false);
   });
 
-  test('marks an active self-update operation terminal from a loopback request', () => {
-    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
+  test('marks an active self-update operation terminal from a loopback request', async () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
 
     const handler = createFinalizeSelfUpdateHandler();
     const req = createFinalizeRequest({
@@ -76,17 +140,18 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
       status: 'rolled-back',
       phase: 'rolled-back',
       lastError: 'health gate failed',
     });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
-  test('marks an active self-update operation as succeeded', () => {
+  test('marks an active self-update operation as succeeded', async () => {
     mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
 
     const handler = createFinalizeSelfUpdateHandler();
@@ -99,17 +164,110 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
       status: 'succeeded',
       phase: 'succeeded',
     });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
-  test('marks an active self-update operation as failed', () => {
+  test('releases surviving infrastructure ownership after success is durably finalized', async () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
+    const handler = createFinalizeSelfUpdateHandler();
+    const res = createMockResponse();
+
+    await handler(
+      createFinalizeRequest({
+        body: { operationId: 'op-123', status: 'succeeded', phase: 'succeeded' },
+      }),
+      res,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
+    expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  test('keeps exiting self ownership retained after successful finalize', () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'exiting-process' }),
+    );
+    const handler = createFinalizeSelfUpdateHandler();
+
+    handler(
+      createFinalizeRequest({ body: { operationId: 'op-123', status: 'succeeded' } }),
+      createMockResponse(),
+    );
+
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+  });
+
+  test('does not release surviving ownership when terminal state was not persisted', () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
+    mockMarkOperationTerminal.mockReturnValueOnce(undefined);
+    const res = createMockResponse();
+
+    createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({ body: { operationId: 'op-123', status: 'succeeded' } }),
+      res,
+    );
+
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  test('releases a matching lease when rollback arrives after the operation is already terminal', async () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'op-123',
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      kind: 'self-update',
+    });
+
+    const handler = createFinalizeSelfUpdateHandler();
+    await handler(
+      createFinalizeRequest({
+        body: { operationId: 'op-123', status: 'rolled-back' },
+      }),
+      createMockResponse(),
+    );
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
+  });
+
+  test('does not release the retained lifecycle when terminalization throws', async () => {
     mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
+    const failure = new Error('store write failed');
+    mockMarkOperationTerminal.mockImplementationOnce(() => {
+      throw failure;
+    });
+
+    await expect(
+      createFinalizeSelfUpdateHandler()(
+        createFinalizeRequest({
+          body: { operationId: 'op-123', status: 'rolled-back' },
+        }),
+        createMockResponse(),
+      ),
+    ).rejects.toThrow(failure);
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+  });
+
+  test('marks an active self-update operation as failed', async () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
 
     const handler = createFinalizeSelfUpdateHandler();
     const req = createFinalizeRequest({
@@ -122,17 +280,18 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
       status: 'failed',
       phase: 'failed',
       lastError: 'controller failure',
     });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
-  test('marks an active self-update operation as expired', () => {
+  test('marks an active self-update operation as expired', async () => {
     mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
 
     const handler = createFinalizeSelfUpdateHandler();
@@ -146,7 +305,7 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
       status: 'expired',
@@ -230,6 +389,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -243,6 +403,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -259,6 +420,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -295,6 +457,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
@@ -339,7 +502,7 @@ describe('internal-self-update', () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
-  test('ignores already-terminal operations without rewriting them', () => {
+  test('ignores already-terminal operations without rewriting them', async () => {
     mockGetOperationById.mockReturnValue({
       id: 'op-123',
       status: 'succeeded',
@@ -356,7 +519,7 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(202);
@@ -369,7 +532,7 @@ describe('internal-self-update', () => {
     );
   });
 
-  test('ignores already-expired operations without rewriting them', () => {
+  test('ignores already-expired operations without rewriting them', async () => {
     mockGetOperationById.mockReturnValue({
       id: 'op-123',
       status: 'expired',
@@ -387,7 +550,7 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(202);
@@ -398,6 +561,75 @@ describe('internal-self-update', () => {
         reason: 'already-terminal',
       }),
     );
+  });
+
+  test('notifies an observer from a durably saved already-terminal result', async () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'already-terminal-observer',
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      kind: 'self-update',
+      helperLifecycleOwner: 'surviving-process',
+      lastError: 'rollback complete',
+    });
+    const completion = waitForSelfUpdateHelperCompletion('already-terminal-observer', 1_000);
+
+    await createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({
+        body: { operationId: 'already-terminal-observer', status: 'rolled-back' },
+      }),
+      createMockResponse(),
+    );
+
+    await expect(completion).resolves.toEqual({
+      status: 'rolled-back',
+      lastError: 'rollback complete',
+    });
+  });
+
+  test('notifies an observer from already-terminal success without an error', async () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'already-terminal-observer-success',
+      status: 'succeeded',
+      phase: 'succeeded',
+      kind: 'self-update',
+      helperLifecycleOwner: 'surviving-process',
+    });
+    const completion = waitForSelfUpdateHelperCompletion(
+      'already-terminal-observer-success',
+      1_000,
+    );
+
+    await createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({
+        body: { operationId: 'already-terminal-observer-success', status: 'succeeded' },
+      }),
+      createMockResponse(),
+    );
+
+    await expect(completion).resolves.toEqual({ status: 'succeeded' });
+  });
+
+  test('does not release an already-terminal operation when its save fails', async () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'already-terminal-save-failure',
+      status: 'succeeded',
+      phase: 'succeeded',
+      kind: 'self-update',
+      helperLifecycleOwner: 'surviving-process',
+    });
+    mockSaveStore.mockRejectedValueOnce(new Error('save unavailable'));
+    const res = createMockResponse();
+
+    await createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({
+        body: { operationId: 'already-terminal-save-failure', status: 'succeeded' },
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
   });
 
   test('rejects finalize requests for non-self-update operations', () => {
@@ -469,7 +701,7 @@ describe('internal-self-update', () => {
     expect(getSelfUpdateFinalizeSecretForOperation('op-never-issued')).toBe(finalizeSecret);
   });
 
-  test('per-op hash validation succeeds when correct secret is supplied', () => {
+  test('per-op hash validation succeeds when correct secret is supplied', async () => {
     const { secret, secretHash } = issueSelfUpdateFinalizeSecret('op-per-hash');
     mockGetOperationById.mockReturnValue(
       createActiveSelfUpdateOp({ id: 'op-per-hash', finalizeSecretHash: secretHash }),
@@ -484,7 +716,7 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(202);
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-per-hash', { status: 'succeeded' });
@@ -531,7 +763,7 @@ describe('internal-self-update', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
-  test('map is cleaned up after successful finalize', () => {
+  test('map is cleaned up after successful finalize', async () => {
     const { secret } = issueSelfUpdateFinalizeSecret('op-cleanup');
     mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp({ id: 'op-cleanup' }));
 
@@ -542,7 +774,7 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(202);
     // After cleanup, the per-op secret is no longer in the map
@@ -551,7 +783,7 @@ describe('internal-self-update', () => {
     expect(getSelfUpdateFinalizeSecretForOperation('op-cleanup')).not.toBe(secret);
   });
 
-  test('map is cleaned up on the already-terminal path too', () => {
+  test('map is cleaned up on the already-terminal path too', async () => {
     issueSelfUpdateFinalizeSecret('op-already-terminal');
     mockGetOperationById.mockReturnValue({
       id: 'op-already-terminal',
@@ -566,7 +798,7 @@ describe('internal-self-update', () => {
     });
     const res = createMockResponse();
 
-    handler(req, res);
+    await handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(202);
     expect(getSelfUpdateFinalizeSecretForOperation('op-already-terminal')).toBe(finalizeSecret);

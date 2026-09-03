@@ -38,7 +38,7 @@ class Dhi extends Custom<DhiRegistryConfiguration> {
    * @returns {boolean}
    */
   match(image) {
-    return /^.*\.?dhi.io$/.test(image.registry.url);
+    return this.matchRegistryHost(image, 'dhi.io');
   }
 
   /**

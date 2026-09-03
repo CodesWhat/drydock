@@ -7,7 +7,7 @@ import type Trigger from '../triggers/providers/Trigger.js';
 export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this container';
 export const AGENT_LIFECYCLE_UNSUPPORTED_ERROR =
   "Lifecycle actions (start/stop/restart) are not supported over this container's agent connection, typically because the agent has not advertised the usesControllerDockerTransport capability.";
-const DEFAULT_TRIGGER_TYPES = ['docker', 'dockercompose'];
+const DEFAULT_TRIGGER_TYPES = ['docker', 'dockercompose', 'portainer'];
 const COMPOSE_DIRECTORY_FILE_CANDIDATES = new Set([
   'compose.yaml',
   'compose.yml',
@@ -44,10 +44,39 @@ export interface DockerTriggerCandidate {
 type TriggerWithComposeAffinity = DockerTriggerCandidate;
 
 export type ContainerTriggerContext = Pick<Container, 'agent' | 'labels'> &
-  Partial<Pick<Container, 'name' | 'watcher'>>;
+  Partial<Pick<Container, 'image' | 'name' | 'updateKind' | 'watcher'>>;
+
+const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
+const COMPOSE_SERVICE_LABEL = 'com.docker.compose.service';
+
+function isDrydockSelfContainer(container: ContainerTriggerContext): boolean {
+  const imageName = container.image?.name;
+  return imageName === 'drydock' || imageName?.endsWith('/drydock') === true;
+}
+
+function isPortainerCompatibleWithContainer(container: ContainerTriggerContext): boolean {
+  if (isDrydockSelfContainer(container)) {
+    return false;
+  }
+  if (container.labels?.['dd.update.mode'] === 'infrastructure') {
+    return false;
+  }
+  const project = container.labels?.[COMPOSE_PROJECT_LABEL];
+  const service = container.labels?.[COMPOSE_SERVICE_LABEL];
+  return (
+    typeof project === 'string' &&
+    project.trim().length > 0 &&
+    typeof service === 'string' &&
+    service.trim().length > 0
+  );
+}
+
+function isPortainerExecutionCompatibleWithContainer(container: ContainerTriggerContext): boolean {
+  return !container.updateKind || container.updateKind.kind === 'tag';
+}
 
 /**
- * Relative specificity of a compatible docker/dockercompose trigger, used by
+ * Relative specificity of a compatible docker/dockercompose/portainer trigger, used by
  * `model/action-policy.ts`'s `selectActionTrigger` to rank multiple
  * compatible candidates (spec-6.0.1-action-policy.md decision 3): a
  * dockercompose trigger whose configured file was actually verified against
@@ -231,7 +260,11 @@ function isTriggerAgentCompatible(
   if (trigger.agent && trigger.agent !== container.agent) {
     return false;
   }
-  if (container.agent && !trigger.agent && ['docker', 'dockercompose'].includes(trigger.type)) {
+  if (
+    container.agent &&
+    !trigger.agent &&
+    ['docker', 'dockercompose', 'portainer'].includes(trigger.type)
+  ) {
     return false;
   }
   return true;
@@ -263,14 +296,56 @@ export function isTriggerCompatibleWithContainer(
   if (!isTriggerAgentCompatible(trigger, container)) {
     return false;
   }
+  return isTriggerExecutionCompatibleWithContainer(trigger, container);
+}
 
+/**
+ * Check whether a trigger is structurally usable for a container, including
+ * local/agent routing, without requiring a known update kind.
+ */
+export function isTriggerAssociatedWithContainer(
+  trigger: DockerTriggerCandidate,
+  container: ContainerTriggerContext,
+): boolean {
+  return (
+    isTriggerAgentCompatible(trigger, container) &&
+    isTriggerStructurallyCompatibleWithContainer(trigger, container)
+  );
+}
+
+/**
+ * Check update-execution constraints while intentionally ignoring agent
+ * routing. This is used when eligibility distinguishes an available trigger
+ * type from one that can execute this update kind.
+ */
+export function isTriggerExecutionCompatibleWithContainer(
+  trigger: DockerTriggerCandidate,
+  container: ContainerTriggerContext,
+): boolean {
+  if (!isTriggerStructurallyCompatibleWithContainer(trigger, container)) {
+    return false;
+  }
+  return trigger.type !== 'portainer' || isPortainerExecutionCompatibleWithContainer(container);
+}
+
+/**
+ * Check trigger constraints that do not depend on where the trigger runs.
+ * Used by eligibility reporting to distinguish an agent mismatch from a
+ * trigger that cannot handle the container at all.
+ */
+export function isTriggerStructurallyCompatibleWithContainer(
+  trigger: DockerTriggerCandidate,
+  container: ContainerTriggerContext,
+): boolean {
+  if (trigger.type === 'portainer' && !isPortainerCompatibleWithContainer(container)) {
+    return false;
+  }
   if (trigger.type === 'dockercompose') {
     return isComposeTriggerCompatibleWithContainer(
       trigger as TriggerWithComposeAffinity,
       container,
     );
   }
-
   return true;
 }
 

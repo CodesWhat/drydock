@@ -45,7 +45,7 @@ When the same trigger is defined under multiple prefixes, the merge priority is:
 
 Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replaced the removed `dd.trigger.include` / `dd.trigger.exclude`.
 
-<Callout type="info">Action triggers (Docker, Docker Compose, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
+<Callout type="info">Action triggers (Docker, Docker Compose, Portainer, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
 
 <Callout type="warn">**`dd.action.include` / `dd.action.exclude` are hard blockers.** A container with a non-matching include or an active exclude label rejects both automatic and manual updates — the Update button is locked and the API returns `409` for a manual update request. If you need a container to stay manually updatable while excluded from automatic dispatch, use `AUTO=onauto` with `dd.action.include` (or `dd.action.auto`) instead of relying on the old soft-blocker behavior.</Callout>
 
@@ -102,7 +102,7 @@ Operations waiting on the global cap remain in `queued` status, which the UI alr
 
 **Scope:** per controller instance. Distributed agent hosts have independent counters by design — there is no cross-host coordination.
 
-<Callout type="info">Self-update operations (`drydock` updating itself) bypass the global cap — they take per-container locks but never wait on the global semaphore. This prevents a full update queue from starving an admin-triggered self-update.</Callout>
+<Callout type="info">Self-update operations (`drydock` updating itself) bypass the global semaphore, but first wait for already-admitted update lifecycles to drain through a fair exclusive gate. Once admitted, the self-update blocks new container update lifecycles in the outgoing controller until it restarts. Infrastructure-mode updates keep their global-cap bypass without taking the exclusive gate.</Callout>
 
 ```yaml
 services:
