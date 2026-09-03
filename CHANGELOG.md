@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Deprecation docs realigned with the shipped code.** `DEPRECATIONS.md` and the generated deprecations page now double the `$` in the curl-healthcheck compose migration snippet so it actually expands inside the container instead of the host, name `PUT /api/v1/settings` instead of the tombstoned unversioned path, note that the `GET /api/auth/methods` `Sunset` header's 2027-07-01 date is a conservative earliest instant rather than the real removal (the v1.7.0 release), add the previously undocumented `WUD_AGENT_SECRET`/`WUD_AGENT_SECRET_FILE` fallback removal, add the WebSocket origin-check, anonymous-auth grandfather, and session cookie rename entries that were missing from the generated page, and use `**Removal**` instead of `**Removed in**` for still-pending removals so the table doesn't assert a version has already shipped.
+
 ## [1.6.1-rc.7] — 2026-09-03
 
 ### Fixed

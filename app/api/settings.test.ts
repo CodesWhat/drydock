@@ -190,7 +190,7 @@ describe('Settings Router', () => {
     expect(res.setHeader).toHaveBeenCalledWith('Deprecation', deprecatedPutDeprecation);
     expect(res.setHeader).toHaveBeenCalledWith('Sunset', deprecatedPutSunset);
     expect(mockLogWarn).toHaveBeenCalledWith(
-      'PUT /api/settings is deprecated and will be removed in API v2. Use PATCH /api/settings instead.',
+      'PUT /api/v1/settings is deprecated and will be removed in API v2. Use PATCH /api/v1/settings instead.',
     );
 
     // RFC 9745: Deprecation is the instant the resource BECAME deprecated

@@ -6,17 +6,19 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ## Active
 
-### PUT /api/settings
+### PUT /api/v1/settings
 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
 | **Removal** | Deferred to API v2 — `/api/v1` is frozen, so the method cannot be dropped from it; the `Sunset` header advertises 2027-01-01 as the earliest retirement instant |
-| **Affects** | API consumers using `PUT /api/settings` |
+| **Affects** | API consumers using `PUT /api/v1/settings` |
 
-`PUT /api/settings` is a compatibility alias for `PATCH /api/settings`. Use `PATCH` for partial settings updates. An earlier revision of this entry scheduled the removal for v1.6.0; that predated the API versioning policy freezing `/api/v1`, under which removing a method from the versioned surface is a breaking change reserved for `/api/v2`.
+`PUT /api/v1/settings` is a compatibility alias for `PATCH /api/v1/settings`. Use `PATCH` for partial settings updates. An earlier revision of this entry scheduled the removal for v1.6.0; that predated the API versioning policy freezing `/api/v1`, under which removing a method from the versioned surface is a breaking change reserved for `/api/v2`.
 
-**Migration:** Replace `PUT /api/settings` calls with `PATCH /api/settings`.
+The unversioned `/api/settings` path is not a working alias for this endpoint. Like the rest of the unversioned surface it returns `410 Gone` (see the Unversioned `/api/*` path entry below); settings is not one of the four wud-card compatibility endpoints exempted from that tombstone.
+
+**Migration:** Replace `PUT /api/v1/settings` calls with `PATCH /api/v1/settings`.
 
 ---
 
@@ -25,10 +27,10 @@ Active deprecations and their removal timeline. Each entry includes the version 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.7.0 |
+| **Removal** | v1.7.0 |
 | **Affects** | API consumers using `GET /api/auth/methods` |
 
-`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
+`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled. The `Sunset` header carries 2027-07-01 only because the header needs a date; that date is not a floor on the removal, which ships in v1.7.0, whose release candidates already return 410.
 
 **Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
 
@@ -39,7 +41,7 @@ Active deprecations and their removal timeline. Each entry includes the version 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 |
+| **Removal** | v1.8.0 |
 | **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
 `GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers for its v1.8.0 removal.
@@ -53,7 +55,7 @@ Active deprecations and their removal timeline. Each entry includes the version 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.7.0 |
+| **Removal** | v1.7.0 |
 | **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` (or the legacy `dd.trigger.include` / `dd.trigger.exclude`) where the labels filter out the matching docker / dockercompose action trigger |
 
 In v1.5.x the eligibility model classifies `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill says *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queues the update (the confirm modal lists the soft blocker and switches the accept label to *Update anyway*). This preserves the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
@@ -69,12 +71,12 @@ In v1.7.0 these reasons become **hard** blockers: the Update button is locked wh
 | | |
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.7.0 |
+| **Removal** | v1.7.0 |
 | **Affects** | Custom `healthcheck:` overrides in compose files that use `curl` |
 
 The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
 
-**Migration:** Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
+**Migration:** Custom `curl`-based healthcheck overrides remain supported through v1.6.x, and v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (the doubled `$` is compose escaping, so the variable is expanded inside the container instead of from the host environment before the container starts). See [Monitoring](https://getdrydock.com/docs/monitoring).
 
 ---
 
@@ -83,7 +85,7 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 | | |
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.7.0 |
+| **Removal** | v1.7.0 |
 | **Affects** | Trigger configs using `DD_TRIGGER_*` env vars and container labels `dd.trigger.include` / `dd.trigger.exclude` |
 
 Legacy trigger prefixes are accepted as compatibility aliases while the trigger taxonomy moves to action/notification prefixes.
@@ -143,6 +145,20 @@ The following v1.4-era compatibility inputs are no longer executed in v1.6.0:
 | Token-only Hub/DHI public instance configuration (for example `DD_REGISTRY_HUB_PUBLIC_TOKEN` without `..._PUBLIC_LOGIN`) | Registry validation fails closed instead of silently switching to anonymous access. The `TOKEN` key itself remains valid when paired with `LOGIN`. | Configure the named instance with `LOGIN`+`PASSWORD`, `LOGIN`+`TOKEN`, or `AUTH`; remove credentials entirely for intentional anonymous access. |
 
 The migration CLI intentionally retains knowledge of the removed WUD names so it can rewrite old configuration files; this is migration support, not runtime compatibility.
+
+---
+
+### Agent-mode `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` fallback
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.4.0 (via the general `WUD_*` warning; this specific fallback's removal was never separately announced) |
+| **Removed in** | v1.6.0-rc.1 |
+| **Affects** | Agent-mode deployments (`app/agent/api/index.ts`) configured with only `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE`, no `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` |
+
+This is a separate, undocumented removal from the general `WUD_*` table above. Agent mode's secret lookup carried its own explicit fallback through v1.5.2, on top of the general configuration loader: `process.env.DD_AGENT_SECRET ?? process.env.WUD_AGENT_SECRET` (and the equivalent for `_FILE`). The general loader did read `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` like every other `WUD_*` variable: it remapped them to `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` and logged the same "deprecated and scheduled for removal in v1.6.0" warning as the rest of the `WUD_*` surface, starting in v1.4.0. So operators relying on the `WUD_` name did get a warning release through that generic mechanism, even though this specific code-level fallback's removal at v1.6.0-rc.1 was never separately announced. An agent that had only `WUD_AGENT_SECRET` set went straight from authenticating successfully to `init()` throwing `Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE` at startup, an error message that never mentions the `WUD_` variable the operator actually configured. This entry was never recorded at the time of the v1.6.0 release; it is added here retroactively.
+
+**Migration:** Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE`.
 
 ---
 
