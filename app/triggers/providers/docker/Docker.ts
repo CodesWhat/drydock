@@ -1641,7 +1641,14 @@ class Docker<
       return [];
     }
     const domain = parsedImage.domain?.trim().toLowerCase();
-    const isDockerHub = !domain || domain === 'docker.io' || domain === 'registry-1.docker.io';
+    // `index.docker.io` is the legacy Docker Hub host: the daemon rewrites it to
+    // `docker.io` before recording RepoDigests, so a reference pulled under that
+    // alias has to be matched against the short Hub forms, not against itself.
+    const isDockerHub =
+      !domain ||
+      domain === 'docker.io' ||
+      domain === 'index.docker.io' ||
+      domain === 'registry-1.docker.io';
     if (!isDockerHub) {
       return [`${domain}/${path}`];
     }
