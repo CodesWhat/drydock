@@ -46,9 +46,9 @@ pre-commit:
       priority: 2
     coverage:
       glob: '*.{ts,vue}'
-      run: ./scripts/pre-commit-coverage.sh
+      run: ./scripts/pre-commit-coverage.sh {staged_files}
       priority: 3
-      timeout: 2m
+      timeout: 5m
 
 pre-push:
   piped: true

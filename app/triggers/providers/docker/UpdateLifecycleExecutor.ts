@@ -428,11 +428,13 @@ class UpdateLifecycleExecutor {
         }
       }
 
+      let postPullHookInvoked = false;
       const postPullHook = async (
         operationId: string,
         imageIdentity?: string,
         options?: PostPullHookOptions,
       ) => {
+        postPullHookInvoked = true;
         if (options?.skipSecurityGate !== true) {
           const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
           // A deferred verification must still run when the caller could not
@@ -473,6 +475,16 @@ class UpdateLifecycleExecutor {
         runtimeContext,
         postPullHook,
       );
+      // When the lifecycle is deferred, the post-pull hook carries the security
+      // gate, the pre-update hook and the prune/backup step. A subclass that
+      // replaces performContainerUpdate without calling the hook skips all three
+      // with no message at all, so treat a missed call as a failed update rather
+      // than an update nobody gated.
+      if (deferPreRuntimeUpdateLifecycle && !postPullHookInvoked) {
+        throw new Error(
+          `Update of ${this.context.getContainerFullName(container)} deferred its security gate and pre-update hook, but the runtime update never invoked the post-pull hook`,
+        );
+      }
       if (!updated) {
         return;
       }

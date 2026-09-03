@@ -13,9 +13,13 @@ import {
 interface LefthookCommand {
   priority?: number;
   run?: string;
+  timeout?: string;
 }
 
 interface LefthookDefinition {
+  'pre-commit'?: {
+    commands?: Record<string, LefthookCommand>;
+  };
   'pre-push'?: {
     commands?: Record<string, LefthookCommand>;
   };
@@ -26,6 +30,9 @@ const lefthookPath = fileURLToPath(new URL('../../lefthook.yml', import.meta.url
 const processorPath = fileURLToPath(new URL('../../test/load-test.processor.cjs', import.meta.url));
 const secretScanScriptPath = fileURLToPath(
   new URL('../../scripts/scan-secrets.sh', import.meta.url),
+);
+const preCommitCoverageScriptPath = fileURLToPath(
+  new URL('../../scripts/pre-commit-coverage.sh', import.meta.url),
 );
 const gitleaksConfigPath = fileURLToPath(new URL('../../.gitleaks.toml', import.meta.url));
 const gitleaksIgnorePath = fileURLToPath(new URL('../../.gitleaksignore', import.meta.url));
@@ -134,6 +141,34 @@ test('workflow tests are wired outside the app coverage suite', () => {
     run: workflowTestsCommand,
     priority: 8,
   });
+});
+
+test('pre-commit coverage hook receives the staged file list', () => {
+  // DR-46: lefthook passed {staged_files} to the biome commands but not to
+  // pre-commit-coverage.sh, so its `for f in "$@"` loop always saw an empty
+  // list and the hook was a silent no-op on every commit.
+  expect(loadLefthook()['pre-commit']?.commands?.coverage).toMatchObject({
+    run: './scripts/pre-commit-coverage.sh {staged_files}',
+  });
+});
+
+test('pre-commit coverage hook has enough time and skips on merge commits', () => {
+  // DR-55: once DR-46 made the hook actually receive the staged list,
+  // merging the base branch into a feature branch stages every file the
+  // base changed, so the related-test set balloons to most of the trigger
+  // suites and blows past a short timeout. The lefthook timeout matches the
+  // script's own stated intent, and the script exits early on a merge
+  // commit -- pre-push coverage and CI already cover merged commits.
+  expect(loadLefthook()['pre-commit']?.commands?.coverage).toMatchObject({
+    timeout: '5m',
+  });
+
+  const script = readFileSync(preCommitCoverageScriptPath, 'utf8');
+  expect(script).toContain('timeout: 5m');
+  expect(script).toContain('git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1');
+  expect(script).toContain(
+    'Merge commit; skipping pre-commit tests (pre-push coverage and CI cover merged commits).',
+  );
 });
 
 test('demo mock contracts and production build are first-class CI gates', () => {
