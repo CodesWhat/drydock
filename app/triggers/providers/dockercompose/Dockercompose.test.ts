@@ -421,7 +421,17 @@ describe('Dockercompose Trigger', () => {
       }),
     );
 
-    const composeUpdateSpy = vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    const composeUpdateSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      // The real refresh is what invokes the post-pull hook the deferred
+      // lifecycle hangs its gate and pre-update work off, so a stub standing in
+      // for it has to invoke it too.
+      .mockImplementation(async (_composeFile, _service, _container, options) => {
+        const { postPullHook } = (options ?? {}) as {
+          postPullHook?: (operationId: string) => Promise<void>;
+        };
+        await postPullHook?.('');
+      });
 
     await trigger.processComposeFile('/opt/drydock/test/portainer.yml', [container]);
 
@@ -454,7 +464,17 @@ describe('Dockercompose Trigger', () => {
       }),
     );
 
-    const composeUpdateSpy = vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    const composeUpdateSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      // The real refresh is what invokes the post-pull hook the deferred
+      // lifecycle hangs its gate and pre-update work off, so a stub standing in
+      // for it has to invoke it too.
+      .mockImplementation(async (_composeFile, _service, _container, options) => {
+        const { postPullHook } = (options ?? {}) as {
+          postPullHook?: (operationId: string) => Promise<void>;
+        };
+        await postPullHook?.('');
+      });
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [
       tagContainer,
