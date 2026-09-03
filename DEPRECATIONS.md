@@ -62,7 +62,7 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 `DD_TRIGGER_*` and `dd.trigger.*` were accepted as compatibility aliases while the trigger taxonomy moved to action/notification prefixes, and were logged at `error` level throughout v1.6.0 as a loud migration signal. Both are removed in v1.7.0:
 
-- **`DD_TRIGGER_*` environment variables now fail startup.** Any detected `DD_TRIGGER_*` variable raises a startup error that lists every offending variable with its exact `DD_ACTION_*` / `DD_NOTIFICATION_*` replacement (action for `docker`/`dockercompose`/`command`, notification for every other provider), plus the `config migrate --source trigger` command and a link to this page. Drydock does not start until every listed variable is renamed.
+- **`DD_TRIGGER_*` environment variables now fail startup.** Any detected `DD_TRIGGER_*` variable raises a startup error that lists every offending variable with its exact `DD_ACTION_*` / `DD_NOTIFICATION_*` replacement (action for `docker`/`dockercompose`/`portainer`/`command`, notification for every other provider), plus the `config migrate --source trigger` command and a link to this page. Drydock does not start until every listed variable is renamed.
 - **`dd.trigger.include` / `dd.trigger.exclude` container labels no longer resolve to anything.** They stopped acting as a per-category fallback beneath `dd.action.include` / `dd.action.exclude` and `dd.notification.include` / `dd.notification.exclude`; only the scoped labels are read now. A container still carrying either legacy label logs an `error`-level warning (once per label key) and increments the `dd_legacy_input_total{source="label"}` counter, so a fleet that hasn't migrated its labels stays visible in the deprecation banner and Prometheus — the label is just no longer consulted for actual include/exclude filtering.
 
 **Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
@@ -87,7 +87,7 @@ The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
 | **Removed in** | v1.7.0 |
-| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` where the labels filter out the matching docker / dockercompose action trigger (v1.7.0 ignores the legacy `dd.trigger.*` labels — see the runtime removal above) |
+| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` where the labels filter out the matching docker / dockercompose / portainer action trigger (v1.7.0 ignores the legacy `dd.trigger.*` labels, see the runtime removal above) |
 
 In v1.5.x–v1.6.x the eligibility model classified `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill said *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queued the update (the confirm modal listed the soft blocker and switched the accept label to *Update anyway*). This preserved the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
 

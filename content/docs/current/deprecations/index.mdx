@@ -166,7 +166,7 @@ The `DD_TRIGGER_*` prefix has been replaced by semantic prefixes that distinguis
 | **Deprecated since** | v1.5.0 |
 | **Removed since** | v1.7.0 |
 | **Detection** | Startup error listing every detected variable with its exact replacement; drydock does not start until all are renamed |
-| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
+| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Portainer/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
 
 ### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
 
