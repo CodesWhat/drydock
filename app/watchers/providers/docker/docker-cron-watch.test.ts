@@ -280,6 +280,34 @@ describe('watchFromCronOrchestration', () => {
     }
   });
 
+  test('resolves every coalesced caller with the deadline result, not just the initiator', async () => {
+    vi.useFakeTimers();
+    try {
+      const stallingWatch = vi.fn().mockReturnValue(new Promise<ContainerReport[]>(() => {}));
+      const watcher = createWatcher({ watch: stallingWatch });
+
+      const initiator = watchFromCronOrchestration(watcher, { reason: 'schedule' });
+      await Promise.resolve();
+
+      // Arrives while the scan above is in flight, so it coalesces into it
+      // instead of starting a second scan.
+      const coalesced = watchFromCronOrchestration(watcher, { reason: 'docker-event' });
+      expect(watcher.cronWatchRescanRequested).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+
+      // Before the fix, the coalesced caller held the raw (unbounded) scan
+      // promise, so it never observed the deadline and stayed pending
+      // forever, only the initiator resolved.
+      await expect(initiator).resolves.toEqual([]);
+      await expect(coalesced).resolves.toEqual([]);
+      expect(stallingWatch).toHaveBeenCalledTimes(1);
+      expect(watcher.cronWatchInFlight).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('a stale scan settling after its deadline does not clobber a newer in-flight scan', async () => {
     vi.useFakeTimers();
     try {
@@ -321,7 +349,11 @@ describe('watchFromCronOrchestration', () => {
       expect(watcher.cronWatchRescanRequested).toBe(true);
 
       freshDeferred.resolve([]);
-      await Promise.all([freshCall, coalesced]);
+      // Both the initiating and the coalesced caller share the fresh scan's
+      // result - the stale scan's late settlement must not have redirected
+      // either of them.
+      await expect(freshCall).resolves.toEqual([]);
+      await expect(coalesced).resolves.toEqual([]);
       await vi.waitFor(() => expect(watchMock).toHaveBeenCalledTimes(3));
     } finally {
       vi.useRealTimers();

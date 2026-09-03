@@ -135,14 +135,17 @@ const CRON_WATCH_DEADLINE = Symbol('cron-watch-deadline');
  *
  * The in-flight scan is raced against a deadline (see
  * getCronWatchDeadlineMs()) so a `watch()` that never settles cannot wedge
- * every later cron tick into the coalescing branch forever. When the
- * deadline wins the race, this call resolves to an empty result (matching
- * the existing "nothing to report this cycle" shape used by the
- * maintenance-window skip below) and clears the single-flight state so the
- * next cron tick starts a fresh scan. If the original scan later settles
- * anyway, its own settlement handler is a no-op: `watcher.cronWatchInFlight`
- * no longer identifies it, so a stale settlement cannot clobber whatever
- * newer scan has since taken its place.
+ * every later cron tick into the coalescing branch forever.
+ * `watcher.cronWatchInFlight` stores the deadline-bounded promise itself
+ * (not the raw scan), so every coalesced caller shares the same race and,
+ * when the deadline wins, resolves to the same empty result (matching the
+ * existing "nothing to report this cycle" shape used by the
+ * maintenance-window skip below) - not just the call that initiated the
+ * scan. The deadline branch also clears the single-flight state so the next
+ * cron tick starts a fresh scan. If the original scan later settles anyway,
+ * its own settlement handler is a no-op: `watcher.cronWatchInFlight` no
+ * longer identifies the bounded promise it was assigned to, so a stale
+ * settlement cannot clobber whatever newer scan has since taken its place.
  */
 export async function watchFromCronOrchestration(
   watcher: CronWatchOrchestrationWatcher,
@@ -164,13 +167,19 @@ export async function watchFromCronOrchestration(
   }
 
   const inFlight = runCronWatch(watcher, options);
-  watcher.cronWatchInFlight = inFlight;
+
+  // Declared before settleAndFollowUp so the closure below can reference it;
+  // assigned further down, but not read until inFlight settles, which is
+  // always after the assignment below has run.
+  let bounded: Promise<ContainerReport[]>;
 
   // Runs once this exact scan settles, whether it wins the race below or
-  // settles later after the deadline already cleared it. The identity
-  // check makes the latter case a no-op.
+  // settles later after the deadline already cleared it. The identity check
+  // compares against the deadline-bounded promise stored on the watcher
+  // (what coalesced callers actually hold), not the raw scan, so it makes
+  // the latter case a no-op.
   const settleAndFollowUp = () => {
-    if (watcher.cronWatchInFlight !== inFlight) {
+    if (watcher.cronWatchInFlight !== bounded) {
       return;
     }
     watcher.cronWatchInFlight = undefined;
@@ -211,28 +220,37 @@ export async function watchFromCronOrchestration(
     deadlineTimer = setTimeout(() => resolve(CRON_WATCH_DEADLINE), deadlineMs);
   });
 
-  try {
-    const winner = await Promise.race([inFlight, deadline]);
-    if (winner !== CRON_WATCH_DEADLINE) {
-      return winner;
+  // Stored on the watcher below so a coalesced caller shares this exact
+  // race instead of the raw (unbounded) scan promise - otherwise only the
+  // initiating call resolves at the deadline and every coalesced caller
+  // stays pending until the stalled watch() eventually settles, if ever.
+  bounded = (async (): Promise<ContainerReport[]> => {
+    try {
+      const winner = await Promise.race([inFlight, deadline]);
+      if (winner !== CRON_WATCH_DEADLINE) {
+        return winner;
+      }
+      // Deadline won the race, so inFlight has not settled yet: nothing else
+      // in this single-flight design clears cronWatchInFlight while a scan is
+      // still running, so it still identifies this exact scan here.
+      watcher.ensureLogger();
+      if (watcher.log && typeof watcher.log.warn === 'function') {
+        watcher.log.warn(
+          `Cron scan exceeded its ${deadlineMs}ms deadline without settling (a stalled watch()?) - clearing the single-flight state so the next cron tick starts a fresh scan`,
+        );
+      }
+      watcher.cronWatchInFlight = undefined;
+      watcher.cronWatchRescanRequested = false;
+      watcher.cronWatchRescanReason = undefined;
+      watcher.cronWatchRescanIgnoreMaintenanceWindow = false;
+      return [];
+    } finally {
+      clearTimeout(deadlineTimer);
     }
-    // Deadline won the race, so inFlight has not settled yet: nothing else
-    // in this single-flight design clears cronWatchInFlight while a scan is
-    // still running, so it still identifies this exact scan here.
-    watcher.ensureLogger();
-    if (watcher.log && typeof watcher.log.warn === 'function') {
-      watcher.log.warn(
-        `Cron scan exceeded its ${deadlineMs}ms deadline without settling (a stalled watch()?) - clearing the single-flight state so the next cron tick starts a fresh scan`,
-      );
-    }
-    watcher.cronWatchInFlight = undefined;
-    watcher.cronWatchRescanRequested = false;
-    watcher.cronWatchRescanReason = undefined;
-    watcher.cronWatchRescanIgnoreMaintenanceWindow = false;
-    return [];
-  } finally {
-    clearTimeout(deadlineTimer);
-  }
+  })();
+
+  watcher.cronWatchInFlight = bounded;
+  return bounded;
 }
 
 /**
