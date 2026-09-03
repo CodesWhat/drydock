@@ -27,10 +27,10 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 |
+| **Removal** | v1.8.0 |
 | **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
-`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers for its v1.8.0 removal.
+`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers. The `Sunset` header advertises 2028-07-01, a deliberately conservative earliest-retirement instant, not the actual removal date; the endpoint is removed at the v1.8.0 release, which ships well before that date.
 
 **Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
 

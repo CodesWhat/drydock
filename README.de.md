@@ -70,7 +70,7 @@
 | Schnellstart          | [Schnellstart](https://getdrydock.com/docs/quickstart)                                                          |
 | Änderungsprotokoll    | [`CHANGELOG.md`](CHANGELOG.md)                                                                                  |
 | Deprecations          | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                            |
-| Roadmap               | Siehe den Abschnitt [„Roadmap“](#roadmap) oben                                                                  |
+| Roadmap               | Siehe den Abschnitt [„Roadmap“](#roadmap) unten                                                                  |
 | Mitwirken             | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                            |
 | Code of Conduct       | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                      |
 | Governance            | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                |
@@ -85,6 +85,8 @@
 
 **Empfohlen: Verwenden Sie einen Socket-Proxy**, um einzuschränken, auf welche Docker-API-Endpunkte Drydock zugreifen kann. Dadurch wird vermieden, dass der Container vollen Zugriff auf den Docker-Socket erhält.
 
+> **Hinweis:** Compose behandelt `$` als Variableninterpolationssyntax, sodass ein argon2id-Hash mit einfachem `$` beschädigt bei Drydock ankommt. Verdoppeln Sie beim Einfügen des echten Hashes jedes `$` zu `$$`, zum Beispiel `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
+
 ```yaml
 services:
   drydock:
@@ -92,6 +94,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -118,12 +122,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>Alternativ: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> Socket-Proxy</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) ist ein standardmäßig verweigernder Docker-Socket-Filter aus demselben CodesWhat-Ökosystem mit einer für drydock erstellten Voreinstellung:
+
+> **Hinweis:** Compose behandelt `$` als Variableninterpolationssyntax, sodass ein argon2id-Hash mit einfachem `$` beschädigt bei Drydock ankommt. Verdoppeln Sie beim Einfügen des echten Hashes jedes `$` zu `$$`, zum Beispiel `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
 
 ```yaml
 services:
@@ -132,6 +141,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -154,6 +165,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 Siehe sockguards [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml)-Voreinstellung für einen Start-`sockguard.yaml` (die gleiche Voreinstellung portwing wird in eigenen Beispielen geliefert).
@@ -168,12 +182,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **Warnung:** Der direkte Socket-Zugriff gewährt dem Container die volle Kontrolle über den Docker-Daemon. Verwenden Sie das oben beschriebene Socket-Proxy-Setup für Produktionsbereitstellungen. Im [Docker Socket Security Guide](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) finden Sie alle Optionen, einschließlich Remote-TLS und rootless Docker.
+>
+> Verwenden Sie einfache Anführungszeichen um den Hash-Wert, wie gezeigt. Doppelte Anführungszeichen lassen die Shell weiterhin `$` expandieren, bevor docker es überhaupt sieht, wodurch ein echter argon2id-Hash verstümmelt wird.
 
 </details>
 
@@ -200,6 +217,18 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <hr>
 
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
+
+<details open>
+<summary><strong>Highlights von v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` ist jetzt Single-Flight, sodass überlappende Scans in einer großen Flotte nicht mehr denselben Trigger mehrfach für ein Update auslösen.** Ein Scan, der nie abschließt, läuft jetzt gegen eine Frist, damit er spätere Cron-Durchläufe nicht blockiert. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Ein `once=true`-Trigger löst nicht mehr Stunden später erneut für ein bereits gemeldetes Tag-Update aus, wenn eine Registry die Digest-Abfrage ratenbegrenzt**, weil der Schlüssel des Benachrichtigungsverlaufs jetzt bei diesem Fehler stabil bleibt, statt zwischen zwei Hash-Formaten zu wechseln. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Die Deprecation-Banner der UI für die entfernten `DD_TRIGGER_*`-Umgebungsvariablen und die curl-basierte Healthcheck-Überschreibung sagen jetzt, dass diese Dinge bereits entfernt sind**, statt auf eine bereits verstrichene Entfernungsfrist zu verweisen. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Ein Dokumentations-Audit hat README, DEPRECATIONS.md und die Konfigurations-/Trigger-/Registry-/API-/Monitoring-/Agenten-Dokumentation gegen den tatsächlichen Code dieses Codebaums korrigiert**, und die Get-Started-Snippets der Marketing-Website starten jetzt eine Instanz, die tatsächlich gesund wird. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Vollständige Release-Notes in [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
 
 <details open>
 <summary><strong>Highlights von v1.7.0-rc.8</strong></summary>

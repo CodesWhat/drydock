@@ -192,18 +192,18 @@ By default, triggers fire on every detected update. Use `THRESHOLD` to only noti
 | Threshold | Fires on |
 | --- | --- |
 | `all` (default) | Every update |
-| `major` | Major, minor, or patch semver changes (not digest-only) |
-| `minor` | Minor, patch, or prerelease changes |
-| `patch` | Patch or prerelease changes |
+| `major` | Any semver change, including prerelease, or a digest-only update |
+| `minor` | Minor, patch, prerelease, or digest-only updates |
+| `patch` | Patch, prerelease, or digest-only updates |
 | `digest` | Digest-only updates |
 
-The threshold controls which range of change magnitudes are allowed through, not a minimum severity floor. For example, `THRESHOLD=major` fires on every semver bump (major, minor, or patch), while `THRESHOLD=minor` fires on minor and smaller changes but skips major version jumps.
+The threshold controls which range of change magnitudes are allowed through, not a minimum severity floor. For example, `THRESHOLD=major` fires on every semver bump (major, minor, or patch), while `THRESHOLD=minor` fires on minor and smaller changes but skips major version jumps. Digest-only updates pass through `major`, `minor`, and `patch` too, since a plain threshold only caps the semver magnitude and does not filter by update kind; append `-no-digest` (e.g. `minor-no-digest`) to exclude digest-only updates.
 
 ```yaml
 environment:
   - DD_NOTIFICATION_SLACK_ALERTS_TOKEN=xoxb-xxxxx
   - DD_NOTIFICATION_SLACK_ALERTS_CHANNEL=#docker-updates
-  - DD_NOTIFICATION_SLACK_ALERTS_THRESHOLD=minor  # skip digest-only and major bumps
+  - DD_NOTIFICATION_SLACK_ALERTS_THRESHOLD=minor  # skip major bumps (digest-only updates still fire)
 ```
 
 **Docs:** [Triggers configuration](/docs/configuration/triggers)
@@ -311,9 +311,11 @@ Run commands before or after an update (database backups, cache flushes, health 
 
 ```yaml
 labels:
-  - dd.hook.pre=docker exec mydb pg_dump -U postgres mydb > /backup/pre-update.sql
+  - dd.hook.pre=/usr/local/bin/pre-update-backup.sh
   - dd.hook.post=/usr/local/bin/notify-healthcheck.sh
 ```
+
+Hook commands are validated against a restricted shell-safe grammar and reject redirection (`>`, `<`), command chaining (`;`, `&&`, `||`, `|`), and command substitution. A command that needs any of those, like a `pg_dump ... > file.sql` backup, has to live in a mounted script that the hook label simply invokes. See [Lifecycle hooks](/docs/configuration/hooks#command-validation).
 
 ### Vulnerability scanning (Update Bouncer)
 

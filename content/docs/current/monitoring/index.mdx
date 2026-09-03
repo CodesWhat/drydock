@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 The healthiness is exposed at [/health](http://localhost:3000/health).
 
-If the application is healthy, the HTTP response status code is `200`. During startup, before authentication strategies are ready, drydock returns `503` with a startup readiness payload.
+If the application is healthy, the HTTP response status code is `200`. Before at least one authentication strategy is registered, drydock returns `503` with a startup readiness payload. This is usually brief, resolving as soon as auth strategies finish registering during startup, but it is not purely a startup phase: if the instance ends up with zero registered auth strategies (for example, a fresh install with no `DD_AUTH_*` configuration and no `DD_ANONYMOUS_AUTH_CONFIRM=true`), the readiness check never becomes true and `/health` stays `503` indefinitely. This is a deliberate fail-closed design, not a bug: an instance with no way to authenticate is not considered healthy.
 
 ### Example
 
