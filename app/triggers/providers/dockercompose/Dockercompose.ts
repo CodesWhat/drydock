@@ -2737,7 +2737,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         onSelfUpdateOperationId: selfUpdateOperationIdHandler,
       });
       recordRuntimeUpdate();
-      if (composeFileOnceEnabled && !composeFileOnceApplied) {
+      // Only a preflighted service may be marked handled. On the fail-closed
+      // fallback each container runs the ordinary gated refresh, and marking
+      // the service handled would make a later replica skip that refresh, and
+      // with it the post-pull gate that runs inside it.
+      if (composeFileOncePreflighted) {
         composeFileOnceHandledServices.add(service);
       }
     }

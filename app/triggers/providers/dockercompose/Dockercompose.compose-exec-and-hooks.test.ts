@@ -938,6 +938,32 @@ describe('Dockercompose Trigger', () => {
     expect(composeUpdateOptions.skipPull).toBeUndefined();
   });
 
+  test('compose-file-once runtime updates should gate every replica of a service the preflight did not cover', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    const { scanAndGateSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+    const labels = { 'com.docker.compose.service': 'nginx' };
+    const first = makeContainer({ id: 'nginx-1', name: 'nginx-1', labels });
+    const second = makeContainer({ id: 'nginx-2', name: 'nginx-2', labels });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [
+        { service: 'nginx', container: first },
+        { service: 'nginx', container: second },
+      ],
+    );
+
+    // Compose-file-once only earns the one-refresh-per-service shortcut off a
+    // preflight. Without one the gate runs inside each container's refresh, so
+    // marking the service handled after the first replica would leave the
+    // second recreated by that refresh and never gated.
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(2);
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(2);
+  });
+
   test('compose-file-once runtime updates should omit runtime context when neither context is available', async () => {
     trigger.configuration.composeFileOnce = true;
     trigger.configuration.dryrun = false;
