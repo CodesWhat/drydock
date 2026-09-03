@@ -328,6 +328,99 @@ describe('docker image details orchestration module', () => {
     });
   });
 
+  describe('unknown registry repair', () => {
+    // A container first seen before its registry was configured gets
+    // stamped image.registry.name: 'unknown' by normalizeContainer's
+    // no-match branch. Its tag is otherwise normal, so before this fix
+    // shouldRepairStoredImageReference never re-entered the repair branch
+    // and the container stayed unknown forever (#945).
+    test('repairs a stored container whose registry name is unknown even though its tag is normal', async () => {
+      const stored = createErroredStoredContainer();
+      stored.error = undefined;
+      stored.image.registry = { name: 'unknown', url: 'ghcr.io' };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+      // Behave like the production normalizer once the registry is configured:
+      // a ghcr.io image now matches a provider and gets its real name.
+      const helpers = createHelpers({
+        normalizeContainer: vi.fn((container: any) => ({
+          ...container,
+          image: {
+            ...container.image,
+            registry: {
+              ...container.image.registry,
+              name: container.image.registry.url === 'ghcr.io' ? 'ghcr.private' : 'unknown',
+            },
+          },
+        })),
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        helpers as any,
+      );
+
+      expect(helpers.normalizeContainer).toHaveBeenCalledTimes(1);
+      expect(stored.image.registry.name).toBe('ghcr.private');
+      expect(stored.image.id).toBe('image-new');
+      expect(stored.image.tag.value).toBe('1.2.3');
+    });
+
+    test('leaves the registry unknown when the repair still finds no matching provider', async () => {
+      const stored = createErroredStoredContainer();
+      stored.error = undefined;
+      stored.image.registry = { name: 'unknown', url: 'ghcr.io' };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+      const helpers = createHelpers();
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        helpers as any,
+      );
+
+      // No provider matched, so the stamp stays and the next cycle retries.
+      expect(helpers.normalizeContainer).toHaveBeenCalledTimes(1);
+      expect(stored.image.registry.name).toBe('unknown');
+      expect(stored.image.id).toBe('image-new');
+    });
+
+    test('does not repair a stored container that already has a known registry name and a normal tag', async () => {
+      const stored = createErroredStoredContainer();
+      stored.error = undefined;
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher } = createWatcher();
+      const helpers = createHelpers();
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        helpers as any,
+      );
+
+      expect(helpers.normalizeContainer).not.toHaveBeenCalled();
+    });
+  });
+
   describe('errored container fast-path eligibility', () => {
     test('takes the fast path when an errored container image is unchanged', async () => {
       const stored = createErroredStoredContainer();
