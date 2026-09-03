@@ -558,13 +558,13 @@ Returns 200 with the updated container on success, 400 if security scanner is no
 
 ## Run bulk security scan
 
-This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel and emits a single `security-scan-cycle-complete` event when finished. Respects client-disconnect aborts.
+This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel as `dd:scan-started` and `dd:scan-completed` events (see [Server-Sent Events](/docs/api#server-sent-events-sse)). Internally, a single `SecurityScanCycleComplete` event fires when the cycle finishes so digest-mode notification triggers can send one summary instead of one per container; this internal event is not itself delivered over the SSE channel. Respects client-disconnect aborts.
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/scan-all
 ```
 
-Rate-limited to 1 request per 60 seconds per IP. Authenticated admins bypass the rate limit.
+Rate-limited to 1 request per 60 seconds. There is no bypass for admins or any other role; when identity-aware rate limit keying is enabled the limit is keyed per session/user instead of per IP, but it still applies to every authenticated caller.
 
 Returns 202 Accepted when the bulk scan is started, or 429 if the rate limit is exceeded.
 
@@ -606,6 +606,8 @@ Opens a WebSocket connection for real-time container log streaming. The server d
 ws://drydock:3000/api/v1/containers/{id}/logs/stream?follow=true&tail=100
 ```
 
+Unlike the system log stream (`WS /api/log/stream`), whose unversioned alias was removed in v1.6.0, this endpoint's unversioned form (`WS /api/containers/{id}/logs/stream`) still works. Prefer the `/api/v1/` path in new integrations regardless.
+
 ### Query parameters
 
 | Parameter | Type | Default | Description |
@@ -642,6 +644,7 @@ Each WebSocket message is a JSON object:
 | `4001` | Container is not running |
 | `4004` | Container not found |
 | `1011` | Watcher unavailable or stream error |
+| `1013` | Log viewer is too slow (send buffer overflowed) |
 
 ### Authentication
 
