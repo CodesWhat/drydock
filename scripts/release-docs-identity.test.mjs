@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.7';
-const PREV_RC_VERSION = '1.7.0-rc.6';
-const RC_DATE = '2026-08-29';
-const RC_DISPLAY_DATE = 'August 29, 2026';
+const RC_VERSION = '1.7.0-rc.8';
+const PREV_RC_VERSION = '1.7.0-rc.7';
+const RC_DATE = '2026-09-03';
+const RC_DISPLAY_DATE = 'September 3, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -142,7 +142,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
   );
 
-  for (const issue of [927, 930]) {
+  for (const issue of [336, 386]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${issue}`;
     assert.ok(
@@ -155,17 +155,17 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const pull of [938, 942]) {
+  for (const pull of [952, 922]) {
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${pull}`;
     assert.ok(changelog.includes(pullLink), `CHANGELOG.md must link PR #${pull}`);
     assert.ok(updates.includes(pullLink), `updates page must link PR #${pull}`);
   }
 
   for (const fragment of [
-    '`Authorization: Basic`',
-    '`processAuthoritativeContainer`',
-    '`sanitizeLogParam`',
-    '`public.ecr.aws/supabase/postgres`',
+    '`dd.registry.lookup.image`',
+    '`buildContainerReport()`',
+    '`DD_AGENT_ALLOW_INSECURE_SECRET`',
+    '`RepoDigests`',
   ]) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);

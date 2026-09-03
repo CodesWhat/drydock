@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.8] — 2026-09-03
+
 ### Fixed
 
 - **`dd.registry.lookup.image` (and its legacy alias `dd.registry.lookup.url`) did nothing for any container reported by a controller-Docker-transport agent (e.g. Portwing).** `AgentClient.ts`'s `buildContainerReport()` calls `normalizeContainer()` to pick a registry provider for these agents, but that function reads `image.registry.lookupImage` as an already-populated field. The controller's own Docker watcher does translate the label, but only when it discovers the container first, and every later agent report replaced the stored `image` block wholesale, so the field never survived. A container mirrored through a private registry and labeled to divert update checks to its real upstream image (the [#336](https://github.com/CodesWhat/drydock/issues/336) scenario) silently checked the mirror's own sparse tag copy instead, with no error. `buildContainerReport()` now applies the same label (falling back to the legacy alias, matching `container-init.ts`'s own precedence) before normalizing, and never overwrites a `lookupImage`/`lookupUrl` the agent already reported.
@@ -2664,7 +2666,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.7...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.8...HEAD
+[1.7.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.7...v1.7.0-rc.8
 [1.7.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.6...v1.7.0-rc.7
 [1.7.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...v1.7.0-rc.6
 [1.7.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...v1.7.0-rc.5
