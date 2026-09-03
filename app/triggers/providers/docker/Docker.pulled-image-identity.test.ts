@@ -31,6 +31,7 @@ const SIGNATURE_VERIFY_CONFIGURATION = {
 const PULLED_DIGEST = `sha256:${'a'.repeat(64)}`;
 const RETAGGED_DIGEST = `sha256:${'b'.repeat(64)}`;
 const LOCAL_IMAGE_ID = `sha256:${'c'.repeat(64)}`;
+const UNRELATED_DIGEST = `sha256:${'d'.repeat(64)}`;
 
 function createImageApi(inspectResult) {
   return {
@@ -419,4 +420,337 @@ test('an availability-warn skip still runs the pre-update hook and prune/backup'
     'my-registry/test/test:4.5.6',
     expect.anything(),
   );
+});
+
+// A multi-arch index republished without touching this platform's layers
+// leaves the daemon holding both the old and the new manifest digest for the
+// same repository (`[repo@OLD, repo@NEW]`). Picking the wrong one pins the
+// security gate, cosign verification and the scan to a manifest that was
+// never gated for this update while the operation still reports success.
+describe('disambiguating multiple RepoDigests for the same repository', () => {
+  test('prefers the digest the watcher already resolved for the candidate', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer({ result: { digest: PULLED_DIGEST } });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${PULLED_DIGEST}` });
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  test('falls back to a registry manifest lookup when the watcher result has no matching digest', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockResolvedValue({ digest: PULLED_DIGEST });
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    // No watcher-resolved digest on the update result: the candidate has to
+    // be disambiguated another way.
+    const container = createTriggerContainer();
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${PULLED_DIGEST}` });
+    // The pulled repository is not under this container's registry, so the
+    // lookup keeps the container's image name and takes only the pulled tag.
+    expect(registryState.registry.hub.getImageManifestDigest).toHaveBeenCalledWith({
+      ...container.image,
+      name: 'test/test',
+      tag: { ...container.image.tag, value: '1.1.0' },
+    });
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  // The whole point of the lookup is to identify the manifest that was just
+  // pulled. `container.image` still carries the tag the container is running,
+  // so deriving the descriptor from it queries the wrong manifest on every
+  // tag update, and on every rollback, where the reference is the backup's
+  // older tag.
+  test('resolves the fallback manifest from the pulled tag, not the tag the container runs', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [
+        `my-registry/test/test@${RETAGGED_DIGEST}`,
+        `my-registry/test/test@${PULLED_DIGEST}`,
+      ],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockImplementation(async (image) =>
+        image.tag.value === '4.5.6' ? { digest: PULLED_DIGEST } : { digest: RETAGGED_DIGEST },
+      );
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    // Runs 1.0.0, pulled 4.5.6.
+    const container = createTriggerContainer();
+
+    await expect(
+      docker.bindPulledImageIdentity(
+        dockerApi,
+        'my-registry/test/test:4.5.6',
+        container,
+        logContainer,
+      ),
+    ).resolves.toEqual({ imageIdentity: `my-registry/test/test:4.5.6@${PULLED_DIGEST}` });
+    // Repository and tag come from the pulled reference; the registry URL,
+    // which a Docker reference does not carry, stays on the container image.
+    expect(registryState.registry.hub.getImageManifestDigest).toHaveBeenCalledWith({
+      ...container.image,
+      name: 'test/test',
+      tag: { ...container.image.tag, value: '4.5.6' },
+    });
+    expect(container.image.tag.value).toBe('1.0.0');
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  test('keeps the same descriptor when the pull re-used the tag the container runs', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [
+        `my-registry/test/test@${RETAGGED_DIGEST}`,
+        `my-registry/test/test@${PULLED_DIGEST}`,
+      ],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockResolvedValue({ digest: PULLED_DIGEST });
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer();
+
+    await expect(
+      docker.bindPulledImageIdentity(
+        dockerApi,
+        'my-registry/test/test:1.0.0',
+        container,
+        logContainer,
+      ),
+    ).resolves.toEqual({ imageIdentity: `my-registry/test/test:1.0.0@${PULLED_DIGEST}` });
+    expect(registryState.registry.hub.getImageManifestDigest).toHaveBeenCalledWith({
+      ...container.image,
+      name: 'test/test',
+      tag: { ...container.image.tag, value: '1.0.0' },
+    });
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  test('pins to the digest the pulled reference already names without any lookup', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi.fn();
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    // The watcher resolved the other candidate; the reference is authoritative.
+    const container = createTriggerContainer({ result: { digest: RETAGGED_DIGEST } });
+
+    await expect(
+      docker.bindPulledImageIdentity(
+        dockerApi,
+        `nginx:1.1.0@${PULLED_DIGEST}`,
+        container,
+        logContainer,
+      ),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${PULLED_DIGEST}` });
+    expect(registryState.registry.hub.getImageManifestDigest).not.toHaveBeenCalled();
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  test('looks the pulled tag up when a digest-form reference names no local candidate', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockResolvedValue({ digest: PULLED_DIGEST });
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer();
+
+    await expect(
+      docker.bindPulledImageIdentity(
+        dockerApi,
+        `nginx:1.1.0@${UNRELATED_DIGEST}`,
+        container,
+        logContainer,
+      ),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${PULLED_DIGEST}` });
+    // The tag is queried on its own: appending the reference's digest would
+    // ask the registry for a manifest the reference already resolved.
+    expect(registryState.registry.hub.getImageManifestDigest).toHaveBeenCalledWith({
+      ...container.image,
+      name: 'test/test',
+      tag: { ...container.image.tag, value: '1.1.0' },
+    });
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  test('skips the lookup for a digest-only reference that names no local candidate', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi.fn();
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer();
+
+    const [sortedFirst] = [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`].sort();
+
+    await expect(
+      docker.bindPulledImageIdentity(
+        dockerApi,
+        `nginx@${UNRELATED_DIGEST}`,
+        container,
+        logContainer,
+      ),
+    ).resolves.toEqual({ imageIdentity: sortedFirst });
+    // There is no pulled tag to query, and the container's own tag names a
+    // different manifest, so the ambiguity is reported instead of guessed at.
+    expect(registryState.registry.hub.getImageManifestDigest).not.toHaveBeenCalled();
+    expect(logContainer.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Multiple manifest digests match the pulled image repository'),
+    );
+  });
+
+  test('picks deterministically and logs the ambiguity when neither source resolves a match', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    // Resolves, but to a manifest digest that matches neither local candidate.
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockResolvedValue({ digest: UNRELATED_DIGEST });
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer({ result: { digest: UNRELATED_DIGEST } });
+
+    const [sortedFirst] = [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`].sort();
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${sortedFirst.split('@')[1]}` });
+    expect(logContainer.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Multiple manifest digests match the pulled image repository'),
+    );
+  });
+
+  test('falls through to the deterministic pick when the registry lookup itself fails', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockRejectedValue(new Error('registry unreachable'));
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer();
+
+    const [sortedFirst] = [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`].sort();
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${sortedFirst.split('@')[1]}` });
+    expect(logContainer.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Multiple manifest digests match the pulled image repository'),
+    );
+  });
+
+  test('picks deterministically when the registry manager exposes no manifest lookup', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    // Default registry state's `hub` manager has no getImageManifestDigest.
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer();
+
+    const [sortedFirst] = [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`].sort();
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${sortedFirst.split('@')[1]}` });
+    expect(logContainer.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Multiple manifest digests match the pulled image repository'),
+    );
+  });
+
+  test('picks deterministically when the registry manifest lookup resolves without a digest', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi.fn().mockResolvedValue({});
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer();
+
+    const [sortedFirst] = [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`].sort();
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${sortedFirst.split('@')[1]}` });
+    expect(logContainer.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Multiple manifest digests match the pulled image repository'),
+    );
+  });
+});
+
+describe('getRollbackIdentityBindingPolicy', () => {
+  test('reports required when the security policy requires signature verification', () => {
+    mockGetSecurityConfiguration.mockReturnValue(
+      createSecurityConfiguration(SIGNATURE_VERIFY_CONFIGURATION),
+    );
+    const container = createTriggerContainer();
+
+    expect(docker.getRollbackIdentityBindingPolicy(container)).toBe('required');
+  });
+
+  test('reports optional under an availability policy of warn', () => {
+    mockGetSecurityConfiguration.mockReturnValue(
+      createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+    );
+    const container = createTriggerContainer();
+
+    expect(docker.getRollbackIdentityBindingPolicy(container)).toBe('optional');
+  });
+
+  test('reports disabled when the security gate itself is disabled', () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration({ enabled: false }));
+    const container = createTriggerContainer();
+
+    expect(docker.getRollbackIdentityBindingPolicy(container)).toBe('disabled');
+  });
 });

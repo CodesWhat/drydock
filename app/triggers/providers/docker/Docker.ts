@@ -16,7 +16,7 @@ import {
 import { deriveContainerIdentityKey, fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
-import { buildImageReference } from '../../../registries/image-reference.js';
+import { buildImageReference, cleanRegistryUrl } from '../../../registries/image-reference.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getTrivyDatabaseStatus } from '../../../security/runtime.js';
@@ -396,6 +396,18 @@ type PulledImageIdentityOutcome = {
 type PulledImageIdentityBinding = {
   imageIdentity?: string;
   skipSecurityGate?: boolean;
+};
+
+/**
+ * The image that was actually pulled, as the identity-binding code sees it:
+ * the reference string handed to the pull, plus the parsed repository parts of
+ * that same reference with any `@sha256:...` suffix already removed.
+ */
+type PulledImageReference = {
+  reference: string;
+  parsedImage: { domain?: string; path?: string };
+  /** The pulled tag, trimmed. Undefined for a digest-only `repo@sha256:...`. */
+  tag?: string;
 };
 
 type PulledImageInspectApi = {
@@ -1885,7 +1897,7 @@ class Docker<
       const imageWithoutDigest = imageReference.split('@', 1)[0];
       const parsedImage = parse(imageWithoutDigest);
       const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
-      const matchingRepoDigest = imageInspect?.RepoDigests?.find((repoDigest) => {
+      const matchingRepoDigests = (imageInspect?.RepoDigests ?? []).filter((repoDigest) => {
         const separatorIndex = repoDigest.indexOf('@');
         if (separatorIndex <= 0 || separatorIndex === repoDigest.length - 1) {
           return false;
@@ -1895,6 +1907,12 @@ class Docker<
         return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
       });
       const tag = parsedImage.tag?.trim();
+      const matchingRepoDigest = await this.selectPulledRepoDigest(
+        matchingRepoDigests,
+        container,
+        logContainer,
+        { reference: imageReference, parsedImage, tag },
+      );
       if (imageId && matchingRepoDigest && tag) {
         const separatorIndex = matchingRepoDigest.indexOf('@');
         const repo = matchingRepoDigest.substring(0, separatorIndex);
@@ -1921,6 +1939,121 @@ class Docker<
       bindingPolicy,
       'Docker image inspection returned no local ID and matching manifest digest',
     );
+  }
+
+  /**
+   * Disambiguate multiple `RepoDigests` entries that match the pulled image's
+   * repository. Docker never drops a stale entry: when a multi-arch index is
+   * republished without touching this platform's layers, the local image ID
+   * can carry both the old and the new manifest digest for the same repo
+   * (`[repo@OLD, repo@NEW]`). Picking the wrong one pins the security gate,
+   * cosign verification and the scan to a manifest that was never the one
+   * gated for this update, while the operation still reports success.
+   *
+   * Prefers the digest the pulled reference itself names when it is
+   * digest-pinned, then the digest the watcher already resolved for this
+   * candidate (`container.result.digest`, set during discovery, no extra
+   * lookup). Falls back to a registry manifest lookup, which is cheap when the
+   * same image was already resolved earlier in the same poll cycle
+   * (BaseRegistry caches it). Otherwise picks deterministically and logs every
+   * candidate so the ambiguity is visible instead of silently picked.
+   */
+  protected async selectPulledRepoDigest(
+    candidates: string[],
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    pulled: PulledImageReference,
+  ): Promise<string | undefined> {
+    if (candidates.length <= 1) {
+      return candidates[0];
+    }
+
+    const digestOf = (repoDigest: string) => repoDigest.substring(repoDigest.indexOf('@') + 1);
+
+    // A digest-pinned pull already names the manifest the daemon resolved, so
+    // the reference outranks anything read off the still-running container.
+    // Matching it here also keeps the digest out of the lookup below, which
+    // would otherwise have to append it to a reference that already carries one.
+    const referenceSeparatorIndex = pulled.reference.indexOf('@');
+    if (referenceSeparatorIndex >= 0) {
+      const referenceDigest = pulled.reference.substring(referenceSeparatorIndex + 1);
+      const pinned = candidates.find((candidate) => digestOf(candidate) === referenceDigest);
+      if (pinned) {
+        return pinned;
+      }
+    }
+
+    const resolvedDigest = container?.result?.digest;
+    if (typeof resolvedDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(resolvedDigest)) {
+      const preferred = candidates.find((candidate) => digestOf(candidate) === resolvedDigest);
+      if (preferred) {
+        return preferred;
+      }
+    }
+
+    try {
+      const lookupImage = this.buildPulledManifestLookupImage(container, pulled);
+      if (lookupImage) {
+        const registry = this.resolveRegistryManager(container, logContainer, {
+          allowAnonymousFallback: true,
+        });
+        if (registry && typeof registry.getImageManifestDigest === 'function') {
+          const manifest = await registry.getImageManifestDigest(lookupImage);
+          if (typeof manifest?.digest === 'string') {
+            const resolved = candidates.find(
+              (candidate) => digestOf(candidate) === manifest.digest,
+            );
+            if (resolved) {
+              return resolved;
+            }
+          }
+        }
+      }
+    } catch {
+      // Best-effort disambiguation only. Fall through to the deterministic pick.
+    }
+
+    const sorted = [...candidates].sort();
+    const chosen = sorted[0];
+    logContainer.warn(
+      `Multiple manifest digests match the pulled image repository for ${container?.name}: [${candidates.join(', ')}]; picked ${chosen}`,
+    );
+    return chosen;
+  }
+
+  /**
+   * Build the image descriptor the fallback manifest lookup queries.
+   *
+   * `container.image` describes what the container is still *running*, so its
+   * tag names a different manifest than the one that was just pulled on any
+   * tag update, and on every rollback, where the reference is the backup's
+   * older tag. Binding the security gate and the deployment to that manifest
+   * gates an image nobody pulled, so repository and tag both come from the
+   * pulled reference instead.
+   *
+   * A Docker reference carries neither the registry's v2 API URL nor its
+   * credentials, so those stay on `container.image`, and the repository is
+   * only taken from the reference while it sits under that same registry.
+   * A repository from anywhere else would be queried against the wrong
+   * endpoint with the wrong auth.
+   *
+   * Returns undefined for a digest-only `repo@sha256:...` pull. The reference
+   * has already answered what that manifest is, and quietly querying the
+   * container's own tag instead is the mis-binding this exists to prevent.
+   */
+  protected buildPulledManifestLookupImage(container, pulled: PulledImageReference) {
+    if (!pulled.tag) {
+      return undefined;
+    }
+    const containerImage = container.image;
+    const repository = [pulled.parsedImage.domain, pulled.parsedImage.path]
+      .filter(Boolean)
+      .join('/');
+    const registryPrefix = `${cleanRegistryUrl(containerImage.registry.url)}/`;
+    const name = repository.startsWith(registryPrefix)
+      ? repository.substring(registryPrefix.length)
+      : containerImage.name;
+    return { ...containerImage, name, tag: { ...containerImage.tag, value: pulled.tag } };
   }
 
   protected getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {
@@ -2019,6 +2152,17 @@ class Docker<
       return 'disabled';
     }
     return securityConfiguration.availabilityPolicy === 'warn' ? 'optional' : 'required';
+  }
+
+  /**
+   * Public alias of {@link getPostPullIdentityBindingPolicy} for callers
+   * outside this class, such as the manual rollback API in
+   * `app/util/backup.ts`, which needs the same required/optional/disabled
+   * decision to know whether an unresolvable rollback digest should refuse
+   * the rollback or fall back to the mutable tag with a warning.
+   */
+  getRollbackIdentityBindingPolicy(container): 'required' | 'optional' | 'disabled' {
+    return this.getPostPullIdentityBindingPolicy(container);
   }
 
   async createTriggerContext(container, logContainer, _runtimeContext?: unknown) {

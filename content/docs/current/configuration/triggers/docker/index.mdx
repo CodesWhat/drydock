@@ -76,7 +76,7 @@ Optionally pass a specific backup ID in the request body:
 { "backupId": "uuid" }
 ```
 
-If omitted, the most recent backup is used. Rollback pulls the backup image, stops the current container, recreates it with the backup image, and starts it.
+If omitted, the most recent backup is used. Rollback pulls the backup image, stops the current container, recreates it with the backup image, and starts it. Rollback pulls and creates from an immutable `repo:tag@sha256:...` reference whenever a digest can be established, so a registry retag between the backup and the rollback can't change what gets deployed. See [Backup & Rollback](/docs/configuration/rollback) for how older backups without a recorded digest are handled.
 
 ## Auto-Rollback
 

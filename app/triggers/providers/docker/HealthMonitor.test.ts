@@ -288,7 +288,7 @@ describe('HealthMonitor', () => {
     expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
       dockerApi,
       expect.anything(),
-      'myregistry/myapp@sha256:old',
+      'myregistry/myapp:v3.2.1@sha256:old',
       expect.anything(),
       log,
     );
@@ -337,7 +337,7 @@ describe('HealthMonitor', () => {
     expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
       dockerApi,
       expect.anything(),
-      'myregistry/myapp@sha256:old',
+      'myregistry/myapp:latest@sha256:old',
       expect.anything(),
       log,
     );
