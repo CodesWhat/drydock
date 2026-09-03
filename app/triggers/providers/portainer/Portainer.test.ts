@@ -37,9 +37,13 @@ vi.mock('../../../configuration/index.js', async () => {
   };
 });
 
-const PULLED_DIGEST = `sha256:${'a'.repeat(64)}`;
-const SCANNED_IMAGE_ID = `sha256:${'b'.repeat(64)}`;
-const SWAPPED_IMAGE_ID = `sha256:${'c'.repeat(64)}`;
+// Image A is what the pull put on disk and what the gate scans. Image B is what
+// the mutable tag resolves to after it moves.
+const IMAGE_A_DIGEST = `sha256:${'a'.repeat(64)}`;
+const IMAGE_A_ID = `sha256:${'b'.repeat(64)}`;
+const IMAGE_B_DIGEST = `sha256:${'d'.repeat(64)}`;
+const IMAGE_B_ID = `sha256:${'c'.repeat(64)}`;
+const ORIGINAL_IMAGE_ID = `sha256:${'e'.repeat(64)}`;
 
 function createSecurityConfiguration(overrides: Record<string, unknown> = {}) {
   return {
@@ -1576,7 +1580,7 @@ test('performContainerUpdate pins the post-pull gate to the digest that was pull
     getImage: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
         Id: 'sha256:new',
-        RepoDigests: [`pihole/pihole@${PULLED_DIGEST}`],
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
       }),
     }),
     listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
@@ -1594,7 +1598,7 @@ test('performContainerUpdate pins the post-pull gate to the digest that was pull
   );
 
   expect(result).toBe(true);
-  expect(hook).toHaveBeenCalledWith('', `pihole/pihole:2026.07.2@${PULLED_DIGEST}`, {
+  expect(hook).toHaveBeenCalledWith('', `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`, {
     skipSecurityGate: false,
   });
 });
@@ -1666,29 +1670,34 @@ test('performContainerUpdate records the skipped scan and keeps the deferred lif
   expect(redeploy).toHaveBeenCalledOnce();
 });
 
-test('performContainerUpdate takes the redeploy identity from the scanned digest', async () => {
+test('performContainerUpdate anchors the redeploy identity on the scanned digest', async () => {
   const trigger = makeTrigger({ skipEndpointVerification: true });
   mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
   const resolved = makeResolvedUpdate();
   vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
   vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
-  const pinnedReference = `pihole/pihole:2026.07.2@${PULLED_DIGEST}`;
-  // The mutable tag no longer resolves to the image the gate scanned, which is
-  // the A -> B -> A case: anchoring on the tag would compare an image the gate
-  // never looked at against itself and let the redeploy through.
+  const pinnedReference = `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`;
+  // Three inspections, in order: the tag at bind time, the digest that bind
+  // produced, then the tag again just before the PUT. The identity the
+  // convergence check uses comes from the second one, so the third compares the
+  // tag against the image the gate scanned instead of against another reading
+  // of the same mutable tag. That is what closes A -> B -> A: the tag is read
+  // once, for the bind, and moving it back before the re-read can no longer
+  // hide that it stopped resolving to the scanned image in between.
+  const inspect = vi
+    .fn()
+    // Pull and bind: the tag resolves to image A.
+    .mockResolvedValueOnce({ Id: IMAGE_A_ID, RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`] })
+    // The pinned digest still resolves to image A, which is what the gate scans.
+    .mockResolvedValueOnce({ Id: IMAGE_A_ID, RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`] })
+    // Pre-PUT re-read: the tag now resolves to image B.
+    .mockResolvedValueOnce({ Id: IMAGE_B_ID, RepoDigests: [`pihole/pihole@${IMAGE_B_DIGEST}`] });
   const dockerApi = {
-    getImage: vi.fn((reference: string) => ({
-      inspect: vi
-        .fn()
-        .mockResolvedValue(
-          reference === pinnedReference
-            ? { Id: SCANNED_IMAGE_ID }
-            : { Id: SWAPPED_IMAGE_ID, RepoDigests: [`pihole/pihole@${PULLED_DIGEST}`] },
-        ),
-    })),
+    getImage: vi.fn((_reference: string) => ({ inspect })),
     listContainers: vi.fn(),
   };
   const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  const hook = vi.fn().mockResolvedValue(undefined);
 
   await expect(
     trigger.performContainerUpdate(
@@ -1696,74 +1705,133 @@ test('performContainerUpdate takes the redeploy identity from the scanned digest
       makeContainer(),
       trigger.log,
       undefined,
-      vi.fn().mockResolvedValue(undefined),
+      hook,
     ),
-  ).rejects.toThrow('changed during the post-pull hook');
-  expect(dockerApi.getImage).toHaveBeenCalledWith(pinnedReference);
-  expect(resolved.targetImageId).toBe(SCANNED_IMAGE_ID);
+  ).rejects.toThrow('Pulled image identity changed during the post-pull hook');
+
+  expect(dockerApi.getImage.mock.calls.map((call) => call[0])).toStrictEqual([
+    'pihole/pihole:2026.07.2',
+    pinnedReference,
+    'pihole/pihole:2026.07.2',
+  ]);
+  expect(hook).toHaveBeenCalledWith('', pinnedReference, { skipSecurityGate: false });
+  expect(resolved.targetImageId).toBe(IMAGE_A_ID);
   expect(redeploy).not.toHaveBeenCalled();
   expect(dockerApi.listContainers).not.toHaveBeenCalled();
 });
 
-test('performContainerUpdate restores the stack when the redeploy lands on an unscanned image', async () => {
-  vi.useFakeTimers();
-  const trigger = makeTrigger({ skipEndpointVerification: true });
-  trigger.configuration.redeployTimeout = 1;
-  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+function makeSwapDuringRedeployScenario(trigger) {
   const resolved = makeResolvedUpdate();
+  resolved.updatedStackFileContent = 'services:\n  pihole:\n    image: pihole/pihole:2026.07.2';
   vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
   vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
   const labels = {
     'com.docker.compose.project': 'pihole',
     'com.docker.compose.service': 'pihole',
   };
+  const previousReplica = {
+    State: 'running',
+    ImageID: ORIGINAL_IMAGE_ID,
+    Image: 'pihole/pihole:2026.05.0',
+    Labels: labels,
+  };
+  // Portainer resolved the tag itself while deploying and created image B, which
+  // is not the image the gate scanned.
+  const swappedReplica = {
+    State: 'running',
+    ImageID: IMAGE_B_ID,
+    Image: 'pihole/pihole:2026.07.2',
+    Labels: labels,
+  };
+  let running = previousReplica;
   const dockerApi = {
     getImage: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
-        Id: SCANNED_IMAGE_ID,
-        RepoDigests: [`pihole/pihole@${PULLED_DIGEST}`],
+        Id: IMAGE_A_ID,
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
       }),
     }),
-    listContainers: vi
-      .fn()
-      // Baseline before the PUT: the old image, one replica.
-      .mockResolvedValueOnce([
-        {
-          State: 'running',
-          ImageID: 'sha256:old',
-          Image: 'pihole/pihole:2026.05.0',
-          Labels: labels,
-        },
-      ])
-      // After the PUT the reference is right but the content is not: the tag
-      // moved between the gate and Portainer resolving it.
-      .mockResolvedValue([
-        {
-          State: 'running',
-          ImageID: SWAPPED_IMAGE_ID,
-          Image: 'pihole/pihole:2026.07.2',
-          Labels: labels,
-        },
-      ]),
+    listContainers: vi.fn(async () => [running]),
   };
-  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  const applyStackFile = (stackFileContent: string) => {
+    running = stackFileContent === resolved.stackFileContent ? previousReplica : swappedReplica;
+  };
+  return { resolved, dockerApi, applyStackFile };
+}
 
-  const updatePromise = expect(
-    trigger.performContainerUpdate(
+test('performContainerUpdate restores the previous stack when the redeploy lands on an unscanned image', async () => {
+  vi.useFakeTimers();
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.redeployTimeout = 1;
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const { resolved, dockerApi, applyStackFile } = makeSwapDuringRedeployScenario(trigger);
+  const redeploy = vi
+    .spyOn(trigger, 'redeployPortainerStack')
+    .mockImplementation(async (_stack, stackFileContent) => {
+      applyStackFile(stackFileContent);
+    });
+
+  const updatePromise = trigger
+    .performContainerUpdate(
       { dockerApi, auth: undefined, newImage: resolved.targetImage },
       makeContainer(),
       trigger.log,
       undefined,
       vi.fn().mockResolvedValue(undefined),
-    ),
-  ).rejects.toThrow('Timed out waiting for Portainer stack');
+    )
+    .catch((error: unknown) => error);
   for (let advance = 0; advance < 4; advance += 1) {
     await vi.advanceTimersByTimeAsync(2000);
   }
-  await updatePromise;
+  const error = (await updatePromise) as Error;
 
+  // The update failed on its own convergence, and only on that: the restore is
+  // reported in the message whenever it does not land, so an unsuffixed message
+  // is the assertion that the previous stack came back.
+  expect(error.message).toBe(
+    'Timed out waiting for Portainer stack pihole service pihole to use pihole/pihole:2026.07.2',
+  );
+  expect(error.message).not.toContain('Portainer restore failed');
+  expect(trigger.log.info).toHaveBeenCalledWith(
+    'Portainer redeploy verified: pihole now uses pihole/pihole:2026.05.0',
+  );
   expect(redeploy).toHaveBeenCalledTimes(2);
+  expect(redeploy.mock.calls[0][1]).toBe(resolved.updatedStackFileContent);
   expect(redeploy.mock.calls[1][1]).toBe(resolved.stackFileContent);
+  vi.useRealTimers();
+});
+
+test('performContainerUpdate reports a restore that fails after an unscanned redeploy', async () => {
+  vi.useFakeTimers();
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.redeployTimeout = 1;
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const { resolved, dockerApi, applyStackFile } = makeSwapDuringRedeployScenario(trigger);
+  const redeploy = vi
+    .spyOn(trigger, 'redeployPortainerStack')
+    .mockImplementationOnce(async (_stack, stackFileContent) => {
+      applyStackFile(stackFileContent);
+    })
+    .mockRejectedValueOnce(new Error('Portainer rejected the restore PUT'));
+
+  const updatePromise = trigger
+    .performContainerUpdate(
+      { dockerApi, auth: undefined, newImage: resolved.targetImage },
+      makeContainer(),
+      trigger.log,
+      undefined,
+      vi.fn().mockResolvedValue(undefined),
+    )
+    .catch((error: unknown) => error);
+  for (let advance = 0; advance < 4; advance += 1) {
+    await vi.advanceTimersByTimeAsync(2000);
+  }
+  const error = (await updatePromise) as Error;
+
+  expect(error.message).toBe(
+    'Timed out waiting for Portainer stack pihole service pihole to use pihole/pihole:2026.07.2 (Portainer restore failed: Portainer rejected the restore PUT)',
+  );
+  expect(redeploy).toHaveBeenCalledTimes(2);
   vi.useRealTimers();
 });
 
