@@ -13,7 +13,13 @@ import {
 } from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 
-function buildEligibilityContext(container: Container): UpdateEligibilityContext {
+/**
+ * Exported so the approvals API can compute a row's live eligibility through exactly the
+ * context the container surfaces use. The queue must never disagree with the Update button
+ * about the same container, and re-deriving the active-operation, maintenance-window and
+ * agent-registration lookups here is how that drift would start.
+ */
+export function buildEligibilityContext(container: Container): UpdateEligibilityContext {
   const registryState = registry.getState();
   return {
     triggers: registryState.trigger,

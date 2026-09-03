@@ -12,6 +12,7 @@ var {
   mockRegisterContainerUpdateApplied,
   mockRegisterContainerUpdateFailed,
   mockRegisterBatchUpdateCompleted,
+  mockRegisterApprovalEvent,
   mockRandomUUID,
   mockRandomBytes,
   mockCreateHash,
@@ -61,6 +62,7 @@ var {
     mockRegisterContainerUpdateApplied: vi.fn(),
     mockRegisterContainerUpdateFailed: vi.fn(),
     mockRegisterBatchUpdateCompleted: vi.fn(),
+    mockRegisterApprovalEvent: vi.fn(),
     mockRandomUUID: vi.fn(() => {
       uuidCounter += 1;
       return `uuid-${uuidCounter}`;
@@ -134,6 +136,7 @@ vi.mock('../event/index', () => ({
   registerContainerUpdateApplied: mockRegisterContainerUpdateApplied,
   registerContainerUpdateFailed: mockRegisterContainerUpdateFailed,
   registerBatchUpdateCompleted: mockRegisterBatchUpdateCompleted,
+  registerApprovalEvent: mockRegisterApprovalEvent,
   getContainerUpdateAppliedEventContainerName: (payload: unknown) => {
     if (typeof payload === 'string') return payload || undefined;
     if (!payload || typeof payload !== 'object') return undefined;
@@ -882,6 +885,103 @@ describe('SSE lifecycle event handlers', () => {
       const writes = res.write.mock.calls.map(([v]) => v);
       const eventWrite = writes.find((v) => v.includes('dd:batch-update-completed'));
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
+    });
+  });
+
+  describe('dd:approval-* broadcast', () => {
+    function emitApproval(kind: string, overrides: Record<string, unknown> = {}) {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onApproval = mockRegisterApprovalEvent.mock.calls.at(-1)[0];
+
+      onApproval({
+        kind,
+        id: 'approval-1',
+        containerId: 'container-1',
+        containerName: 'nginx',
+        decision: 'pending',
+        pendingCount: 3,
+        ...overrides,
+      });
+
+      return res;
+    }
+
+    test('a created row broadcasts dd:approval-created with five scalars', () => {
+      const res = emitApproval('created');
+
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+      const payload = parseSseEventPayload(res, 'dd:approval-created');
+      expect(payload).toStrictEqual({
+        id: 'approval-1',
+        containerId: 'container-1',
+        containerName: 'nginx',
+        decision: 'pending',
+        pendingCount: 3,
+      });
+    });
+
+    test('a resolved row broadcasts dd:approval-resolved', () => {
+      const res = emitApproval('resolved', { decision: 'approved' });
+
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+      const payload = parseSseEventPayload(res, 'dd:approval-resolved');
+      expect(payload).toMatchObject({ decision: 'approved', pendingCount: 3 });
+    });
+
+    test.each([['approved'], ['rejected'], ['deferred']])(
+      'a %s row broadcasts dd:approval-decided',
+      (decision) => {
+        const res = emitApproval('decided', { decision, pendingCount: 2 });
+
+        expect(mockLoggerWarn).not.toHaveBeenCalled();
+        const payload = parseSseEventPayload(res, 'dd:approval-decided');
+        expect(payload).toStrictEqual({
+          id: 'approval-1',
+          containerId: 'container-1',
+          containerName: 'nginx',
+          decision,
+          pendingCount: 2,
+        });
+      },
+    );
+
+    // DR-4, the half that dropping fields does not cover: `id` and `name` on a container
+    // carry no maximum length (app/model/container.ts), so a field the projection keeps is
+    // as able to blow the 256 KB pending-byte cap as one it drops — and this frame is
+    // retained in the replay ring, so it would do it again on reconnect.
+    test('bounds the strings it keeps, not just the fields it drops', () => {
+      const res = emitApproval('created', {
+        containerId: 'c'.repeat(300 * 1024),
+        containerName: 'n'.repeat(300 * 1024),
+      });
+
+      const write = res.write.mock.calls
+        .map(([value]) => value)
+        .find((value: string) => value.includes('dd:approval-created'));
+      expect(write.length).toBeLessThan(256 * 1024);
+      const payload = parseSseEventPayload(res, 'dd:approval-created');
+      expect(payload.containerId).toBe('c'.repeat(256));
+      expect(payload.containerName).toBe('n'.repeat(256));
+      expect(payload.id).toBe('approval-1');
+    });
+
+    // DR-4: a lifecycle payload carrying a container snapshot disconnects every client at
+    // the 256 KB backpressure cap. Nothing the reconciler can hand this builder puts a
+    // container in the payload, so a 500-vulnerability container cannot reach the wire.
+    test('the payload carries nothing the bus event did not name', () => {
+      const res = emitApproval('created', {
+        container: { id: 'container-1', security: { updateScan: { vulnerabilities: [] } } },
+        releaseNotes: 'x'.repeat(300 * 1024),
+      });
+
+      const write = res.write.mock.calls
+        .map(([value]) => value)
+        .find((value: string) => value.includes('dd:approval-created'));
+      expect(write.length).toBeLessThan(256 * 1024);
+      expect(write).not.toContain('vulnerabilities');
+      expect(write).not.toContain('releaseNotes');
     });
   });
 

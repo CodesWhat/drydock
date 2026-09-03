@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { getExperimentalPortwingEnabled, getServerConfiguration } from '../configuration/index.js';
 import * as agentRouter from './agent.js';
 import * as appRouter from './app.js';
+import * as approvalsRouter from './approvals.js';
 import * as auditRouter from './audit.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
@@ -202,6 +203,9 @@ export function init(): express.Router {
   if (getExperimentalPortwingEnabled()) {
     router.use('/portwing', portwingRouter.init());
   }
+
+  // Mount the pending-approval queue (read-only in this slice)
+  router.use('/approvals', approvalsRouter.init());
 
   // Mount audit log
   router.use('/audit', auditRouter.init());

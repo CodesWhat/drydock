@@ -79,6 +79,7 @@ vi.mock('./preview', mockInit);
 vi.mock('./backup', mockInit);
 vi.mock('./container-actions', mockInit);
 vi.mock('./internal-self-update', mockInit);
+vi.mock('./approvals', mockInit);
 vi.mock('./audit', mockInit);
 vi.mock('./webhook', mockInit);
 vi.mock('./webhooks', mockInit);
@@ -337,6 +338,7 @@ describe('API Router', () => {
     const backupRouter = await import('./backup.js');
     const containerActionsRouter = await import('./container-actions.js');
     const internalSelfUpdateRouter = await import('./internal-self-update.js');
+    const approvalsRouter = await import('./approvals.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
     const webhooksRouter = await import('./webhooks.js');
@@ -362,6 +364,7 @@ describe('API Router', () => {
     expect(backupRouter.init).toHaveBeenCalled();
     expect(containerActionsRouter.init).toHaveBeenCalled();
     expect(internalSelfUpdateRouter.init).toHaveBeenCalled();
+    expect(approvalsRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
     expect(webhooksRouter.init).toHaveBeenCalled();

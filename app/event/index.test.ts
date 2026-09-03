@@ -52,6 +52,10 @@ const eventTestCases = [
     emitter: event.emitMaturityGateCleared,
     register: event.registerMaturityGateCleared,
   },
+  {
+    emitter: event.emitApprovalEvent,
+    register: event.registerApprovalEvent,
+  },
 ];
 test.each(eventTestCases)(
   'the registered $register.name function must execute the handler when the $emitter.name emitter function is called',

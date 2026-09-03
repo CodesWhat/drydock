@@ -2,6 +2,7 @@ import dns from 'node:dns';
 import * as agentServer from './agent/api/index.js';
 import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
+import * as approvalReconciler from './approvals/reconcile.js';
 import { renderBanner } from './banner/index.js';
 import { getDnsMode } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
@@ -84,6 +85,10 @@ if (commandExitCode !== null) {
 
     // Init scheduled maturity gate sweep
     maturityScheduler.init();
+
+    // Reconcile the approval queue from watch results. Controller-only: the ledger is
+    // never written by ingestion, so an enrolled agent can neither mint nor resolve a row.
+    approvalReconciler.init();
 
     // Drain the notification outbox in the background. The deliver callback
     // resolves the destination trigger by id and lets it handle the entry;

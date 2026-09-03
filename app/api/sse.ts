@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type {
+  ApprovalEventKind,
+  ApprovalEventPayload,
   BatchUpdateCompletedEventPayload,
   ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
@@ -15,6 +17,7 @@ import {
   registerAgentConnected,
   registerAgentDisconnected,
   registerAgentStatsChanged,
+  registerApprovalEvent,
   registerBatchUpdateCompleted,
   registerContainerAdded,
   registerContainerHealthTransition,
@@ -76,7 +79,23 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:update-applied',
   'dd:update-failed',
   'dd:batch-update-completed',
+  'dd:approval-created',
+  'dd:approval-decided',
+  'dd:approval-resolved',
 ]);
+
+/**
+ * Wire names for the approval queue's three lifecycle transitions. The bus carries one
+ * event with a `kind`; the browser gets three distinct event names, so a client can listen
+ * for the one it cares about without parsing a payload. A decision and a resolution are
+ * separate names because they mean different things to a queue view: `decided` is an
+ * operator answering, `resolved` is a row leaving without one.
+ */
+const APPROVAL_SSE_EVENT_NAMES: Record<ApprovalEventKind, string> = {
+  created: 'dd:approval-created',
+  decided: 'dd:approval-decided',
+  resolved: 'dd:approval-resolved',
+};
 
 // Events that carry no id: line because they are ephemeral (not cross-client
 // durable state). Heartbeats and per-client handshakes must not be buffered.
@@ -685,6 +704,36 @@ function projectContainerLifecyclePayload(
   };
 }
 
+/**
+ * Longest container id or name this event will put on the wire. Comfortably past a Docker
+ * id (64 hex) or any name a person types, and short enough that the whole frame stays a
+ * rounding error against the per-client budget.
+ */
+const APPROVAL_SSE_TEXT_MAX_LENGTH = 256;
+
+/**
+ * Five scalars, built by naming each field rather than by stripping a container. There is
+ * no projection to keep in step with the container schema and no way for a vulnerability
+ * array, an SBOM or a release-notes body to reach a client through this event: everything
+ * the queue view needs beyond the count is fetched from `/api/v1/approvals`.
+ *
+ * The two container-supplied strings are bounded as well as named. Neither `id` nor `name`
+ * carries a maximum length in the container schema, and an agent supplies both, so naming
+ * the fields alone still leaves a frame that can exceed the 256 KB pending-byte cap and
+ * disconnect a backpressured client — then do it again when the ring buffer replays. The
+ * row's own `id` is not bounded: it is a generated UUID, and it is the key a client uses
+ * to fetch the row, so truncating it would break the lookup it exists for.
+ */
+function buildApprovalSsePayload(payload: ApprovalEventPayload): Record<string, unknown> {
+  return {
+    id: payload.id,
+    containerId: payload.containerId.slice(0, APPROVAL_SSE_TEXT_MAX_LENGTH),
+    containerName: payload.containerName.slice(0, APPROVAL_SSE_TEXT_MAX_LENGTH),
+    decision: payload.decision,
+    pendingCount: payload.pendingCount,
+  };
+}
+
 function broadcastContainerEvent(eventName: string, payload: unknown): void {
   if (!ALLOWED_CONTAINER_EVENT_NAMES.has(eventName)) {
     log.child({ component: 'sse' }).warn(`Dropping invalid SSE container event name: ${eventName}`);
@@ -775,6 +824,17 @@ export function init(): express.Router {
     registerContainerUpdateFailed(
       (payload: ContainerUpdateFailedEventPayload) => {
         broadcastContainerEvent('dd:update-failed', buildUpdateFailedSsePayload(payload));
+      },
+      { order: 1000 },
+    ),
+  );
+  trackEventListenerDeregistration(
+    registerApprovalEvent(
+      (payload: ApprovalEventPayload) => {
+        broadcastContainerEvent(
+          APPROVAL_SSE_EVENT_NAMES[payload.kind],
+          buildApprovalSsePayload(payload),
+        );
       },
       { order: 1000 },
     ),

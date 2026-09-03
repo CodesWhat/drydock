@@ -23,8 +23,6 @@ import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
-import { uniqStrings } from '../util/string-array.js';
-import { recordAuditEvent } from './audit-events.js';
 import { mapComponentsToList } from './component.js';
 import { createBulkSecurityHandlers } from './container/bulk-security.js';
 import { createCrudHandlers } from './container/crud.js';
@@ -40,7 +38,7 @@ import {
 import { type ContainerSortMode, sortContainers } from './container/sorting.js';
 import { createStatsHandlers } from './container/stats.js';
 import { createTriggerHandlers } from './container/triggers.js';
-import { createUpdatePolicyHandlers } from './container/update-policy.js';
+import { updatePolicyHandlers } from './container/update-policy-writer.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -202,14 +200,6 @@ const triggerHandlers = createTriggerHandlers({
 const containerStatsCollector = createContainerStatsCollector({
   getContainerById: (id) => storeContainer.getContainer(id),
   getWatchers: () => registry.getState().watcher || {},
-});
-
-const updatePolicyHandlers = createUpdatePolicyHandlers({
-  storeContainer,
-  uniqStrings,
-  getErrorMessage,
-  redactContainerRuntimeEnv,
-  recordAuditEvent,
 });
 
 const securityHandlers = createSecurityHandlers({

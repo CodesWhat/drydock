@@ -41,6 +41,9 @@ export interface AuditEntry {
     | 'auto-update-blocked'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'
+    | 'update-approved'
+    | 'update-rejected'
+    | 'update-deferred'
     | 'mqtt-command-update';
   containerName: string;
   containerIdentityKey?: string;

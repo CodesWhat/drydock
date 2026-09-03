@@ -9,6 +9,7 @@ import {
   notificationRuleIdPathParam,
   operationIdPathParam,
 } from '../common.js';
+import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
@@ -745,6 +746,7 @@ export const openApiPaths = {
     },
   },
   ...notificationOutboxPaths,
+  ...approvalPaths,
   '/api/v1/notifications/{id}': {
     patch: {
       tags: ['Notifications'],
