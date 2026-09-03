@@ -16,6 +16,9 @@ interface LefthookCommand {
 }
 
 interface LefthookDefinition {
+  'pre-commit'?: {
+    commands?: Record<string, LefthookCommand>;
+  };
   'pre-push'?: {
     commands?: Record<string, LefthookCommand>;
   };
@@ -133,6 +136,15 @@ test('workflow tests are wired outside the app coverage suite', () => {
   expect(loadLefthook()['pre-push']?.commands?.['workflow-tests']).toMatchObject({
     run: workflowTestsCommand,
     priority: 8,
+  });
+});
+
+test('pre-commit coverage hook receives the staged file list', () => {
+  // DR-46: lefthook passed {staged_files} to the biome commands but not to
+  // pre-commit-coverage.sh, so its `for f in "$@"` loop always saw an empty
+  // list and the hook was a silent no-op on every commit.
+  expect(loadLefthook()['pre-commit']?.commands?.coverage).toMatchObject({
+    run: './scripts/pre-commit-coverage.sh {staged_files}',
   });
 });
 
