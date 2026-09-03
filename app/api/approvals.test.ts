@@ -19,7 +19,7 @@ const {
   mockCountApprovals,
   mockGetApprovalById,
   mockDecideApprovalIfPending,
-  mockResetApprovalToPending,
+  mockRestoreApproval,
   mockUpdateApproval,
   mockGetContainer,
   mockBuildEligibilityContext,
@@ -34,7 +34,7 @@ const {
   mockCountApprovals: vi.fn(),
   mockGetApprovalById: vi.fn(),
   mockDecideApprovalIfPending: vi.fn(),
-  mockResetApprovalToPending: vi.fn(),
+  mockRestoreApproval: vi.fn(),
   mockUpdateApproval: vi.fn(),
   mockGetContainer: vi.fn(),
   mockBuildEligibilityContext: vi.fn(),
@@ -54,7 +54,7 @@ vi.mock('../store/approval.js', () => ({
   countApprovals: mockCountApprovals,
   getApprovalById: mockGetApprovalById,
   decideApprovalIfPending: mockDecideApprovalIfPending,
-  resetApprovalToPending: mockResetApprovalToPending,
+  restoreApproval: mockRestoreApproval,
   updateApproval: mockUpdateApproval,
 }));
 vi.mock('../approvals/events.js', () => ({
@@ -428,7 +428,7 @@ describe('decision preconditions', () => {
 
     expect(status).toBe(409);
     expect(body).toStrictEqual({ error: 'Approval already decided' });
-    expect(mockResetApprovalToPending).not.toHaveBeenCalled();
+    expect(mockRestoreApproval).not.toHaveBeenCalled();
   });
 
   test.each(DECISION_PATHS)('%s rejects a note that is not a string', async (path) => {
@@ -641,10 +641,32 @@ describe('POST /:id/approve', () => {
 
     expect(status).toBe(statusCode);
     expect(body).toStrictEqual({ error: message });
-    expect(mockResetApprovalToPending).toHaveBeenCalledWith('approval-1');
+    expect(mockRestoreApproval).toHaveBeenCalledWith(createRecord());
     expect(mockUpdateApproval).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
     expect(mockAnnounceApprovalEvent).not.toHaveBeenCalled();
+  });
+
+  // A reserved row is not always a pending one: an expired deferral is semantically
+  // pending, so it can be reserved, and a rollback that reset it to `pending` would erase
+  // who deferred it, why, and until when.
+  test('puts an expired deferral back exactly as it was', async () => {
+    const expired = createRecord({
+      decision: 'deferred',
+      decidedAt: '2026-08-29T00:10:00.000Z',
+      decidedBy: 'scott',
+      decisionNote: 'after the freeze',
+      deferredUntil: '2026-08-30T00:00:00.000Z',
+    });
+    mockGetApprovalById.mockReturnValue(expired);
+    mockRequestContainerUpdate.mockRejectedValue(
+      new UpdateRequestError(409, 'Update mode is notify; Drydock will not apply updates'),
+    );
+
+    const { status } = await callDecision('/:id/approve');
+
+    expect(status).toBe(409);
+    expect(mockRestoreApproval).toHaveBeenCalledWith(expired);
   });
 
   test('reports an unexpected dispatch failure as the same 500 the Update button reports', async () => {
@@ -654,7 +676,7 @@ describe('POST /:id/approve', () => {
 
     expect(status).toBe(500);
     expect(body).toStrictEqual({ error: 'Unable to accept container update' });
-    expect(mockResetApprovalToPending).toHaveBeenCalledWith('approval-1');
+    expect(mockRestoreApproval).toHaveBeenCalledWith(createRecord());
   });
 
   // Edge case 5. The reservation is written before anything is awaited, so the second
@@ -726,7 +748,7 @@ describe('POST /:id/reject', () => {
 
     expect(status).toBe(400);
     expect(body).toStrictEqual({ error: 'No current update available to skip' });
-    expect(mockResetApprovalToPending).toHaveBeenCalledWith('approval-1');
+    expect(mockRestoreApproval).toHaveBeenCalledWith(createRecord());
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 });
@@ -813,7 +835,7 @@ describe('POST /:id/defer', () => {
 
     expect(status).toBe(400);
     expect(body).toStrictEqual({ error: 'Failed to update container policy' });
-    expect(mockResetApprovalToPending).toHaveBeenCalledWith('approval-1');
+    expect(mockRestoreApproval).toHaveBeenCalledWith(createRecord());
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 });

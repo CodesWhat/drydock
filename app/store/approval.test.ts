@@ -363,9 +363,40 @@ describe('decideApprovalIfPending', () => {
       status: 'not-found',
     });
   });
+
+  // A row deciding twice is the expired-deferral case: the first decision's note and
+  // expiry describe a choice that has lapsed, and carrying them into the second one would
+  // put a reason on the audit entry that the operator never typed.
+  test('a second decision keeps nothing from the first', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.decideApprovalIfPending(inserted.id, {
+      decision: 'deferred',
+      decidedAt: '2026-03-04T00:00:00.000Z',
+      decidedBy: 'scott',
+      decisionNote: 'after the freeze',
+      deferredUntil: '2026-03-05T00:00:00.000Z',
+    });
+
+    const transition = approvalStore.decideApprovalIfPending(
+      inserted.id,
+      { decision: 'approved', decidedAt: '2026-03-06T00:00:00.000Z', decidedBy: 'ada' },
+      { now: Date.parse('2026-03-06T00:00:00.000Z') },
+    );
+
+    expect(transition).toStrictEqual({
+      status: 'decided',
+      record: {
+        ...inserted,
+        decision: 'approved',
+        decidedAt: '2026-03-06T00:00:00.000Z',
+        decidedBy: 'ada',
+      },
+    });
+    expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(transition.record);
+  });
 });
 
-describe('resetApprovalToPending', () => {
+describe('restoreApproval', () => {
   test('clears every trace of a decision that did not stand', () => {
     const inserted = approvalStore.insertApproval(createInput());
     approvalStore.decideApprovalIfPending(inserted.id, {
@@ -377,23 +408,48 @@ describe('resetApprovalToPending', () => {
       operationId: 'op-1',
     });
 
-    const restored = approvalStore.resetApprovalToPending(inserted.id);
+    const restored = approvalStore.restoreApproval(inserted);
 
-    expect(restored).toStrictEqual({
-      ...inserted,
-      decision: 'pending',
-    });
-    expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(restored);
+    expect(restored).toStrictEqual(inserted);
+    expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(inserted);
   });
 
-  test('returns undefined for an unknown id', () => {
-    expect(approvalStore.resetApprovalToPending('nope')).toBeUndefined();
+  // The row a reservation replaced is not always a pending one. An expired deferral is
+  // semantically pending and can be reserved, and resetting it to `pending` would erase
+  // who deferred it, when, why, and until when — a decision that did happen.
+  test('puts an expired deferral back exactly as it was', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.decideApprovalIfPending(inserted.id, {
+      decision: 'deferred',
+      decidedAt: '2026-03-04T00:00:00.000Z',
+      decidedBy: 'scott',
+      decisionNote: 'after the freeze',
+      deferredUntil: '2026-03-05T00:00:00.000Z',
+    });
+    const snapshot = approvalStore.getApprovalById(inserted.id);
+    approvalStore.decideApprovalIfPending(
+      inserted.id,
+      { decision: 'approved', decidedAt: '2026-03-06T00:00:00.000Z', decidedBy: 'ada' },
+      { now: Date.parse('2026-03-06T00:00:00.000Z') },
+    );
+
+    const restored = approvalStore.restoreApproval(snapshot);
+
+    expect(restored).toStrictEqual(snapshot);
+    expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(snapshot);
+  });
+
+  test('returns undefined for an id no row carries', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+
+    expect(approvalStore.restoreApproval({ ...inserted, id: 'nope' })).toBeUndefined();
   });
 
   test('returns undefined when the collection has not been created', () => {
+    const inserted = approvalStore.insertApproval(createInput());
     approvalStore.resetApprovalStoreForTests();
 
-    expect(approvalStore.resetApprovalToPending('nope')).toBeUndefined();
+    expect(approvalStore.restoreApproval(inserted)).toBeUndefined();
   });
 });
 

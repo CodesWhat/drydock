@@ -48,7 +48,7 @@ import {
   decideApprovalIfPending,
   getApprovalById,
   listApprovals,
-  resetApprovalToPending,
+  restoreApproval,
   updateApproval,
 } from '../store/approval.js';
 import { getContainer } from '../store/container.js';
@@ -226,6 +226,8 @@ type DecisionRequest = Request<{ id: string }> & { user?: { username?: string } 
 
 /** A row reserved for one decision, with the container that decision acts on. */
 interface ReservedApproval {
+  /** The row exactly as it was before the reservation, for a rollback to put back. */
+  previous: ApprovalRecord;
   record: ApprovalRecord;
   container: Container;
 }
@@ -325,25 +327,27 @@ function reserveApproval(
     return undefined;
   }
 
-  return { record: transition.record, container };
+  return { previous, record: transition.record, container };
 }
 
 /**
- * Put a reserved row back in the queue and answer with the reason its work was refused.
- * A decision that did not take effect leaves no trace: the operator can fix the blocker
- * and decide again, and the row's `createdAt` still says how long it has been waiting.
+ * Put a reserved row back exactly as it was and answer with the reason its work was
+ * refused. A decision that did not take effect leaves no trace: the operator can fix the
+ * blocker and decide again, and the row's `createdAt` still says how long it has been
+ * waiting. The snapshot is restored rather than the row being reset, because a reserved
+ * row may be an expired deferral that a reset would blank.
  * @param res
- * @param record
+ * @param previous
  * @param statusCode
  * @param message
  */
 function abandonReservation(
   res: Response,
-  record: ApprovalRecord,
+  previous: ApprovalRecord,
   statusCode: number,
   message: string,
 ): void {
-  resetApprovalToPending(record.id);
+  restoreApproval(previous);
   sendErrorResponse(res, statusCode, message);
 }
 
@@ -364,7 +368,7 @@ function writeDecisionPolicy(
 ): boolean {
   const result = applyContainerUpdatePolicyAction(reserved.container, action, body);
   if ('error' in result) {
-    abandonReservation(res, reserved.record, 400, result.error);
+    abandonReservation(res, reserved.previous, 400, result.error);
     return false;
   }
   return true;
@@ -429,7 +433,7 @@ async function approveApproval(req: DecisionRequest, res: Response): Promise<voi
 
   const outcome = await dispatchManualContainerUpdate(reserved.container);
   if (outcome.kind === 'rejected') {
-    resetApprovalToPending(reserved.record.id);
+    restoreApproval(reserved.previous);
   } else {
     updateApproval(reserved.record.id, { operationId: outcome.operationId });
     completeDecision('update-approved', reserved.container, {

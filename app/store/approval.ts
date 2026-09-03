@@ -44,11 +44,11 @@ const APPROVAL_MUTABLE_FIELDS = [
 ] as const;
 
 /**
- * The fields a human decision writes. Cleared wholesale when a reserved decision does not
- * stand, so a rolled-back approve leaves a row indistinguishable from one nobody touched.
- * `outcome`, `resolvedAt` and `resolution` are deliberately absent: they describe what
- * happened to the row rather than what an operator chose, and a row carrying them is not
- * pending, so no reservation can ever be holding them.
+ * The fields a human decision writes. Cleared before a decision is applied and before a
+ * snapshot is restored, so neither operation can leave a field the row it produced does
+ * not name. `outcome`, `resolvedAt` and `resolution` are deliberately absent: they
+ * describe what happened to the row rather than what an operator chose, and a row carrying
+ * them is not pending, so no decision or reservation can ever be holding them.
  */
 const APPROVAL_DECISION_FIELDS = [
   'decidedAt',
@@ -136,6 +136,22 @@ function copyDefinedFields<T extends object, K extends keyof T>(
     if (value !== undefined) {
       target[field] = value;
     }
+  }
+}
+
+/**
+ * Drop every field a human decision writes.
+ *
+ * Load-bearing on the way in as well as on the way back. A patch only carries the fields
+ * its caller named, so applying one over a row that was already decided — an expired
+ * deferral, which is semantically pending again — would leave the lapsed decision's note
+ * and expiry sitting on the new decision, and put a reason on the audit entry that this
+ * operator never typed.
+ * @param document
+ */
+function clearDecisionFields(document: ApprovalDocument): void {
+  for (const field of APPROVAL_DECISION_FIELDS) {
+    delete document[field];
   }
 }
 
@@ -341,28 +357,33 @@ export function decideApprovalIfPending(
     return { status: 'already-decided', record };
   }
 
+  clearDecisionFields(document);
   copyDefinedFields(document, patch, APPROVAL_MUTABLE_FIELDS);
   approvalCollection.update(document);
   return { status: 'decided', record: toApprovalRecord(document) };
 }
 
 /**
- * Undo a reservation whose work did not go through, putting the row back in the queue
- * with no trace of the attempt. A patch cannot do this: `updateApproval` copies only the
- * fields a caller names and has no way to spell "unset", which is correct for a decision
- * and useless for a rollback.
- * @param id
+ * Undo a reservation whose work did not go through, putting back the exact row it
+ * replaced. A patch cannot do this: `updateApproval` copies only the fields a caller names
+ * and has no way to spell "unset", which is correct for a decision and useless for a
+ * rollback.
+ *
+ * It restores a snapshot rather than resetting to `pending`, because the row a reservation
+ * replaced is not always a pending one. An expired deferral is semantically pending and
+ * can be reserved, and blanking it would erase who deferred it, when, why and until when —
+ * a decision that did happen, and the only record of it until the row is pruned.
+ * @param record
  */
-export function resetApprovalToPending(id: string): ApprovalRecord | undefined {
-  const document = approvalCollection?.findOne({ id });
+export function restoreApproval(record: ApprovalRecord): ApprovalRecord | undefined {
+  const document = approvalCollection?.findOne({ id: record.id });
   if (!document || !approvalCollection) {
     return undefined;
   }
 
-  document.decision = 'pending';
-  for (const field of APPROVAL_DECISION_FIELDS) {
-    delete document[field];
-  }
+  document.decision = record.decision;
+  clearDecisionFields(document);
+  copyDefinedFields(document, record, APPROVAL_DECISION_FIELDS);
 
   approvalCollection.update(document);
   return toApprovalRecord(document);

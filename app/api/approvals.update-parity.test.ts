@@ -61,7 +61,7 @@ vi.mock('../store/approval.js', () => ({
   countApprovals: vi.fn(),
   getApprovalById: mockGetApprovalById,
   decideApprovalIfPending: mockDecideApprovalIfPending,
-  resetApprovalToPending: vi.fn(),
+  restoreApproval: vi.fn(),
   updateApproval: vi.fn(),
 }));
 vi.mock('../approvals/events.js', () => ({ announceApprovalEvent: vi.fn() }));
