@@ -66,122 +66,149 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.8</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.8</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.8</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.7</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.8</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.8</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.7 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.8 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    pagination: string;
-    updates: string;
-    selfUpdate: string;
-    security: string;
-    compose: string;
-    sessions: string;
-    roadmap: string;
+    digestPin: string;
+    selfUpdateCleanup: string;
+    snapshotPrune: string;
+    registryLookup: string;
+    phantomAgent: string;
+    unknownRegistry: string;
+    debugDump: string;
+    qaSweep: string;
   }
 > = {
   'README.de.md': {
-    pagination: '**Die Registry-Paginierung folgt jetzt dem Cursor jeder Registry**',
-    updates:
-      '**Updates bleiben erfolgreich, wenn die Bereinigung nach der Gesundheitsprüfung fehlschlägt**',
-    selfUpdate: 'Self-Updates warten vor dem exklusiven Gate auf aktive Lebenszyklen',
-    security:
-      '**Die Anmeldedaten-Redaktion deckt jetzt Trigger, Registries, Debug-Dumps und Lookalike-Hosts ab**',
-    compose: '**Compose-Umschreibungen prüfen vor dem Schreiben das Laufzeit-Repository**',
-    sessions: '**Header-authentifizierte Anfragen speichern keine Sessions mehr**',
-    roadmap: '**Der Wettbewerbsvergleich und die Roadmap wurden für 2026 aktualisiert**',
+    digestPin:
+      '**Die Docker-native und die Compose-Update-Pfade pinnen jetzt einen unveränderlichen Digest des gezogenen Images vor Signaturprüfung, Scan und Ersetzung**',
+    selfUpdateCleanup:
+      '**Ein Self-Update macht einen bereits gesundheitsgeprüften Ersatz nicht mehr rückgängig, wenn die Bereinigung des alten Containers fehlschlägt**',
+    snapshotPrune:
+      'der Watcher-Snapshot-Handler behandelt eine leere Container-Liste nicht mehr als Massenentfernung',
+    registryLookup:
+      '**`dd.registry.lookup.image` gilt jetzt auch für Container, die von Controller-Docker-Transport-Agents gemeldet werden**',
+    phantomAgent:
+      '**`DD_AGENT_ALLOW_INSECURE_SECRET` erzeugt keinen Phantom-Agent namens `allow` mehr**',
+    unknownRegistry:
+      'ein Container, der als `unknown` markiert war, bevor seine Registry konfiguriert wurde, erholt sich jetzt bei der Aktualisierung',
+    debugDump:
+      '**Debug-Dumps redigieren jetzt Apprise-Service-URLs, Rocket.Chat-Benutzer-IDs und Telegram-Chat-IDs**',
+    qaSweep: '**Vier Fixes aus dem QA-Sweep von rc.6 landen**',
   },
   'README.es.md': {
-    pagination: '**La paginación de los registros sigue ahora el cursor de cada registro**',
-    updates:
-      '**Las actualizaciones siguen siendo exitosas cuando falla la limpieza después de la comprobación de salud**',
-    selfUpdate:
-      'las autoactualizaciones esperan a que terminen los ciclos activos antes de tomar el bloqueo exclusivo',
-    security:
-      '**La redacción de credenciales cubre ahora activadores, registros, volcados de depuración y hosts parecidos**',
-    compose:
-      '**Las reescrituras de Compose verifican el repositorio en ejecución antes de escribir**',
-    sessions: '**Las solicitudes autenticadas por cabecera ya no persisten sesiones**',
-    roadmap: '**La comparación de competidores y la hoja de ruta se actualizaron para 2026**',
+    digestPin:
+      '**Las rutas de actualización nativa de Docker y de Compose ahora fijan un digest inmutable de la imagen extraída antes de la verificación de firma, el escaneo y el reemplazo**',
+    selfUpdateCleanup:
+      '**La autoactualización ya no revierte un reemplazo verificado por salud cuando falla la limpieza del contenedor antiguo**',
+    snapshotPrune:
+      'el manejador de instantáneas del watcher deja de tratar una lista de contenedores vacía como una eliminación masiva',
+    registryLookup:
+      '**`dd.registry.lookup.image` ahora se aplica a los contenedores reportados por agentes de transporte Docker del controlador**',
+    phantomAgent:
+      '**`DD_AGENT_ALLOW_INSECURE_SECRET` ya no crea un agente fantasma llamado `allow`**',
+    unknownRegistry:
+      'un contenedor marcado como `unknown` antes de configurar su registro ahora se recupera al actualizar',
+    debugDump:
+      '**Los volcados de depuración redactan las URL de servicio de Apprise, los ID de usuario de Rocket.Chat y los ID de chat de Telegram**',
+    qaSweep: '**Llegan cuatro correcciones del barrido de control de calidad de rc.6**',
   },
   'README.fr.md': {
-    pagination:
-      '**La pagination des registres suit désormais le curseur propre à chaque registre**',
-    updates: '**Une mise à jour reste réussie si le nettoyage échoue après le contrôle de santé**',
-    selfUpdate:
-      'les auto-mises à jour attendent la fin des cycles actifs avant de prendre le verrou exclusif',
-    security:
-      '**La rédaction des identifiants couvre désormais les déclencheurs, registres, vidages de débogage et hôtes ressemblants**',
-    compose: '**Les réécritures Compose vérifient le dépôt d’exécution avant toute écriture**',
-    sessions: '**Les requêtes authentifiées par en-tête ne persistent plus de sessions**',
-    roadmap:
-      '**La comparaison des concurrents et la feuille de route ont été actualisées pour 2026**',
+    digestPin:
+      "**Les chemins de mise à jour Docker natif et Compose épinglent désormais un digest immuable de l'image récupérée avant la vérification de signature, l'analyse et le remplacement**",
+    selfUpdateCleanup:
+      "**Une auto-mise à jour n'annule plus un remplacement vérifié par le contrôle de santé lorsque le nettoyage de l'ancien conteneur échoue**",
+    snapshotPrune:
+      "le gestionnaire d'instantané du watcher ne traite plus une liste de conteneurs vide comme une suppression massive",
+    registryLookup:
+      "**`dd.registry.lookup.image` s'applique désormais aux conteneurs signalés par les agents à transport Docker du contrôleur**",
+    phantomAgent: "**`DD_AGENT_ALLOW_INSECURE_SECRET` ne crée plus d'agent fantôme nommé `allow`**",
+    unknownRegistry:
+      "un conteneur marqué `unknown` avant la configuration de son registre se rétablit désormais à l'actualisation",
+    debugDump:
+      '**Les vidages de débogage occultent désormais les URL de service Apprise, les ID utilisateur Rocket.Chat et les ID de discussion Telegram**',
+    qaSweep: '**Quatre correctifs du balayage QA de la rc.6 arrivent**',
   },
   'README.pl.md': {
-    pagination: '**Paginacja rejestrów korzysta teraz z kursora właściwego dla każdego rejestru**',
-    updates:
-      '**Aktualizacje pozostają pomyślne, gdy czyszczenie nie powiedzie się po kontroli stanu**',
-    selfUpdate:
-      'samoaktualizacje czekają na zakończenie aktywnych cykli przed przejęciem wyłącznej blokady',
-    security:
-      '**Redakcja poświadczeń obejmuje teraz wyzwalacze, rejestry, zrzuty debugowania i podobne hosty**',
-    compose: '**Przepisywanie Compose sprawdza repozytorium uruchomieniowe przed zapisem**',
-    sessions: '**Żądania uwierzytelnione nagłówkiem nie zapisują już sesji**',
-    roadmap: '**Porównanie konkurencji i mapa drogowa zostały odświeżone na 2026 rok**',
+    digestPin:
+      '**Ścieżki aktualizacji natywnej Docker i Compose przypinają teraz niezmienny skrót pobranego obrazu przed weryfikacją podpisu, skanowaniem i podmianą**',
+    selfUpdateCleanup:
+      '**Samoaktualizacja nie wycofuje już zweryfikowanej pod względem kondycji podmiany, gdy czyszczenie starego kontenera się nie powiedzie**',
+    snapshotPrune:
+      'moduł obsługi migawek watchera przestaje traktować pustą listę kontenerów jako masowe usunięcie',
+    registryLookup:
+      '**`dd.registry.lookup.image` dotyczy teraz kontenerów zgłaszanych przez agentów transportu Docker kontrolera**',
+    phantomAgent:
+      '**`DD_AGENT_ALLOW_INSECURE_SECRET` nie tworzy już agenta widmo o nazwie `allow`**',
+    unknownRegistry:
+      'kontener oznaczony jako `unknown` przed skonfigurowaniem rejestru teraz odzyskuje stan przy odświeżeniu',
+    debugDump:
+      '**Zrzuty debugowania ukrywają teraz adresy URL usługi Apprise, identyfikatory użytkowników Rocket.Chat i identyfikatory czatów Telegram**',
+    qaSweep: '**Cztery poprawki z przeglądu QA rc.6 trafiają do wydania**',
   },
   'README.pt-BR.md': {
-    pagination: '**A paginação dos registros agora segue o cursor de cada registro**',
-    updates:
-      '**As atualizações continuam bem-sucedidas quando a limpeza falha após a verificação de integridade**',
-    selfUpdate:
-      'as autoatualizações aguardam os ciclos ativos terminarem antes de assumir o bloqueio exclusivo',
-    security:
-      '**A redação de credenciais agora cobre gatilhos, registros, dumps de depuração e hosts semelhantes**',
-    compose: '**As reescritas do Compose verificam o repositório em execução antes de gravar**',
-    sessions: '**Solicitações autenticadas por cabeçalho não persistem mais sessões**',
-    roadmap: '**A comparação com concorrentes e o roadmap foram atualizados para 2026**',
+    digestPin:
+      '**Os caminhos de atualização nativa do Docker e do Compose agora fixam um digest imutável da imagem baixada antes da verificação de assinatura, da varredura e da substituição**',
+    selfUpdateCleanup:
+      '**A autoatualização não reverte mais uma substituição verificada por saúde quando a limpeza do contêiner antigo falha**',
+    snapshotPrune:
+      'o manipulador de snapshot do watcher para de tratar uma lista de contêineres vazia como uma remoção em massa',
+    registryLookup:
+      '**`dd.registry.lookup.image` agora se aplica a contêineres reportados por agentes de transporte Docker do controlador**',
+    phantomAgent:
+      '**`DD_AGENT_ALLOW_INSECURE_SECRET` não cria mais um agente fantasma chamado `allow`**',
+    unknownRegistry:
+      'um contêiner marcado como `unknown` antes de seu registro ser configurado agora se recupera na atualização',
+    debugDump:
+      '**Os dumps de depuração agora redigem URLs de serviço do Apprise, IDs de usuário do Rocket.Chat e IDs de chat do Telegram**',
+    qaSweep: '**Chegam quatro correções da varredura de QA da rc.6**',
   },
   'README.zh-CN.md': {
-    pagination: '**注册表分页现在遵循各注册表自己的游标**',
-    updates: '**健康检查通过后即使清理失败，更新仍会保持成功**',
-    selfUpdate: '自更新会等待活动生命周期完成后再获取独占闸门',
-    security: '**凭据脱敏现在覆盖触发器、注册表、调试转储和相似主机**',
-    compose: '**Compose 重写会在写入前验证运行时仓库**',
-    sessions: '**通过请求头认证的请求不再持久化会话**',
-    roadmap: '**竞争者对比和路线图已更新至 2026 年**',
+    digestPin:
+      '**Docker 原生和 Compose 更新路径现在会在签名验证、扫描和替换之前锁定已拉取镜像的不可变摘要**',
+    selfUpdateCleanup: '**当旧容器清理失败时，自更新不再回滚已通过健康检查的替换**',
+    snapshotPrune: 'watcher 快照处理器也不再将空容器列表当作批量删除处理',
+    registryLookup: '**`dd.registry.lookup.image` 现在适用于由控制器 Docker 传输代理上报的容器**',
+    phantomAgent: '**`DD_AGENT_ALLOW_INSECURE_SECRET` 不再创建名为 `allow` 的幽灵代理**',
+    unknownRegistry: '在配置注册表之前被标记为 `unknown` 的容器现在会在刷新时恢复',
+    debugDump:
+      '**调试转储现在会对 Apprise 服务 URL、Rocket.Chat 用户 ID 和 Telegram 聊天 ID 进行脱敏**',
+    qaSweep: '**rc.6 QA 排查中的四项修复已合入**',
   },
 };
 
@@ -237,6 +264,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc5--2026-08-27',
   './CHANGELOG.md#170-rc6--2026-08-29',
   './CHANGELOG.md#170-rc7--2026-08-29',
+  './CHANGELOG.md#170-rc8--2026-09-03',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -291,30 +319,33 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
     const releaseBullets = [
-      release.pagination,
-      release.updates,
-      release.security,
-      release.compose,
-      release.sessions,
-      release.roadmap,
+      release.digestPin,
+      release.selfUpdateCleanup,
+      release.registryLookup,
+      release.phantomAgent,
+      release.debugDump,
+      release.qaSweep,
     ].map((fragment) => getBullet(releaseBlock, fragment));
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
     expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[1]).toContain(release.selfUpdate);
+    expect(releaseBullets[1]).toContain(release.snapshotPrune);
+    expect(releaseBullets[3]).toContain(release.unknownRegistry);
     expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/927',
-      'https://github.com/CodesWhat/drydock/pull/931',
-      'https://github.com/CodesWhat/drydock/pull/932',
-      'https://github.com/CodesWhat/drydock/pull/933',
-      'https://github.com/CodesWhat/drydock/pull/935',
-      'https://github.com/CodesWhat/drydock/pull/936',
-      'https://github.com/CodesWhat/drydock/pull/942',
+      'https://github.com/CodesWhat/drydock/pull/928',
+      'https://github.com/CodesWhat/drydock/pull/929',
+      'https://github.com/CodesWhat/drydock/pull/951',
+      'https://github.com/CodesWhat/drydock/pull/952',
+      'https://github.com/CodesWhat/drydock/pull/953',
+      'https://github.com/CodesWhat/drydock/pull/954',
+      'https://github.com/CodesWhat/drydock/pull/955',
+      'https://github.com/CodesWhat/drydock/pull/956',
+      'https://github.com/CodesWhat/drydock/pull/961',
     ]);
     expect(getUrls(releaseBullets[1]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/931',
-      'https://github.com/CodesWhat/drydock/pull/942',
+      'https://github.com/CodesWhat/drydock/pull/929',
+      'https://github.com/CodesWhat/drydock/pull/951',
     ]);
   });
 

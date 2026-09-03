@@ -202,6 +202,20 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.8 亮点</strong></summary>
+
+- **Docker 原生和 Compose 更新路径现在会在签名验证、扫描和替换之前锁定已拉取镜像的不可变摘要**，从而在两条路径上关闭注册表重新打标签的窗口。([#961](https://github.com/CodesWhat/drydock/pull/961)，[#952](https://github.com/CodesWhat/drydock/pull/952))
+- **当旧容器清理失败时，自更新不再回滚已通过健康检查的替换**，watcher 快照处理器也不再将空容器列表当作批量删除处理。([#951](https://github.com/CodesWhat/drydock/pull/951)，[#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` 现在适用于由控制器 Docker 传输代理上报的容器**，因此 Portwing 上报的容器与本地监视的容器遵循相同的注册表覆盖规则。([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` 不再创建名为 `allow` 的幽灵代理**，且在配置注册表之前被标记为 `unknown` 的容器现在会在刷新时恢复。([#954](https://github.com/CodesWhat/drydock/pull/954)，[#955](https://github.com/CodesWhat/drydock/pull/955))
+- **调试转储现在会对 Apprise 服务 URL、Rocket.Chat 用户 ID 和 Telegram 聊天 ID 进行脱敏**，从而关闭该端点中最后一个特定提供商的凭据缺口。([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **rc.6 QA 排查中的四项修复已合入**：修正后的 Trivy 公告、真正的 404 页面、准确的审计搜索计数，以及尊重自身刷新按钮的服务器面板。([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.7 亮点</strong></summary>
 
 - **注册表分页现在遵循各注册表自己的游标**，避免更新检查跳过页面或过早停止。([#927](https://github.com/CodesWhat/drydock/pull/927))

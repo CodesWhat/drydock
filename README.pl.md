@@ -202,6 +202,20 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.8</strong></summary>
+
+- **Ścieżki aktualizacji natywnej Docker i Compose przypinają teraz niezmienny skrót pobranego obrazu przed weryfikacją podpisu, skanowaniem i podmianą**, zamykając okno na zmianę repozytorium rejestru na obu ścieżkach. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **Samoaktualizacja nie wycofuje już zweryfikowanej pod względem kondycji podmiany, gdy czyszczenie starego kontenera się nie powiedzie**, a moduł obsługi migawek watchera przestaje traktować pustą listę kontenerów jako masowe usunięcie. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` dotyczy teraz kontenerów zgłaszanych przez agentów transportu Docker kontrolera**, dzięki czemu kontenery zgłaszane przez Portwing respektują to samo przekierowanie rejestru co obserwowane lokalnie. ([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` nie tworzy już agenta widmo o nazwie `allow`**, a kontener oznaczony jako `unknown` przed skonfigurowaniem rejestru teraz odzyskuje stan przy odświeżeniu. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))
+- **Zrzuty debugowania ukrywają teraz adresy URL usługi Apprise, identyfikatory użytkowników Rocket.Chat i identyfikatory czatów Telegram**, zamykając ostatnią lukę poświadczeń właściwą dla dostawcy w tym punkcie końcowym. ([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **Cztery poprawki z przeglądu QA rc.6 trafiają do wydania**: poprawione ostrzeżenie Trivy, prawdziwa strona 404, dokładne liczniki wyszukiwania audytu i panel serwerów respektujący własny przycisk Odśwież. ([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+Pełne informacje o wydaniu: [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.7</strong></summary>
 
 - **Paginacja rejestrów korzysta teraz z kursora właściwego dla każdego rejestru**, więc sprawdzanie aktualizacji nie pomija stron ani nie kończy się przedwcześnie. ([#927](https://github.com/CodesWhat/drydock/pull/927))
