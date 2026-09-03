@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import type Loki from 'lokijs';
-import { type Container, getCandidateIdentityFields } from '../model/container.js';
+import {
+  type Container,
+  type ContainerUpdateKind,
+  getCandidateIdentityFields,
+  isTagUpdateKind,
+} from '../model/container.js';
 import { initCollection } from './util.js';
 
 export type NotificationEventKind =
@@ -57,16 +62,34 @@ function buildKey(
  * bypasses the registry poll cache — without the candidate itself changing. Hashing them
  * caused `hasAlreadyNotifiedForResult` to see a "new" result and fire a duplicate `once: true`
  * notification for the same update.
+ *
+ * For a tag-kind update on a container configured for digest watching
+ * (`image.digest.watch`), digest and created are excluded outright rather than falling back
+ * to "created when digest is absent": the candidate is fully identified by the tag, and the
+ * digest lookup that runs alongside it is a separate, independently-failing call. A registry
+ * rate limit (`Digest watch failed (429)`) drops the digest for one scan and not the next,
+ * which used to flip `created` in and out of the hash and made `once=true` treat the exact
+ * same tag update as new again a few hours later, re-firing every trigger (#972).
+ *
+ * A container NOT configured for digest watching never has a digest to flip on a transient
+ * failure, so it keeps the original created-as-sole-discriminator fallback — that's the
+ * legacy-manifest path (e.g. a mutable `latest` tag) where `created` is the only immutable
+ * signal available at all. Digest-kind updates always stay keyed on the digest, since that's
+ * what identifies them.
  */
-export function computeResultHash(container: Pick<Container, 'result' | 'updateKind'>): string {
-  const updateKind = container.updateKind ?? {};
+export function computeResultHash(
+  container: Pick<Container, 'result' | 'updateKind' | 'image'>,
+): string {
+  const updateKind = (container.updateKind ?? {}) as Partial<ContainerUpdateKind>;
   const fields = getCandidateIdentityFields(container.result);
+  const isStableTagUpdate =
+    isTagUpdateKind(updateKind as ContainerUpdateKind) && container.image?.digest?.watch === true;
   const payload = {
     tag: fields.tag ?? null,
-    digest: fields.digest ?? null,
-    created: fields.created ?? null,
-    kind: (updateKind as { kind?: unknown }).kind ?? null,
-    remoteValue: (updateKind as { remoteValue?: unknown }).remoteValue ?? null,
+    digest: isStableTagUpdate ? null : (fields.digest ?? null),
+    created: isStableTagUpdate ? null : (fields.created ?? null),
+    kind: updateKind.kind ?? null,
+    remoteValue: updateKind.remoteValue ?? null,
   };
   return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }

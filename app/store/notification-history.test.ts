@@ -59,6 +59,84 @@ describe('notification-history store', () => {
       );
     });
 
+    // Regression test for #972: a transient registry rate limit
+    // (`Digest watch failed (429)`) drops the digest lookup for a tag-kind
+    // update on one scan and succeeds on the next. Before this fix, digest
+    // absence flipped `created` into the hash on the failed scan and back out
+    // on the next, so the once=true history no longer matched and the
+    // trigger re-fired for a tag update it had already announced.
+    test('returns the same hash for a tag-kind update whether the digest lookup succeeded or failed', () => {
+      const digestSucceeded = {
+        result: {
+          tag: '2.29.2-pg17',
+          digest: 'sha256:abc',
+          created: '2026-04-15',
+        },
+        updateKind: { kind: 'tag', remoteValue: '2.29.2-pg17' },
+        image: { digest: { watch: true } },
+      } as any;
+      const digestFailed = {
+        result: {
+          tag: '2.29.2-pg17',
+          // Digest watch failed (429): no digest, and created falls back to
+          // whatever this scan's enumeration produced.
+          digest: undefined,
+          created: '2026-04-15T12:59:48.000Z',
+        },
+        updateKind: { kind: 'tag', remoteValue: '2.29.2-pg17' },
+        image: { digest: { watch: true } },
+      } as any;
+      expect(notificationHistory.computeResultHash(digestFailed)).toBe(
+        notificationHistory.computeResultHash(digestSucceeded),
+      );
+    });
+
+    test('keeps created as the discriminator for a tag-kind update when digest watching is not configured', () => {
+      const base = {
+        result: { tag: 'latest', digest: undefined, created: '2026-04-15' },
+        updateKind: { kind: 'tag', remoteValue: 'latest' },
+        image: { digest: { watch: false } },
+      } as any;
+      const differentImage = {
+        ...base,
+        result: { ...base.result, created: '2026-04-16' },
+      };
+      expect(notificationHistory.computeResultHash(differentImage)).not.toBe(
+        notificationHistory.computeResultHash(base),
+      );
+    });
+
+    test('still keys a digest-kind update on the digest (no tag-kind carve-out)', () => {
+      const base = {
+        result: { tag: 'latest', digest: 'sha256:abc', created: '2026-04-15' },
+        updateKind: { kind: 'digest', remoteValue: 'sha256:abc' },
+      } as any;
+      const differentDigest = {
+        ...base,
+        result: { ...base.result, digest: 'sha256:def' },
+        updateKind: { kind: 'digest', remoteValue: 'sha256:def' },
+      };
+      expect(notificationHistory.computeResultHash(differentDigest)).not.toBe(
+        notificationHistory.computeResultHash(base),
+      );
+    });
+
+    test('a genuinely new tag for a tag-kind update still produces a different hash', () => {
+      const base = {
+        result: { tag: '2.29.1-pg17', digest: undefined, created: '2026-04-15' },
+        updateKind: { kind: 'tag', remoteValue: '2.29.1-pg17' },
+        image: { digest: { watch: true } },
+      } as any;
+      const newTag = {
+        result: { tag: '2.29.2-pg17', digest: undefined, created: '2026-04-15' },
+        updateKind: { kind: 'tag', remoteValue: '2.29.2-pg17' },
+        image: { digest: { watch: true } },
+      } as any;
+      expect(notificationHistory.computeResultHash(newTag)).not.toBe(
+        notificationHistory.computeResultHash(base),
+      );
+    });
+
     test('returns a different hash when the candidate identity or updateKind changes', () => {
       const base = {
         result: { tag: '2.0', digest: 'sha256:abc', created: '2026-04-15' },
@@ -71,12 +149,17 @@ describe('notification-history store', () => {
           result: { ...base.result, tag: '2.1' },
         }),
       ).not.toBe(baseHash);
+      // Digest is intentionally excluded from the hash for a tag-kind update
+      // (see the dedicated tag-kind tests below, #972) — assert the digest
+      // change matters here against a digest-kind base instead, which is
+      // still keyed on it.
+      const digestKindBase = { ...base, updateKind: { kind: 'digest', remoteValue: 'sha256:abc' } };
       expect(
         notificationHistory.computeResultHash({
-          ...base,
-          result: { ...base.result, digest: 'sha256:def' },
+          ...digestKindBase,
+          result: { ...digestKindBase.result, digest: 'sha256:def' },
         }),
-      ).not.toBe(baseHash);
+      ).not.toBe(notificationHistory.computeResultHash(digestKindBase));
       expect(
         notificationHistory.computeResultHash({
           ...base,
