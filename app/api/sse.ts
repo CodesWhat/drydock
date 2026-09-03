@@ -80,16 +80,20 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:update-failed',
   'dd:batch-update-completed',
   'dd:approval-created',
+  'dd:approval-decided',
   'dd:approval-resolved',
 ]);
 
 /**
- * Wire names for the approval queue's two lifecycle transitions. The bus carries one event
- * with a `kind`; the browser gets two distinct event names, so a client can listen for the
- * one it cares about without parsing a payload.
+ * Wire names for the approval queue's three lifecycle transitions. The bus carries one
+ * event with a `kind`; the browser gets three distinct event names, so a client can listen
+ * for the one it cares about without parsing a payload. A decision and a resolution are
+ * separate names because they mean different things to a queue view: `decided` is an
+ * operator answering, `resolved` is a row leaving without one.
  */
 const APPROVAL_SSE_EVENT_NAMES: Record<ApprovalEventKind, string> = {
   created: 'dd:approval-created',
+  decided: 'dd:approval-decided',
   resolved: 'dd:approval-resolved',
 };
 

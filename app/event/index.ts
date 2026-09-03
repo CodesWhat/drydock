@@ -203,8 +203,10 @@ export interface MaturityGateClearedEventPayload {
 }
 
 /**
- * A row entering or leaving the approval queue. Emitted only by the controller-side
- * reconciler; the SSE layer turns it into `dd:approval-created` / `dd:approval-resolved`.
+ * A row entering the approval queue, being decided by an operator, or leaving without
+ * one. Emitted only by the controller side — the reconciler and the decision API; the SSE
+ * layer turns it into `dd:approval-created` / `dd:approval-decided` /
+ * `dd:approval-resolved`.
  *
  * Five scalars and nothing else, by design. DR-4 is the standing lesson: the SSE ring
  * buffer caps a client at 256 KB of pending bytes, and a lifecycle payload carrying a
@@ -220,7 +222,7 @@ export interface ApprovalEventPayload {
   pendingCount: number;
 }
 
-export type ApprovalEventKind = 'created' | 'resolved';
+export type ApprovalEventKind = 'created' | 'decided' | 'resolved';
 
 export interface AgentConnectedEventPayload {
   agentName: string;

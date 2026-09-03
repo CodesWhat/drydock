@@ -930,6 +930,23 @@ describe('SSE lifecycle event handlers', () => {
       expect(payload).toMatchObject({ decision: 'approved', pendingCount: 3 });
     });
 
+    test.each([['approved'], ['rejected'], ['deferred']])(
+      'a %s row broadcasts dd:approval-decided',
+      (decision) => {
+        const res = emitApproval('decided', { decision, pendingCount: 2 });
+
+        expect(mockLoggerWarn).not.toHaveBeenCalled();
+        const payload = parseSseEventPayload(res, 'dd:approval-decided');
+        expect(payload).toStrictEqual({
+          id: 'approval-1',
+          containerId: 'container-1',
+          containerName: 'nginx',
+          decision,
+          pendingCount: 2,
+        });
+      },
+    );
+
     // DR-4: a lifecycle payload carrying a container snapshot disconnects every client at
     // the 256 KB backpressure cap. Nothing the reconciler can hand this builder puts a
     // container in the payload, so a 500-vulnerability container cannot reach the wire.

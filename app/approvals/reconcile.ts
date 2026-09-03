@@ -23,11 +23,9 @@
  * must never propagate into the cycle that produced the report.
  */
 import {
-  type ApprovalEventKind,
   type ContainerLifecycleEventPayload,
   type ContainerUpdateAppliedEvent,
   type ContainerUpdateFailedEventPayload,
-  emitApprovalEvent,
   registerContainerRemoved,
   registerContainerReport,
   registerContainerReports,
@@ -48,7 +46,6 @@ import type { Container, ContainerReport } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import {
   type ApprovalPatch,
-  countApprovals,
   findApprovalByContainerAndCandidate,
   findApprovalByOperationId,
   findApprovalsByContainerId,
@@ -58,6 +55,7 @@ import {
 import { getUpdateMode } from '../store/settings.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 import { getErrorMessage } from '../util/error.js';
+import { announceApprovalEvent } from './events.js';
 
 const log = logger.child({ component: 'approvals' });
 
@@ -82,27 +80,6 @@ function isOpen(record: ApprovalRecord): boolean {
   return record.decision === 'pending' || record.decision === 'deferred';
 }
 
-/**
- * Tell the SSE layer a row entered or left the queue. Dispatched rather than awaited: the
- * store write is what matters and it has already happened, the container-removed listener
- * is on the synchronous legacy channel and cannot await anything, and a subscriber's
- * failure must not become the watch cycle's.
- */
-function announce(kind: ApprovalEventKind, record: ApprovalRecord): void {
-  void emitApprovalEvent({
-    kind,
-    id: record.id,
-    containerId: record.containerId,
-    containerName: record.containerName,
-    decision: record.decision,
-    // Read after the write, so the badge count a client patches in is the count the list
-    // endpoint would return for the same instant.
-    pendingCount: countApprovals().pending,
-  }).catch((error) => {
-    log.warn(`Approval event dispatch failed: ${getErrorMessage(error)}`);
-  });
-}
-
 function resolveRows(
   records: ApprovalRecord[],
   resolution: ApprovalResolution,
@@ -112,7 +89,7 @@ function resolveRows(
   for (const record of records) {
     const patch: ApprovalPatch = { ...extra, resolution, resolvedAt };
     updateApproval(record.id, patch);
-    announce('resolved', { ...record, ...patch });
+    announceApprovalEvent('resolved', { ...record, ...patch });
   }
 }
 
@@ -175,7 +152,7 @@ function reconcileContainer(container: Container | undefined): void {
   }
 
   if (findApprovalByContainerAndCandidate(input.containerId, input.candidateRef) === undefined) {
-    announce('created', insertApproval(input));
+    announceApprovalEvent('created', insertApproval(input));
   }
 }
 
