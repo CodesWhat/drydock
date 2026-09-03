@@ -316,6 +316,51 @@ describe('Docker Watcher', () => {
       // Exactly one follow-up scan runs after the running scan finishes,
       // even though three callers asked for a rescan.
       await vi.waitFor(() => expect(watchMock).toHaveBeenCalledTimes(2));
+
+      // vi.waitFor() resolves the instant the count reaches 2 and would not
+      // fail if a second (unwanted) follow-up also fired - flush pending
+      // promises and recheck to catch that case.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchMock).toHaveBeenCalledTimes(2);
+    });
+
+    // #979: a scan that was in flight when the watcher was deregistered used
+    // to start a brand-new full scan (via the coalesced follow-up) on a
+    // torn-down watcher once it finally settled, emitting a watcher snapshot
+    // - the authoritative prune list - for a watcher no longer registered.
+    test('drops the coalesced follow-up scan once the watcher is deregistered while the scan was running', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+      docker.log = createMockLog(['info', 'debug']);
+
+      let resolveFirstWatch: (value: unknown[]) => void = () => undefined;
+      const firstWatch = new Promise<unknown[]>((resolve) => {
+        resolveFirstWatch = resolve;
+      });
+      const watchMock = vi
+        .fn()
+        .mockImplementationOnce(() => firstWatch)
+        .mockResolvedValue([]);
+      docker.watch = watchMock;
+
+      const call1 = docker.watchFromCron({ reason: 'schedule' });
+      const call2 = docker.watchFromCron({ reason: 'docker-event' });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(docker.cronWatchRescanRequested).toBe(true);
+
+      await docker.deregisterComponent();
+      expect(docker.cronWatchRescanRequested).toBe(false);
+      expect(docker.cronWatchInFlight).toBeUndefined();
+
+      resolveFirstWatch([]);
+      await Promise.all([call1, call2]);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchMock).toHaveBeenCalledTimes(1);
     });
 
     test('coalesces a request silently when logging is unavailable', async () => {
@@ -366,6 +411,13 @@ describe('Docker Watcher', () => {
       await Promise.all([call1, call2]);
 
       await vi.waitFor(() => expect(watchMock).toHaveBeenCalledTimes(2));
+
+      // vi.waitFor() resolves the instant the count reaches 2 and would not
+      // fail if a second (unwanted) follow-up also fired - flush pending
+      // promises and recheck to catch that case.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchMock).toHaveBeenCalledTimes(2);
     });
 
     test('should report container statistics', async () => {

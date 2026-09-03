@@ -343,6 +343,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public cronWatchInFlight?: Promise<ContainerReport[]>;
   public cronWatchRescanRequested: boolean = false;
   public cronWatchRescanReason?: string;
+  public cronWatchRescanIgnoreMaintenanceWindow: boolean = false;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
@@ -538,6 +539,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       this.#cachedTimeMatcher = undefined;
       return undefined;
     }
+  }
+
+  /**
+   * The watcher's own cron interval in milliseconds, derived from two
+   * consecutive matches of the configured cron expression. Used by
+   * docker-cron-watch.ts to size the single-flight in-flight scan deadline
+   * (#979). Returns undefined when the cron expression cannot be matched at
+   * all (getNextScheduledRunDate() already handles the unparseable case).
+   */
+  getCronIntervalMs(): number | undefined {
+    const firstRun = this.getNextScheduledRunDate();
+    if (!firstRun) {
+      return undefined;
+    }
+    const secondRun = this.getNextScheduledRunDate(firstRun);
+    if (!secondRun) {
+      return undefined;
+    }
+    return secondRun.getTime() - firstRun.getTime();
   }
 
   override getNextRunAt(): string | undefined {
@@ -925,6 +945,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.unregisterContainerUpdateApplied?.();
     this.unregisterContainerUpdateApplied = undefined;
     this.clearMaintenanceWindowQueue();
+    // A scan that was already in flight is left running (it is not
+    // cancellable), but clearing its single-flight state here means its
+    // eventual settlement won't find a rescan request waiting for it. The
+    // isWatcherDeregistered guard in watchFromCronOrchestration() covers
+    // the remaining window (a rescan requested between this reset and that
+    // settlement) by dropping the follow-up instead of starting a brand-new
+    // scan on a torn-down watcher.
+    this.cronWatchInFlight = undefined;
+    this.cronWatchRescanRequested = false;
+    this.cronWatchRescanReason = undefined;
+    this.cronWatchRescanIgnoreMaintenanceWindow = false;
   }
 
   private async maybeFastResyncAfterUpdate(

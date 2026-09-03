@@ -17,21 +17,65 @@ export interface CronWatchOrchestrationWatcher {
   name: string;
   log?: {
     info?: (message: string) => void;
+    warn?: (message: string) => void;
+    debug?: (message: string) => void;
   };
   configuration: {
     cron: string;
     maintenancewindow?: string;
   };
   isCronWatchInProgress: boolean;
+  isWatcherDeregistered: boolean;
   cronWatchInFlight?: Promise<ContainerReport[]>;
   cronWatchRescanRequested: boolean;
   cronWatchRescanReason?: string;
+  cronWatchRescanIgnoreMaintenanceWindow: boolean;
   ensureLogger: () => void;
   isMaintenanceWindowOpen: () => boolean;
   queueMaintenanceWindowWatch: () => void;
   clearMaintenanceWindowQueue: () => void;
   watch: () => Promise<ContainerReport[]>;
+  /**
+   * The watcher's own cron interval in milliseconds, when it can be
+   * computed (e.g. from two consecutive matches of the configured cron
+   * expression). Used to size the in-flight scan deadline. Undefined when
+   * the watcher cannot compute it (unparseable cron), in which case the
+   * deadline falls back to CRON_WATCH_DEADLINE_FLOOR_MS.
+   */
+  getCronIntervalMs?: () => number | undefined;
 }
+
+/**
+ * A single-flight scan is raced against a deadline so a stalled `watch()`
+ * (Dockerode is built with no request timeout - see docker-remote-auth.ts -
+ * so a hung socket proxy can leave `listContainers`/`inspect` pending
+ * forever, and `allSettledWithDockerWatchConcurrency` never settles while
+ * one input never does) cannot wedge every later cron tick into the
+ * coalescing branch forever, logging that it is coalescing into a follow-up
+ * scan that would never actually run.
+ *
+ * Sized as a multiple of the watcher's own cron interval, so a fast-cron
+ * watcher is not held hostage for the full floor, with a floor so a
+ * slow-cron watcher does not declare a stall after a single missed
+ * interval.
+ */
+const CRON_WATCH_DEADLINE_INTERVAL_MULTIPLIER = 2;
+const CRON_WATCH_DEADLINE_FLOOR_MS = 10 * 60 * 1000; // 10 minutes
+
+function getCronWatchDeadlineMs(watcher: CronWatchOrchestrationWatcher): number {
+  const intervalMs = watcher.getCronIntervalMs?.();
+  if (!intervalMs || intervalMs <= 0) {
+    return CRON_WATCH_DEADLINE_FLOOR_MS;
+  }
+  return Math.max(
+    intervalMs * CRON_WATCH_DEADLINE_INTERVAL_MULTIPLIER,
+    CRON_WATCH_DEADLINE_FLOOR_MS,
+  );
+}
+
+// Sentinel distinguishing "the deadline timer fired" from a real, possibly
+// empty, watch() result racing it.
+const CRON_WATCH_DEADLINE = Symbol('cron-watch-deadline');
 
 /**
  * Watch containers (called by cron scheduled tasks).
@@ -50,7 +94,21 @@ export interface CronWatchOrchestrationWatcher {
  * The caller awaits and receives that running scan's result, not a fresh
  * one. Once the running scan finishes, exactly one follow-up scan is
  * started (not awaited by the coalesced callers) if a rescan was requested
- * while it ran, however many callers asked for one.
+ * while it ran, however many callers asked for one. If any coalesced
+ * request had `ignoreMaintenanceWindow: true`, the follow-up carries that
+ * flag too, so a maintenance-window catch-up requested mid-scan is not
+ * silently downgraded to a normal (window-respecting) scan.
+ *
+ * The in-flight scan is raced against a deadline (see
+ * getCronWatchDeadlineMs()) so a `watch()` that never settles cannot wedge
+ * every later cron tick into the coalescing branch forever. When the
+ * deadline wins the race, this call resolves to an empty result (matching
+ * the existing "nothing to report this cycle" shape used by the
+ * maintenance-window skip below) and clears the single-flight state so the
+ * next cron tick starts a fresh scan. If the original scan later settles
+ * anyway, its own settlement handler is a no-op: `watcher.cronWatchInFlight`
+ * no longer identifies it, so a stale settlement cannot clobber whatever
+ * newer scan has since taken its place.
  */
 export async function watchFromCronOrchestration(
   watcher: CronWatchOrchestrationWatcher,
@@ -59,6 +117,9 @@ export async function watchFromCronOrchestration(
   if (watcher.cronWatchInFlight) {
     watcher.cronWatchRescanRequested = true;
     watcher.cronWatchRescanReason = options.reason;
+    if (options.ignoreMaintenanceWindow) {
+      watcher.cronWatchRescanIgnoreMaintenanceWindow = true;
+    }
     watcher.ensureLogger();
     if (watcher.log && typeof watcher.log.info === 'function') {
       watcher.log.info(
@@ -70,18 +131,73 @@ export async function watchFromCronOrchestration(
 
   const inFlight = runCronWatch(watcher, options);
   watcher.cronWatchInFlight = inFlight;
-  try {
-    return await inFlight;
-  } finally {
-    watcher.cronWatchInFlight = undefined;
-    if (watcher.cronWatchRescanRequested) {
-      const rescanReason = watcher.cronWatchRescanReason;
-      watcher.cronWatchRescanRequested = false;
-      watcher.cronWatchRescanReason = undefined;
-      // Fire-and-forget: the caller(s) that coalesced already got this
-      // scan's result above, they are not waiting on the follow-up.
-      void watchFromCronOrchestration(watcher, { reason: rescanReason }).catch(() => undefined);
+
+  // Runs once this exact scan settles, whether it wins the race below or
+  // settles later after the deadline already cleared it. The identity
+  // check makes the latter case a no-op.
+  const settleAndFollowUp = () => {
+    if (watcher.cronWatchInFlight !== inFlight) {
+      return;
     }
+    watcher.cronWatchInFlight = undefined;
+    if (!watcher.cronWatchRescanRequested) {
+      return;
+    }
+    const rescanReason = watcher.cronWatchRescanReason;
+    const rescanIgnoreMaintenanceWindow = watcher.cronWatchRescanIgnoreMaintenanceWindow;
+    watcher.cronWatchRescanRequested = false;
+    watcher.cronWatchRescanReason = undefined;
+    watcher.cronWatchRescanIgnoreMaintenanceWindow = false;
+    if (watcher.isWatcherDeregistered) {
+      watcher.ensureLogger();
+      if (watcher.log && typeof watcher.log.debug === 'function') {
+        watcher.log.debug(
+          `Dropping the coalesced follow-up scan (${rescanReason ?? 'manual'}) - the watcher was deregistered while the previous scan was running`,
+        );
+      }
+      return;
+    }
+    // Fire-and-forget: the caller(s) that coalesced already got this
+    // scan's result above, they are not waiting on the follow-up.
+    void watchFromCronOrchestration(watcher, {
+      reason: rescanReason,
+      ignoreMaintenanceWindow: rescanIgnoreMaintenanceWindow,
+    }).catch(() => undefined);
+  };
+  // Observed independently of the deadline race below so the follow-up
+  // still runs (or is correctly dropped as stale) even when the deadline
+  // wins the race first.
+  inFlight.then(settleAndFollowUp, settleAndFollowUp);
+
+  const deadlineMs = getCronWatchDeadlineMs(watcher);
+  // The Promise executor below runs synchronously, so deadlineTimer is
+  // always assigned before this line finishes executing.
+  let deadlineTimer!: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<typeof CRON_WATCH_DEADLINE>((resolve) => {
+    deadlineTimer = setTimeout(() => resolve(CRON_WATCH_DEADLINE), deadlineMs);
+  });
+
+  try {
+    const winner = await Promise.race([inFlight, deadline]);
+    if (winner !== CRON_WATCH_DEADLINE) {
+      return winner;
+    }
+    // Deadline won the race, so inFlight has not settled yet: nothing else
+    // in this single-flight design clears cronWatchInFlight while a scan is
+    // still running, so it still identifies this exact scan here.
+    watcher.ensureLogger();
+    if (watcher.log && typeof watcher.log.warn === 'function') {
+      watcher.log.warn(
+        `Cron scan exceeded its ${deadlineMs}ms deadline without settling (a stalled watch()?) - clearing the single-flight state so the next cron tick starts a fresh scan`,
+      );
+    }
+    watcher.cronWatchInFlight = undefined;
+    watcher.cronWatchRescanRequested = false;
+    watcher.cronWatchRescanReason = undefined;
+    watcher.cronWatchRescanIgnoreMaintenanceWindow = false;
+    return [];
+  } finally {
+    clearTimeout(deadlineTimer);
   }
 }
 

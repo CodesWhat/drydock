@@ -71,11 +71,11 @@ function buildKey(
  * which used to flip `created` in and out of the hash and made `once=true` treat the exact
  * same tag update as new again a few hours later, re-firing every trigger (#972).
  *
- * A container NOT configured for digest watching never has a digest to flip on a transient
- * failure, so it keeps the original created-as-sole-discriminator fallback, that's the
- * legacy-manifest path (e.g. a mutable `latest` tag) where `created` is the only immutable
- * signal available at all. Digest-kind updates always stay keyed on the digest, since that's
- * what identifies them.
+ * A container NOT configured for digest watching never runs `handleDigestWatch`, the only
+ * place that populates `result.digest` and `result.created`, so both stay undefined for it
+ * and the digest-absent `created` fallback in `getCandidateIdentityFields` never has a value
+ * to contribute. The identity for that container is effectively tag-only. Digest-kind updates
+ * always stay keyed on the digest, since that's what identifies them.
  */
 export function computeResultHash(
   container: Pick<Container, 'result' | 'updateKind' | 'image'>,
