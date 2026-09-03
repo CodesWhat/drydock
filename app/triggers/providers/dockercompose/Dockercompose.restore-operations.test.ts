@@ -1,5 +1,5 @@
 import { watch } from 'node:fs';
-import { emitContainerUpdateFailed } from '../../../event/index.js';
+import { emitBatchUpdateCompleted, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import Dockercompose from './Dockercompose.js';
@@ -214,11 +214,13 @@ describe('Dockercompose compose restore operation records', () => {
   function insertInProgressOperation(id: string) {
     updateOperationStore.insertOperation({
       id,
-      kind: 'container-update',
       containerName: 'nginx',
       containerId: 'nginx-1',
       status: 'in-progress',
       phase: 'prepare',
+      batchId: 'batch-1',
+      queuePosition: 1,
+      queueTotal: 1,
     } as never);
   }
 
@@ -234,16 +236,26 @@ describe('Dockercompose compose restore operation records', () => {
       phase: 'rollback-failed',
       rollbackReason: 'compose_runtime_refresh_failed',
       lastError: restoreFailureError,
+      // The correction reopens the row, which clears the batch fields unless
+      // they are carried across.
+      batchId: 'batch-1',
+      queuePosition: 1,
+      queueTotal: 1,
     });
     expect(emitContainerUpdateFailed).toHaveBeenCalledTimes(2);
     expect(vi.mocked(emitContainerUpdateFailed).mock.calls[0][0]).toMatchObject({
       phase: 'rolled-back',
       error: 'runtime refresh failed',
+      batchId: 'batch-1',
     });
     expect(vi.mocked(emitContainerUpdateFailed).mock.calls[1][0]).toMatchObject({
       phase: 'rollback-failed',
       error: restoreFailureError,
+      batchId: 'batch-1',
     });
+    // The batch completed once, when the rollback terminalized the row. The
+    // correction re-terminalizes it, which must not complete the batch again.
+    expect(emitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
   });
 
   test('an operation that already records a failed rollback is left alone', async () => {
@@ -268,5 +280,93 @@ describe('Dockercompose compose restore operation records', () => {
     expect(thrownError.message).toBe(restoreFailureError);
     expect(updateOperationStore.getOperationById('op-missing')).toBeUndefined();
     expect(emitContainerUpdateFailed).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A single-container update request carries a bare `operationId` that every
+   * mapping in the compose batch resolves to, so the correction has to identify
+   * the row by container rather than trust the id it was handed.
+   */
+  describe('under an operation id shared by every mapping', () => {
+    const sharedRuntimeContext = { operationId: 'op-shared' };
+
+    function makeReplicaMapping(id: string) {
+      return {
+        service: 'nginx',
+        container: makeContainer({
+          id,
+          name: id,
+          labels: { 'com.docker.compose.service': 'nginx' },
+        }),
+      };
+    }
+
+    function insertRolledBackOperation(overrides: Record<string, unknown>) {
+      updateOperationStore.insertOperation({
+        id: 'op-shared',
+        containerName: 'nginx',
+        containerId: 'nginx-2',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'compose_runtime_refresh_failed',
+        lastError: 'runtime refresh failed',
+        completedAt: new Date().toISOString(),
+        ...overrides,
+      } as never);
+    }
+
+    function correct() {
+      trigger.correctRolledBackOperationsAfterComposeRestoreFailure(
+        [makeReplicaMapping('nginx-1'), makeReplicaMapping('nginx-2')],
+        sharedRuntimeContext,
+        new Error(restoreFailureError),
+      );
+    }
+
+    test('the record is matched to its own container rather than the first mapping', () => {
+      insertRolledBackOperation({});
+
+      correct();
+
+      expect(updateOperationStore.getOperationById('op-shared')).toMatchObject({
+        status: 'failed',
+        phase: 'rollback-failed',
+        lastError: restoreFailureError,
+      });
+    });
+
+    test('a rollback this provider did not perform is left alone', () => {
+      insertRolledBackOperation({ rollbackReason: 'health_check_failed' });
+
+      correct();
+
+      expect(updateOperationStore.getOperationById('op-shared')).toMatchObject({
+        status: 'rolled-back',
+        lastError: 'runtime refresh failed',
+      });
+      expect(emitContainerUpdateFailed).not.toHaveBeenCalled();
+    });
+
+    test('a self-update record is left alone', () => {
+      insertRolledBackOperation({ kind: 'self-update' });
+
+      correct();
+
+      expect(updateOperationStore.getOperationById('op-shared')).toMatchObject({
+        status: 'rolled-back',
+        lastError: 'runtime refresh failed',
+      });
+    });
+
+    test('a record for a container outside the batch is left alone', () => {
+      insertRolledBackOperation({ containerId: 'redis-1' });
+
+      correct();
+
+      expect(updateOperationStore.getOperationById('op-shared')).toMatchObject({
+        status: 'rolled-back',
+        lastError: 'runtime refresh failed',
+      });
+    });
   });
 });

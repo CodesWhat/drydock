@@ -198,12 +198,21 @@ type ComposeRuntimeRefreshOptions = {
   ) => Promise<void>;
 };
 
+/**
+ * The rollback reason every compose runtime-refresh rollback records. Also the
+ * identity marker the restore-failure correction path matches on, so it can
+ * only rewrite a row this provider's own rollback produced.
+ */
+const COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON = 'compose_runtime_refresh_failed';
+
 type ComposeRollbackOutcome = {
   status: 'rolled-back' | 'rollback-failed';
   phase: 'rolled-back' | 'rollback-failed';
-  rollbackReason: 'compose_runtime_refresh_failed';
+  rollbackReason: typeof COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON;
   lastError: string;
 };
+
+type StoredUpdateOperation = NonNullable<ReturnType<typeof updateOperationStore.getOperationById>>;
 
 type ComposeRollbackError = Error & {
   composeRollbackOutcome?: ComposeRollbackOutcome;
@@ -265,6 +274,27 @@ function withComposeRestoreFailure(runtimeError: unknown, restoreError: unknown)
  * runtime mappings. Several replicas of one service can share a mapping list,
  * so the set is what callers want rather than one entry per container.
  */
+/**
+ * Whether a stored operation is the record this provider's rollback just wrote
+ * for `container`. An update request for a single container carries a bare
+ * `operationId` that every mapping in the batch resolves to, so the id alone
+ * does not say which container the row belongs to; the container id, the kind
+ * and the compose rollback reason together do.
+ */
+function isComposeRollbackRecordFor(
+  operation: StoredUpdateOperation | undefined,
+  container: ComposeRuntimeUpdateMapping['container'],
+): operation is StoredUpdateOperation {
+  return (
+    operation !== undefined &&
+    operation.status === 'rolled-back' &&
+    operation.kind !== 'self-update' &&
+    typeof container.id === 'string' &&
+    operation.containerId === container.id &&
+    operation.rollbackReason === COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON
+  );
+}
+
 function collectComposeOperationIds(
   mappings: ComposeRuntimeUpdateMapping[],
   runtimeContext: Record<string, unknown> | undefined,
@@ -2292,14 +2322,26 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     error: unknown,
   ): void {
     const lastError = getErrorMessage(error);
-    for (const operationId of collectComposeOperationIds(mappings, runtimeContext)) {
-      const operation = updateOperationStore.getOperationById(operationId);
-      if (operation?.status !== 'rolled-back') {
+    const correctedOperationIds = new Set<string>();
+    for (const { container } of mappings) {
+      const operationId = getRequestedOperationId(container, runtimeContext);
+      if (!operationId || correctedOperationIds.has(operationId)) {
         continue;
       }
+      const operation = updateOperationStore.getOperationById(operationId);
+      if (!isComposeRollbackRecordFor(operation, container)) {
+        continue;
+      }
+      correctedOperationIds.add(operationId);
+      // Reopening clears the batch fields, so carry them across: without them
+      // the corrected row detaches from its batch and the superseding
+      // update-failed event loses its batch id.
       updateOperationStore.reopenTerminalOperation(operationId, {
         status: 'in-progress',
         phase: 'rollback-started',
+        batchId: operation.batchId,
+        queuePosition: operation.queuePosition,
+        queueTotal: operation.queueTotal,
       });
       updateOperationStore.markOperationTerminal(operationId, {
         status: 'failed',
@@ -3204,7 +3246,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return {
         status: 'rolled-back',
         phase: 'rolled-back',
-        rollbackReason: 'compose_runtime_refresh_failed',
+        rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
     } catch (rollbackError: unknown) {
@@ -3225,7 +3267,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return {
         status: 'rollback-failed',
         phase: 'rollback-failed',
-        rollbackReason: 'compose_runtime_refresh_failed',
+        rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
     }
@@ -3546,7 +3588,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         Dockercompose.attachComposeRollbackOutcome(runtimeError, {
           status: 'rollback-failed',
           phase: 'rollback-failed',
-          rollbackReason: 'compose_runtime_refresh_failed',
+          rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
           lastError: getErrorMessage(runtimeError),
         });
       }
