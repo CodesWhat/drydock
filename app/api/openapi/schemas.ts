@@ -1464,6 +1464,15 @@ export const openApiSchemas = {
     required: ['pending', 'deferred', 'decidedToday'],
     additionalProperties: false,
   },
+  ApprovalDecisionResult: {
+    type: 'object',
+    description: 'The row as it stands after a reject or a defer.',
+    properties: {
+      approval: { $ref: '#/components/schemas/Approval' },
+    },
+    required: ['approval'],
+    additionalProperties: false,
+  },
   ApprovalDetail: {
     type: 'object',
     description:

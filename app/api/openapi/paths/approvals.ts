@@ -1,5 +1,26 @@
 import { errorResponse, jsonResponse, paginationQueryParams } from '../common.js';
 
+const decisionNoteProperty = {
+  note: {
+    type: 'string',
+    maxLength: 500,
+    description: 'Free-text reason recorded on the row and in the audit entry',
+  },
+};
+
+const decisionRequestBody = {
+  required: false,
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        properties: { ...decisionNoteProperty },
+        additionalProperties: false,
+      },
+    },
+  },
+};
+
 const approvalIdPathParam = {
   name: 'id',
   in: 'path',
@@ -96,6 +117,105 @@ export const approvalPaths = {
         }),
         401: errorResponse('Authentication required'),
         404: errorResponse('Approval not found'),
+        500: errorResponse('Internal server error'),
+      },
+    },
+  },
+  '/api/v1/approvals/{id}/approve': {
+    post: {
+      tags: ['Approvals', 'Actions'],
+      summary: 'Approve a queued update',
+      description:
+        'Dispatches through the same admission path POST /api/v1/containers/{id}/update ' +
+        'uses and returns the same responses, so an approve inherits every rejection that ' +
+        'endpoint has — including the 409 under update mode notify. Admission is ' +
+        're-evaluated now, not when the row was sighted. A second concurrent approve gets ' +
+        '409 and no second operation is created.',
+      operationId: 'approveApproval',
+      parameters: [approvalIdPathParam],
+      requestBody: decisionRequestBody,
+      responses: {
+        202: jsonResponse('Container update accepted', {
+          $ref: '#/components/schemas/ContainerUpdateAcceptedResponse',
+        }),
+        400: errorResponse('Invalid note, or no update available for this container'),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Container actions feature disabled'),
+        404: errorResponse('Approval or container not found'),
+        409: errorResponse(
+          'Approval already decided, update mode is notify, or the update is blocked',
+        ),
+        500: errorResponse('Unable to accept container update'),
+      },
+    },
+  },
+  '/api/v1/approvals/{id}/reject': {
+    post: {
+      tags: ['Approvals', 'Actions'],
+      summary: 'Reject a queued update',
+      description:
+        "Adds the candidate to the container's skipTags or skipDigests — the same " +
+        "operation as the container detail panel's Skip button, undoable from the " +
+        'update-policy panel — and resolves the row as rejected.',
+      operationId: 'rejectApproval',
+      parameters: [approvalIdPathParam],
+      requestBody: decisionRequestBody,
+      responses: {
+        200: jsonResponse('Approval rejected', {
+          $ref: '#/components/schemas/ApprovalDecisionResult',
+        }),
+        400: errorResponse('Invalid note, or no current update available to skip'),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Approval or container not found'),
+        409: errorResponse('Approval already decided'),
+        500: errorResponse('Internal server error'),
+      },
+    },
+  },
+  '/api/v1/approvals/{id}/defer': {
+    post: {
+      tags: ['Approvals', 'Actions'],
+      summary: 'Defer a queued update',
+      description:
+        "Snoozes the container until the given instant and mirrors it onto the row's " +
+        'deferredUntil, so the queue and the snoozed soft blocker cannot disagree about ' +
+        'when the hold ends. There is no sweep job: a row is deferred while deferredUntil ' +
+        'is in the future and pending again the moment it is not.',
+      operationId: 'deferApproval',
+      parameters: [approvalIdPathParam],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                until: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Explicit expiry. Takes precedence over days.',
+                },
+                days: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 365,
+                  description: 'Days from now. Defaults to 7 when neither field is given.',
+                },
+                ...decisionNoteProperty,
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Approval deferred', {
+          $ref: '#/components/schemas/ApprovalDecisionResult',
+        }),
+        400: errorResponse('Invalid note, until date, or day count'),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Approval or container not found'),
+        409: errorResponse('Approval already decided'),
         500: errorResponse('Internal server error'),
       },
     },
