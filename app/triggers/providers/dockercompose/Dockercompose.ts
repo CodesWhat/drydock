@@ -213,6 +213,40 @@ function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeCont
 }
 
 /**
+ * Layer a compose-file-once service's preflight context (pulled image, auth,
+ * bound identity) over the runtime context the caller requested, leaving the
+ * context undefined when there is neither.
+ */
+function mergeComposeFileOnceRuntimeContext(
+  requestedRuntimeContext: Record<string, unknown> | undefined,
+  composeFileOnceRuntimeContext: ComposeRuntimeContext | undefined,
+): ComposeRuntimeContext | undefined {
+  if (!composeFileOnceRuntimeContext && !requestedRuntimeContext) {
+    return undefined;
+  }
+  return {
+    ...(requestedRuntimeContext || {}),
+    ...(composeFileOnceRuntimeContext || {}),
+  };
+}
+
+/**
+ * A compose file left holding the candidate image because its restore failed
+ * needs manual repair, so the restore failure travels with the error the
+ * caller records rather than only reaching the log (DR-47). The original error
+ * object is kept whenever there is one, so rollback details already attached
+ * to it survive.
+ */
+function withComposeRestoreFailure(runtimeError: unknown, restoreError: unknown): unknown {
+  const restoreDetail = `compose file restore failed: ${getErrorMessage(restoreError)}`;
+  if (runtimeError instanceof Error) {
+    runtimeError.message = `${runtimeError.message} (${restoreDetail})`;
+    return runtimeError;
+  }
+  return new Error(`${getErrorMessage(runtimeError)} (${restoreDetail})`);
+}
+
+/**
  * Re-order `mappingsNeedingRuntimeUpdate` into dependency-graph topological
  * order before `runRuntimeUpdatesForComposeMappings`'s sequential loop
  * (v1.7 Phase 6.1, #219 — design §3): this loop was already the easiest
@@ -2467,6 +2501,52 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Pull, bind and gate every compose-file-once service in the batch. Runs
+   * before `maybeApplyComposeFileMutations` so a candidate the gate rejects
+   * leaves neither a rewritten compose file nor a stray `.back` behind
+   * (DR-47); the contexts it returns are what the container updates then
+   * refresh from, so nothing is pulled or bound twice.
+   */
+  private async runComposeFileOncePreflight(
+    composeFile,
+    composeFileChain,
+    compose,
+    orderedMappings: ComposeRuntimeUpdateMapping[],
+    requestedRuntimeContext: Record<string, unknown> | undefined,
+  ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
+    try {
+      const composeFileOnceRuntimeContextByService =
+        await this.buildComposeFileOnceRuntimeContextByService(orderedMappings);
+      for (const { container, service } of orderedMappings) {
+        const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+        const composeContext: ComposeUpdateLifecycleContext = {
+          composeFile,
+          composeFiles: composeFileChain,
+          service,
+          serviceDefinition: compose.services[service],
+          runtimeContext: mergeComposeFileOnceRuntimeContext(
+            requestedRuntimeContext,
+            composeFileOnceRuntimeContext,
+          ),
+        };
+        await this.runComposeFileOncePostPullGate(container, composeContext);
+      }
+      return composeFileOnceRuntimeContextByService;
+    } catch (error: unknown) {
+      this.terminalizeComposeFileOncePreflightOperations(
+        orderedMappings,
+        requestedRuntimeContext,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  private isComposeFileOnceEnabled(): boolean {
+    return this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+  }
+
   async runRuntimeUpdatesForComposeMappings(
     composeFile,
     composeFileChain,
@@ -2477,49 +2557,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     lifecycleAlreadyAcquired = false,
     onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
     lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
+    composeFileOnceRuntimeContextByService: Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    > = new Map(),
   ): Promise<void> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
         ? (runtimeContext as Record<string, unknown>)
         : undefined;
     const composeFileOnceHandledServices = new Set<string>();
-    const composeFileOnceEnabled =
-      this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+    const composeFileOnceEnabled = this.isComposeFileOnceEnabled();
     const orderedMappings = sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate);
-    let composeFileOnceRuntimeContextByService = new Map<
-      string,
-      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
-    >();
-    if (composeFileOnceEnabled) {
-      try {
-        composeFileOnceRuntimeContextByService =
-          await this.buildComposeFileOnceRuntimeContextByService(mappingsNeedingRuntimeUpdate);
-        for (const { container, service } of orderedMappings) {
-          const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
-          const composeContext: ComposeUpdateLifecycleContext = {
-            composeFile,
-            composeFiles: composeFileChain,
-            service,
-            serviceDefinition: compose.services[service],
-            runtimeContext:
-              composeFileOnceRuntimeContext || requestedRuntimeContext
-                ? {
-                    ...(requestedRuntimeContext || {}),
-                    ...(composeFileOnceRuntimeContext || {}),
-                  }
-                : undefined,
-          };
-          await this.runComposeFileOncePostPullGate(container, composeContext);
-        }
-      } catch (error: unknown) {
-        this.terminalizeComposeFileOncePreflightOperations(
-          orderedMappings,
-          requestedRuntimeContext,
-          error,
-        );
-        throw error;
-      }
-    }
 
     // Refresh all containers requiring a runtime update via the shared
     // lifecycle orchestrator (security gate, hooks, prune/backup, events), in
@@ -2538,13 +2587,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           composeFileOnceEnabled &&
           composeFileOnceApplied !== true &&
           composeFileOnceRuntimeContext !== undefined,
-        runtimeContext:
-          composeFileOnceRuntimeContext || requestedRuntimeContext
-            ? {
-                ...(requestedRuntimeContext || {}),
-                ...(composeFileOnceRuntimeContext || {}),
-              }
-            : undefined,
+        runtimeContext: mergeComposeFileOnceRuntimeContext(
+          requestedRuntimeContext,
+          composeFileOnceRuntimeContext,
+        ),
         postPullGateCompleted: composeFileOnceEnabled,
       };
       let runtimeUpdateRecorded = false;
@@ -2589,6 +2635,22 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
     lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
   ): Promise<boolean> {
+    const requestedRuntimeContext =
+      runtimeContext && typeof runtimeContext === 'object'
+        ? (runtimeContext as Record<string, unknown>)
+        : undefined;
+    // Compose-file-once gates the whole batch before the compose file is
+    // touched, so a rejected candidate leaves no rewritten file and no `.back`
+    // to clean up (DR-47).
+    const composeFileOnceRuntimeContextByService = this.isComposeFileOnceEnabled()
+      ? await this.runComposeFileOncePreflight(
+          composeFile,
+          composeFileChain,
+          compose,
+          sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate),
+          requestedRuntimeContext,
+        )
+      : undefined;
     const mutationSnapshots = await this.maybeApplyComposeFileMutations(
       composeFileChain,
       composeByFile,
@@ -2607,14 +2669,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         lifecycleAlreadyAcquired,
         onSelfUpdateOperationId,
         lifecycleClassifications,
+        composeFileOnceRuntimeContextByService,
       );
     } catch (runtimeError: unknown) {
       if (completedRuntimeUpdates.length === 0) {
         try {
           await this.restoreComposeFileMutations(mutationSnapshots);
-        } catch {
-          // restoreComposeFileMutations already logged the restore failure. Keep the
-          // original runtime error as the operation error surfaced to callers.
+        } catch (restoreError: unknown) {
+          // restoreComposeFileMutations already logged the restore failure; carry it
+          // on the runtime error so the caller records that the file needs repair.
+          throw withComposeRestoreFailure(runtimeError, restoreError);
         }
       } else {
         /* v8 ignore next 4 -- service is a fallback for malformed runtime update payloads. */
@@ -2632,9 +2696,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
               completedServiceNames.has(service),
             ),
           });
-        } catch {
-          // restoreComposeFileMutations already logged the restore failure. Keep the
-          // original runtime error as the operation error surfaced to callers.
+        } catch (restoreError: unknown) {
+          // restoreComposeFileMutations already logged the restore failure; carry it
+          // on the runtime error rather than claiming a restore that did not happen.
+          throw withComposeRestoreFailure(runtimeError, restoreError);
         }
         this.log.warn(
           `Restored compose file mutations for ${composeFileChainSummary} after failed runtime refresh while ` +

@@ -910,7 +910,89 @@ describe('Dockercompose Trigger', () => {
     expect(callOrder.some((entry) => ['stop', 'remove', 'create', 'start'].includes(entry))).toBe(
       false,
     );
-    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(composeFile, originalCompose);
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('compose-file-once should preflight every service before the compose write and preserve the services it already refreshed', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const originalCompose = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+    const containers = [
+      makeContainer({
+        name: 'nginx',
+        updateAvailable: true,
+        labels: { 'com.docker.compose.service': 'nginx' },
+      }),
+      makeContainer({
+        name: 'redis',
+        imageName: 'redis',
+        tagValue: '7.0.0',
+        remoteValue: '7.2.0',
+        updateAvailable: true,
+        labels: { 'com.docker.compose.service': 'redis' },
+      }),
+    ];
+    const callOrder: string[] = [];
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:7.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
+    const writeComposeFileSpy = vi
+      .spyOn(trigger, 'writeComposeFile')
+      .mockImplementation(async () => {
+        callOrder.push('write');
+      });
+    vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+      callOrder.push('pull');
+    });
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockImplementation(async (_context, container) => {
+      callOrder.push(`gate:${container.name}`);
+    });
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockImplementation(
+      async (_container, composeContext) => {
+        callOrder.push(`refresh:${composeContext.service}`);
+        expect(composeContext.skipPull).toBe(true);
+        expect(composeContext.postPullGateCompleted).toBe(true);
+        if (composeContext.service === 'redis') {
+          throw new Error('redis runtime refresh failed');
+        }
+      },
+    );
+
+    await expect(trigger.processComposeFile(composeFile, containers)).rejects.toThrow(
+      'redis runtime refresh failed',
+    );
+
+    expect(callOrder).toEqual([
+      'pull',
+      'pull',
+      'gate:nginx',
+      'gate:redis',
+      'write',
+      'refresh:nginx',
+      'refresh:redis',
+      'write',
+    ]);
+    const partiallyRestoredComposeText = writeComposeFileSpy.mock.calls.at(-1)?.[1] as string;
+    expect(partiallyRestoredComposeText).toContain('nginx:1.1.0');
+    expect(partiallyRestoredComposeText).toContain('redis:7.0.0');
+    expect(partiallyRestoredComposeText).not.toContain('redis:7.2.0');
+    expect(trigger.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('preserving completed services (nginx)'),
+    );
   });
 
   test('compose-file-once preflight failure terminalizes every active mapped operation', async () => {
@@ -940,10 +1022,13 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue(new Error('preflight blocked'));
 
     await expect(
-      trigger.runRuntimeUpdatesForComposeMappings(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
         '/opt/drydock/test/stack.yml',
         ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
         makeCompose({ nginx: {}, redis: {}, postgres: {} }),
+        [],
         [
           { service: 'nginx', container: firstContainer },
           { service: 'redis', container: secondContainer },
@@ -983,10 +1068,11 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('processComposeFile should restore mutations and leave runtime untouched when a post-pull hook rejects', async () => {
+  test('processComposeFile should leave the compose file and its backup untouched when a post-pull hook rejects', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
     trigger.configuration.composeFileOnce = true;
+    trigger.configuration.backup = true;
     const container = makeContainer({
       id: 'nginx-rejected',
       name: 'nginx',
@@ -999,6 +1085,7 @@ describe('Dockercompose Trigger', () => {
     );
     vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
     const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const backupSpy = vi.spyOn(trigger, 'backup').mockResolvedValue();
     const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
     const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
     const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
@@ -1027,7 +1114,8 @@ describe('Dockercompose Trigger', () => {
     expect(removeContainerSpy).not.toHaveBeenCalled();
     expect(createContainerSpy).not.toHaveBeenCalled();
     expect(startContainerSpy).not.toHaveBeenCalled();
-    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(composeFile, originalCompose);
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(backupSpy).not.toHaveBeenCalled();
   });
 
   test('preview should passthrough base preview errors without compose metadata', async () => {
