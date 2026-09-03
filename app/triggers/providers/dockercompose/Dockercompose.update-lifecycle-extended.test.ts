@@ -1362,6 +1362,93 @@ describe('Dockercompose Trigger', () => {
     expect(rollbackSpy).toHaveBeenCalled();
   });
 
+  test('compose-file-once should carry a recovered image ID to the next replica (DR-54)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const firstContainer = makeContainer({
+      id: 'container-nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'container-nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // The preflight's inspect fails, so the service context starts with no
+    // image ID. Whatever the first replica recovers has to reach the second.
+    let localTagImageId = 'sha256:image-a';
+    let imageInspectCalls = 0;
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockImplementation(async () => {
+        imageInspectCalls += 1;
+        if (imageInspectCalls === 1) {
+          throw new Error('image inspect unavailable');
+        }
+        return {
+          Id: localTagImageId,
+          RepoDigests: [],
+          Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+          Os: 'linux',
+        };
+      }),
+    });
+    const capturePulledImageIdentitySpy = vi.spyOn(trigger, 'capturePulledImageIdentity');
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger as any, 'attemptRollbackRestoreOldContainer').mockResolvedValue({
+      status: 'rolled-back',
+    });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    let createCalls = 0;
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockImplementation(async () => {
+      createCalls += 1;
+      const createdImageId = localTagImageId;
+      if (createCalls === 1) {
+        // An external pull moves nginx:1.1.0 on to a new image between the
+        // two replicas, which is the whole hazard: the second replica must
+        // not quietly accept it just because it resolves the tag again.
+        localTagImageId = 'sha256:image-b';
+      }
+      return {
+        start: vi.fn().mockResolvedValue(undefined),
+        remove: removeCreated,
+        inspect: vi.fn().mockResolvedValue({ Image: createdImageId }),
+      } as any;
+    });
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile(composeFile, [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Recreated container nginx-b runs image sha256:image-b but nginx:1.1.0 was pulled as sha256:image-a',
+    );
+
+    // Twice, not three times: the preflight tried and failed, the first
+    // replica recovered the ID, and the second replica read that recovery off
+    // the service context instead of resolving the tag for itself.
+    expect(capturePulledImageIdentitySpy).toHaveBeenCalledTimes(2);
+    expect(createContainerSpy).toHaveBeenCalledTimes(2);
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+  });
+
   test('compose-file-once should check the recreate against an image ID the preflight failed to resolve (DR-54)', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;

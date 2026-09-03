@@ -166,6 +166,15 @@ type ComposeRuntimeContext = {
    * image instead of from the mutable tag (DR-54).
    */
   pulledImageId?: string;
+  /**
+   * Write-back for an image ID a runtime refresh resolved after the
+   * compose-file-once preflight could not. Later replicas of the service read
+   * the preflight's context, so a recovery that stays local to one replica
+   * leaves the next one resolving the mutable tag again, and a tag that moves
+   * mid-batch then splits the service with each replica passing its own
+   * check against its own image (DR-54).
+   */
+  onPulledImageIdResolved?: (pulledImageId: string) => void;
   securityGateUnboundWarn?: boolean;
   securityGateUnboundReason?: string;
   securityGateUnboundWarnRecorded?: boolean;
@@ -2694,6 +2703,35 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Hand a compose-file-once service context a way to record the image ID a
+   * runtime refresh resolved when the preflight's own inspect failed. The
+   * merged context each replica gets is a copy, so without this the first
+   * replica's recovery dies with it and the second replica resolves the tag
+   * again (DR-54).
+   */
+  private attachRecoveredPulledImageIdSink(
+    composeFileOnceRuntimeContextByService: Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    >,
+    service: string,
+    composeFileOnceRuntimeContext: ComposeRuntimeContext | undefined,
+  ): ComposeRuntimeContext | undefined {
+    if (!composeFileOnceRuntimeContext) {
+      return undefined;
+    }
+    return {
+      ...composeFileOnceRuntimeContext,
+      onPulledImageIdResolved: (pulledImageId: string) => {
+        composeFileOnceRuntimeContextByService.set(service, {
+          ...composeFileOnceRuntimeContext,
+          pulledImageId,
+        });
+      },
+    };
+  }
+
   private isComposeFileOnceEnabled(): boolean {
     return this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
   }
@@ -2752,7 +2790,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         skipPull: composeFileOncePreflighted,
         runtimeContext: mergeComposeFileOnceRuntimeContext(
           requestedRuntimeContext,
-          composeFileOnceRuntimeContext,
+          this.attachRecoveredPulledImageIdSink(
+            composeFileOnceRuntimeContextByService,
+            service,
+            composeFileOnceRuntimeContext,
+          ),
         ),
         postPullGateCompleted: composeFileOncePreflighted,
       };
@@ -3511,8 +3553,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       securityGateUnboundReason = identityOutcome.reason;
       // A preflight whose inspect failed stores no image ID, so the recovery
       // here is the only one this replica gets. Discarding it would leave the
-      // recreate unverified against anything at all.
+      // recreate unverified against anything at all, and keeping it local to
+      // this replica would leave the next one resolving the tag again.
       expectedImageId = identityOutcome.localImageId;
+      if (expectedImageId) {
+        runtimeContext.onPulledImageIdResolved?.(expectedImageId);
+      }
     }
     const pinnedImage = imageIdentity || newImage;
     if (!imageIdentity && !expectedImageId) {
