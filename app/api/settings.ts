@@ -8,10 +8,14 @@ import { sanitizeApiError } from './helpers.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'settings' });
+// Versioned paths on purpose. The unversioned `/api` alias was removed in
+// v1.6.0 and settings is not one of the four wud-card compat endpoints that
+// survived it, so `/api/settings` now returns 410. Pointing a consumer at it
+// would send them somewhere that no longer answers.
 const deprecatedPutWarning =
-  'PUT /api/settings is deprecated and will be removed in API v2. Use PATCH /api/settings instead.';
+  'PUT /api/v1/settings is deprecated and will be removed in API v2. Use PATCH /api/v1/settings instead.';
 // '@1772236800' = 2026-02-28T00:00:00Z, the v1.4.0 GA date (see CHANGELOG.md
-// and the "PUT /api/settings" entry in DEPRECATIONS.md) — the date this
+// and the "PUT /api/v1/settings" entry in DEPRECATIONS.md), the date this
 // route actually became deprecated. Per RFC 9745 the Deprecation value must
 // be the instant the resource became deprecated, a past/current date, never
 // the same instant as the future Sunset removal date below.
