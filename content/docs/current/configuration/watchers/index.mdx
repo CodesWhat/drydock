@@ -799,8 +799,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
 | `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
-| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
-| `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
+| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
+| `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
