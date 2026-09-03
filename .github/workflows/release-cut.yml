@@ -360,7 +360,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
 
       - name: Wait for successful branch CI on release source SHA
-        uses: ./.github/actions/wait-for-successful-branch-ci
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
         with:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
@@ -369,7 +369,7 @@ jobs:
           sleep-seconds: '300'
 
       - name: Wait for successful E2E Playwright on release source SHA
-        uses: ./.github/actions/wait-for-successful-branch-ci
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
         with:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
