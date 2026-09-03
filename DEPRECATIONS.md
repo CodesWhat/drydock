@@ -76,7 +76,7 @@ In v1.7.0 these reasons become **hard** blockers: the Update button is locked wh
 
 The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
 
-**Migration:** Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (the doubled `$` is compose escaping, so the variable is expanded inside the container instead of from the host environment before the container starts). See [Monitoring](https://getdrydock.com/docs/monitoring).
+**Migration:** Custom `curl`-based healthcheck overrides remain supported through v1.6.x, and v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (the doubled `$` is compose escaping, so the variable is expanded inside the container instead of from the host environment before the container starts). See [Monitoring](https://getdrydock.com/docs/monitoring).
 
 ---
 
