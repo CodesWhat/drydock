@@ -228,18 +228,6 @@ export const openApiSchemas = {
     required: ['providers', 'errors'],
     additionalProperties: false,
   },
-  AuthStrategiesResponse: {
-    type: 'object',
-    properties: {
-      strategies: {
-        type: 'array',
-        items: { type: 'object', additionalProperties: true },
-      },
-      warnings: { type: 'array', items: { type: 'string' } },
-    },
-    required: ['strategies', 'warnings'],
-    additionalProperties: false,
-  },
   RememberMeResponse: {
     type: 'object',
     properties: {

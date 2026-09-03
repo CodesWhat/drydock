@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The pre-commit coverage hook never ran.** `lefthook.yml` passed `{staged_files}` to the biome commands but not to `scripts/pre-commit-coverage.sh`, so its `for f in "$@"` loop always saw an empty argument list and printed `No app/ or ui/ files staged; skipping tests` on every commit, regardless of what was actually staged. The pre-push gate still ran full coverage, so nothing shipped uncovered, but the commit-time signal the hook promises was dead on every line. `pre-commit-coverage.sh` now receives the staged file list the same way the biome commands already do.
 - **Merging the base branch into a feature branch could refuse to commit.** [#974](https://github.com/CodesWhat/drydock/pull/974) made `pre-commit-coverage.sh` actually receive the staged file list, and a merge commit stages every file the base branch changed, so the related-test set it hands to `vitest --changed HEAD` balloons to most of the trigger suites and blows past lefthook's timeout, refusing the commit with `coverage: timeout (2m0s)`. The script now checks for `MERGE_HEAD` before workspace detection and skips straight to `exit 0` on a merge commit, since the pre-push gate and CI already run full coverage on merge commits. `lefthook.yml`'s `coverage` timeout also moves to `5m`, matching what the script's own header comment already said.
 
+### Removed
+
+- **Removed the deprecated `GET /auth/strategies` alias.** Deprecated since v1.6.0 and scheduled for removal in v1.8.0, the legacy `{ strategies, warnings }` response shape is gone. Unlike `GET /api/auth/methods`, this route was never registered under the `/api` mount, so it was never behind the unversioned-API tombstone; a request to it now falls through to the SPA shell instead of returning 410. Use `GET /api/v1/auth/status` instead.
+
 ## [1.7.0-rc.7] — 2026-08-29
 
 ### Security

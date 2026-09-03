@@ -657,15 +657,7 @@ curl http://drydock:3000/api/v1/auth/status
 
 The same status payload is also available at `GET /auth/status`; `GET /api/auth/status` remains as the unversioned compatibility alias.
 
-### Get available strategies
-
-Returns the list of configured authentication strategies. This endpoint is unauthenticated so the login screen can render.
-
-```bash
-curl http://drydock:3000/auth/strategies
-```
-
-The `{ strategies, warnings }` response shape from `GET /auth/strategies` is deprecated and scheduled for removal in v1.8.0. Migrate to `GET /api/v1/auth/status`; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
+The legacy `{ strategies, warnings }` response shape at `GET /auth/strategies` was removed in v1.8.0; the route is no longer mounted and now falls through to the SPA shell. Use `GET /api/v1/auth/status` instead; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
 
 The legacy `GET /api/auth/methods` alias was removed in v1.7.0 and now returns `410 Gone`; see [Deprecations](/docs/deprecations#api-auth-methods).
 

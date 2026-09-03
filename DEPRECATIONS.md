@@ -22,20 +22,6 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 
 ---
 
-### Legacy auth strategies response shape (`GET /auth/strategies`)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 |
-| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
-
-`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers for its v1.8.0 removal.
-
-**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
-
----
-
 ## Removed compatibility behaviors
 
 ### `curl` in Docker image
@@ -209,6 +195,20 @@ Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unc
 `GET /api/auth/methods` was a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen could render before a session existed. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. Because it was registered directly on the app, ahead of the `/api` mount, it survived the general unversioned `/api/*` removal above on its own v1.7.0 timeline. That registration is gone as of v1.7.0: the route is no longer mounted anywhere, so a request to it now falls through to the same unversioned `/api/*` **410 Gone** tombstone described above. `GET /api/auth/status` is unaffected and remains a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
 
 **Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
+
+---
+
+### Legacy auth strategies response shape (`GET /auth/strategies`)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0 |
+| **Removed in** | v1.8.0 |
+| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
+
+`GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. As of v1.8.0 the route is no longer mounted. Unlike the unversioned `/api/*` aliases above, `/auth/strategies` was never registered under the `/api` mount, so its removal does not fall through to the `410 Gone` tombstone; a request to it now falls through to the SPA's catch-all route and receives a `200` HTML shell response instead, the same as any other unmatched path. `GET /api/auth/status` (and its versioned form `GET /api/v1/auth/status`) is unaffected and remains available.
+
+**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
 
 ---
 
