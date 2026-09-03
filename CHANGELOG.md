@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`fflate` override added in `e2e/` for CVE-2026-45820.** `@smithy/middleware-compression` pins `fflate` at 0.8.1 exactly, so the fix had to come through an npm override; `fflate` now resolves to 0.8.3 in `e2e/package-lock.json`, which is the only workspace that carried the vulnerable range. Lockfile-only change, no runtime code touched.
+
 ### Fixed
 
 - **Two deprecation banner strings in the UI still described the legacy `DD_TRIGGER_*` env vars and the curl-based healthcheck override as active with a future removal.** Both were removed outright in v1.7.0; `legacyConfigBody` and `curlHealthcheckBody` (all 17 locales) now say so instead of pointing at a deadline that already passed. The curl banner's `{bin}` slot also rendered the compose migration snippet with a single `$`, which compose expands from the host environment before the container starts; doubled it to `$${DD_SERVER_PORT:-3000}` to match the corrected DEPRECATIONS.md snippet.
