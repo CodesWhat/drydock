@@ -45,6 +45,8 @@ const SAFE_CLIENT_ERRORS = new Set([
 ]);
 
 type UpdatePolicyActionResult = { policy: ContainerUpdatePolicy } | { error: string };
+/** The stored container, or a message safe to hand a client verbatim. */
+export type ContainerUpdatePolicyWriteResult = { container: Container } | { error: string };
 type UniqStringsFn = UpdatePolicyHandlerDependencies['uniqStrings'];
 type AuditedUpdatePolicyField = DeclarativeUpdatePolicyField | 'snoozeUntil';
 
@@ -409,41 +411,61 @@ function recordOverrideAuditEvents(
   }
 }
 
-function createPatchContainerUpdatePolicy({
+/**
+ * Resolve the snooze expiry a `snooze` action payload names, without writing anything.
+ *
+ * The approval queue's defer decision has to know the timestamp before it reserves the
+ * row, and the row's `deferredUntil` has to be the same value the container's
+ * `updatePolicy.snoozeUntil` ends up holding — the existing `snoozed` soft blocker stays
+ * the single source of truth for whether a candidate is being held. Both throws below
+ * carry a client-safe message by construction, so there is nothing to classify here.
+ * @param payload
+ */
+export function resolveSnoozeUntilFromPayload(
+  payload: Record<string, unknown>,
+): { snoozeUntil: string } | { error: string } {
+  try {
+    return { snoozeUntil: getSnoozeUntilFromActionPayload(payload) };
+  } catch (error: unknown) {
+    return { error: (error as Error).message };
+  }
+}
+
+/**
+ * Apply one policy action to a container and persist it, reporting the stored container or
+ * a client-safe reason it was refused.
+ *
+ * Split out of the PATCH handler so the approval queue's reject and defer decisions write
+ * policy through this exact code — the same layered-override handling, the same
+ * normalization, the same override audit entries — rather than a second implementation of
+ * "add the current tag to skipTags". Rejecting an update from the queue is the same
+ * operation as the container panel's Skip button, and it is one function rather than two
+ * that agree today.
+ * @param dependencies
+ */
+function createApplyContainerUpdatePolicyAction({
   storeContainer,
   uniqStrings,
   getErrorMessage,
-  redactContainerRuntimeEnv,
   recordAuditEvent,
 }: UpdatePolicyHandlerDependencies) {
-  return function patchContainerUpdatePolicy(req: Request, res: Response) {
-    const id = getPathParamValue(req.params.id);
-    const { action } = (req.body || {}) as { action?: string };
-    const container = storeContainer.getContainer(id);
-
-    if (!container) {
-      sendErrorResponse(res, 404, 'Container not found');
-      return;
-    }
-    if (!action) {
-      sendErrorResponse(res, 400, 'Action is required');
-      return;
-    }
-
+  return function applyContainerUpdatePolicyAction(
+    container: Container,
+    action: string,
+    body: Record<string, unknown>,
+  ): ContainerUpdatePolicyWriteResult {
     try {
-      const actionBody = getActionBody(req.body);
       const hasLayeredPolicy = container.updatePolicyDeclarative !== undefined;
       const updatePolicy = hasLayeredPolicy
         ? normalizeUpdatePolicy(getUpdatePolicyOverrides(container), uniqStrings, true)
         : normalizeUpdatePolicy(container.updatePolicy || {}, uniqStrings);
       const previousOverrides = hasLayeredPolicy ? structuredClone(updatePolicy) : undefined;
       const result = hasLayeredPolicy
-        ? applyLayeredPolicyAction(action, container, updatePolicy, actionBody, uniqStrings)
-        : applyPolicyAction(action, container, updatePolicy, actionBody, uniqStrings);
+        ? applyLayeredPolicyAction(action, container, updatePolicy, body, uniqStrings)
+        : applyPolicyAction(action, container, updatePolicy, body, uniqStrings);
 
       if ('error' in result) {
-        sendErrorResponse(res, 400, result.error);
-        return;
+        return { error: result.error };
       }
 
       const normalizedPolicy = normalizeUpdatePolicy(result.policy, uniqStrings, hasLayeredPolicy);
@@ -465,20 +487,52 @@ function createPatchContainerUpdatePolicy({
           normalizedPolicy,
         );
       }
-      res.status(200).json(redactContainerRuntimeEnv(containerUpdated));
+      return { container: containerUpdated };
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
-      if (SAFE_CLIENT_ERRORS.has(errorMessage)) {
-        sendErrorResponse(res, 400, errorMessage);
-        return;
-      }
-      sendErrorResponse(res, 400, GENERIC_UPDATE_POLICY_ERROR);
+      return {
+        error: SAFE_CLIENT_ERRORS.has(errorMessage) ? errorMessage : GENERIC_UPDATE_POLICY_ERROR,
+      };
     }
   };
 }
 
+function createPatchContainerUpdatePolicy(
+  dependencies: UpdatePolicyHandlerDependencies,
+  applyContainerUpdatePolicyAction: ReturnType<typeof createApplyContainerUpdatePolicyAction>,
+) {
+  return function patchContainerUpdatePolicy(req: Request, res: Response) {
+    const id = getPathParamValue(req.params.id);
+    const { action } = (req.body || {}) as { action?: string };
+    const container = dependencies.storeContainer.getContainer(id);
+
+    if (!container) {
+      sendErrorResponse(res, 404, 'Container not found');
+      return;
+    }
+    if (!action) {
+      sendErrorResponse(res, 400, 'Action is required');
+      return;
+    }
+
+    const result = applyContainerUpdatePolicyAction(container, action, getActionBody(req.body));
+    if ('error' in result) {
+      sendErrorResponse(res, 400, result.error);
+      return;
+    }
+
+    res.status(200).json(dependencies.redactContainerRuntimeEnv(result.container));
+  };
+}
+
 export function createUpdatePolicyHandlers(dependencies: UpdatePolicyHandlerDependencies) {
+  const applyContainerUpdatePolicyAction = createApplyContainerUpdatePolicyAction(dependencies);
+
   return {
-    patchContainerUpdatePolicy: createPatchContainerUpdatePolicy(dependencies),
+    patchContainerUpdatePolicy: createPatchContainerUpdatePolicy(
+      dependencies,
+      applyContainerUpdatePolicyAction,
+    ),
+    applyContainerUpdatePolicyAction,
   };
 }
