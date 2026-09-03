@@ -3637,7 +3637,7 @@ test('handleContainerReport sends once for two concurrent evaluations of the sam
   // The synchronous reserve-then-send prefix of call1 runs to completion
   // (including invoking trigger.trigger()) before call2 is even evaluated,
   // since calling an async function runs synchronously up to its first
-  // await — so call2 already sees the reservation held.
+  // await, so call2 already sees the reservation held.
   expect(sendSpy).toHaveBeenCalledTimes(1);
 
   resolveSend();

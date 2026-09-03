@@ -322,7 +322,7 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {
         cron: '0 * * * *',
       });
-      docker.log = {}; // no info() — must not throw while coalescing
+      docker.log = {}; // no info(), must not throw while coalescing
 
       let resolveFirstWatch: (value: unknown[]) => void = () => undefined;
       const firstWatch = new Promise<unknown[]>((resolve) => {

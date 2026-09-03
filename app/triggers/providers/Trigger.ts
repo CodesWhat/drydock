@@ -1497,13 +1497,13 @@ class Trigger<
    * Atomic check-and-reserve for the `once=true` history gate on the simple
    * update-available path. `hasAlreadyNotifiedForResult` is a pure read, and
    * the write (`recordNotifiedForResult`) only lands after the trigger's send
-   * resolves — an `await` away. Two overlapping cron scans (#972) can both
+   * resolves, an `await` away. Two overlapping cron scans (#972) can both
    * evaluate the same first-seen candidate for the same trigger in that
    * window: both read "not notified yet" and both send, one every few hours
    * whenever a transient digest 429 happened to straddle the scans.
    *
    * This closes the window by adding the reservation key synchronously, in
-   * the same call that does the "already notified" read — nothing can run
+   * the same call that does the "already notified" read, nothing can run
    * between those two statements in JS, so a second concurrent evaluation of
    * the exact same (trigger, container, event, result) sees the key already
    * held and is turned away here rather than racing the send. The caller
@@ -1522,7 +1522,7 @@ class Trigger<
     const containerId =
       typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
     if (!containerId) {
-      // No stable id to key a reservation on — same permissive fallback as
+      // No stable id to key a reservation on, same permissive fallback as
       // hasAlreadyNotifiedForResult; nothing to dedup against.
       return true;
     }
@@ -1537,7 +1537,7 @@ class Trigger<
   /**
    * Release a reservation taken by `reserveOnceNotificationSlot`. Safe to
    * call even when no reservation was taken (e.g. `once=false`, or no stable
-   * container id) — deleting an absent key is a no-op.
+   * container id), deleting an absent key is a no-op.
    */
   private releaseOnceNotificationSlot(
     container: Container,

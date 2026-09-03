@@ -150,7 +150,7 @@ describe('notification-history store', () => {
         }),
       ).not.toBe(baseHash);
       // Digest is intentionally excluded from the hash for a tag-kind update
-      // (see the dedicated tag-kind tests below, #972) — assert the digest
+      // (see the dedicated tag-kind tests below, #972), assert the digest
       // change matters here against a digest-kind base instead, which is
       // still keyed on it.
       const digestKindBase = { ...base, updateKind: { kind: 'digest', remoteValue: 'sha256:abc' } };

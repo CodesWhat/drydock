@@ -47,7 +47,7 @@ export interface CronWatchOrchestrationWatcher {
  * If a scan is already in flight, this call does not start a second one. It
  * records that a rescan was requested (so a docker event that arrives
  * mid-scan is not lost) and returns the SAME promise as the in-flight scan
- * — the caller awaits and receives that running scan's result, not a fresh
+ * The caller awaits and receives that running scan's result, not a fresh
  * one. Once the running scan finishes, exactly one follow-up scan is
  * started (not awaited by the coalesced callers) if a rescan was requested
  * while it ran, however many callers asked for one.
