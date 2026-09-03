@@ -19,6 +19,8 @@ If you want the state to persist after the container removal, you need to mount 
 | `DD_SECURITY_STATE_CACHE_MAX_ENTRIES` | ⚪ | Max cached per-container security-state entries retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_UPDATE_LIFECYCLE_CACHE_TTL_MS` | ⚪ | Time-to-live for cached update lifecycle timestamps used while a pending update candidate remains the same | integer (`>0`) | `1800000` (30 min) |
 | `DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES` | ⚪ | Max cached update lifecycle entries retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
+| `DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS` | ⚪ | Time-to-live for cached update-policy retention decisions | integer (`>0`) | `604800000` (7 days) |
+| `DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES` | ⚪ | Max cached update-policy retention entries retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_UPDATE_OPERATION_MAX_ENTRIES` | ⚪ | Max update/rollback operation records to retain (oldest pruned when exceeded) | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_UPDATE_OPERATION_RETENTION_DAYS` | ⚪ | Days to retain update operation records before pruning | integer (`>0`) | `30` |
 | `DD_UPDATE_OPERATION_ACTIVE_TTL_MS` | ⚪ | Maximum age (ms) an operation may remain in an `active` status (`queued` or `in-progress`) before it is terminalised to the non-notifying `expired` status. Applied at startup and during housekeeping to clear stuck operations left behind by an unclean shutdown; unlike `failed`, an `expired` operation emits no "update failed" notification. | integer (`>0`) | `1800000` (30 min) |

@@ -87,6 +87,8 @@ Standard shell variables (`PATH`, `HOME`, etc.) are always included and do not n
 - update_kind_semver_diff
 - watcher
 
+<Callout type="info">This list is not exhaustive. The simple-mode subprocess also receives every other field of the runtime container object flattened to `snake_case` keys, including labels, security-scan data, update-policy state, and dependency info, whatever that particular container currently carries. Treat the list above as the stable core set, not the full schema.</Callout>
+
 #### Example
 
 ```bash
@@ -120,7 +122,7 @@ watcher='local'
 
 ### In batch mode (execution for a batch of containers to update)
 
-<Callout type="info">A `containers_json` environment variable is passed containing the array of all the containers to update as a JSON string.</Callout>
+<Callout type="info">A `containers_json` environment variable is passed containing the array of all the containers to update as a JSON string. When the batch has a digest title or body to report, `dd_title` and `dd_body` are also passed; when the batch run has a known event kind, `dd_event_kind` is passed too. All three are omitted when the corresponding value is empty.</Callout>
 
 ## Examples
 

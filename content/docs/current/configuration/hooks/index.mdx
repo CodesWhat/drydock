@@ -38,8 +38,8 @@ Lifecycle hooks let you run shell commands before or after a container is update
 
 ### Allowlist matching rules
 
-- **No slash in entry** (`sh`, `jq`): the basename of the hook command's first token is compared. `jq` matches both `jq` and `/usr/bin/jq`.
-- **Slash in entry** (`/usr/local/bin/notify.sh`): an exact full-path match is required. The basename alone is not sufficient.
+- **No slash in entry** (`sh`, `jq`): the entry must equal the hook command's first token exactly. `jq` matches a command whose first token is literally `jq`; it does not match `/usr/bin/jq` or any other path ending in `jq`.
+- **Slash in entry** (`/usr/local/bin/notify.sh`): an exact full-path match is required, same as above.
 
 Example:
 
@@ -65,7 +65,7 @@ When a hook runs, drydock injects environment variables describing the update:
 | `DD_UPDATE_FROM` | Current tag or digest | `1.2.3` |
 | `DD_UPDATE_TO` | New tag or digest | `1.3.0` |
 
-Injected hook environment values are sanitized before execution. Control characters and shell metacharacters `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, and `)` are replaced with `_`, matching the command trigger's environment hardening. This protects hook scripts that expand Drydock-provided values but does not make arbitrary hook commands safe; keep hook commands trusted and quote variables in your scripts.
+Injected hook environment values are sanitized before execution. Control characters, DEL, and the characters `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, `)`, space, `*`, `?`, `[`, `]`, `{`, `}`, `~`, `\`, `"`, and `'` are replaced with `_`, and a leading `-` is stripped so a value can't be parsed as an option, matching the command trigger's environment hardening. This protects hook scripts that expand Drydock-provided values but does not make arbitrary hook commands safe; keep hook commands trusted and quote variables in your scripts.
 
 ## Command validation
 
