@@ -2886,31 +2886,6 @@ describe('Docker Watcher', () => {
       expect(result2).toEqual(nextRun2);
     });
 
-    test('getCronIntervalMs should return undefined when no scheduled run can be computed', () => {
-      vi.spyOn(docker, 'getNextScheduledRunDate').mockReturnValue(undefined);
-
-      expect(docker.getCronIntervalMs()).toBeUndefined();
-    });
-
-    test('getCronIntervalMs should return undefined when a second scheduled run cannot be computed', () => {
-      const firstRun = new Date('2026-04-09T12:05:00.000Z');
-      vi.spyOn(docker, 'getNextScheduledRunDate').mockImplementation((fromDate?: Date) =>
-        fromDate === undefined ? firstRun : undefined,
-      );
-
-      expect(docker.getCronIntervalMs()).toBeUndefined();
-    });
-
-    test('getCronIntervalMs should return the interval between two consecutive scheduled runs', () => {
-      const firstRun = new Date('2026-04-09T12:00:00.000Z');
-      const secondRun = new Date('2026-04-09T13:00:00.000Z');
-      vi.spyOn(docker, 'getNextScheduledRunDate').mockImplementation((fromDate?: Date) =>
-        fromDate === undefined ? firstRun : secondRun,
-      );
-
-      expect(docker.getCronIntervalMs()).toBe(60 * 60 * 1000);
-    });
-
     test('should consider maintenance window open and next date undefined when no window is configured', () => {
       docker.configuration.maintenancewindow = undefined;
       expect(docker.isMaintenanceWindowOpen()).toBe(true);

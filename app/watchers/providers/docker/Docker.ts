@@ -62,6 +62,7 @@ import {
 import {
   type CronWatchOptions,
   type CronWatchOrchestrationWatcher,
+  resetCronWatchState,
   watchFromCronOrchestration,
 } from './docker-cron-watch.js';
 import {
@@ -336,10 +337,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
-  // Single-flight state for watchFromCron, mutated through the
-  // asCronWatchWatcher() cast by docker-cron-watch.ts: the in-flight scan's
-  // promise, plus whether a caller asked for a rescan while it was running.
-  // See watchFromCronOrchestration() for the coalescing contract.
+  // Single-flight state for watchFromCron; see watchFromCronOrchestration()
+  // in docker-cron-watch.ts for the coalescing contract.
   public cronWatchInFlight?: Promise<ContainerReport[]>;
   public cronWatchRescanRequested: boolean = false;
   public cronWatchRescanReason?: string;
@@ -539,25 +538,6 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       this.#cachedTimeMatcher = undefined;
       return undefined;
     }
-  }
-
-  /**
-   * The watcher's own cron interval in milliseconds, derived from two
-   * consecutive matches of the configured cron expression. Used by
-   * docker-cron-watch.ts to size the single-flight in-flight scan deadline
-   * (#979). Returns undefined when the cron expression cannot be matched at
-   * all (getNextScheduledRunDate() already handles the unparseable case).
-   */
-  getCronIntervalMs(): number | undefined {
-    const firstRun = this.getNextScheduledRunDate();
-    if (!firstRun) {
-      return undefined;
-    }
-    const secondRun = this.getNextScheduledRunDate(firstRun);
-    if (!secondRun) {
-      return undefined;
-    }
-    return secondRun.getTime() - firstRun.getTime();
   }
 
   override getNextRunAt(): string | undefined {
@@ -945,17 +925,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.unregisterContainerUpdateApplied?.();
     this.unregisterContainerUpdateApplied = undefined;
     this.clearMaintenanceWindowQueue();
-    // A scan that was already in flight is left running (it is not
-    // cancellable), but clearing its single-flight state here means its
-    // eventual settlement won't find a rescan request waiting for it. The
-    // isWatcherDeregistered guard in watchFromCronOrchestration() covers
-    // the remaining window (a rescan requested between this reset and that
-    // settlement) by dropping the follow-up instead of starting a brand-new
-    // scan on a torn-down watcher.
-    this.cronWatchInFlight = undefined;
-    this.cronWatchRescanRequested = false;
-    this.cronWatchRescanReason = undefined;
-    this.cronWatchRescanIgnoreMaintenanceWindow = false;
+    // See resetCronWatchState() in docker-cron-watch.ts for why this runs
+    // on deregister.
+    resetCronWatchState(this.asCronWatchWatcher());
   }
 
   private async maybeFastResyncAfterUpdate(

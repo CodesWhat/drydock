@@ -1,6 +1,10 @@
 import type { ContainerReport } from '../../../model/container.js';
 import type { CronWatchOrchestrationWatcher } from './docker-cron-watch.js';
-import { watchFromCronOrchestration } from './docker-cron-watch.js';
+import {
+  getCronIntervalMs,
+  resetCronWatchState,
+  watchFromCronOrchestration,
+} from './docker-cron-watch.js';
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -35,6 +39,7 @@ function createWatcher(
     queueMaintenanceWindowWatch: vi.fn(),
     clearMaintenanceWindowQueue: vi.fn(),
     watch: vi.fn().mockResolvedValue([]),
+    getNextScheduledRunDate: vi.fn().mockReturnValue(undefined),
     ...overrides,
   };
 }
@@ -206,10 +211,17 @@ describe('watchFromCronOrchestration', () => {
     vi.useFakeTimers();
     try {
       const stallingWatch = vi.fn().mockReturnValue(new Promise<ContainerReport[]>(() => {}));
+      const firstRun = new Date('2026-01-01T00:00:00.000Z');
       const watcher = createWatcher({
         watch: stallingWatch,
-        getCronIntervalMs:
-          intervalMs === undefined ? undefined : vi.fn().mockReturnValue(intervalMs),
+        getNextScheduledRunDate:
+          intervalMs === undefined
+            ? vi.fn().mockReturnValue(undefined)
+            : vi
+                .fn()
+                .mockImplementation((fromDate?: Date) =>
+                  fromDate === undefined ? firstRun : new Date(firstRun.getTime() + intervalMs),
+                ),
       });
 
       const call = watchFromCronOrchestration(watcher, { reason: 'schedule' });
@@ -399,5 +411,54 @@ describe('watchFromCronOrchestration', () => {
     await Promise.resolve();
 
     expect(watchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getCronIntervalMs', () => {
+  test('returns undefined when no scheduled run can be computed', () => {
+    const watcher = { getNextScheduledRunDate: vi.fn().mockReturnValue(undefined) };
+
+    expect(getCronIntervalMs(watcher)).toBeUndefined();
+  });
+
+  test('returns undefined when a second scheduled run cannot be computed', () => {
+    const firstRun = new Date('2026-04-09T12:05:00.000Z');
+    const watcher = {
+      getNextScheduledRunDate: vi
+        .fn()
+        .mockImplementation((fromDate?: Date) => (fromDate === undefined ? firstRun : undefined)),
+    };
+
+    expect(getCronIntervalMs(watcher)).toBeUndefined();
+  });
+
+  test('returns the interval between two consecutive scheduled runs', () => {
+    const firstRun = new Date('2026-04-09T12:00:00.000Z');
+    const secondRun = new Date('2026-04-09T13:00:00.000Z');
+    const watcher = {
+      getNextScheduledRunDate: vi
+        .fn()
+        .mockImplementation((fromDate?: Date) => (fromDate === undefined ? firstRun : secondRun)),
+    };
+
+    expect(getCronIntervalMs(watcher)).toBe(60 * 60 * 1000);
+  });
+});
+
+describe('resetCronWatchState', () => {
+  test('clears the single-flight state', () => {
+    const watcher = createWatcher({
+      cronWatchInFlight: Promise.resolve([]),
+      cronWatchRescanRequested: true,
+      cronWatchRescanReason: 'docker-event',
+      cronWatchRescanIgnoreMaintenanceWindow: true,
+    });
+
+    resetCronWatchState(watcher);
+
+    expect(watcher.cronWatchInFlight).toBeUndefined();
+    expect(watcher.cronWatchRescanRequested).toBe(false);
+    expect(watcher.cronWatchRescanReason).toBeUndefined();
+    expect(watcher.cronWatchRescanIgnoreMaintenanceWindow).toBe(false);
   });
 });

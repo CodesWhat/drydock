@@ -35,14 +35,48 @@ export interface CronWatchOrchestrationWatcher {
   queueMaintenanceWindowWatch: () => void;
   clearMaintenanceWindowQueue: () => void;
   watch: () => Promise<ContainerReport[]>;
-  /**
-   * The watcher's own cron interval in milliseconds, when it can be
-   * computed (e.g. from two consecutive matches of the configured cron
-   * expression). Used to size the in-flight scan deadline. Undefined when
-   * the watcher cannot compute it (unparseable cron), in which case the
-   * deadline falls back to CRON_WATCH_DEADLINE_FLOOR_MS.
-   */
-  getCronIntervalMs?: () => number | undefined;
+  getNextScheduledRunDate: (fromDate?: Date) => Date | undefined;
+}
+
+/**
+ * Duck-typed subset needed by getCronIntervalMs(): two consecutive matches
+ * of a cron expression, from an arbitrary starting point.
+ */
+export interface CronIntervalWatcher {
+  getNextScheduledRunDate: (fromDate?: Date) => Date | undefined;
+}
+
+/**
+ * The watcher's own cron interval in milliseconds, derived from two
+ * consecutive matches of the configured cron expression. Used to size the
+ * single-flight in-flight scan deadline (#979). Returns undefined when the
+ * cron expression cannot be matched at all (getNextScheduledRunDate()
+ * already handles the unparseable case).
+ */
+export function getCronIntervalMs(watcher: CronIntervalWatcher): number | undefined {
+  const firstRun = watcher.getNextScheduledRunDate();
+  if (!firstRun) {
+    return undefined;
+  }
+  const secondRun = watcher.getNextScheduledRunDate(firstRun);
+  if (!secondRun) {
+    return undefined;
+  }
+  return secondRun.getTime() - firstRun.getTime();
+}
+
+/**
+ * Resets the single-flight cron-watch state (#972). Called on deregister so
+ * an already-in-flight scan (not cancellable) doesn't find a rescan request
+ * waiting for it when it eventually settles; the isWatcherDeregistered guard
+ * in watchFromCronOrchestration() covers the remaining window by dropping
+ * the follow-up instead of starting a new scan on a torn-down watcher.
+ */
+export function resetCronWatchState(watcher: CronWatchOrchestrationWatcher): void {
+  watcher.cronWatchInFlight = undefined;
+  watcher.cronWatchRescanRequested = false;
+  watcher.cronWatchRescanReason = undefined;
+  watcher.cronWatchRescanIgnoreMaintenanceWindow = false;
 }
 
 /**
@@ -63,7 +97,7 @@ const CRON_WATCH_DEADLINE_INTERVAL_MULTIPLIER = 2;
 const CRON_WATCH_DEADLINE_FLOOR_MS = 10 * 60 * 1000; // 10 minutes
 
 function getCronWatchDeadlineMs(watcher: CronWatchOrchestrationWatcher): number {
-  const intervalMs = watcher.getCronIntervalMs?.();
+  const intervalMs = getCronIntervalMs(watcher);
   if (!intervalMs || intervalMs <= 0) {
     return CRON_WATCH_DEADLINE_FLOOR_MS;
   }
