@@ -324,14 +324,55 @@ describe('Dockercompose compose restore operation records', () => {
     }
 
     test('the record is matched to its own container rather than the first mapping', () => {
-      insertRolledBackOperation({});
+      // Two different operation ids for two different containers, so a match
+      // that ignores container identity (first-mapping order or status alone)
+      // is distinguishable from one that checks it. The first mapping's
+      // operation ("op-1") is stamped with a containerId that belongs to
+      // neither its own container (nginx-1) nor the container that is
+      // actually corrected (nginx-2), so a container-identity-aware match
+      // must leave it alone while still correcting "op-2".
+      const perContainerRuntimeContext = {
+        operationIds: new Map([
+          ['nginx-1', 'op-1'],
+          ['nginx-2', 'op-2'],
+        ]),
+      };
+      updateOperationStore.insertOperation({
+        id: 'op-1',
+        containerName: 'nginx',
+        containerId: 'redis-1',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'compose_runtime_refresh_failed',
+        lastError: 'runtime refresh failed',
+        completedAt: new Date().toISOString(),
+      } as never);
+      updateOperationStore.insertOperation({
+        id: 'op-2',
+        containerName: 'nginx',
+        containerId: 'nginx-2',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'compose_runtime_refresh_failed',
+        lastError: 'runtime refresh failed',
+        completedAt: new Date().toISOString(),
+      } as never);
 
-      correct();
+      trigger.correctRolledBackOperationsAfterComposeRestoreFailure(
+        [makeReplicaMapping('nginx-1'), makeReplicaMapping('nginx-2')],
+        perContainerRuntimeContext,
+        new Error(restoreFailureError),
+      );
 
-      expect(updateOperationStore.getOperationById('op-shared')).toMatchObject({
+      expect(updateOperationStore.getOperationById('op-2')).toMatchObject({
         status: 'failed',
         phase: 'rollback-failed',
         lastError: restoreFailureError,
+      });
+      expect(updateOperationStore.getOperationById('op-1')).toMatchObject({
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        lastError: 'runtime refresh failed',
       });
     });
 

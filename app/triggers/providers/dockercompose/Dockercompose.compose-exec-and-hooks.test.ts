@@ -957,9 +957,12 @@ describe('Dockercompose Trigger', () => {
     );
 
     // Compose-file-once only earns the one-refresh-per-service shortcut off a
-    // preflight. Without one the gate runs inside each container's refresh, so
-    // marking the service handled after the first replica would leave the
-    // second recreated by that refresh and never gated.
+    // preflight. Without one, marking the service handled after the first
+    // replica would make the second wrongly skip its own compose refresh,
+    // assuming the first replica's refresh already covered it. It would
+    // still be gated, through the postPullHook fallback that runs whenever
+    // postPullGateCompleted is false, but it would never get pulled or
+    // recreated.
     expect(composeUpdateSpy).toHaveBeenCalledTimes(2);
     expect(scanAndGateSpy).toHaveBeenCalledTimes(2);
   });
