@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`fflate` override added in `e2e/` for CVE-2026-45820.** `@smithy/middleware-compression` pins `fflate` at 0.8.1 exactly, so the fix had to come through an npm override; `fflate` now resolves to 0.8.3 in `e2e/package-lock.json`, which is the only workspace that carried the vulnerable range. Lockfile-only change, no runtime code touched.
+
 ## [1.7.0-rc.8] — 2026-09-03
 
 ### Fixed
