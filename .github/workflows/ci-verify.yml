@@ -139,7 +139,26 @@ jobs:
           printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
       - name: Scan secrets
-        run: scripts/scan-secrets.sh
+        # On pull_request the git-history scan covers base..HEAD only. The
+        # checkout above has fetch-depth 0, so with --log-opts=--all every
+        # branch ever pushed to the repo was scanned under the base branch's
+        # ignore file: an unannotated fixture on any other branch failed
+        # Secrets on every open PR, and a branch could never fix its own
+        # finding. push, schedule, workflow_dispatch and workflow_call keep
+        # scanning full history; head and base are the same trust domain
+        # there. Policy files still come from the base ref (step above).
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          SCAN_SECRETS_LOG_OPTS: >-
+            ${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || '--all' }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            # Make sure origin/<base> resolves with full history even if the
+            # checkout's remote refs were trimmed.
+            git fetch --no-tags origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          fi
+          scripts/scan-secrets.sh
 
   changes:
     name: "Changes: Path Filter"

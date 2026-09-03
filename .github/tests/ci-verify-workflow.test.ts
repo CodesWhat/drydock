@@ -186,9 +186,7 @@ test('secret scanning gates full history and the tracked working tree', () => {
       GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb',
     },
   });
-  expect(getWorkflowStep('secrets', 'Scan secrets')).toMatchObject({
-    run: 'scripts/scan-secrets.sh',
-  });
+  expect(getWorkflowStep('secrets', 'Scan secrets')?.run).toContain('scripts/scan-secrets.sh');
 
   const scanScript = readFileSync(secretScanScriptPath, 'utf8');
   expect(scanScript).toContain('gitleaks git');
@@ -253,6 +251,47 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
   expect(run).toContain(
     'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
   );
+});
+
+test('the secrets git-history scan is scoped to base..HEAD on pull_request and full history otherwise', () => {
+  // DR-51: the "Scan secrets" step used to run `gitleaks git --log-opts="--all"`
+  // unconditionally, so a pull_request scanned every commit ever pushed to any
+  // branch in the repo under the base branch's ignore file. An unannotated
+  // fixture on any other open branch failed Secrets on every PR, and a branch
+  // could never fix its own finding by editing its own history. Scoping the
+  // pull_request scan to `origin/<base>..HEAD` fixes that; push/schedule/
+  // workflow_dispatch/workflow_call keep scanning full history, since head and
+  // base are the same trust domain there.
+  const scanStep = getWorkflowStep('secrets', 'Scan secrets');
+
+  expect(scanStep).toMatchObject({
+    env: {
+      BASE_REF: '${{ github.base_ref }}',
+      SCAN_SECRETS_LOG_OPTS:
+        "${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || '--all' }}",
+    },
+  });
+
+  const run = scanStep?.run ?? '';
+  expect(run).toContain('set -euo pipefail');
+  // origin/<base> isn't a local ref after the job's fetch-depth: 0 checkout
+  // (that only unshallows the ref under test, not every other branch), so the
+  // step fetches it into refs/remotes/origin/<base> before delegating to the
+  // script -- otherwise `origin/${BASE_REF}..HEAD` wouldn't resolve.
+  expect(run).toContain('if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then');
+  expect(run).toContain(
+    'git fetch --no-tags origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"',
+  );
+  expect(run).toContain('scripts/scan-secrets.sh');
+});
+
+test('scan-secrets.sh consumes SCAN_SECRETS_LOG_OPTS and defaults to full history', () => {
+  const scanScript = readFileSync(secretScanScriptPath, 'utf8');
+
+  // Local/manual runs (no SCAN_SECRETS_LOG_OPTS set) must keep scanning
+  // complete history, matching the workflow's push/schedule behavior.
+  expect(scanScript).toContain('log_opts="${SCAN_SECRETS_LOG_OPTS:---all}"');
+  expect(scanScript).toContain('--log-opts="${log_opts}"');
 });
 
 test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
