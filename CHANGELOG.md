@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **Removed the deprecated `GET /auth/strategies` alias.** Deprecated since v1.6.0 and scheduled for removal in v1.8.0, the legacy `{ strategies, warnings }` response shape is gone. Unlike `GET /api/auth/methods`, this route was never registered under the `/api` mount, so it was never behind the unversioned-API tombstone; a request to it now falls through to the SPA shell instead of returning 410. Use `GET /api/v1/auth/status` instead.
+- **Removed the deprecated `GET /auth/strategies` alias.** Deprecated since v1.6.0 and scheduled for removal in v1.8.0, the legacy `{ strategies, warnings }` response shape is gone. Unlike `GET /api/auth/methods`, this route was never registered under the `/api` mount, so it isn't behind the unversioned-API tombstone; it now has its own explicit 410 Gone tombstone instead, registered ahead of the authentication guard so the response is the same whether or not the request is authenticated. Use `GET /api/v1/auth/status` instead.
 
 ## [1.7.0-rc.7] — 2026-08-29
 

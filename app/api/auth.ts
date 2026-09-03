@@ -133,6 +133,30 @@ export async function requireAuthentication(
   next();
 }
 
+const AUTH_STRATEGIES_TOMBSTONE_MESSAGE =
+  'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.';
+
+/**
+ * GET /auth/strategies was a legacy response-shape alias for GET
+ * /api/v1/auth/status ({ strategies, warnings } instead of { providers,
+ * errors }). Deprecated in v1.6.0, removed in v1.8.0 -- see DEPRECATIONS.md.
+ * Registered ahead of requireAuthentication below so it answers 410 whether
+ * or not the caller is authenticated, the same tombstone shape and helper
+ * the unversioned /api/* aliases use in app/api/index.ts, instead of falling
+ * through to the SPA shell or a bare 401.
+ * @param _req
+ * @param res
+ */
+function getAuthStrategiesTombstone(_req: Request, res: Response): void {
+  sendErrorResponse(res, 410, {
+    message: AUTH_STRATEGIES_TOMBSTONE_MESSAGE,
+    details: {
+      migration: '/api/v1/auth/status',
+      docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+    },
+  });
+}
+
 /**
  * Get current user.
  * @param req
@@ -444,13 +468,11 @@ export function init(app: Application): void {
     return next();
   });
 
-  // GET /auth/strategies was a legacy response-shape alias for GET
-  // /api/v1/auth/status ({ strategies, warnings } instead of { providers,
-  // errors }). Deprecated in v1.6.0, removed in v1.8.0 -- see
-  // DEPRECATIONS.md. It is no longer registered here; unlike the /api/*
-  // aliases, /auth/* is not behind the unversioned-API tombstone, so a
-  // request to it now falls through to the UI's SPA catch-all, exactly
-  // like any other unmatched path.
+  // GET /auth/strategies is a 410 tombstone (see getAuthStrategiesTombstone
+  // above) registered ahead of requireAuthentication below, so it answers
+  // the same regardless of whether the caller is authenticated.
+  router.get('/strategies', getAuthStrategiesTombstone);
+
   router.get('/status', getAuthStatus);
 
   // GET /api/auth/methods was a compatibility alias for clients that still

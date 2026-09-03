@@ -1418,16 +1418,32 @@ describe('Auth Router', () => {
       );
     });
 
-    test('should not register the removed /auth/strategies alias', () => {
+    test('should register a 410 tombstone for the removed /auth/strategies alias, ahead of authentication', () => {
       // Removed in v1.8.0 (see DEPRECATIONS.md). Unlike /api/auth/methods,
       // /auth/strategies is mounted under the bare /auth router rather than
-      // /api/*, so it is never covered by the unversioned-API tombstone; a
-      // request to it now falls through to the UI's SPA catch-all instead.
+      // /api/*, so it is never covered by the unversioned-API tombstone.
+      // Registered before requireAuthentication so it answers 410 with or
+      // without credentials, instead of falling through to the SPA shell
+      // (authenticated) or a bare 401 (unauthenticated).
       const app = createApp();
       auth.init(app);
 
-      const getRoutes = mockRouter.get.mock.calls.map((c) => c[0]);
-      expect(getRoutes).not.toContain('/strategies');
+      const strategiesRouteIndex = mockRouter.get.mock.calls.findIndex(
+        (c) => c[0] === '/strategies',
+      );
+      const strategiesRouteOrder = mockRouter.get.mock.invocationCallOrder[strategiesRouteIndex];
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const authMiddlewareOrder = mockRouter.use.mock.invocationCallOrder[authMiddlewareIndex];
+
+      expect(strategiesRouteIndex).toBeGreaterThanOrEqual(0);
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+      expect(strategiesRouteOrder).toBeLessThan(authMiddlewareOrder);
+
+      // No authentication middleware in the route's own handler chain either.
+      expect(mockRouter.get.mock.calls[strategiesRouteIndex]).toHaveLength(2);
     });
 
     test('should register public auth status endpoints for login-time diagnostics', () => {
@@ -1652,6 +1668,36 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         providers: [{ type: 'oauth', name: 'provider', logoutUrl: 'https://logout.example.com' }],
         errors: [{ provider: 'basic:andi', error: 'hash is required' }],
+      });
+    });
+
+    test('getAuthStrategiesTombstone should return 410 with migration details, unauthenticated', () => {
+      const handler = getRouteHandler('get', '/strategies');
+      const res = createResponse();
+      handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+        details: {
+          migration: '/api/v1/auth/status',
+          docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+        },
+      });
+    });
+
+    test('getAuthStrategiesTombstone should return the same 410 body for an authenticated caller', () => {
+      const handler = getRouteHandler('get', '/strategies');
+      const res = createResponse();
+      handler({ principal: { kind: 'session', username: 'john' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+        details: {
+          migration: '/api/v1/auth/status',
+          docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+        },
       });
     });
 

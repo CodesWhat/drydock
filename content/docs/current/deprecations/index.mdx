@@ -234,7 +234,7 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 ### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
 
-`GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. As of v1.8.0, the route is no longer mounted. Unlike `GET /api/auth/methods` above, `/auth/strategies` was never registered under the `/api` mount, so its removal does not fall through to the `410 Gone` tombstone; a request to it now falls through to the SPA catch-all and gets a `200` HTML shell response instead, the same as any other unmatched path.
+`GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. As of v1.8.0, the route no longer serves the old shape. Unlike `GET /api/auth/methods` above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead it has its own explicit **410 Gone** tombstone, registered ahead of the authentication guard so the response is the same whether or not the request carries credentials.
 
 | | |
 | --- | --- |
