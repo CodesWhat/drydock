@@ -244,7 +244,20 @@ function withComposeRestoreFailure(runtimeError: unknown, restoreError: unknown)
     runtimeError.message = `${runtimeError.message} (${restoreDetail})`;
     return runtimeError;
   }
-  return new Error(`${getErrorMessage(runtimeError)} (${restoreDetail})`);
+  // A non-Error rejection has to be replaced rather than amended, so carry the
+  // original across: the compose rollback outcome is what tells a caller the
+  // container was restored, and losing it would downgrade the report.
+  const replacement: Error & { composeRollbackOutcome?: unknown } = new Error(
+    `${getErrorMessage(runtimeError)} (${restoreDetail})`,
+    { cause: runtimeError },
+  );
+  const composeRollbackOutcome = isPlainObject(runtimeError)
+    ? runtimeError.composeRollbackOutcome
+    : undefined;
+  if (composeRollbackOutcome !== undefined) {
+    replacement.composeRollbackOutcome = composeRollbackOutcome;
+  }
+  return replacement;
 }
 
 /**

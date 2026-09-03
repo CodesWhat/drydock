@@ -2043,6 +2043,40 @@ describe('Dockercompose Trigger', () => {
     expect(thrownError.message).toContain('compose restore write failed');
   });
 
+  test('processComposeFile should keep the rollback outcome of a non-Error runtime failure', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const composeRollbackOutcome = {
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'runtime refresh failed',
+    };
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    const runtimeFailure = { message: 'runtime refresh failed', composeRollbackOutcome };
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue(runtimeFailure);
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe(
+      'runtime refresh failed (compose file restore failed: Failed to restore compose file mutations ' +
+        '(/opt/drydock/test/stack.yml: compose restore write failed))',
+    );
+    expect(thrownError.composeRollbackOutcome).toEqual(composeRollbackOutcome);
+    expect(thrownError.cause).toBe(runtimeFailure);
+  });
+
   test('processComposeFile should surface a failed partial compose restore instead of claiming it restored', async () => {
     trigger.configuration.dryrun = false;
     const containers = [
