@@ -281,7 +281,7 @@ secrets:
     file: ./agent_ed25519.pem
 ```
 
-The signing key is parsed and validated once at startup — a missing or malformed key skips that agent with a warning rather than crashing the controller — and is masked in configuration dumps the same way the secret token is.
+The signing key is parsed and validated once at startup. A missing `signingkeyid` or `signingkey` skips that agent with a warning and the controller keeps starting. A key that's present but malformed (invalid PEM, wrong key type) is not caught the same way: it throws while constructing that agent's client, and since nothing wraps agent initialization in a try/catch, it crashes the controller process instead of just skipping the one bad agent. Double-check the key file's contents before deploying it. The signing key is masked in configuration dumps the same way the secret token is.
 
 <Callout type="info">The insecure-secret hard error above only applies to `token` mode. An `ed25519` agent transmits no secret, so it will connect over plain HTTP without `DD_AGENT_ALLOW_INSECURE_SECRET` — though HTTPS is still recommended to protect the request and response payloads themselves.</Callout>
 

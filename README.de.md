@@ -70,7 +70,7 @@
 | Schnellstart          | [Schnellstart](https://getdrydock.com/docs/quickstart)                                                          |
 | Änderungsprotokoll    | [`CHANGELOG.md`](CHANGELOG.md)                                                                                  |
 | Deprecations          | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                            |
-| Roadmap               | Siehe den Abschnitt [„Roadmap“](#roadmap) oben                                                                  |
+| Roadmap               | Siehe den Abschnitt [„Roadmap“](#roadmap) unten                                                                  |
 | Mitwirken             | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                            |
 | Code of Conduct       | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                      |
 | Governance            | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                |
@@ -85,6 +85,8 @@
 
 **Empfohlen: Verwenden Sie einen Socket-Proxy**, um einzuschränken, auf welche Docker-API-Endpunkte Drydock zugreifen kann. Dadurch wird vermieden, dass der Container vollen Zugriff auf den Docker-Socket erhält.
 
+> **Hinweis:** Compose behandelt `$` als Variableninterpolationssyntax, sodass ein argon2id-Hash mit einfachem `$` beschädigt bei Drydock ankommt. Verdoppeln Sie beim Einfügen des echten Hashes jedes `$` zu `$$`, zum Beispiel `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
+
 ```yaml
 services:
   drydock:
@@ -92,6 +94,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -118,12 +122,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>Alternativ: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> Socket-Proxy</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) ist ein standardmäßig verweigernder Docker-Socket-Filter aus demselben CodesWhat-Ökosystem mit einer für drydock erstellten Voreinstellung:
+
+> **Hinweis:** Compose behandelt `$` als Variableninterpolationssyntax, sodass ein argon2id-Hash mit einfachem `$` beschädigt bei Drydock ankommt. Verdoppeln Sie beim Einfügen des echten Hashes jedes `$` zu `$$`, zum Beispiel `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
 
 ```yaml
 services:
@@ -132,6 +141,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -154,6 +165,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 Siehe sockguards [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml)-Voreinstellung für einen Start-`sockguard.yaml` (die gleiche Voreinstellung portwing wird in eigenen Beispielen geliefert).
@@ -168,12 +182,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **Warnung:** Der direkte Socket-Zugriff gewährt dem Container die volle Kontrolle über den Docker-Daemon. Verwenden Sie das oben beschriebene Socket-Proxy-Setup für Produktionsbereitstellungen. Im [Docker Socket Security Guide](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) finden Sie alle Optionen, einschließlich Remote-TLS und rootless Docker.
+>
+> Verwenden Sie einfache Anführungszeichen um den Hash-Wert, wie gezeigt. Doppelte Anführungszeichen lassen die Shell weiterhin `$` expandieren, bevor docker es überhaupt sieht, wodurch ein echter argon2id-Hash verstümmelt wird.
 
 </details>
 

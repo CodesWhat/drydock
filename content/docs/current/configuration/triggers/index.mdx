@@ -127,7 +127,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 | Threshold | Fires on |
 | --- | --- |
 | `all` | Any change (default) |
-| `major` | Major, minor, or patch semver change |
+| `major` | Any semver change, including prerelease (the `major` threshold does not actually cap the change magnitude) |
 | `major-only` | Major only |
 | `minor` | Any semver change that is not major (minor, patch, prerelease) |
 | `minor-only` | Minor only |
@@ -140,9 +140,9 @@ The semver thresholds can be suffixed with `-no-digest` to exclude digest-only u
 
 - `RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.
 - Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DISABLETITLE` (default `false`) to send only the body without a title line.
-- You can set `DD_NOTIFICATION_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, e.g. `DD_NOTIFICATION_NTFY_THRESHOLD=minor` (or `DD_ACTION_{trigger_type}_THRESHOLD` for action triggers).
+- You can set `DD_NOTIFICATION_{trigger_type}_THRESHOLD`, `_ONCE`, `_MODE`, or `_ORDER` to define a default for all triggers of the same type, e.g. `DD_NOTIFICATION_NTFY_THRESHOLD=minor` (or `DD_ACTION_{trigger_type}_...` for action triggers). The same four keys, `THRESHOLD`, `ONCE`, `MODE`, and `ORDER`, are the ones this type-level default mechanism supports.
 - Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.
-- Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.
+- Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`, `ONCE`, `MODE`, and `ORDER`; for each of those keys, if exactly one value is defined among them, that value is used for the others unless they override it explicitly.
 - Setting `ONCE=false` with `MODE=batch` gives a report with all pending updates on every run.
 - `DIGESTCRON` is validated with `cron.validate()` at registration time. An invalid cron expression causes a startup error with a descriptive message — the trigger will not be registered.
 - `MODE=digest` accumulates update events in an in-memory buffer and flushes them as a single batch notification on the `DIGESTCRON` schedule. If the same container has multiple updates within the window, only the latest is included. Containers that are updated before the digest fires are automatically evicted from the buffer. Useful for daily email digests: `DD_NOTIFICATION_SMTP_GMAIL_MODE=digest` + `DD_NOTIFICATION_SMTP_GMAIL_DIGESTCRON=0 8 * * *`.
@@ -275,6 +275,15 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `releaseNotes` | Structured release notes for the available update target, when available | `{ title, body, url, publishedAt, provider }` |
 | `currentReleaseNotes` | Structured release notes for the currently running tag, when available | `{ title, body, url, publishedAt, provider }` |
 | `container.error.message` | Error message (when an error occurred) | `401 Unauthorized` |
+| `currentTag` | Current image tag (top-level shortcut for `container.image.tag.value`) | `1.24.0` |
+| `suggestedTag` | Suggested new tag from the registry (top-level shortcut for `container.result.tag`) | `1.25.0` |
+| `isDigestUpdate` | Whether this update is digest-only rather than a tag change | `false` |
+| `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `maturity-cleared`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
+| `event.error` | Error message (`event.kind` = `update-failed`) | `Pull failed: 401 Unauthorized` |
+| `event.details`, `event.status`, `event.blockingCount` | Alert details, status, and blocking-finding count (`event.kind` = `security-alert`) | `12` |
+| `event.previousHealth` | Health status before the container went unhealthy (`event.kind` = `container-unhealthy`) | `healthy` |
+| `event.minAgeDays`, `event.pendingSince` | Configured maturity window and when the gate started waiting (`event.kind` = `maturity-cleared`) | `7` |
+| `event.agentName`, `event.reason` | Agent name and disconnect reason (`event.kind` = `agent-disconnect` / `agent-reconnect`) | `remote-1` |
 
 ### Batch mode variables
 

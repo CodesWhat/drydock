@@ -70,7 +70,7 @@
 | 快速入门         | [快速入门](https://getdrydock.com/docs/quickstart)                                     |
 | 更新日志         | [`CHANGELOG.md`](CHANGELOG.md)                                                     |
 | 弃用           | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                               |
-| 路线图          | 请参阅上面的[路线图](#roadmap) 部分                                                           |
+| 路线图          | 请参阅下面的[路线图](#roadmap) 部分                                                           |
 | 贡献           | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                               |
 | 行为准则         | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                         |
 | 治理           | [`GOVERNANCE.md`](GOVERNANCE.md)                                                   |
@@ -85,6 +85,8 @@
 
 **推荐：使用套接字代理**来限制哪些 Docker API 端点 Drydock 可以访问。这可以避免容器完全访问 Docker 套接字。
 
+> **注意：** Compose 会将 `$` 视为变量插值语法，因此粘贴单个 `$` 的 argon2id 哈希值到达 Drydock 时会被破坏。粘贴真实哈希值时，请将每个 `$` 替换为 `$$`，例如 `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`。
+
 ```yaml
 services:
   drydock:
@@ -92,6 +94,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -118,12 +122,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>替代方案：<a href="https://github.com/CodesWhat/sockguard">sockguard</a>套接字代理</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) 是来自同一 CodesWhat 生态系统的默认拒绝 Docker 套接字过滤器，具有为 drydock 构建的预设：
+
+> **注意：** Compose 会将 `$` 视为变量插值语法，因此粘贴单个 `$` 的 argon2id 哈希值到达 Drydock 时会被破坏。粘贴真实哈希值时，请将每个 `$` 替换为 `$$`，例如 `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`。
 
 ```yaml
 services:
@@ -132,6 +141,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -154,6 +165,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 请参阅 sockguard 的 [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) 预设，了解起始 `sockguard.yaml`（相同的预设 portwing 在其自己的示例中提供）。
@@ -168,12 +182,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **警告：** 直接套接字访问授予容器对 Docker 守护进程的完全控制权。使用上面的套接字代理设置进行生产部署。请参阅 [Docker Socket 安全指南](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) 了解所有选项，包括远程 TLS 和 rootless Docker。
+>
+> 请按示例使用单引号包裹哈希值。双引号仍会让 shell 在 docker 看到之前展开 `$`，从而破坏真实的 argon2id 哈希值。
 
 </details>
 

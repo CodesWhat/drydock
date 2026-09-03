@@ -26,6 +26,8 @@ The `pushover` trigger lets you send realtime notifications to your devices (And
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
+<Callout type="warn">`RETRY` and `EXPIRE` are optional only while `PRIORITY` is not `2`. Once `PRIORITY=2` (emergency), both become required, and the trigger fails to start without them. `RETRY` must also be at least `30` seconds per Pushover's own API.</Callout>
+
 ## Examples
 
 ### Configuration
