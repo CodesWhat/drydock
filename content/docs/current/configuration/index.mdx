@@ -98,7 +98,7 @@ services:
     # The image includes a built-in HEALTHCHECK — no override needed.
     # If you need custom intervals, use the built-in binary:
     healthcheck:
-      test: /bin/healthcheck ${DD_SERVER_PORT:-3000}
+      test: /bin/healthcheck $${DD_SERVER_PORT:-3000}
       interval: 10s
       timeout: 10s
       retries: 3
