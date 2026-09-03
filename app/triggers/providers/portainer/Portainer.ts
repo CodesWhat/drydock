@@ -21,6 +21,8 @@ const ENDPOINT_ID_LABEL = 'dd.portainer.endpoint-id';
 const DEFAULT_REDEPLOY_TIMEOUT_MS = 5 * 60 * 1000;
 const REDEPLOY_POLL_INTERVAL_MS = 2 * 1000;
 const PORTAINER_REQUEST_TIMEOUT_MS = 30 * 1000;
+// Portainer stack types: 1 Swarm, 2 standalone Compose, 3 Kubernetes.
+const STANDALONE_COMPOSE_STACK_TYPE = 2;
 
 type PortainerUpdateMode = 'auto' | 'env' | 'compose';
 
@@ -37,6 +39,7 @@ interface PortainerTriggerConfiguration extends DockerTriggerConfiguration {
 
 interface PortainerStackSummary {
   Id: number;
+  Type?: number;
   Name?: string;
   EndpointId?: number;
   ProjectPath?: string;
@@ -525,6 +528,24 @@ function validatePortainerEnvVariable(
   }
 }
 
+/**
+ * Refuse anything that is not a standalone Compose stack. A Swarm stack carries
+ * the same Compose labels, but its nodes pull the tag themselves, so Drydock's
+ * local pull, gate and convergence check say nothing about what the cluster
+ * ends up running.
+ */
+function assertStandaloneComposeStack(
+  stack: { Type?: number },
+  stackId: number,
+  source: string,
+): void {
+  if (stack.Type !== STANDALONE_COMPOSE_STACK_TYPE) {
+    throw new Error(
+      `Portainer stack ${stackId} is not a standalone Compose stack: ${source} reports type ${stack.Type ?? 'unknown'}. Swarm and Kubernetes stacks are not supported because their nodes pull the image themselves.`,
+    );
+  }
+}
+
 function isGitBackedStack(stack: PortainerStackSummary): boolean {
   return (
     (typeof stack.WorkflowID === 'number' && stack.WorkflowID > 0) ||
@@ -861,9 +882,19 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       throw new Error(`Unable to resolve Portainer stack for container ${container.name}`);
     }
 
+    // Checked on both responses, and on the detail response by itself, so the
+    // merge below cannot let a detail payload that omits the type inherit the
+    // summary's. Both run before the stack file fetch, the pull and the gate.
+    assertStandaloneComposeStack(matchedStack, matchedStack.Id, 'the Portainer stack list');
+    const stackDetails = await this.getPortainerStack(matchedStack.Id);
+    assertStandaloneComposeStack(
+      stackDetails,
+      matchedStack.Id,
+      'the Portainer stack detail response',
+    );
     const stack = {
       ...matchedStack,
-      ...(await this.getPortainerStack(matchedStack.Id)),
+      ...stackDetails,
     };
     if (endpointId !== undefined && stack.EndpointId !== endpointId) {
       throw new Error(`Portainer stack ${stack.Id} does not belong to endpoint ${endpointId}`);
@@ -1038,7 +1069,6 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
 
     await this.pullImage(context.dockerApi, context.auth, context.newImage, logContainer);
 
-    resolved.targetImageId = await this.capturePulledImageId(context.dockerApi, context.newImage);
     // Pin the mutable repo:tag to the digest the pull actually fetched, exactly
     // as the Docker and Compose paths do, so the gate verifies and scans that
     // image instead of whatever the tag points at by the time it runs. Under
@@ -1051,6 +1081,14 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       container,
       logContainer,
     );
+    // The identity the redeploy has to converge on comes from the bound digest,
+    // not from the mutable tag. Reading it from the tag would anchor the check
+    // on whatever the tag happened to point at rather than on the image the
+    // gate scanned, so a tag that moves away and back again (A -> B -> A) would
+    // satisfy the before/after comparison below while the running container was
+    // never the scanned image.
+    const scannedImage = binding.imageIdentity ?? context.newImage;
+    resolved.targetImageId = await this.capturePulledImageId(context.dockerApi, scannedImage);
     if (postPullHook) {
       await postPullHook(
         getRequestedOperationId(container, runtimeContext) ?? '',
@@ -1058,6 +1096,12 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         { skipSecurityGate: binding.skipSecurityGate === true },
       );
     }
+    // Portainer redeploys from the reference in the stack file with pullImage
+    // disabled, so the tag has to still resolve to the scanned image at the
+    // moment the stack is handed over. This cannot bind the redeploy to that
+    // image the way the Docker path's own create does, because Portainer
+    // performs the create; a swap after this point is caught by the
+    // convergence check below and the stack is restored.
     const verifiedTargetImageId = await this.capturePulledImageId(
       context.dockerApi,
       context.newImage,
