@@ -261,6 +261,25 @@ function withComposeRestoreFailure(runtimeError: unknown, restoreError: unknown)
 }
 
 /**
+ * Collect the distinct update-operation ids requested for a set of compose
+ * runtime mappings. Several replicas of one service can share a mapping list,
+ * so the set is what callers want rather than one entry per container.
+ */
+function collectComposeOperationIds(
+  mappings: ComposeRuntimeUpdateMapping[],
+  runtimeContext: Record<string, unknown> | undefined,
+): Set<string> {
+  const operationIds = new Set<string>();
+  for (const { container } of mappings) {
+    const operationId = getRequestedOperationId(container, runtimeContext);
+    if (operationId) {
+      operationIds.add(operationId);
+    }
+  }
+  return operationIds;
+}
+
+/**
  * Re-order `mappingsNeedingRuntimeUpdate` into dependency-graph topological
  * order before `runRuntimeUpdatesForComposeMappings`'s sequential loop
  * (v1.7 Phase 6.1, #219 — design §3): this loop was already the easiest
@@ -2244,14 +2263,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     runtimeContext: Record<string, unknown> | undefined,
     error: unknown,
   ): void {
-    const operationIds = new Set<string>();
-    for (const { container } of mappings) {
-      const operationId = getRequestedOperationId(container, runtimeContext);
-      if (operationId) {
-        operationIds.add(operationId);
-      }
-    }
-    for (const operationId of operationIds) {
+    for (const operationId of collectComposeOperationIds(mappings, runtimeContext)) {
       const operation = updateOperationStore.getOperationById(operationId);
       if (operation?.status === 'queued' || operation?.status === 'in-progress') {
         updateOperationStore.markOperationTerminal(operationId, {
@@ -2260,6 +2272,41 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           lastError: getErrorMessage(error),
         });
       }
+    }
+  }
+
+  /**
+   * Bring update operations back in line with the compose file after a restore
+   * failure. The runtime rollback has already terminalized them as
+   * `rolled-back`, and `markOperationTerminal` refuses to rewrite a terminal
+   * row, so without this the record would keep claiming a clean rollback while
+   * the compose file is still mutated. Reopen those rows and terminalize them
+   * again as a failed rollback carrying the combined error, which also emits a
+   * superseding lifecycle event. Rows that already record a failed rollback are
+   * left alone: they are not lying, and re-terminalizing them would only send a
+   * duplicate notification.
+   */
+  private correctRolledBackOperationsAfterComposeRestoreFailure(
+    mappings: ComposeRuntimeUpdateMapping[],
+    runtimeContext: Record<string, unknown> | undefined,
+    error: unknown,
+  ): void {
+    const lastError = getErrorMessage(error);
+    for (const operationId of collectComposeOperationIds(mappings, runtimeContext)) {
+      const operation = updateOperationStore.getOperationById(operationId);
+      if (operation?.status !== 'rolled-back') {
+        continue;
+      }
+      updateOperationStore.reopenTerminalOperation(operationId, {
+        status: 'in-progress',
+        phase: 'rollback-started',
+      });
+      updateOperationStore.markOperationTerminal(operationId, {
+        status: 'failed',
+        phase: 'rollback-failed',
+        rollbackReason: operation.rollbackReason,
+        lastError,
+      });
     }
   }
 
@@ -2710,7 +2757,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         } catch (restoreError: unknown) {
           // restoreComposeFileMutations already logged the restore failure; carry it
           // on the runtime error so the caller records that the file needs repair.
-          throw withComposeRestoreFailure(runtimeError, restoreError);
+          const failure = withComposeRestoreFailure(runtimeError, restoreError);
+          this.correctRolledBackOperationsAfterComposeRestoreFailure(
+            mappingsNeedingRuntimeUpdate,
+            requestedRuntimeContext,
+            failure,
+          );
+          throw failure;
         }
       } else {
         /* v8 ignore next 4 -- service is a fallback for malformed runtime update payloads. */
@@ -2731,7 +2784,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         } catch (restoreError: unknown) {
           // restoreComposeFileMutations already logged the restore failure; carry it
           // on the runtime error rather than claiming a restore that did not happen.
-          throw withComposeRestoreFailure(runtimeError, restoreError);
+          const failure = withComposeRestoreFailure(runtimeError, restoreError);
+          this.correctRolledBackOperationsAfterComposeRestoreFailure(
+            mappingsNeedingRuntimeUpdate,
+            requestedRuntimeContext,
+            failure,
+          );
+          throw failure;
         }
         this.log.warn(
           `Restored compose file mutations for ${composeFileChainSummary} after failed runtime refresh while ` +
