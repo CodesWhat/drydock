@@ -26,7 +26,38 @@ vi.mock('../../../registry/index.js', () => ({
   })),
 }));
 
+const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+vi.mock('../../../configuration/index.js', async () => {
+  const actual = await vi.importActual<typeof import('../../../configuration/index.js')>(
+    '../../../configuration/index.js',
+  );
+  return {
+    ...actual,
+    getSecurityConfiguration: () => mockGetSecurityConfiguration(),
+  };
+});
+
+const PULLED_DIGEST = `sha256:${'a'.repeat(64)}`;
+
+function createSecurityConfiguration(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    scanner: 'trivy',
+    blockSeverities: ['CRITICAL', 'HIGH'],
+    trivy: { server: '', command: 'trivy', timeout: 120000 },
+    signature: {
+      verify: false,
+      cosign: { command: 'cosign', timeout: 60000, key: '', identity: '', issuer: '' },
+    },
+    sbom: { enabled: false, formats: ['spdx-json'] },
+    ...overrides,
+  };
+}
+
 function makeTrigger(options: { skipEndpointVerification?: boolean } = {}) {
+  // Security is off unless a test opts in, so the inherited identity binding
+  // reports policy `disabled` and leaves the rest of these tests untouched.
+  mockGetSecurityConfiguration.mockReset();
   const trigger = new Portainer();
   trigger.configuration = {
     url: 'http://portainer.lan',
@@ -1310,7 +1341,7 @@ test('performContainerUpdate pulls and runs the post-pull hook before a dry-run 
   );
   expect(result).toBe(false);
   expect(order).toEqual(['pull', 'hook']);
-  expect(inspect).toHaveBeenCalledTimes(2);
+  expect(inspect).toHaveBeenCalledTimes(3);
   expect(redeploy).not.toHaveBeenCalled();
   expect(wait).not.toHaveBeenCalled();
 });
@@ -1426,7 +1457,7 @@ test('performContainerUpdate captures the local image identity for convergence',
     hook,
   );
   expect(resolved.targetImageId).toBe('sha256:new');
-  expect(dockerApi.getImage).toHaveBeenCalledTimes(2);
+  expect(dockerApi.getImage).toHaveBeenCalledTimes(3);
   expect(hook).toHaveBeenCalledOnce();
   expect(wait).toHaveBeenCalledWith(
     dockerApi,
@@ -1436,6 +1467,118 @@ test('performContainerUpdate captures the local image identity for convergence',
     }),
     trigger.log,
   );
+});
+
+function makeRunningReplica() {
+  return {
+    State: 'running',
+    ImageID: 'sha256:old',
+    Image: 'pihole/pihole:2026.05.0',
+    Labels: {
+      'com.docker.compose.project': 'pihole',
+      'com.docker.compose.service': 'pihole',
+    },
+  };
+}
+
+test('performContainerUpdate pins the post-pull gate to the digest that was pulled', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${PULLED_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+  const hook = vi.fn().mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    hook,
+  );
+
+  expect(result).toBe(true);
+  expect(hook).toHaveBeenCalledWith('', `pihole/pihole:2026.07.2@${PULLED_DIGEST}`, {
+    skipSecurityGate: false,
+  });
+});
+
+test('performContainerUpdate fails closed when the pulled image cannot be pinned', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn(),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  const hook = vi.fn().mockResolvedValue(undefined);
+
+  await expect(
+    trigger.performContainerUpdate(
+      { dockerApi, auth: undefined, newImage: resolved.targetImage },
+      makeContainer(),
+      trigger.log,
+      undefined,
+      hook,
+    ),
+  ).rejects.toThrow('Unable to bind security gate to the pulled image for pihole');
+  expect(hook).not.toHaveBeenCalled();
+  expect(redeploy).not.toHaveBeenCalled();
+  expect(dockerApi.listContainers).not.toHaveBeenCalled();
+});
+
+test('performContainerUpdate records the skipped scan and keeps the deferred lifecycle under warn', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  const audit = vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+  const hook = vi.fn().mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    hook,
+  );
+
+  expect(result).toBe(true);
+  expect(hook).toHaveBeenCalledWith('', undefined, { skipSecurityGate: true });
+  expect(audit).toHaveBeenCalledWith(
+    'security-scan-skipped',
+    expect.objectContaining({ name: 'pihole' }),
+    'error',
+    expect.stringContaining('DD_SECURITY_AVAILABILITY_POLICY=warn'),
+  );
+  expect(redeploy).toHaveBeenCalledOnce();
 });
 
 test.each([
@@ -1550,6 +1693,7 @@ test('performContainerUpdate aborts before Portainer PUT when the pulled image c
   vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
   const inspect = vi
     .fn()
+    .mockResolvedValueOnce({ Id: 'sha256:approved' })
     .mockResolvedValueOnce({ Id: 'sha256:approved' })
     .mockResolvedValueOnce({ Id: 'sha256:changed' });
   const dockerApi = {

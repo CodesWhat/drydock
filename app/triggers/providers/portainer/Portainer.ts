@@ -3,6 +3,7 @@ import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
+import type { PostPullHookOptions } from '../docker/UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import {
   updateComposeServiceImageInText,
@@ -1015,7 +1016,11 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     if (container.updateKind?.kind !== 'tag') {
       throw new Error('Portainer provider only supports tag updates');
@@ -1034,8 +1039,24 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     await this.pullImage(context.dockerApi, context.auth, context.newImage, logContainer);
 
     resolved.targetImageId = await this.capturePulledImageId(context.dockerApi, context.newImage);
+    // Pin the mutable repo:tag to the digest the pull actually fetched, exactly
+    // as the Docker and Compose paths do, so the gate verifies and scans that
+    // image instead of whatever the tag points at by the time it runs. Under
+    // binding policy `required` this throws before the hook and nothing is
+    // redeployed; under `warn` it records the skipped scan and returns
+    // `skipSecurityGate`, which suppresses only the gate half of the hook.
+    const binding = await this.bindPulledImageIdentity(
+      context.dockerApi,
+      context.newImage,
+      container,
+      logContainer,
+    );
     if (postPullHook) {
-      await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '');
+      await postPullHook(
+        getRequestedOperationId(container, runtimeContext) ?? '',
+        binding.imageIdentity,
+        { skipSecurityGate: binding.skipSecurityGate === true },
+      );
     }
     const verifiedTargetImageId = await this.capturePulledImageId(
       context.dockerApi,
