@@ -66,128 +66,125 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.9</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.10</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.9</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.10</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.9</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.10</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.9</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.10</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.9</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.10</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.9 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.10 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    singleFlight: string;
-    deadline: string;
-    onceKey: string;
-    deprecationBanner: string;
-    docsAudit: string;
-    getStarted: string;
+    onceReservation: string;
+    retryBuffer: string;
+    deadlineTimer: string;
+    hookLocation: string;
+    contributorCredit: string;
+    hookAbort: string;
   }
 > = {
   'README.de.md': {
-    singleFlight:
-      '**`watchFromCron()` ist jetzt Single-Flight, sodass überlappende Scans in einer großen Flotte nicht mehr denselben Trigger mehrfach für ein Update auslösen.**',
-    deadline: 'läuft jetzt gegen eine Frist',
-    onceKey:
-      '**Ein `once=true`-Trigger löst nicht mehr Stunden später erneut für ein bereits gemeldetes Tag-Update aus, wenn eine Registry die Digest-Abfrage ratenbegrenzt**',
-    deprecationBanner:
-      '**Die Deprecation-Banner der UI für die entfernten `DD_TRIGGER_*`-Umgebungsvariablen und die curl-basierte Healthcheck-Überschreibung sagen jetzt, dass diese Dinge bereits entfernt sind**',
-    docsAudit:
-      '**Ein Dokumentations-Audit hat README, DEPRECATIONS.md und die Konfigurations-/Trigger-/Registry-/API-/Monitoring-/Agenten-Dokumentation gegen den tatsächlichen Code dieses Codebaums korrigiert**',
-    getStarted:
-      'die Get-Started-Snippets der Marketing-Website starten jetzt eine Instanz, die tatsächlich gesund wird',
+    onceReservation:
+      '**Batch- und Digest-Sends mit `once=true` nehmen jetzt dieselbe Reservierung des Benachrichtigungs-Slots vor wie der einfache Pfad, sodass ein manueller Scan, der einen Cron-Scan überlappt, dasselbe Update nicht mehr zweimal melden kann.**',
+    retryBuffer: 'der Batch-Retry-Puffer trägt keinen unreservierten Eintrag mehr an den Trigger',
+    deadlineTimer:
+      '**Das Deregistrieren eines Watchers löscht jetzt den Fristen-Timer des Cron-Scans**',
+    hookLocation:
+      '**Der Getting-Started-Leitfaden sagt jetzt, dass Hook-Skripte innerhalb des Drydock-Containers laufen**',
+    contributorCredit: 'der Agent-Registry-Lookup-Fix nennt jetzt den Beitragenden',
+    hookAbort:
+      '**Derselbe Hooks-Absatz sagt jetzt, dass ein fehlgeschlagener Pre-Hook das Update standardmäßig abbricht, und nennt `dd.hook.pre.abort=false` als Opt-out**',
   },
   'README.es.md': {
-    singleFlight:
-      '**`watchFromCron()` ahora es de ejecución única, de modo que los escaneos superpuestos en una flota grande ya no disparan el mismo activador varias veces para la misma actualización.**',
-    deadline: 'compite contra un plazo límite',
-    onceKey:
-      '**Un activador `once=true` ya no se dispara de nuevo horas después para una actualización de etiqueta que ya había anunciado, cuando un registro limita la tasa de la consulta de digest**',
-    deprecationBanner:
-      '**Los banners de obsolescencia de la interfaz para las variables de entorno `DD_TRIGGER_*` eliminadas y la anulación del healthcheck basada en curl ahora indican que esas cosas ya desaparecieron**',
-    docsAudit:
-      '**Una auditoría de documentación corrigió el README, DEPRECATIONS.md y la documentación de configuración/activadores/registros/API/monitoreo/agentes frente al código real de este árbol**',
-    getStarted:
-      'los fragmentos de Get Started del sitio de marketing ahora despliegan una instancia que realmente queda saludable',
+    onceReservation:
+      '**Los envíos por lotes y por resumen con `once=true` ahora toman la misma reserva de la ranura de notificación que toma la ruta simple, de modo que un escaneo manual superpuesto a un escaneo de cron ya no puede anunciar la misma actualización dos veces.**',
+    retryBuffer:
+      'el búfer de reintentos por lotes ya no lleva al activador una entrada sin reservar',
+    deadlineTimer:
+      '**Dar de baja un watcher ahora borra el temporizador de plazo del escaneo de cron**',
+    hookLocation:
+      '**La guía de inicio ahora indica que los scripts de hook se ejecutan dentro del contenedor de Drydock**',
+    contributorCredit:
+      'la corrección de búsqueda de registro del agente ahora acredita a quien la escribió',
+    hookAbort:
+      '**El mismo párrafo de hooks ahora indica que un pre-hook fallido aborta la actualización de forma predeterminada y nombra `dd.hook.pre.abort=false` como la opción para desactivarlo**',
   },
   'README.fr.md': {
-    singleFlight:
-      '**`watchFromCron()` est désormais à exécution unique (single-flight), si bien que des scans qui se chevauchent sur une grande flotte ne déclenchent plus le même déclencheur plusieurs fois pour une seule mise à jour.**',
-    deadline: 'confronté à une échéance',
-    onceKey:
-      "**Un déclencheur `once=true` ne se redéclenche plus des heures plus tard pour une mise à jour de tag déjà annoncée, lorsqu'un registre limite le débit de la recherche de digest**",
-    deprecationBanner:
-      "**Les bannières de dépréciation de l'interface pour les variables d'environnement `DD_TRIGGER_*` supprimées et la surcharge du healthcheck basée sur curl indiquent désormais que ces éléments ont déjà disparu**",
-    docsAudit:
-      '**Un audit de la documentation a corrigé le README, DEPRECATIONS.md et la documentation de configuration/déclencheurs/registres/API/supervision/agents par rapport au code réel de cet arbre**',
-    getStarted:
-      'les extraits Get Started du site marketing déploient désormais une instance qui devient réellement saine',
+    onceReservation:
+      "**Les envois par lot et par condensé avec `once=true` prennent désormais la même réservation de créneau de notification que le chemin simple, si bien qu'un scan manuel qui chevauche un scan cron ne peut plus annoncer deux fois la même mise à jour.**",
+    retryBuffer:
+      'le tampon de réessai par lot ne porte plus au déclencheur une entrée sans réservation',
+    deadlineTimer:
+      "**Le désenregistrement d'un watcher efface désormais le minuteur d'échéance du scan cron**",
+    hookLocation:
+      "**Le guide de démarrage précise désormais que les scripts de hook s'exécutent à l'intérieur du conteneur Drydock**",
+    contributorCredit:
+      "le correctif de recherche de registre de l'agent crédite désormais la personne qui l'a écrit",
+    hookAbort:
+      "**Le même paragraphe sur les hooks précise désormais qu'un pre-hook en échec interrompt la mise à jour par défaut et nomme `dd.hook.pre.abort=false` comme option de désactivation**",
   },
   'README.pl.md': {
-    singleFlight:
-      '**`watchFromCron()` działa teraz w trybie single-flight, dzięki czemu nakładające się skany w dużej flocie nie uruchamiają już tego samego wyzwalacza wielokrotnie dla jednej aktualizacji.**',
-    deadline: 'jest teraz uruchamiany z terminem',
-    onceKey:
-      '**Wyzwalacz `once=true` nie uruchamia się już ponownie godziny później dla aktualizacji tagu, którą już zgłosił, gdy rejestr ogranicza liczbę zapytań o digest**',
-    deprecationBanner:
-      '**Banery przestarzałości w interfejsie dla usuniętych zmiennych środowiskowych `DD_TRIGGER_*` oraz nadpisania healthchecka opartego na curl teraz informują, że te rzeczy już zniknęły**',
-    docsAudit:
-      '**Audyt dokumentacji poprawił README, DEPRECATIONS.md oraz dokumentację konfiguracji/wyzwalaczy/rejestrów/API/monitoringu/agentów zgodnie z rzeczywistym kodem tego drzewa**',
-    getStarted:
-      'fragmenty Get Started na stronie marketingowej wdrażają teraz instancję, która faktycznie staje się zdrowa',
+    onceReservation:
+      '**Wysyłki zbiorcze i skrótowe z `once=true` biorą teraz tę samą rezerwację slotu powiadomienia co ścieżka prosta, dzięki czemu ręczny skan nakładający się na skan crona nie może już zgłosić tej samej aktualizacji dwukrotnie.**',
+    retryBuffer: 'bufor ponowień wsadowych nie przekazuje już do wyzwalacza wpisu bez rezerwacji',
+    deadlineTimer: '**Wyrejestrowanie watchera czyści teraz licznik terminu skanu crona**',
+    hookLocation:
+      '**Przewodnik pierwszych kroków mówi teraz, że skrypty hooków działają wewnątrz kontenera Drydock**',
+    contributorCredit: 'poprawka wyszukiwania rejestru dla agenta wskazuje teraz jej autora',
+    hookAbort:
+      '**Ten sam akapit o hookach mówi teraz, że nieudany pre-hook domyślnie przerywa aktualizację, i wskazuje `dd.hook.pre.abort=false` jako sposób rezygnacji**',
   },
   'README.pt-BR.md': {
-    singleFlight:
-      '**`watchFromCron()` agora é single-flight, de modo que varreduras sobrepostas em uma frota grande não disparam mais o mesmo gatilho várias vezes para a mesma atualização.**',
-    deadline: 'compete contra um prazo',
-    onceKey:
-      '**Um gatilho `once=true` não dispara mais horas depois para uma atualização de tag que já havia anunciado, quando um registro limita a taxa da consulta de digest**',
-    deprecationBanner:
-      '**Os banners de descontinuação da UI para as variáveis de ambiente `DD_TRIGGER_*` removidas e a substituição do healthcheck baseada em curl agora dizem que essas coisas já foram removidas**',
-    docsAudit:
-      '**Uma auditoria de documentação corrigiu o README, o DEPRECATIONS.md e a documentação de configuração/gatilhos/registros/API/monitoramento/agentes em relação ao código real desta árvore**',
-    getStarted:
-      'os trechos de Get Started do site de marketing agora implantam uma instância que realmente fica saudável',
+    onceReservation:
+      '**Os envios em lote e por digest com `once=true` agora fazem a mesma reserva de vaga de notificação que o caminho simples faz, de modo que uma varredura manual sobreposta a uma varredura do cron não pode mais anunciar a mesma atualização duas vezes.**',
+    retryBuffer:
+      'o buffer de retentativas em lote não leva mais ao gatilho uma entrada sem reserva',
+    deadlineTimer:
+      '**Cancelar o registro de um watcher agora limpa o temporizador de prazo da varredura do cron**',
+    hookLocation:
+      '**O guia de primeiros passos agora diz que os scripts de hook rodam dentro do contêiner do Drydock**',
+    contributorCredit: 'a correção de busca de registro do agente agora credita quem a escreveu',
+    hookAbort:
+      '**O mesmo parágrafo sobre hooks agora diz que um pre-hook com falha aborta a atualização por padrão e nomeia `dd.hook.pre.abort=false` como a forma de desativar isso**',
   },
   'README.zh-CN.md': {
-    singleFlight:
-      '**`watchFromCron()` 现在是单次并发（single-flight）执行，因此大规模集群中重叠的扫描不会再为同一次更新多次触发同一个触发器。**',
-    deadline: '与截止时间竞争',
-    onceKey:
-      '**当注册表对摘要查询进行限流时，`once=true` 触发器不会再在数小时后为已经通知过的标签更新重新触发**',
-    deprecationBanner:
-      '**界面中针对已移除的 `DD_TRIGGER_*` 环境变量和基于 curl 的健康检查覆盖的弃用横幅现在会说明这些内容已经移除**',
-    docsAudit:
-      '**一次文档审计根据本代码树的实际代码修正了 README、DEPRECATIONS.md 以及配置/触发器/注册表/API/监控/代理相关文档**',
-    getStarted: '营销网站的 Get Started 代码片段现在部署的实例能够真正变为健康状态',
+    onceReservation:
+      '**批量和摘要模式下的 `once=true` 发送现在会像简单路径一样先占用通知名额，因此与定时扫描重叠的手动扫描不会再把同一次更新通报两次。**',
+    retryBuffer: '批量重试缓冲区也不会再把未占位的条目送到触发器',
+    deadlineTimer: '**注销 watcher 现在会清除定时扫描的截止计时器**',
+    hookLocation: '**入门指南现在说明 hook 脚本在 Drydock 容器内运行**',
+    contributorCredit: '代理的注册表查找修复也标注了它的贡献者',
+    hookAbort:
+      '**同一段 hooks 说明现在写明失败的 pre-hook 默认会中止更新，并指出 `dd.hook.pre.abort=false` 是退出该行为的开关**',
   },
 };
 
@@ -245,6 +242,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc7--2026-08-29',
   './CHANGELOG.md#170-rc8--2026-09-03',
   './CHANGELOG.md#170-rc9--2026-09-03',
+  './CHANGELOG.md#170-rc10--2026-09-04',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -299,25 +297,25 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
     const releaseBullets = [
-      release.singleFlight,
-      release.onceKey,
-      release.deprecationBanner,
-      release.docsAudit,
+      release.onceReservation,
+      release.deadlineTimer,
+      release.hookLocation,
+      release.hookAbort,
     ].map((fragment) => getBullet(releaseBlock, fragment));
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
     expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[0]).toContain(release.deadline);
-    expect(releaseBullets[3]).toContain(release.getStarted);
+    expect(releaseBullets[0]).toContain(release.retryBuffer);
+    expect(releaseBullets[2]).toContain(release.contributorCredit);
     expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/979',
-      'https://github.com/CodesWhat/drydock/pull/979',
-      'https://github.com/CodesWhat/drydock/pull/988',
-      'https://github.com/CodesWhat/drydock/pull/988',
+      'https://github.com/CodesWhat/drydock/pull/1001',
+      'https://github.com/CodesWhat/drydock/pull/996',
+      'https://github.com/CodesWhat/drydock/pull/998',
+      'https://github.com/CodesWhat/drydock/pull/998',
     ]);
     expect(getUrls(releaseBullets[0]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/979',
+      'https://github.com/CodesWhat/drydock/pull/998',
     ]);
   });
 
