@@ -4,14 +4,11 @@ The published documentation is available at **[getdrydock.com/docs](https://getd
 
 ## Source of truth
 
-Documentation content is now versioned at:
+Documentation content is versioned under `/content/docs`:
 
-- `/content/docs/current` (`v1.5`, active release docs)
-- `/content/docs/v1.4` (previous stable docs)
-- `/content/docs/v1.3` (legacy docs)
+- `/content/docs/current` is the active release line and is published under the newest version slug
+- `/content/docs/vX.Y` directories are frozen snapshots of earlier lines
 
-The site/docs app lives in `/apps/web` and uses `npm run sync:docs` to copy:
+The version list itself lives in `apps/web/scripts/docs-versions.mjs`. Its first entry is the slug `current` publishes as, and every other entry maps a snapshot directory to its slug. Update that file, not this one, when a line ships or retires.
 
-- `current -> apps/web/content/docs/v1.5`
-- `v1.4 -> apps/web/content/docs/v1.4`
-- `v1.3 -> apps/web/content/docs/v1.3`
+The site/docs app lives in `/apps/web` and uses `npm run sync:docs` to copy each entry from `docs-versions.mjs` into `apps/web/content/docs/<slug>`. The synced copy is gitignored.
