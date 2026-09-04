@@ -20,7 +20,7 @@ export function init() {
   }
   maintenanceSkipCounter = new Counter({
     name: 'dd_watcher_maintenance_skip_total',
-    help: 'The number of watch cycles skipped due to maintenance window',
+    help: 'The number of watch cycles skipped, or automatic installs deferred, due to maintenance window',
     labelNames: ['type', 'name'],
   });
 
