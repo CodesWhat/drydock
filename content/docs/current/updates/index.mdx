@@ -5,6 +5,20 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.8 Highlights — September 4, 2026
+
+Three fixes and a docs pass: overlapping scans no longer fire the same
+trigger repeatedly for one update, because `watchFromCron()` is now
+single-flight; a `once=true` trigger no longer re-fires hours later for an
+update it already announced when a rate-limited digest lookup shifts the
+notification-history hash; batch and digest updates now take the same
+notification reservation the simple path does, so an overlapping manual scan
+cannot double-send, and a deregistered watcher no longer warns about a scan
+deadline it no longer owns; and `DEPRECATIONS.md` and the generated
+deprecations page are realigned with the shipped code. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc8--2026-09-04)
+for the full release notes.
+
 ## v1.6.1-rc.7 Highlights — September 3, 2026
 
 Six fixes: `DD_AGENT_ALLOW_INSECURE_SECRET` no longer registers a phantom
