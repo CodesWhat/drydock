@@ -699,7 +699,7 @@ Separating detection from the installation step, so discovery and registry check
 
 The window never applies to you. **Manual updates from the UI or API are not gated by it** — the container's Update action stays available at any hour. When you use it outside the window, the confirm dialog notes that the update is currently policy-blocked with _"Outside maintenance window — auto update deferred until the window opens"_ and the button reads **Update anyway**. That is a heads-up, not a refusal. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility#maintenance-window-closed-in-the-update-dialog).
 
-A manual scan is not gated. Triggering a scan from the UI, or calling `POST /api/v1/containers/watch` (all watchers) or `POST /api/v1/containers/{id}/watch` (a single container) directly, runs immediately regardless of the window, those calls go straight to the watcher's `watch()` method, which the maintenance-window check never sits in front of. Only the scheduled cron tick (and the queued catch-up it leaves behind) is gated.
+A manual recheck is not gated. The recheck-all action on the containers view, or calling `POST /api/v1/containers/watch` (all watchers) or `POST /api/v1/containers/{id}/watch` (a single container) directly, runs immediately regardless of the window. Those calls go straight to the watcher's `watch()` method, which the maintenance-window check never sits in front of. This is the watcher recheck, not the security **Scan now** action, which calls `/scan` and is unrelated to the window. Only the scheduled cron tick (and the queued catch-up it leaves behind) is gated.
 
 Only allow automatic updates between 2 AM and 4 AM in Europe/Berlin:
 

@@ -432,7 +432,7 @@ services:
     environment:
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
       - DD_AGENT_REMOTE1_SECRET=pick-a-long-random-string   # must match the agent's DD_AGENT_SECRET
-      - DD_AGENT_ALLOW_INSECURE_SECRET=true                 # plain-HTTP LAN only; see note above
+      - DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem          # TLS to the agent, as in the setup example above
       - DD_REGISTRY_GITEA_PRIVATE_URL=https://git.example.com
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=john
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe
