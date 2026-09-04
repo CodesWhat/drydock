@@ -1315,8 +1315,19 @@ describe('Dockercompose Trigger', () => {
     }
   });
 
-  test('a recreate that lands on a different image than the pull should be removed and fail (DR-54)', async () => {
+  test('a recreate that lands on a different image than the preflight pulled should be removed and fail (DR-54)', async () => {
     trigger.configuration.dryrun = false;
+    // The default posture, spelled out rather than left to the file-level
+    // configuration mock: no scanner and the fail-closed availability policy.
+    // The runtime context below is what a compose-file-once preflight produces
+    // under it, an image ID and no unbound-scan warning, because with scanning
+    // off the identity binding policy is `disabled` and never warns.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
     const container = makeContainer({ name: 'nginx-a' });
     mockDockerApi.getImage.mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
@@ -1350,7 +1361,6 @@ describe('Dockercompose Trigger', () => {
           dockerApi: mockDockerApi,
           newImage: 'nginx:1.1.0',
           pulledImageId: 'sha256:pulled-image',
-          securityGateUnboundWarn: true,
         },
       }),
     ).rejects.toThrow(
@@ -1360,6 +1370,569 @@ describe('Dockercompose Trigger', () => {
     expect(removeCreated).toHaveBeenCalledWith({ force: true });
     expect(startContainerSpy).not.toHaveBeenCalled();
     expect(rollbackSpy).toHaveBeenCalled();
+  });
+
+  test('a moved tag on an update with no preflighted identity should be kept under availability policy warn (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // Scanning off with the policy set to warn: the operator has said they
+    // would rather the update land than have it refused for want of a certain
+    // answer. The runtime context carries no preflight identity, so this
+    // container resolved its own image and nothing else was created against a
+    // shared decision this one could split.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+    // A concurrent docker pull moved nginx:1.1.0 between the pull and the
+    // create, so the container that came back runs a different image.
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+      skipPull: true,
+      runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+    });
+
+    // The container stands, and the warning names both image IDs so the
+    // operator can see which one is actually running.
+    expect(startContainerSpy).toHaveBeenCalled();
+    expect(removeCreated).not.toHaveBeenCalled();
+    expect(rollbackSpy).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'the local tag moved between the pull and the recreate. ' +
+        'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+    // With no scanner the identity binding policy is `disabled` and records
+    // nothing, so this is the only audit row the container gets.
+    expect(securityAuditSpy).toHaveBeenCalledTimes(1);
+    expect(securityAuditSpy).toHaveBeenCalledWith(
+      'security-scan-skipped',
+      container,
+      'error',
+      'Security scan skipped because the local tag moved between the pull and the recreate: ' +
+        'nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+  });
+
+  test('a moved tag on a compose-file-once update reached with no preflighted identity should be kept under availability policy warn (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // The config flag alone is not the marker: compose-file-once is enabled,
+    // but this call carries no preflight identity in its runtime context, so
+    // the refresh reached the check without a shared decision to protect and
+    // the availability policy decides exactly as it would with the flag off.
+    trigger.configuration.composeFileOnce = true;
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+    // A concurrent docker pull moved nginx:1.1.0 between the pull and the
+    // create, so the container that came back runs a different image.
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+      skipPull: true,
+      runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+    });
+
+    // The container stands: compose-file-once being on is not, by itself,
+    // enough to force a refusal without a preflighted identity behind it.
+    expect(startContainerSpy).toHaveBeenCalled();
+    expect(removeCreated).not.toHaveBeenCalled();
+    expect(rollbackSpy).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'the local tag moved between the pull and the recreate. ' +
+        'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+    expect(securityAuditSpy).toHaveBeenCalledTimes(1);
+    expect(securityAuditSpy).toHaveBeenCalledWith(
+      'security-scan-skipped',
+      container,
+      'error',
+      'Security scan skipped because the local tag moved between the pull and the recreate: ' +
+        'nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+  });
+
+  test('a moved tag on an update with no preflighted identity should be refused under availability policy block (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // Same update, same race, default policy: certainty wins and the
+    // candidate is torn down rather than left running an unasked-for image.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+        skipPull: true,
+        runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+      }),
+    ).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image',
+    );
+
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+    expect(startContainerSpy).not.toHaveBeenCalled();
+    expect(rollbackSpy).toHaveBeenCalled();
+  });
+
+  test('a moved tag is refused under availability policy warn when the runtime context carries a pulledImageId (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // Pins the `pulledImageId` clause of the preflight marker on its own,
+    // separately from `imageIdentity` and `onPulledImageIdResolved`: in
+    // production the marker's three fields are never all set at once
+    // (`imageIdentity` and `pulledImageId` are mutually exclusive outcomes of
+    // the same preflight resolution), so this only exercises the field a
+    // preflight populates when the pull could not be bound to a digest.
+    // Availability policy is `warn`, which would keep an unpreflighted moved
+    // tag; a preflighted one is refused regardless.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+        skipPull: true,
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          newImage: 'nginx:1.1.0',
+          pulledImageId: 'sha256:pulled-image',
+        },
+      }),
+    ).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image',
+    );
+
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+    expect(startContainerSpy).not.toHaveBeenCalled();
+    expect(rollbackSpy).toHaveBeenCalled();
+  });
+
+  test('a moved tag should be refused, not thrown over, when the security gate exposes no configuration (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // A gate with no securityConfig at all. Reading through it unguarded would
+    // raise a TypeError inside the recreate's try, and the rollback net would
+    // report that as a failed replacement, so a wiring bug would look exactly
+    // like a tag that moved. The policy reads as unset, which is fail-closed.
+    trigger.getSecurityGate = vi.fn().mockReturnValue({});
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+        skipPull: true,
+        runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+      }),
+    ).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image',
+    );
+
+    expect(rollbackSpy).toHaveBeenCalled();
+  });
+
+  test('a moved tag should be kept under a configured scanner whose identity binding is optional (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // The only posture that produces securityGateUnboundWarn in production:
+    // scanning on, signature verification off, the gate on, and the
+    // availability policy at warn, which makes the post-pull identity binding
+    // policy `optional`. The image has no matching manifest digest, so the
+    // pull cannot be bound, the gate half of the post-pull hook is suppressed
+    // and the local image ID becomes what the recreate is checked against.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+      skipPull: true,
+      runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+      postPullHook,
+    });
+
+    // The unbindable pull suppresses the gate but still runs the rest of the
+    // hook, and the moved tag afterwards is kept rather than rolled back.
+    expect(postPullHook).toHaveBeenCalledWith('', undefined, { skipSecurityGate: true });
+    expect(startContainerSpy).toHaveBeenCalled();
+    expect(removeCreated).not.toHaveBeenCalled();
+    expect(rollbackSpy).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'the local tag moved between the pull and the recreate. ' +
+        'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+    // Two separate skips, and the moved tag gets its own row rather than being
+    // folded into the unbound-image one the binding policy already recorded.
+    expect(securityAuditSpy).toHaveBeenCalledTimes(2);
+    expect(securityAuditSpy).toHaveBeenLastCalledWith(
+      'security-scan-skipped',
+      container,
+      'error',
+      'Security scan skipped because the local tag moved between the pull and the recreate: ' +
+        'nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+  });
+
+  test('a moved tag kept under availability policy warn records no audit row when start then fails (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // Same race as the plain "kept" case, but the candidate never actually
+    // starts: the rollback net tears it down and restores the previous
+    // container, so the kept decision must not have already been written as
+    // an audit row before start was attempted.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startError = new Error('daemon refused to start the recreated container');
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockRejectedValue(startError);
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+        skipPull: true,
+        runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+      }),
+    ).rejects.toThrow('daemon refused to start the recreated container');
+
+    // The kept decision was reached and logged, but start failed right after,
+    // so the candidate is removed and the previous container restored instead
+    // of the update completing.
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'the local tag moved between the pull and the recreate. ' +
+        'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+    expect(startContainerSpy).toHaveBeenCalled();
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+    expect(rollbackSpy).toHaveBeenCalled();
+    // No row claims a container was kept under the policy when it never ran.
+    expect(securityAuditSpy).not.toHaveBeenCalled();
+  });
+
+  test('compose-file-once should refuse a moved tag even under availability policy warn (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The permissive policy that would keep the container had this container
+    // resolved its own image. The preflight resolved one identity for the
+    // whole service instead, so every replica runs on the one gate decision it
+    // made and keeping this one would leave it on an image the gate never saw
+    // while its siblings run the image it cleared.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({
+      id: 'container-nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'recordUnboundSecurityWarning').mockImplementation(() => {});
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger as any, 'attemptRollbackRestoreOldContainer').mockResolvedValue({
+      status: 'rolled-back',
+    });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await expect(trigger.processComposeFile(composeFile, [container])).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image',
+    );
+
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+    expect(startContainerSpy).not.toHaveBeenCalled();
+  });
+
+  test('compose-file-once should refuse a moved tag on the replica that recovered the batch image ID (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The posture that used to slip through: no scanner, so the identity
+    // binding policy is `disabled` and the preflight's failed inspect records
+    // no image ID at all, plus the permissive availability policy. The first
+    // replica then arrives with pulledImageId undefined and resolves the ID
+    // itself, and keeping it under warn would leave it on the moved image
+    // while every replica after it was held to the ID it published and
+    // refused. The write-back sink is what marks it as part of the batch.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const firstContainer = makeContainer({
+      id: 'container-nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'container-nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // The preflight's inspect throws, which is the only way a compose-file-once
+    // context reaches a replica with no image ID on it. Every inspect after
+    // that succeeds, so the first replica recovers one.
+    let imageInspectCalls = 0;
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockImplementation(async () => {
+        imageInspectCalls += 1;
+        if (imageInspectCalls === 1) {
+          throw new Error('image inspect unavailable');
+        }
+        return {
+          Id: 'sha256:image-a',
+          RepoDigests: [],
+          Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+          Os: 'linux',
+        };
+      }),
+    });
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger as any, 'attemptRollbackRestoreOldContainer').mockResolvedValue({
+      status: 'rolled-back',
+    });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    // An external pull moves nginx:1.1.0 between the first replica's own
+    // resolve and its create, so this replica is the one that diverges.
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:image-b' }),
+    } as any);
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile(composeFile, [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:image-b but nginx:1.1.0 was pulled as sha256:image-a',
+    );
+
+    // Refused rather than kept, and the batch stops here: the second replica
+    // is never created, so the service is not left split across two images.
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+    expect(startContainerSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).toHaveBeenCalledTimes(1);
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn'),
+    );
   });
 
   test('compose-file-once should carry a recovered image ID to the next replica (DR-54)', async () => {

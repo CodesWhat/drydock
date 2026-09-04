@@ -26,7 +26,7 @@ DD_SECURITY_SCANNER=trivy
 | --- | :---: | --- | --- | --- |
 | `DD_SECURITY_SCANNER` | 🔴 | Enable one scanner or run both and merge duplicate findings | `trivy`, `grype`, `both` | disabled |
 | `DD_SECURITY_BACKEND` | ⚪ | Scanner execution backend | `command`, `docker`, `remote` | `command` |
-| `DD_SECURITY_AVAILABILITY_POLICY` | ⚪ | Behavior when a scan cannot complete. `block` is fail-closed; `warn` records an audit warning and permits the update. Detected blocking findings always block. | `block`, `warn` | `block` |
+| `DD_SECURITY_AVAILABILITY_POLICY` | ⚪ | Behavior when a scan cannot complete, and whether a compose update keeps a container whose local tag moved between the pull and the recreate ([Failure safety](/docs/configuration/triggers/docker-compose#failure-safety)). `block` is fail-closed; `warn` records an audit warning and permits the update. Read whether or not a scanner is configured, so it still governs the moved-tag case on an install with no Update Bouncer. Detected blocking findings always block. | `block`, `warn` | `block` |
 | `DD_SECURITY_DOCKER_SOCKET` | ⚪ | Docker/Podman socket used to create scanner workers when no host is set | absolute socket path | `/var/run/docker.sock` |
 | `DD_SECURITY_DOCKER_HOST` | ⚪ | Docker API/socket-proxy host for scanner workers | hostname/IP | empty |
 | `DD_SECURITY_DOCKER_PORT` | ⚪ | Docker API/socket-proxy port | `1..65535` | `2375` |
