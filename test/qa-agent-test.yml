@@ -1,7 +1,7 @@
 services:
   # Controller — connects to the agent
   controller:
-    image: drydock:v1.4.1-fix
+    image: drydock:dev
     container_name: drydock-controller
     user: root
     ports:
@@ -13,21 +13,24 @@ services:
       - DD_ALLOW_INSECURE_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_LOG_LEVEL=debug
-      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=true
-      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      # The agent watches the same daemon, so the controller must not: any
+      # DD_WATCHER_LOCAL_* key here would register a local watcher and make
+      # DD_LOCAL_WATCHER=false a no-op.
+      - DD_LOCAL_WATCHER=false
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
       - DD_SESSION_SECRET=qa-agent-test-session
       - DD_AGENT_TESTAGENT_SECRET=test-agent-secret-123
       - DD_AGENT_TESTAGENT_HOST=agent
       - DD_AGENT_TESTAGENT_PORT=3000
+      - DD_AGENT_ALLOW_INSECURE_SECRET=true
     depends_on:
       agent:
         condition: service_started
 
   # Agent — watches containers and reports back
   agent:
-    image: drydock:v1.4.1-fix
+    image: drydock:dev
     container_name: drydock-agent
     user: root
     command: --agent
@@ -44,12 +47,11 @@ services:
 
   # Test container with sensitive env vars (triggers the sensitive field classification)
   test-with-env:
-    image: redis:7.2.0
-    pull_policy: never
+    image: redis:7.2-alpine
     container_name: test-with-env
     environment:
       - REDIS_PASSWORD=supersecretpassword
-      - API_KEY=sk-test-1234567890
+      - API_KEY=sk-test-1234567890  # gitleaks:allow
       - DATABASE_URL=postgres://user:pass@db:5432/app
     labels:
       - dd.watch=true

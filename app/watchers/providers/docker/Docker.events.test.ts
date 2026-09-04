@@ -111,7 +111,10 @@ describe('Docker Watcher', () => {
 
     // Setup dockerode mock
     mockDockerApi = {
-      listContainers: vi.fn(),
+      // Defaults to an empty list so init()'s seedControllerLocalEnumeration
+      // call (DR-106 addendum) has something to resolve; tests exercising
+      // getContainers() override this per case as before.
+      listContainers: vi.fn().mockResolvedValue([]),
       getContainer: vi.fn(),
       getEvents: vi.fn(),
       getImage: vi.fn(),
@@ -679,13 +682,17 @@ describe('Docker Watcher', () => {
     });
 
     test('should warn when ensureRemoteAuthHeaders fails in listenDockerEvents', async () => {
+      // Rejected before register(): init() now refreshes remote auth headers
+      // before the controller-local seed too, so a token endpoint that only
+      // starts failing after registration would leave a cached token behind
+      // and this refresh would have nothing left to fail on.
+      mockAxios.post.mockRejectedValue(new Error('Network error'));
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
         protocol: 'https',
         auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } },
       });
-      mockAxios.post.mockRejectedValue(new Error('Network error'));
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
       await docker.listenDockerEvents();

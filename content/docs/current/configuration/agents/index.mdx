@@ -237,6 +237,8 @@ services:
 
 <Callout type="info">By default, the controller also watches its own local Docker socket. If you're running the controller as a pure aggregator with no local containers to monitor, set `DD_LOCAL_WATCHER=false` to disable the default local watcher.</Callout>
 
+<Callout type="warning">This becomes required, not optional, if an agent watches the same daemon a controller-local watcher already watches: the controller's own socket, or a controller-local TCP watcher pointed at the agent's host. The controller's watcher wins every new container on that daemon, and the agent's report of it is refused with a warning logged once per scan cycle. Set `DD_LOCAL_WATCHER=false` on the controller and remove any `DD_WATCHER_LOCAL_*` keys from it, since an explicit local watcher registers whether or not the default one is disabled, or otherwise make sure only one side watches that daemon. If the controller-local watcher runs with `DD_WATCHER_{name}_WATCHEVENTS=false`, the controller only learns about new containers at its cron cadence, so a container created between scans on a shared daemon can be claimed by the agent until the controller's next scan, one more reason not to share a daemon.</Callout>
+
 ### Ed25519 request signing (standard-mode)
 
 By default the controller authenticates to each agent with a shared secret token (the `X-Dd-Agent-Secret` header). Setting `DD_AGENT_{name}_AUTHMODE=ed25519` switches that agent to **per-request Ed25519 signing** instead. Every request carries five headers:
