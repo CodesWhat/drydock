@@ -1594,6 +1594,98 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  // Compose-file-once pulls once per service and recreates every replica, so
+  // the steps around that pull run at two different rates and nothing in the
+  // lifecycle names either of them. The gate belongs to the container and runs
+  // in the preflight, so every replica is gated before the compose file is
+  // written and none of them is gated a second time inside its own refresh.
+  // The pre-update hook and the prune/backup step sit behind that gate and are
+  // per container too, so a replica cannot be recreated without them.
+  test('compose-file-once gates every replica in the preflight and runs the pre-update hook and prune/backup once each', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = true;
+    trigger.configuration.composeFileOnce = true;
+    // The preflight resolves a registry manager for its single pull, which
+    // needs normalizeImage once pruning is enabled.
+    getState().registry.hub.normalizeImage = (image) => image;
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const originalCompose = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const replicas = ['nginx-1', 'nginx-2'].map((name) =>
+      makeContainer({
+        id: name,
+        name,
+        updateAvailable: true,
+        labels: { 'com.docker.compose.service': 'nginx' },
+      }),
+    );
+    vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
+      imageIdentity: `nginx:1.1.0@sha256:${'a'.repeat(64)}`,
+      unboundWarn: false,
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    const callOrder: string[] = [];
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockImplementation(async (_context, container) => {
+      callOrder.push(`gate:${container.name}`);
+    });
+    const preUpdateHookSpy = vi
+      .spyOn(trigger, 'runPreUpdateHook')
+      .mockImplementation(async (container) => {
+        callOrder.push(`hook:${container.name}`);
+      });
+    const pruneImagesSpy = vi
+      .spyOn(trigger, 'pruneImages')
+      .mockImplementation(async (_dockerApi, _registry, container) => {
+        callOrder.push(`prune:${container.name}`);
+      });
+    const backupSpy = vi
+      .spyOn(trigger as any, 'insertContainerImageBackup')
+      .mockImplementation((_context, container) => {
+        callOrder.push(`backup:${container.name}`);
+      });
+    const composeUpdateSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockImplementation(async (_composeFile, _service, container) => {
+        callOrder.push(`refresh:${container.name}`);
+      });
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await trigger.processComposeFile(composeFile, replicas);
+
+    // One pull for the service, shared by both replicas.
+    expect(pullImageSpy).toHaveBeenCalledTimes(1);
+    // Every replica is recreated, and the steps the gate protects run once for
+    // each of them rather than once for the service.
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(2);
+    expect(preUpdateHookSpy).toHaveBeenCalledTimes(2);
+    expect(pruneImagesSpy).toHaveBeenCalledTimes(2);
+    expect(backupSpy).toHaveBeenCalledTimes(2);
+    // Both replicas are gated in the preflight, before either is touched, and
+    // neither gates again inside its own refresh. After that each replica gets
+    // its own hook, prune and backup, in that order and before its refresh, so
+    // no replica can be recreated without them.
+    expect(callOrder).toEqual([
+      'gate:nginx-1',
+      'gate:nginx-2',
+      'hook:nginx-1',
+      'prune:nginx-1',
+      'backup:nginx-1',
+      'refresh:nginx-1',
+      'hook:nginx-2',
+      'prune:nginx-2',
+      'backup:nginx-2',
+      'refresh:nginx-2',
+    ]);
+  });
+
   test('compose-file-once preflight failure terminalizes every active mapped operation', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.composeFileOnce = true;

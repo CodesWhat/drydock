@@ -418,6 +418,44 @@ type PulledImageReference = {
   tag?: string;
 };
 
+/**
+ * What the caller knows about the pull that the binding code cannot work out
+ * for itself.
+ *
+ * Passing this object at all says the caller, not the binder, names the image
+ * this pull is for. It replaces the update candidate's digest
+ * (`container.result.digest`) as the tie-break between several `RepoDigests`,
+ * and it makes an unresolved tie fail closed instead of picking one candidate
+ * deterministically: a manual rollback pulls the image its backup retained,
+ * which the candidate's digest describes nothing about (DR-64).
+ */
+type PulledImageIdentityOptions = {
+  /**
+   * The digest to prefer when the daemon records several `RepoDigests` for the
+   * pulled repository, or `null` for "no preference, and do not fall back to
+   * the update candidate's digest". The field is required so that the empty
+   * object cannot express the same thing by accident: dropping the candidate
+   * tie-break is a decision, not a default.
+   */
+  preferredDigest: string | null;
+};
+
+/**
+ * How `selectPulledRepoDigest` breaks a tie between several `RepoDigests`, and
+ * what it does when nothing breaks it.
+ */
+type PulledDigestTieBreak = {
+  /** The digest to prefer, when the caller or the watcher knows one. */
+  preferredDigest?: string;
+  /**
+   * True when the caller named the image this pull is for. Every candidate
+   * still standing at the end is then a manifest that caller has already said
+   * this pull is not, so the digest resolves to nothing and the binding policy
+   * decides, rather than a lexicographic pick deploying one of them (DR-64).
+   */
+  callerPinned: boolean;
+};
+
 type PulledImageInspectApi = {
   getImage?: (imageRef: string) => {
     inspect: () => Promise<{
@@ -1870,12 +1908,14 @@ class Docker<
     imageReference: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
   ): Promise<PulledImageIdentityBinding> {
     const outcome = await this.capturePulledImageIdentity(
       dockerApi,
       imageReference,
       container,
       logContainer,
+      options,
     );
     if (outcome.unboundWarn) {
       this.recordUnboundSecurityWarning(container, outcome.reason);
@@ -1889,6 +1929,7 @@ class Docker<
     imageReference: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
   ): Promise<PulledImageIdentityOutcome> {
     const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
     if (typeof dockerApi.getImage !== 'function') {
@@ -1917,11 +1958,19 @@ class Docker<
         return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
       });
       const tag = parsedImage.tag?.trim();
+      // Which digest breaks a tie is the caller's to say. The update path has
+      // the candidate the watcher resolved for this container; a rollback has
+      // only what its backup captured, and reading the candidate here anyway
+      // would pin the rollback to the manifest it is undoing (DR-64).
+      const preferredDigest = options
+        ? (options.preferredDigest ?? undefined)
+        : container?.result?.digest;
       const matchingRepoDigest = await this.selectPulledRepoDigest(
         matchingRepoDigests,
         container,
         logContainer,
         { reference: imageReference, parsedImage, tag },
+        { preferredDigest, callerPinned: Boolean(options) },
       );
       if (imageId && matchingRepoDigest && tag) {
         const separatorIndex = matchingRepoDigest.indexOf('@');
@@ -1964,18 +2013,27 @@ class Docker<
    * gated for this update, while the operation still reports success.
    *
    * Prefers the digest the pulled reference itself names when it is
-   * digest-pinned, then the digest the watcher already resolved for this
-   * candidate (`container.result.digest`, set during discovery, no extra
-   * lookup). Falls back to a registry manifest lookup, which is cheap when the
-   * same image was already resolved earlier in the same poll cycle
-   * (BaseRegistry caches it). Otherwise picks deterministically and logs every
-   * candidate so the ambiguity is visible instead of silently picked.
+   * digest-pinned, then `tieBreak.preferredDigest`, the digest the caller
+   * already knows describes this pull: the candidate the watcher resolved
+   * during discovery on the update path, the backup record's captured digest
+   * on a rollback. Falls back to a registry manifest lookup, which is cheap
+   * when the same image was already resolved earlier in the same poll cycle
+   * (BaseRegistry caches it).
+   *
+   * What happens when none of those answers depends on who asked. The update
+   * path picks deterministically and logs every candidate, so the ambiguity is
+   * visible instead of silently picked. A caller that named the image this
+   * pull is for (`tieBreak.callerPinned`, the rollback path) gets nothing: a
+   * lexicographic pick between manifests it has already said this pull is not
+   * would deploy, gate and report one of them at random, so the image is left
+   * unbound and the binding policy refuses or warns instead (DR-64).
    */
   protected async selectPulledRepoDigest(
     candidates: string[],
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     pulled: PulledImageReference,
+    tieBreak: PulledDigestTieBreak,
   ): Promise<string | undefined> {
     if (candidates.length <= 1) {
       return candidates[0];
@@ -1996,9 +2054,9 @@ class Docker<
       }
     }
 
-    const resolvedDigest = container?.result?.digest;
-    if (typeof resolvedDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(resolvedDigest)) {
-      const preferred = candidates.find((candidate) => digestOf(candidate) === resolvedDigest);
+    const { preferredDigest } = tieBreak;
+    if (typeof preferredDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(preferredDigest)) {
+      const preferred = candidates.find((candidate) => digestOf(candidate) === preferredDigest);
       if (preferred) {
         return preferred;
       }
@@ -2026,11 +2084,20 @@ class Docker<
       // Best-effort disambiguation only. Fall through to the deterministic pick.
     }
 
+    const ambiguity = `Multiple manifest digests match the pulled image repository for ${container?.name}: [${candidates.join(', ')}]`;
+    // Nothing here names the manifest that was pulled, and the caller pinned
+    // this pull to an image none of these candidates has been shown to be.
+    // Deploying whichever one sorts first is a coin flip the rollback contract
+    // does not allow, so hand back nothing and let the policy decide (DR-64).
+    if (tieBreak.callerPinned) {
+      logContainer.warn(
+        `${ambiguity}; none of them is the manifest this pull was pinned to, leaving the image unbound`,
+      );
+      return undefined;
+    }
     const sorted = [...candidates].sort();
     const chosen = sorted[0];
-    logContainer.warn(
-      `Multiple manifest digests match the pulled image repository for ${container?.name}: [${candidates.join(', ')}]; picked ${chosen}`,
-    );
+    logContainer.warn(`${ambiguity}; picked ${chosen}`);
     return chosen;
   }
 

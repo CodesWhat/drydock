@@ -74,6 +74,7 @@ export interface RollbackImageIdentityBinder {
     imageReference: string,
     container: unknown,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: { preferredDigest: string | null },
   ) => Promise<{ imageIdentity?: string; skipSecurityGate?: boolean }>;
   /**
    * Reports the same required/optional/disabled decision the update path
@@ -165,6 +166,15 @@ export async function resolveRollbackImageReference(
       localImageReference,
       container,
       logContainer,
+      // The retained image is what this pulls, so the digest that breaks a tie
+      // between several RepoDigests under the same repository is the one the
+      // backup captured. Left to itself the binder would prefer
+      // `container.result.digest`, which describes the update candidate this
+      // rollback exists to undo. A record carrying a digest returns above, so
+      // the value passed here is in practice always `null`, which is the
+      // point: the candidate's digest is not consulted, and a tie nothing else
+      // can break comes back unbound rather than picked (DR-64).
+      { preferredDigest: backup.imageDigest ?? null },
     );
     if (binding.imageIdentity) {
       const separatorIndex = binding.imageIdentity.indexOf('@');

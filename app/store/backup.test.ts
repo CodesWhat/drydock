@@ -261,6 +261,35 @@ describe('Backup Store', () => {
         'registry.example/app:1.2.3',
         container,
         logContainer,
+        { preferredDigest: null },
+      );
+    });
+
+    // container.result.digest is the candidate the watcher resolved for the
+    // update this rollback is undoing, so it must never be what breaks a tie
+    // between two RepoDigests on the retained image (DR-64).
+    test('hands the binder the backup record digest rather than letting it prefer the update candidate', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'registry.example/app:1.2.3@sha256:resolved' }),
+      };
+      const dockerApi = {};
+      const container = { name: 'app', result: { digest: 'sha256:candidate' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3@sha256:resolved');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        dockerApi,
+        'registry.example/app:1.2.3',
+        container,
+        logContainer,
+        // The record carries no digest, so the binder is told to prefer
+        // nothing. An explicit null, not an empty object: the field is
+        // required precisely so that "no preference" cannot be typed by
+        // leaving it out.
+        { preferredDigest: null },
       );
     });
 
@@ -409,6 +438,7 @@ describe('Backup Store', () => {
         'registry.example/app:1.2.3',
         container,
         logContainer,
+        { preferredDigest: null },
       );
     });
 
@@ -435,6 +465,7 @@ describe('Backup Store', () => {
         'registry.example/app:1.2.3',
         container,
         logContainer,
+        { preferredDigest: null },
       );
       expect(trigger.getRollbackIdentityBindingPolicy).not.toHaveBeenCalled();
       expect(logContainer.warn).toHaveBeenCalledWith(
