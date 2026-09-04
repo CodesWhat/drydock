@@ -30,7 +30,7 @@ export function init() {
   }
   maintenanceDeferredUpdateCounter = new Counter({
     name: 'dd_watcher_maintenance_deferred_updates_total',
-    help: 'The number of automatic updates deferred by a maintenance window, one per container per dispatch evaluation, including containers deferred because a dependency was',
+    help: 'The number of automatic updates deferred by a maintenance window, one per container per dispatch evaluation, including containers deferred because a dependency was deferred',
     labelNames: ['type', 'name'],
   });
 
