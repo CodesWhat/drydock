@@ -57,6 +57,12 @@ env:
   # 2026-09-03). Fail the fetch at 60s and let npm retry it itself.
   NPM_CONFIG_FETCH_TIMEOUT: "60000"
   NPM_CONFIG_FETCH_RETRIES: "5"
+  # Every host-side npm ci on that image still stalled exactly once per install
+  # (61s flat with the timeout above) while the Dockerfile's
+  # `npm ci --no-audit --no-fund` never did. Skip the audit and fund lookups
+  # here too; they add nothing in CI.
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_FUND: "false"
 
 jobs:
   security-actions:
