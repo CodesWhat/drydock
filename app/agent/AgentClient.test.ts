@@ -744,7 +744,7 @@ describe('AgentClient', () => {
       expect(result).toBe(report);
     });
 
-    // #1013: the rc.6 gate refused on a watcher NAME match, and a controller
+    // DR-106: the rc.6 gate refused on a watcher NAME match, and a controller
     // with no DD_WATCHER_* registers its default watcher as `local` while the
     // agent quickstart sets DD_WATCHER_LOCAL_SOCKET on the agent, so both
     // sides are called `local` and every agent container was refused forever.
@@ -2534,7 +2534,7 @@ describe('AgentClient', () => {
     });
 
     test('allows a no-record insert of an id no controller local watcher is enumerating', async () => {
-      // #1013: the watcher name is the same `local` the controller's own
+      // DR-106: the watcher name is the same `local` the controller's own
       // default watcher uses, which the rc.6 gate refused on. The id is not
       // one the controller is running, so it is the agent's to claim.
       mockRegistryState.watcher['docker.local'] = {};

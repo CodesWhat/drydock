@@ -11,10 +11,13 @@ import { expect, test } from 'vitest';
 // the watch-scope Set computed at the pruneOldContainers call site); the
 // scope-set logic itself lives in getStillInWatchScopeContainerIds in
 // docker-helpers.ts.
-test('Docker watcher implementation should stay under 1610 lines', () => {
+// Bumped from 1610 for the DR-106 startup-seed fix (one import + one call
+// site in init()); the seeding logic itself lives in
+// seedControllerLocalEnumeration in controller-local-container-ids.ts.
+test('Docker watcher implementation should stay under 1614 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1610);
+  expect(lineCount).toBeLessThanOrEqual(1614);
 });

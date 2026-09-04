@@ -1,9 +1,10 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   _resetControllerLocalContainerIdsForTests,
   findControllerLocalWatcherClaimingContainerId,
   forgetControllerLocalEnumeration,
   recordControllerLocalEnumeration,
+  seedControllerLocalEnumeration,
 } from './controller-local-container-ids.js';
 
 const watcher = (id: string, agent?: string) => ({ getId: () => id, agent });
@@ -79,5 +80,51 @@ describe('controller-local-container-ids', () => {
     forgetControllerLocalEnumeration(watcher('docker.never-registered'));
 
     expect(findControllerLocalWatcherClaimingContainerId('a')).toBe('docker.local');
+  });
+
+  describe('seedControllerLocalEnumeration', () => {
+    test('records the ids a one-off listContainers() call returns', async () => {
+      const dockerApi = {
+        listContainers: vi.fn().mockResolvedValue([{ Id: 'a' }, { Id: 'b' }]),
+      };
+
+      await seedControllerLocalEnumeration(watcher('docker.local'), dockerApi);
+
+      expect(dockerApi.listContainers).toHaveBeenCalledWith({ all: true });
+      expect(findControllerLocalWatcherClaimingContainerId('b')).toBe('docker.local');
+    });
+
+    test('records nothing for a watcher owned by an agent', async () => {
+      const dockerApi = {
+        listContainers: vi.fn().mockResolvedValue([{ Id: 'a' }]),
+      };
+
+      await seedControllerLocalEnumeration(watcher('remote1.docker.local', 'remote1'), dockerApi);
+
+      expect(findControllerLocalWatcherClaimingContainerId('a')).toBeUndefined();
+    });
+
+    test('swallows a listContainers() failure and warns via the logger', async () => {
+      const dockerApi = {
+        listContainers: vi.fn().mockRejectedValue(new Error('daemon unreachable')),
+      };
+      const logger = { warn: vi.fn() };
+
+      await expect(
+        seedControllerLocalEnumeration(watcher('docker.local'), dockerApi, logger),
+      ).resolves.toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('daemon unreachable'));
+      expect(findControllerLocalWatcherClaimingContainerId('anything')).toBeUndefined();
+    });
+
+    test('swallows a listContainers() failure silently with no logger given', async () => {
+      const dockerApi = {
+        listContainers: vi.fn().mockRejectedValue('not an Error instance'),
+      };
+
+      await expect(
+        seedControllerLocalEnumeration(watcher('docker.local'), dockerApi),
+      ).resolves.toBeUndefined();
+    });
   });
 });

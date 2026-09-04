@@ -33,6 +33,7 @@ import { sleep } from '../../../util/sleep.js';
 import {
   forgetControllerLocalEnumeration,
   recordControllerLocalEnumeration,
+  seedControllerLocalEnumeration,
 } from '../../controller-local-container-ids.js';
 import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
@@ -632,6 +633,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.warnIfNarrowMaintenanceWindow();
     await warnIfCurlHealthcheckOverride(this.log);
     await this.initWatcher();
+    await seedControllerLocalEnumeration(this, this.dockerApi, this.log);
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(
       this.configuration.cron,
@@ -1265,8 +1267,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const containers = (await this.dockerApi.listContainers(
       listContainersOptions,
     )) as unknown as DockerContainerSummaryLike[];
-    const enumeratedContainerIds = containers.map((container) => container.Id);
-    recordControllerLocalEnumeration(this, enumeratedContainerIds);
+    recordControllerLocalEnumeration(
+      this,
+      containers.map((container) => container.Id),
+    );
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
     const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] =

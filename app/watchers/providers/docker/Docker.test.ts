@@ -215,7 +215,10 @@ describe('Docker Watcher', () => {
 
     // Setup dockerode mock
     mockDockerApi = {
-      listContainers: vi.fn(),
+      // Resolves empty by default so init()'s startup seed call (DR-106)
+      // has something to await; tests that care about listContainers()
+      // results override this per-case.
+      listContainers: vi.fn().mockResolvedValue([]),
       getContainer: vi.fn(),
       getEvents: vi.fn(),
       getImage: vi.fn(),
@@ -1205,6 +1208,9 @@ describe('Docker Watcher', () => {
         }),
       } as any);
       await docker.register('watcher', 'docker', 'test', createOidcConfig());
+      // register()'s init() already ran the startup seed call; clear it so
+      // the count below reflects only the two getContainers() calls.
+      mockDockerApi.listContainers.mockClear();
 
       await docker.getContainers();
       await docker.getContainers();
@@ -1703,6 +1709,9 @@ describe('Docker Watcher', () => {
       docker.configuration.auth = { type: '' };
       await docker.initWatcher();
       mockDockerApi.listContainers.mockResolvedValue([]);
+      // register()'s init() already ran the startup seed call; clear it so
+      // the assertion below is about getContainers()'s own call, not that one.
+      mockDockerApi.listContainers.mockClear();
 
       await expect(docker.getContainers()).rejects.toThrow('credentials are incomplete');
       expect(mockDockerApi.listContainers).not.toHaveBeenCalled();
