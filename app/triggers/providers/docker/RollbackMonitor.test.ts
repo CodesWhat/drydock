@@ -8,10 +8,14 @@ function createLogger() {
   };
 }
 
+// Shaped like `RollbackContainer` so the fixture cannot drift back to a
+// stand-in that the compose recreate would choke on (DR-101).
 function createContainer(overrides = {}) {
   return {
     name: 'web',
+    watcher: 'local',
     image: {
+      registry: { name: 'hub' },
       tag: { value: '1.2.3' },
       digest: { repo: 'sha256:abc' },
     },
