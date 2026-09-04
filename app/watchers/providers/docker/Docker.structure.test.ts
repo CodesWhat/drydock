@@ -24,10 +24,15 @@ import { expect, test } from 'vitest';
 // remote OIDC watcher's seed call doesn't go out unauthenticated, guarded by
 // wouldRefreshRequireInteractiveOidcDeviceFlow() so a first-time device-code
 // authorization can't block registerWatchers().
-test('Docker watcher implementation should stay under 1700 lines', () => {
+// Bumped from 1700 for the concurrent-getContainers() generation-counter fix:
+// a controllerLocalEnumerationGeneration field plus the guard (and
+// explanatory comment) around the recordControllerLocalEnumeration() call in
+// getContainers(), so an older concurrent call's listContainers() result
+// can't overwrite a newer call's claim set.
+test('Docker watcher implementation should stay under 1711 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1700);
+  expect(lineCount).toBeLessThanOrEqual(1711);
 });
