@@ -47,6 +47,12 @@ env:
   DOCKER_PLATFORMS: linux/amd64,linux/arm64
   CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
   E2E_PLAYWRIGHT_WORKFLOW_FILE: e2e-playwright.yml
+  # npm's default fetch-timeout is 300000ms, the same as the retry wrapper's
+  # timeout_minutes, so a stalled registry fetch always burned the whole
+  # attempt before either side gave up (runner image 20260831 / npm 11.19.0,
+  # 2026-09-03). Fail the fetch at 60s and let npm retry it itself.
+  NPM_CONFIG_FETCH_TIMEOUT: "60000"
+  NPM_CONFIG_FETCH_RETRIES: "5"
 
 jobs:
   release:
