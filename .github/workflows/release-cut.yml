@@ -483,7 +483,10 @@ jobs:
       # and main are the same tree there), so this ordering is universally
       # safe, not just maintenance-safe.
       - name: Wait for successful branch CI on release source SHA
-        uses: ./.github/actions/wait-for-successful-branch-ci
+        # zizmor 1.30 wants the `$/` self-repository form here; left as-is
+        # on purpose so the release workflow keeps the syntax every runner
+        # version understands.
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
         with:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
@@ -493,7 +496,10 @@ jobs:
           allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
 
       - name: Wait for successful E2E Playwright on release source SHA
-        uses: ./.github/actions/wait-for-successful-branch-ci
+        # zizmor 1.30 wants the `$/` self-repository form here; left as-is
+        # on purpose so the release workflow keeps the syntax every runner
+        # version understands.
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
         with:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
