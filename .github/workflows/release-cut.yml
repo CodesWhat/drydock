@@ -520,6 +520,16 @@ jobs:
             set -euo pipefail
             echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin
 
+      # A digest pin resolves to the same manifest for every --platform, so
+      # pinning a per-platform manifest instead of an image index builds the
+      # arm64 stage on an amd64 rootfs and nothing in the build, the manifest
+      # list, or the scans notices. That shipped x86-64 binaries under an arm64
+      # label in v1.7.0-rc.4 through rc.10 (#1021). Only prereleases build; GA
+      # promotes an already-verified RC digest.
+      - name: Verify base image pins are multi-arch indexes
+        if: steps.tag.outputs.is_prerelease == 'true'
+        run: scripts/check-dockerfile-base-indexes.sh Dockerfile "${DOCKER_PLATFORMS}"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
@@ -675,6 +685,34 @@ jobs:
             fi
             echo 'DRYDOCK_IMAGE_REFS'
           } >> "$GITHUB_OUTPUT"
+
+      # The manifest list is not evidence: #1021's broken images listed both
+      # platforms and every digest in them was real. Read the ELF e_machine of
+      # the binaries that actually ship, per platform, before anything is
+      # signed, tagged, or promoted to a public tag.
+      - name: Verify image binaries match their platform
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          TAGS: ${{ steps.image_refs.outputs.tags }}
+        run: |
+          set -euo pipefail
+          image_ref=""
+          while IFS= read -r tag; do
+            if [ -n "${tag}" ]; then
+              image_ref="${tag}@${DIGEST}"
+              break
+            fi
+          done <<< "${TAGS}"
+
+          if [ -z "${image_ref}" ]; then
+            echo "::error::No image reference available to verify platform binaries."
+            exit 1
+          fi
+
+          while IFS= read -r platform; do
+            [ -n "${platform}" ] || continue
+            scripts/check-image-arch.sh "${image_ref}" "${platform}"
+          done <<< "${DOCKER_PLATFORMS//,/$'\n'}"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
