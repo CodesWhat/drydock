@@ -46,6 +46,12 @@ export interface CronWatchOrchestrationWatcher {
   };
   isCronWatchInProgress: boolean;
   isWatcherDeregistered: boolean;
+  /**
+   * Whether a maintenance-window catch-up is armed. Read before the clear below so the scan
+   * that consumes the arm can announce the opening; the arming site is outside watch()
+   * (a digest flush, a webhook, a manual single-container scan), so nothing else knows.
+   */
+  maintenanceWindowWatchQueued: boolean;
   cronWatchInFlight?: Promise<ContainerReport[]>;
   cronWatchRescanRequested: boolean;
   cronWatchRescanReason?: string;
@@ -55,6 +61,7 @@ export interface CronWatchOrchestrationWatcher {
   isMaintenanceWindowOpen: () => boolean;
   queueMaintenanceWindowWatch: () => void;
   clearMaintenanceWindowQueue: () => void;
+  announceMaintenanceWindowOpened: () => Promise<void>;
   watch: () => Promise<ContainerReport[]>;
   getNextScheduledRunDate: (fromDate?: Date) => Date | undefined;
 }
@@ -371,11 +378,12 @@ async function runCronWatch(
   // install scope the arm is taken outside watch() - a digest flush, a webhook, a manual
   // single-container scan - and clearing it on every ordinary tick threw away the only
   // thing that was going to apply the deferred install once the window opened.
-  if (
+  const catchUpWasArmed = watcher.maintenanceWindowWatchQueued;
+  const consumesQueuedCatchUp =
     ignoreMaintenanceWindow ||
     !watcher.configuration.maintenancewindow ||
-    watcher.isMaintenanceWindowOpen()
-  ) {
+    watcher.isMaintenanceWindowOpen();
+  if (consumesQueuedCatchUp) {
     watcher.clearMaintenanceWindowQueue();
   }
 
@@ -408,5 +416,16 @@ async function runCronWatch(
   if (watcher.log && typeof watcher.log.info === 'function') {
     watcher.log.info(`Cron finished (${stats})`);
   }
+
+  // Whichever scan clears an armed queue is the one that has to announce the opening, not
+  // just the once-a-minute poll: clearing also cancels that poll, so an ordinary cron tick
+  // landing inside the open window used to consume the arm in silence and a digest-mode
+  // action trigger sat on its deferred install until the next digest cron. Announced here,
+  // after watch() has awaited its report emit, so every deferred container is back in the
+  // store with fresh state before any trigger flushes on it.
+  if (catchUpWasArmed && consumesQueuedCatchUp) {
+    await watcher.announceMaintenanceWindowOpened();
+  }
+
   return containerReports;
 }

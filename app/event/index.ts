@@ -599,9 +599,11 @@ export function registerSecurityScanCycleComplete(
 }
 
 /**
- * Emit MaintenanceWindowOpened event. Fired after a watcher's maintenance-window catch-up
- * scan finishes, so a digest-mode action trigger holding installs deferred for that watcher
- * can flush them into the window instead of waiting for its next digest cron.
+ * Emit MaintenanceWindowOpened event. Fired by whichever scan consumed the watcher's armed
+ * catch-up queue, once that scan has finished: the queued catch-up itself when the 60s poll
+ * gets there first, an ordinary cron tick when the cron matches inside the open window. A
+ * digest-mode action trigger holding installs deferred for that watcher can then flush them
+ * into the window instead of waiting for its next digest cron.
  * @param payload
  */
 export async function emitMaintenanceWindowOpened(

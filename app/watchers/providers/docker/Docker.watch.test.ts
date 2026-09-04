@@ -521,9 +521,13 @@ describe('Docker Watcher', () => {
       expect(docker.watch).toHaveBeenCalledTimes(1);
       expect(docker.maintenanceWindowWatchQueued).toBe(true);
       expect(docker.maintenanceWindowQueueTimeout).toBeDefined();
+      expect(event.emitMaintenanceWindowOpened).not.toHaveBeenCalled();
       docker.clearMaintenanceWindowQueue();
     });
 
+    // #946 D1: this tick is the one that consumes the arm, and consuming it cancels the
+    // 60s poll that used to be the only announcer, so the tick has to announce or the
+    // digest trigger's deferred install waits for the next digest cron.
     test('a tick inside an open window clears a catch-up armed by a webhook scan', async () => {
       maintenance.isInMaintenanceWindow.mockReturnValue(true);
 
@@ -540,6 +544,45 @@ describe('Docker Watcher', () => {
 
       expect(docker.maintenanceWindowWatchQueued).toBe(false);
       expect(docker.maintenanceWindowQueueTimeout).toBeUndefined();
+      expect(event.emitMaintenanceWindowOpened).toHaveBeenCalledWith({ watcherId: 'docker.test' });
+    });
+
+    test('a failed announcement is logged and does not fail the scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+      event.emitMaintenanceWindowOpened.mockRejectedValue(new Error('handler exploded'));
+
+      docker.queueMaintenanceWindowWatch();
+
+      await expect(docker.watchFromCron()).resolves.toEqual([]);
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to announce the maintenance window opening'),
+      );
+    });
+
+    test('a failed announcement on a logger with no warn still does not fail the scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+      event.emitMaintenanceWindowOpened.mockRejectedValue(new Error('handler exploded'));
+
+      docker.queueMaintenanceWindowWatch();
+
+      await expect(docker.watchFromCron()).resolves.toEqual([]);
+      expect(docker.log.warn).toBeUndefined();
     });
 
     test('should report the next cron run as nextRunAt under the install scope', async () => {

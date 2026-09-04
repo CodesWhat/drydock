@@ -18,10 +18,14 @@ import { expect, test } from 'vitest';
 // Bumped from 1620 for the #946 maintenance-window-opened emit: one call plus its
 // comment in checkQueuedMaintenanceWindowWatch. The event itself lives in
 // app/event/index.ts and the flush it drives lives in triggers/providers/Trigger.ts.
-test('Docker watcher implementation should stay under 1625 lines', () => {
+// Bumped from 1625 when that emit moved into announceMaintenanceWindowOpened, called by
+// whichever scan consumes the armed catch-up queue rather than only by the 60s poll. The
+// decision of when to announce lives in runCronWatch in docker-cron-watch.ts; this method
+// is the emit plus the warn that keeps a failed announce from failing the scan.
+test('Docker watcher implementation should stay under 1640 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1625);
+  expect(lineCount).toBeLessThanOrEqual(1640);
 });

@@ -593,6 +593,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.maintenanceWindowWatchQueued = false;
   }
 
+  /**
+   * Tell a digest-mode action trigger that this watcher's window is open and the scan that
+   * consumed the queued catch-up has finished, so it can flush the installs it deferred
+   * instead of holding them until its next digest cron.
+   *
+   * A failure here is logged and swallowed: the scan itself has already done its work by
+   * this point, and a trigger that cannot be told is no reason to report the scan as failed.
+   */
+  async announceMaintenanceWindowOpened(): Promise<void> {
+    try {
+      await event.emitMaintenanceWindowOpened({ watcherId: this.getId() });
+    } catch (e: unknown) {
+      this.ensureLogger();
+      if (this.log && typeof this.log.warn === 'function') {
+        this.log.warn(`Unable to announce the maintenance window opening (${getErrorMessage(e)})`);
+      }
+    }
+  }
+
   queueMaintenanceWindowWatch() {
     this.maintenanceWindowWatchQueued = true;
     if (this.maintenanceWindowQueueTimeout) {
@@ -621,14 +640,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       if (this.log && typeof this.log.info === 'function') {
         this.log.info('Maintenance window opened - running queued update check');
       }
+      // The scan itself announces the opening once it has run: it is the one that consumes
+      // the armed queue, and an ordinary cron tick can reach the open window before this
+      // poll does.
       await this.watchFromCron({
         ignoreMaintenanceWindow: true,
         reason: 'maintenance-window',
       });
-      // watch() awaits its report emit, so every deferred container is back in the store
-      // with fresh state by now. A digest-mode action trigger only re-buffers on a report,
-      // so tell it to flush rather than leaving the install until its next digest cron.
-      await event.emitMaintenanceWindowOpened({ watcherId: this.getId() });
     } catch (e: unknown) {
       this.ensureLogger();
       if (this.log && typeof this.log.warn === 'function') {
