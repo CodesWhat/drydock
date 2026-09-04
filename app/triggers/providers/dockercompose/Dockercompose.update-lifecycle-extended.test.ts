@@ -1315,8 +1315,19 @@ describe('Dockercompose Trigger', () => {
     }
   });
 
-  test('a recreate that lands on a different image than the pull should be removed and fail (DR-54)', async () => {
+  test('a recreate that lands on a different image than the preflight pulled should be removed and fail (DR-54)', async () => {
     trigger.configuration.dryrun = false;
+    // The default posture, spelled out rather than left to the file-level
+    // configuration mock: no scanner and the fail-closed availability policy.
+    // The runtime context below is what a compose-file-once preflight produces
+    // under it, an image ID and no unbound-scan warning, because with scanning
+    // off the identity binding policy is `disabled` and never warns.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
     const container = makeContainer({ name: 'nginx-a' });
     mockDockerApi.getImage.mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
@@ -1350,7 +1361,6 @@ describe('Dockercompose Trigger', () => {
           dockerApi: mockDockerApi,
           newImage: 'nginx:1.1.0',
           pulledImageId: 'sha256:pulled-image',
-          securityGateUnboundWarn: true,
         },
       }),
     ).rejects.toThrow(
@@ -1362,11 +1372,13 @@ describe('Dockercompose Trigger', () => {
     expect(rollbackSpy).toHaveBeenCalled();
   });
 
-  test('a moved tag on a single-container update should be kept under availability policy warn (DR-67)', async () => {
+  test('a moved tag on an update with no preflighted identity should be kept under availability policy warn (DR-67)', async () => {
     trigger.configuration.dryrun = false;
     // Scanning off with the policy set to warn: the operator has said they
     // would rather the update land than have it refused for want of a certain
-    // answer, and there is no second replica to diverge from.
+    // answer. The runtime context carries no preflight identity, so this
+    // container resolved its own image and nothing else was created against a
+    // shared decision this one could split.
     trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
       enabled: false,
       availabilityPolicy: 'warn',
@@ -1416,7 +1428,7 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('a moved tag on a single-container update should be refused under availability policy block (DR-67)', async () => {
+  test('a moved tag on an update with no preflighted identity should be refused under availability policy block (DR-67)', async () => {
     trigger.configuration.dryrun = false;
     // Same update, same race, default policy: certainty wins and the
     // candidate is torn down rather than left running an unasked-for image.
@@ -1464,15 +1476,73 @@ describe('Dockercompose Trigger', () => {
     expect(rollbackSpy).toHaveBeenCalled();
   });
 
+  test('a moved tag should be kept under a configured scanner whose identity binding is optional (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // The only posture that produces securityGateUnboundWarn in production:
+    // scanning on, signature verification off, the gate on, and the
+    // availability policy at warn, which makes the post-pull identity binding
+    // policy `optional`. The image has no matching manifest digest, so the
+    // pull cannot be bound, the gate half of the post-pull hook is suppressed
+    // and the local image ID becomes what the recreate is checked against.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+      skipPull: true,
+      runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+      postPullHook,
+    });
+
+    // The unbindable pull suppresses the gate but still runs the rest of the
+    // hook, and the moved tag afterwards is kept rather than rolled back.
+    expect(postPullHook).toHaveBeenCalledWith('', undefined, { skipSecurityGate: true });
+    expect(startContainerSpy).toHaveBeenCalled();
+    expect(removeCreated).not.toHaveBeenCalled();
+    expect(rollbackSpy).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'the local tag moved between the pull and the recreate. ' +
+        'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+  });
+
   test('compose-file-once should refuse a moved tag even under availability policy warn (DR-67)', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
     trigger.configuration.composeFileOnce = true;
-    // The permissive policy that would keep the container on the ordinary
-    // path. Compose-file-once ignores it: every replica of the service runs
-    // on the one gate decision the preflight made, so keeping this one would
-    // leave it on an image the gate never saw while its siblings run the
-    // image it cleared.
+    // The permissive policy that would keep the container had this container
+    // resolved its own image. The preflight resolved one identity for the
+    // whole service instead, so every replica runs on the one gate decision it
+    // made and keeping this one would leave it on an image the gate never saw
+    // while its siblings run the image it cleared.
     trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
       enabled: true,
       availabilityPolicy: 'warn',
