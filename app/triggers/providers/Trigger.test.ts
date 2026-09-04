@@ -21,6 +21,9 @@ const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
 const mockMaintenanceSkipInc = vi.hoisted(() => vi.fn());
 const mockMaintenanceSkipLabels = vi.hoisted(() => vi.fn());
 const mockGetMaintenanceSkipCounter = vi.hoisted(() => vi.fn());
+const mockDeferredUpdateInc = vi.hoisted(() => vi.fn());
+const mockDeferredUpdateLabels = vi.hoisted(() => vi.fn());
+const mockGetDeferredUpdateCounter = vi.hoisted(() => vi.fn());
 const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
 const mockGetServerName = vi.hoisted(() => vi.fn(() => 'controller-host'));
 const forceRejectedUpdateBatch = vi.hoisted(() => ({ enabled: false }));
@@ -172,6 +175,7 @@ vi.mock('../../prometheus/watcher.js', () => ({
   init: vi.fn(),
   getWatchContainerGauge: vi.fn(),
   getMaintenanceSkipCounter: mockGetMaintenanceSkipCounter,
+  getMaintenanceDeferredUpdateCounter: mockGetDeferredUpdateCounter,
   getLoggerInitFailureCounter: vi.fn(),
 }));
 vi.mock('../../store/update-operation.js', async (importOriginal) => {
@@ -208,6 +212,11 @@ beforeEach(async () => {
   mockMaintenanceSkipLabels.mockReturnValue({ inc: mockMaintenanceSkipInc });
   mockGetMaintenanceSkipCounter.mockReset();
   mockGetMaintenanceSkipCounter.mockReturnValue({ labels: mockMaintenanceSkipLabels });
+  mockDeferredUpdateInc.mockReset();
+  mockDeferredUpdateLabels.mockReset();
+  mockDeferredUpdateLabels.mockReturnValue({ inc: mockDeferredUpdateInc });
+  mockGetDeferredUpdateCounter.mockReset();
+  mockGetDeferredUpdateCounter.mockReturnValue({ labels: mockDeferredUpdateLabels });
   mockRegistryGetState.mockReturnValue({
     watcher: {} as Record<string, unknown>,
     trigger: {},
@@ -13764,7 +13773,7 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
     });
   }
 
-  test('an install deferred under the install scope queues the catch-up and counts the skip', async () => {
+  test('an install deferred under the install scope queues the catch-up and counts the deferral', async () => {
     const queueMaintenanceWindowWatch = vi.fn();
     mockWindowWatcher({
       configuration: { maintenancewindowscope: 'install' },
@@ -13774,11 +13783,14 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
 
     expect((trigger as any).deferAutoUpdateForMaintenanceWindow(container)).toBe(true);
     expect(queueMaintenanceWindowWatch).toHaveBeenCalledTimes(1);
-    expect(mockMaintenanceSkipLabels).toHaveBeenCalledWith({ type: 'docker', name: 'local' });
-    expect(mockMaintenanceSkipInc).toHaveBeenCalledTimes(1);
+    expect(mockDeferredUpdateLabels).toHaveBeenCalledWith({ type: 'docker', name: 'local' });
+    expect(mockDeferredUpdateInc).toHaveBeenCalledTimes(1);
+    // The skip counter keeps its own unit, one per skipped scan cycle, and the scan gate
+    // owns it. A deferred install is not a skipped cycle.
+    expect(mockMaintenanceSkipInc).not.toHaveBeenCalled();
   });
 
-  test('an install deferred under the scan scope leaves the queue and counter to the scan gate', async () => {
+  test('an install deferred under the scan scope leaves the queue to the scan gate but is still counted', async () => {
     const queueMaintenanceWindowWatch = vi.fn();
     mockWindowWatcher({
       configuration: { maintenancewindowscope: 'scan' },
@@ -13789,6 +13801,8 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
     expect((trigger as any).deferAutoUpdateForMaintenanceWindow(container)).toBe(true);
     expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
     expect(mockMaintenanceSkipInc).not.toHaveBeenCalled();
+    // The install was held back whatever the scope, so it is counted whatever the scope.
+    expect(mockDeferredUpdateInc).toHaveBeenCalledTimes(1);
   });
 
   // #946 finding 4: a watcher sets isWatcherDeregistered in its own teardown, before the
@@ -13806,15 +13820,15 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
     expect((trigger as any).deferAutoUpdateForMaintenanceWindow(container)).toBe(true);
     expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
     // The install was still held back, so it is still counted.
-    expect(mockMaintenanceSkipInc).toHaveBeenCalledTimes(1);
+    expect(mockDeferredUpdateInc).toHaveBeenCalledTimes(1);
   });
 
   test('a deferral tolerates a watcher with no queue method and an uninitialised counter', () => {
-    mockGetMaintenanceSkipCounter.mockReturnValue(undefined);
+    mockGetDeferredUpdateCounter.mockReturnValue(undefined);
     mockWindowWatcher({ isMaintenanceWindowOpen: () => false });
 
     expect((trigger as any).deferAutoUpdateForMaintenanceWindow(container)).toBe(true);
-    expect(mockMaintenanceSkipInc).not.toHaveBeenCalled();
+    expect(mockDeferredUpdateInc).not.toHaveBeenCalled();
   });
 
   test('an open window neither defers nor queues', () => {
@@ -14090,6 +14104,92 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
       String(call[0]).includes('upstream dependency is outside its maintenance window'),
     );
     expect(dependencyDeferredLogs).toHaveLength(0);
+  });
+
+  // #946 finding 6: dd_watcher_maintenance_skip_total keeps its unit (one per skipped scan
+  // cycle, which the scan gate owns). Deferred installs get their own counter, one per
+  // container per dispatch evaluation, and a container deferred behind a dependency counts
+  // too, labelled by its own watcher rather than by whichever one holds the window.
+  test('a container deferred behind a dependency is counted on the deferred-updates metric', async () => {
+    trigger.type = 'docker';
+    mockWindowWatcher({
+      configuration: { maintenancewindowscope: 'install' },
+      isMaintenanceWindowOpen: () => false,
+    });
+    const db = { ...container, id: 'c-db', name: 'db' };
+    const api = {
+      ...container,
+      id: 'c-api',
+      name: 'api',
+      dependsOn: ['db'],
+      dependsOnSource: 'label',
+    };
+    // Only db is directly window-closed. The stub stands in for the direct deferral so the
+    // only sample left is the one the dependency pass takes for api.
+    vi.spyOn(trigger as any, 'deferAutoUpdateForMaintenanceWindow').mockImplementation(
+      (c: any) => c.id === 'c-db',
+    );
+    const { enqueueContainerUpdates: enqueueMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueMock).mockClear();
+
+    const batchResult = await (trigger as any).runAcceptedUpdateBatch([db, api]);
+
+    expect(batchResult.deferredIds).toEqual(new Set(['c-db', 'c-api']));
+    expect(vi.mocked(enqueueMock)).not.toHaveBeenCalled();
+    expect(mockDeferredUpdateLabels).toHaveBeenCalledWith({ type: 'docker', name: 'local' });
+    expect(mockDeferredUpdateInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('a dependency-deferred container whose watcher is gone is simply not counted', async () => {
+    trigger.type = 'docker';
+    mockRegistryGetState.mockReturnValue({
+      watcher: {},
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const db = { ...container, id: 'c-db', name: 'db' };
+    const api = {
+      ...container,
+      id: 'c-api',
+      name: 'api',
+      dependsOn: ['db'],
+      dependsOnSource: 'label',
+    };
+    vi.spyOn(trigger as any, 'deferAutoUpdateForMaintenanceWindow').mockImplementation(
+      (c: any) => c.id === 'c-db',
+    );
+
+    const batchResult = await (trigger as any).runAcceptedUpdateBatch([db, api]);
+
+    expect(batchResult.deferredIds).toEqual(new Set(['c-db', 'c-api']));
+    expect(mockDeferredUpdateInc).not.toHaveBeenCalled();
+  });
+
+  test('a batch+digest trigger counts one deferral per container per scan cycle', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'batch+digest' };
+    mockWindowWatcher({
+      configuration: { maintenancewindowscope: 'install' },
+      isMaintenanceWindowOpen: () => false,
+      queueMaintenanceWindowWatch: vi.fn(),
+    });
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    // One scan reaches both registered handlers. The digest handler only buffers, so the
+    // batch handler is the single evaluation and the single sample.
+    await trigger.handleContainerReports([{ changed: true, container }] as any);
+    await trigger.handleContainerReportDigest({ changed: true, container } as any);
+
+    expect(mockDeferredUpdateInc).toHaveBeenCalledTimes(1);
+
+    // The digest cron is a separate evaluation later, so it counts once more.
+    await trigger.flushDigestBuffer();
+
+    expect(mockDeferredUpdateInc).toHaveBeenCalledTimes(2);
   });
 
   // (g) #946: a window-deferred container was never sent, so neither batch nor digest may

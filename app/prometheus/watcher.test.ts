@@ -14,6 +14,13 @@ test('maintenance skip counter should be properly configured', async () => {
   expect(counter.labelNames).toStrictEqual(['type', 'name']);
 });
 
+test('maintenance deferred update counter should be properly configured', async () => {
+  watcher.init();
+  const counter = watcher.getMaintenanceDeferredUpdateCounter();
+  expect(counter.name).toStrictEqual('dd_watcher_maintenance_deferred_updates_total');
+  expect(counter.labelNames).toStrictEqual(['type', 'name']);
+});
+
 test('logger init failure counter should be properly configured', async () => {
   watcher.init();
   const counter = watcher.getLoggerInitFailureCounter();

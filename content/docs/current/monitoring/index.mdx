@@ -141,9 +141,13 @@ dd_watcher_logger_init_failures_total{type="docker",name="local"} 0
 # TYPE dd_legacy_input_total counter
 dd_legacy_input_total{source="label",key="dd.trigger.include"} 1
 
-# HELP dd_watcher_maintenance_skip_total The number of watch cycles skipped, or automatic installs deferred, due to maintenance window
+# HELP dd_watcher_maintenance_skip_total The number of watch cycles skipped due to maintenance window
 # TYPE dd_watcher_maintenance_skip_total counter
 dd_watcher_maintenance_skip_total{type="docker",name="local"} 0
+
+# HELP dd_watcher_maintenance_deferred_updates_total The number of automatic updates deferred by a maintenance window, one per container per dispatch evaluation, including containers deferred because a dependency was
+# TYPE dd_watcher_maintenance_deferred_updates_total counter
+dd_watcher_maintenance_deferred_updates_total{type="docker",name="local"} 0
 
 # HELP dd_webhook_total Total count of webhook operations
 # TYPE dd_webhook_total counter
@@ -175,6 +179,8 @@ drydock_digest_cache_misses_total 3
 ```
 
 When a watcher logger cannot be initialized, drydock falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total`.
+
+The two maintenance-window counters measure different things and are not interchangeable. `dd_watcher_maintenance_skip_total` counts whole scan cycles the window skipped, so it only moves on a watcher running `MAINTENANCE_WINDOW_SCOPE=scan`; under the default `install` scope no scan is ever skipped and it stays at zero. `dd_watcher_maintenance_deferred_updates_total` counts automatic updates held back for the window, one sample per container per dispatch evaluation, so a batch that defers fifty containers adds fifty and the next scan that still finds them deferred adds fifty more. A container held back because something it depends on was deferred is counted too, labelled by its own watcher.
 
 `dd_legacy_input_total` tracks active compatibility inputs such as the deprecated `dd.trigger.include` / `dd.trigger.exclude` container labels, plus historical observations retained for the lifetime of the process. The `DD_TRIGGER_*` environment variable prefix was removed in v1.7.0 and now fails startup outright, so it can no longer increment this counter — see [Deprecation Schedule](/docs/deprecations#legacy-trigger-prefix). Removed `WUD_*` variables and `wud.*` labels no longer increment it because they are ignored. No data is sent to external services.
 

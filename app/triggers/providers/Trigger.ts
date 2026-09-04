@@ -25,10 +25,11 @@ import type { NotificationOutboxEntry } from '../../model/notification-outbox.js
 import {
   getContainerMaintenanceWindowWatcher,
   getContainerWatcherRegistryId,
+  type MaintenanceWindowWatcher,
   resolveMaintenanceWindowScope,
 } from '../../model/watcher-maintenance-window.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
-import { getMaintenanceSkipCounter } from '../../prometheus/watcher.js';
+import { getMaintenanceDeferredUpdateCounter } from '../../prometheus/watcher.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 import * as registry from '../../registry/index.js';
 import { redactTriggerConfigurationInfrastructureDetails } from '../../registry/trigger-config-redaction.js';
@@ -3358,12 +3359,16 @@ class Trigger<
    * here also queues the watcher's maintenance-window catch-up — the same queue the scan
    * gate uses under `scope=scan`. That catch-up polls once a minute and re-runs the scan the
    * moment the window opens, at which point this returns false and the deferred update is
-   * enqueued for real. The deferral is counted on `dd_watcher_maintenance_skip_total` there
-   * too, which under this scope counts deferred installs rather than skipped scan cycles.
+   * enqueued for real.
    *
-   * Under `scope=scan` nothing extra happens here: the scan gate already owns both the queue
-   * and the counter, and a scan that reaches this point at all did so by explicitly ignoring
-   * the window, so re-queueing from here would only duplicate work the gate has done.
+   * Under `scope=scan` the queue is left alone: the scan gate already owns it, and a scan
+   * that reaches this point at all did so by explicitly ignoring the window, so re-queueing
+   * from here would only duplicate work the gate has done.
+   *
+   * The deferral is counted on `dd_watcher_maintenance_deferred_updates_total` under either
+   * scope, because an install really was held back either way.
+   * `dd_watcher_maintenance_skip_total` keeps its own meaning, one per skipped scan cycle,
+   * and is never touched from here.
    */
   private deferAutoUpdateForMaintenanceWindow(container: Container): boolean {
     const watcher = getContainerMaintenanceWindowWatcher(container, registry.getState().watcher);
@@ -3381,12 +3386,22 @@ class Trigger<
       if (!watcher.isWatcherDeregistered) {
         watcher.queueMaintenanceWindowWatch?.();
       }
-      const counter = getMaintenanceSkipCounter();
-      if (counter) {
-        counter.labels({ type: watcher.type, name: watcher.name }).inc();
-      }
     }
+    this.countDeferredUpdate(watcher);
     return true;
+  }
+
+  /**
+   * Count one automatic update the maintenance window held back, labelled by the watcher that
+   * owns the container. One sample per container per dispatch evaluation: a batch that defers
+   * fifty containers counts fifty, and the next scan that still finds them deferred counts
+   * fifty again, because each is a decision not to install that was actually taken.
+   */
+  private countDeferredUpdate(watcher: Pick<MaintenanceWindowWatcher, 'type' | 'name'>): void {
+    const counter = getMaintenanceDeferredUpdateCounter();
+    if (counter) {
+      counter.labels({ type: watcher.type, name: watcher.name }).inc();
+    }
   }
 
   /**
@@ -3435,6 +3450,15 @@ class Trigger<
           }
           deferredIds.add(dependentId);
           dependencyDeferred.push(dependent);
+          // Counted on the same metric as a directly window-deferred container, labelled by
+          // the dependent's own watcher, which is not necessarily the one holding the window.
+          const dependentWatcher = getContainerMaintenanceWindowWatcher(
+            dependent,
+            registry.getState().watcher,
+          );
+          if (dependentWatcher) {
+            this.countDeferredUpdate(dependentWatcher);
+          }
         }
       }
     }

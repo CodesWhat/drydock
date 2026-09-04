@@ -743,7 +743,7 @@ A minute-precise expression still works if your watcher `CRON` ticks on exactly 
 
 The evaluated timezone is `MAINTENANCE_WINDOW_TZ`, defaulting to `UTC` — not the host clock or your browser. The dashboard shows which watchers have a window and when the next one opens.
 
-`dd_watcher_maintenance_skip_total{type,name}` counts what the window held back: deferred installs under `install`, skipped scan cycles under `scan`.
+`dd_watcher_maintenance_deferred_updates_total{type,name}` counts the automatic updates the window held back, one per container per dispatch evaluation, including a container held back because something it depends on was. `dd_watcher_maintenance_skip_total{type,name}` keeps its old meaning, one per skipped scan cycle, so it only moves under `MAINTENANCE_WINDOW_SCOPE=scan`.
 
 ## Image Set Presets
 
