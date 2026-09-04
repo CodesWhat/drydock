@@ -222,6 +222,18 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.10 highlights</strong></summary>
+
+- **Batch and digest `once=true` sends now take the same notification-slot reservation the simple path takes, so a manual scan overlapping a cron scan can no longer announce the same update twice.** The digest flush skips and evicts a buffered result an earlier flush already sent, and the batch retry buffer no longer carries an unreserved entry to the trigger. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Deregistering a watcher now clears the cron scan's deadline timer**, so a torn-down watcher no longer logs a deadline warning it no longer owns, every caller waiting on that scan resolves, and a scan requested after teardown is refused instead of started. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **The getting-started guide now says hook scripts run inside the Drydock container**, so a path that only exists on the host or in the updated container fails, and the agent registry-lookup fix credits the contributor who wrote it. ([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **The same hooks paragraph now says a failed pre-hook aborts the update by default and names `dd.hook.pre.abort=false` as the opt-out**, instead of describing the abort as unconditional. ([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.9 highlights</strong></summary>
 
 - **`watchFromCron()` is now single-flight, so overlapping scans on a large fleet no longer fire the same trigger multiple times for one update.** A scan that never settles is raced against a deadline so it can't wedge later cron ticks either. ([#979](https://github.com/CodesWhat/drydock/pull/979))
