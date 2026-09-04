@@ -203,12 +203,17 @@ describe('RollbackMonitor', () => {
       getTriggerInstance,
     });
 
+    // The compose action resolves the service to roll back from this
+    // container's registry, watcher and labels, so the monitor has to receive
+    // it whole rather than a name and the replacement's id (DR-101).
+    const container = createContainer({
+      image: { registry: { name: 'hub' }, tag: { value: '1.0.0' }, digest: {} },
+      updateKind: { remoteValue: '2.0.0' },
+    });
+
     await monitor.start(
       { api: true },
-      createContainer({
-        image: { tag: { value: '1.0.0' }, digest: {} },
-        updateKind: { remoteValue: '2.0.0' },
-      }),
+      container,
       { autoRollback: true, rollbackWindow: 120_000, rollbackInterval: 3_000 },
       { info, warn: vi.fn() },
     );
@@ -216,6 +221,7 @@ describe('RollbackMonitor', () => {
     expect(info).toHaveBeenCalledWith('Starting health monitor (window=120000ms, interval=3000ms)');
     expect(startHealthMonitor).toHaveBeenCalledWith({
       dockerApi: { api: true },
+      container,
       containerId: 'new-container-id',
       containerName: 'web',
       backupImageTag: '2.0.0',

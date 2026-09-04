@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import Dockercompose from '../dockercompose/Dockercompose.js';
 import { attachCreatedContainerCandidate } from './created-container-candidate.js';
 import Docker from './Docker.js';
 import { startHealthMonitor } from './HealthMonitor.js';
+
+var mockGetState = vi.hoisted(() => vi.fn());
+vi.mock('../../../registry/index.js', () => ({
+  getState: mockGetState,
+}));
 
 var mockInsertAudit = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/audit.js', () => ({
@@ -35,6 +41,24 @@ function createMockDockerApi(inspectResult) {
     getContainer: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue(inspectResult),
     }),
+  };
+}
+
+// The watcher-discovered container the update ran against. Its own id is the
+// container the update replaced, which is why the monitor has to carry the
+// replacement's id separately.
+function createMonitoredContainer(overrides = {}) {
+  return {
+    id: 'container-000',
+    name: 'test-container',
+    watcher: 'local',
+    labels: {
+      'dd.compose.file': '/opt/drydock/stack.yml',
+      'com.docker.compose.service': 'web',
+    },
+    image: { registry: { name: 'hub' }, name: 'test-image', tag: { value: '2.0.0' } },
+    updateKind: { kind: 'tag', remoteValue: '2.0.0' },
+    ...overrides,
   };
 }
 
@@ -78,6 +102,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
@@ -102,6 +127,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
@@ -154,6 +180,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -204,6 +231,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -262,6 +290,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: 'v3.3.0',
@@ -317,6 +346,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: 'latest',
@@ -353,6 +383,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
@@ -389,6 +420,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
@@ -434,6 +466,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
@@ -469,6 +502,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -508,6 +542,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -538,6 +573,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
@@ -577,6 +613,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -622,6 +659,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -667,6 +705,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -718,6 +757,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -764,6 +804,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -818,6 +859,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
@@ -834,6 +876,86 @@ describe('HealthMonitor', () => {
     expect(newContainerHandle.stop).toHaveBeenCalledTimes(1);
     expect(newContainerHandle.remove).toHaveBeenCalledWith({ force: true });
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Auto-rollback failed'));
+
+    abortController.abort();
+  });
+
+  test('rolls back through the REAL Dockercompose.recreateContainer, which resolves its service from the container', async () => {
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+    mockGetState.mockReturnValue({
+      registry: { hub: { getImageFullName: (image, tag) => `${image.name}:${tag}` } },
+      watcher: { 'docker.local': { dockerApi } },
+    });
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-000',
+        containerName: 'test-container',
+        imageName: 'library/nginx',
+        imageTag: '1.0.0',
+        imageDigest: 'sha256:kept',
+        timestamp: new Date().toISOString(),
+        triggerName: 'dockercompose.default',
+      },
+    ]);
+
+    var composeTrigger = new Dockercompose();
+    composeTrigger.log = { ...createMockLog(), child: vi.fn().mockReturnThis() } as any;
+    composeTrigger.configuration = {
+      dryrun: false,
+      backup: false,
+      composeFileLabel: 'dd.compose.file',
+    } as any;
+    vi.spyOn(composeTrigger, 'resolveComposeServiceContext').mockResolvedValue({
+      composeFile: '/opt/drydock/stack.yml',
+      composeFiles: ['/opt/drydock/stack.yml'],
+      service: 'web',
+    } as any);
+    var mutateComposeFileSpy = vi
+      .spyOn(composeTrigger, 'mutateComposeFile')
+      .mockResolvedValue({} as any);
+    var refreshSpy = vi
+      .spyOn(composeTrigger as any, 'refreshComposeServiceWithDockerApi')
+      .mockResolvedValue(undefined);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      backupScope: { containerName: 'test-container', includeLegacy: true },
+      window: 300000,
+      interval: 10000,
+      triggerInstance: composeTrigger,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    // An { id, name } stand-in threw a TypeError on container.image.registry
+    // before the compose file was ever read, and the failure only showed up as
+    // an auto-rollback error audit row.
+    expect(log.error).not.toHaveBeenCalled();
+    expect(mutateComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/stack.yml',
+      expect.any(Function),
+      expect.anything(),
+    );
+    expect(refreshSpy).toHaveBeenCalledWith(
+      '/opt/drydock/stack.yml',
+      'web',
+      expect.objectContaining({ id: 'container-123', name: 'test-container' }),
+      expect.objectContaining({
+        runtimeContext: { newImage: 'library/nginx@sha256:kept' },
+      }),
+    );
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auto-rollback', status: 'success' }),
+    );
 
     abortController.abort();
   });
@@ -861,6 +983,7 @@ describe('HealthMonitor', () => {
 
     var abortController = startHealthMonitor({
       dockerApi,
+      container: createMonitoredContainer(),
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
