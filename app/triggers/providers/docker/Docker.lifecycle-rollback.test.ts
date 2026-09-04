@@ -13,6 +13,7 @@ registerCommonDockerBeforeEach();
 const {
   mockAuditCounterInc,
   mockGetInProgressOperationByContainerName,
+  mockGetState,
   mockInsertAudit,
   mockMarkOperationTerminal,
   mockRollbackCounterInc,
@@ -223,6 +224,41 @@ describe('auto-rollback health monitor integration', () => {
         window: 300000,
         interval: 10000,
       }),
+    );
+  });
+
+  test('pullRollbackImage should resolve pull credentials and pull the backup reference', async () => {
+    const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getAuthPull,
+          getImageFullName: (image, tagOrDigest) =>
+            `${image.registry.url}/${image.name}:${tagOrDigest}`,
+          normalizeImage: (image) => image,
+        },
+      },
+    });
+    const pullImageSpy = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    const logContainer = createMockLog();
+    const dockerApi = { pull: vi.fn() };
+
+    // Neither recreate path pulls for itself, so this is the only fetch an
+    // automatic rollback gets, and it has to be for the reference the recreate
+    // is about to use rather than the container's own image (DR-110).
+    await docker.pullRollbackImage(
+      dockerApi,
+      'my-registry/test/test:1.24',
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(getAuthPull).toHaveBeenCalledTimes(1);
+    expect(pullImageSpy).toHaveBeenCalledWith(
+      dockerApi,
+      { username: 'robot', password: 'secret' },
+      'my-registry/test/test:1.24',
+      logContainer,
     );
   });
 

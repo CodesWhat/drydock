@@ -913,6 +913,32 @@ class Docker<
   }
 
   /**
+   * Pull the image a rollback is about to recreate from, resolving the pull
+   * credentials the same way every other pull on this trigger does.
+   *
+   * Neither recreate path pulls for itself: `Docker.recreateContainer` goes
+   * straight to `createContainer`, and the compose one runs its runtime
+   * refresh with `skipPull` so the manual rollback in `app/api/backup.ts`,
+   * which pulls before it calls in, is not made to pull twice. That leaves the
+   * caller owning the pull, and the automatic rollback never did one. It only
+   * logged that it was about to. A backup image that is no longer on the host
+   * then failed at create, after the running container had already been
+   * removed (DR-110).
+   *
+   * `rollbackImage` is the reference the caller built from the backup record,
+   * which on this line is `imageName:imageTag`. That is the same reference the
+   * recreate goes on to use, so the pull and the create cannot disagree about
+   * what is being restored.
+   */
+  async pullRollbackImage(dockerApi, rollbackImage, container, logContainer) {
+    const registry = this.resolveRegistryManager(container, logContainer, {
+      allowAnonymousFallback: true,
+    });
+    const auth = await registry.getAuthPull();
+    await this.pullImage(dockerApi, auth, rollbackImage, logContainer);
+  }
+
+  /**
    * Stop a container.
    * @param container
    * @param containerName
