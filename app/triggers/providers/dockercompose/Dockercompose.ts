@@ -3381,6 +3381,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   }
 
   /**
+   * Whether `DD_SECURITY_AVAILABILITY_POLICY` is set to `warn`, read off the
+   * security gate the same way the Docker trigger reads it when a pulled image
+   * cannot be bound to a digest. `warn` is the operator saying they would
+   * rather an update land than have it refused for want of a certain answer;
+   * `block`, the default, is the opposite.
+   */
+  private isSecurityAvailabilityPolicyPermissive(): boolean {
+    const securityGate = this.getSecurityGate() as {
+      securityConfig: { getSecurityConfiguration: () => { availabilityPolicy?: string } };
+    };
+    return securityGate.securityConfig.getSecurityConfiguration().availabilityPolicy === 'warn';
+  }
+
+  /**
    * Confirm the container that was just created runs the image the pull
    * resolved to. The create reference stays the operator's `repo:tag` so the
    * watcher can still read the tag back off `Config.Image`, which means a
@@ -3389,12 +3403,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * one replica of a service a different image than another (DR-54). Throwing
    * here runs inside the recreate's own try, so the candidate is removed and
    * the previous container is restored by the rollback net.
+   *
+   * On the ordinary path a moved tag is one container getting an image nobody
+   * asked for, which is the availability-versus-certainty trade
+   * `DD_SECURITY_AVAILABILITY_POLICY` already settles for the security gate,
+   * so it is settled the same way here (DR-67): `warn` names both image IDs
+   * and lets the container stand, `block` keeps the refusal. Compose-file-once
+   * ignores the policy, because there the replicas of a service share one gate
+   * decision made in the preflight, and accepting a moved tag for one of them
+   * leaves that replica running an image the gate never cleared while its
+   * siblings run the image it did clear, which is a split service rather than
+   * a slower one.
    */
   private async assertReplacementContainerImage(
     newContainer: unknown,
     expectedImageId: string | undefined,
     newImage: string,
     container: { name: string },
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
   ): Promise<void> {
     if (!expectedImageId) {
       // Either the create reference is already digest-pinned, which cannot
@@ -3410,9 +3436,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     if (!createdImageId || createdImageId === expectedImageId) {
       return;
     }
-    throw new Error(
+    const movedTagDetail =
       `Recreated container ${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
-        'the local tag moved between the pull and the recreate',
+      'the local tag moved between the pull and the recreate';
+    if (this.isComposeFileOnceEnabled() || !this.isSecurityAvailabilityPolicyPermissive()) {
+      throw new Error(movedTagDetail);
+    }
+    logContainer.warn(
+      `${movedTagDetail}. Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn`,
     );
   }
 
@@ -3444,6 +3475,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         expectedImageId,
         newImage,
         container,
+        logContainer,
       );
 
       if (currentContainerSpec.State.Running) {
