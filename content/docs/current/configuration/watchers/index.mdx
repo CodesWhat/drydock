@@ -51,7 +51,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 
 **Notes:**
 
-- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`.
+- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`. On the next restart the controller drops the container records its own watchers used to own, so a container that has moved to an agent is reported by that agent instead of staying stuck on what the controller last saw. Anything set on those records from the UI goes with them: a snooze, a maturity mode and skipped tags or digests have to be set again on the agent's copy.
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
 - When `MAINTENANCE_WINDOW` is configured, drydock keeps scanning on its `CRON` and defers only the automatic install, which it applies as soon as the window opens. Set `MAINTENANCE_WINDOW_SCOPE=scan` to skip the scan outside the window instead, which is what releases before v1.8.0 did. Either way the window gates drydock's own automatic behavior only. Manual updates from the UI or API always run. See [Maintenance window](#maintenance-window).
