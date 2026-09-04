@@ -192,7 +192,7 @@ async function performRollback(context: RollbackContext): Promise<void> {
     const latestBackup = backups[0];
     const backupImage = `${latestBackup.imageName}:${latestBackup.imageTag}`;
 
-    log.info(`Auto-rollback: pulling backup image ${backupImage}`);
+    log.info(`Auto-rollback: resolving backup image ${backupImage}`);
     // Actually pull it, and pull it first. Neither recreate path fetches the
     // image for itself, so a backup that is no longer on the host used to fail
     // at create: on the Docker path after stopAndRemoveContainer had already

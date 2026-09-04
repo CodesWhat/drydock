@@ -913,6 +913,25 @@ class Docker<
   }
 
   /**
+   * Is `imageReference` already on the host?
+   *
+   * Any inspect failure answers no, not just the 404 that means the image is
+   * genuinely absent. A daemon that is briefly unreachable, or a `dockerApi`
+   * without `getImage` at all, has to fall through to the pull rather than
+   * skip it: pulling an image that is already there costs a round trip, while
+   * skipping the pull for one that is not there is the create failure the
+   * caller exists to prevent (DR-110).
+   */
+  async isImageOnHost(dockerApi, imageReference): Promise<boolean> {
+    try {
+      await dockerApi.getImage(imageReference).inspect();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Pull the image a rollback is about to recreate from, resolving the pull
    * credentials the same way every other pull on this trigger does.
    *
@@ -929,13 +948,35 @@ class Docker<
    * which on this line is `imageName:imageTag`. That is the same reference the
    * recreate goes on to use, so the pull and the create cannot disagree about
    * what is being restored.
+   *
+   * The pull only runs when that reference is not already on the host. A backup
+   * image survives the prune, so a host with no route to a registry, and a
+   * Docker Hub anonymous 429, both used to roll back fine from the retained
+   * image; pulling unconditionally turned exactly those cases into a refusal
+   * over a fetch there was nothing left to fetch. The registry resolution and
+   * the credential lookup sit behind the same check, because `getAuthPull()`
+   * can go to the network itself. A genuinely missing image is still refused
+   * before anything destructive runs: the pull fails here, and the compose
+   * refresh checks again through `verifyPulledImageCompatibility`'s
+   * `requireLocalImage`.
    */
   async pullRollbackImage(dockerApi, rollbackImage, container, logContainer) {
+    if (await this.isImageOnHost(dockerApi, rollbackImage)) {
+      logContainer.info(`Backup image ${rollbackImage} is already on the host, skipping pull`);
+      return;
+    }
     const registry = this.resolveRegistryManager(container, logContainer, {
       allowAnonymousFallback: true,
     });
     const auth = await registry.getAuthPull();
-    await this.pullImage(dockerApi, auth, rollbackImage, logContainer);
+    try {
+      await this.pullImage(dockerApi, auth, rollbackImage, logContainer);
+    } catch (error: unknown) {
+      throw new Error(
+        `Backup image ${rollbackImage} is neither on the host nor pullable: ${getErrorMessage(error)}`,
+        { cause: error },
+      );
+    }
   }
 
   /**
