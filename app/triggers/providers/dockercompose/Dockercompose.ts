@@ -215,6 +215,16 @@ type ComposeRuntimeRefreshOptions = {
 };
 
 /**
+ * What `assertReplacementContainerImage` hands back when a moved tag was kept
+ * under `DD_SECURITY_AVAILABILITY_POLICY=warn` instead of thrown over. The
+ * caller records the audit row itself, once the recreate the container came
+ * from has actually succeeded.
+ */
+type KeptMovedTagAudit = {
+  details: string;
+};
+
+/**
  * The rollback reason every compose runtime-refresh rollback records. Also the
  * identity marker the restore-failure correction path matches on, so it can
  * only rewrite a row this provider's own rollback produced.
@@ -3439,6 +3449,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * service has one container or ten does not enter into it; a scaled service
    * on the unpreflighted path keeps going container by container under `warn`,
    * each one on its own resolved image and each one logged.
+   *
+   * A kept mismatch does not record its own audit row here: the container has
+   * not started yet, and a start failure after this point tears the candidate
+   * down and restores the previous container, which would leave a
+   * `security-scan-skipped` row on the books for a container that never ran.
+   * The descriptor this returns is recorded by the caller once the recreate
+   * has actually succeeded.
    */
   private async assertReplacementContainerImage(
     newContainer: unknown,
@@ -3447,20 +3464,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container: { name: string; watcher?: string; image?: { name?: string } },
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     preflightedServiceIdentity: boolean,
-  ): Promise<void> {
+  ): Promise<KeptMovedTagAudit | undefined> {
     if (!expectedImageId) {
       // Either the create reference is already digest-pinned, which cannot
       // resolve to a second image, or nothing was resolvable at pull time and
       // the caller has already warned about it.
-      return;
+      return undefined;
     }
     const inspect = (newContainer as { inspect?: () => Promise<{ Image?: string }> })?.inspect;
     if (typeof inspect !== 'function') {
-      return;
+      return undefined;
     }
     const createdImageId = (await inspect.call(newContainer))?.Image;
     if (!createdImageId || createdImageId === expectedImageId) {
-      return;
+      return undefined;
     }
     const movedTagDetail =
       `Recreated container ${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
@@ -3471,19 +3488,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     logContainer.warn(
       `${movedTagDetail}. Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn`,
     );
-    // The container is now running an image nothing verified or scanned, and
-    // on the path this branch is actually reached from there is no other row
-    // saying so: an install with no scanner has an identity binding policy of
-    // `disabled`, which never records the unbound-image skip. This is the only
-    // record, so it names both the image that was pulled and the one that ran.
-    this.recordSecurityAudit(
-      'security-scan-skipped',
-      container,
-      'error',
-      `Security scan skipped because the local tag moved between the pull and the recreate: ` +
+    return {
+      details:
+        `Security scan skipped because the local tag moved between the pull and the recreate: ` +
         `${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
         'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
-    );
+    };
   }
 
   private async recreateReplacementContainerWithCleanup(
@@ -3495,7 +3505,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     cloneRuntimeConfigOptions,
     expectedImageId: string | undefined,
     preflightedServiceIdentity: boolean,
-  ): Promise<void> {
+  ): Promise<KeptMovedTagAudit | undefined> {
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
       newImage,
@@ -3510,7 +3520,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container.name,
         logContainer,
       );
-      await this.assertReplacementContainerImage(
+      const keptMovedTagAudit = await this.assertReplacementContainerImage(
         newContainer,
         expectedImageId,
         newImage,
@@ -3522,6 +3532,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       if (currentContainerSpec.State.Running) {
         await this.startContainer(newContainer, container.name, logContainer);
       }
+      return keptMovedTagAudit;
     } catch (recreateError: unknown) {
       await this.cleanupFailedReplacementCandidate(
         newContainer || getCreatedContainerCandidate(recreateError),
@@ -3614,10 +3625,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // Whether this refresh belongs to a compose-file-once batch, whose
     // containers all run on the one identity and the one gate decision the
     // preflight settled ahead of every container in it, rather than resolving
-    // its own. It has to be read here, before the recovery below can fill
-    // `expectedImageId` in for this container alone: after that point the two
-    // are indistinguishable, because the recovery publishes the first replica's
-    // ID as the service's shared one (DR-54).
+    // its own. Read here, at entry, from the runtime context the caller
+    // handed in, so it reflects what the caller actually passed for this
+    // container: a preflight's `pulledImageId` or `imageIdentity`, or the
+    // `onPulledImageIdResolved` sink a compose-file-once batch attaches
+    // (DR-54).
     //
     // The write-back sink is part of the test, not a belt-and-braces third
     // clause. A preflight whose own inspect threw stores no image ID, so its
@@ -3742,7 +3754,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       logContainer,
     );
     try {
-      await this.recreateReplacementContainerWithCleanup(
+      const keptMovedTagAudit = await this.recreateReplacementContainerWithCleanup(
         dockerApi,
         recreationContainerSpec,
         pinnedImage,
@@ -3752,6 +3764,25 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         expectedImageId,
         preflightedServiceIdentity,
       );
+      if (keptMovedTagAudit) {
+        // Recorded only now that the recreate above has actually succeeded:
+        // recording it earlier, inside the assert, would leave a
+        // `security-scan-skipped` row on the books even when `startContainer`
+        // throws right after and the rollback net removes the candidate and
+        // restores the previous container. On the path this is reached from
+        // there may be no other row saying the scan was skipped: an install
+        // with no scanner and no signature verification has an identity
+        // binding policy of `disabled`, which never records the unbound-image
+        // skip. Where one does exist, such as a configured scanner with an
+        // optional binding policy, this row still names both the image that
+        // was pulled and the one that ran, so it stands on its own either way.
+        this.recordSecurityAudit(
+          'security-scan-skipped',
+          container,
+          'error',
+          keptMovedTagAudit.details,
+        );
+      }
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
         dockerApi as DockerApiLike,
