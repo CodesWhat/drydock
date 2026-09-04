@@ -25,7 +25,6 @@ import {
 import {
   getAuthStatus,
   getLogoutRedirectUrl,
-  getStrategies,
   isAuthenticationReady,
   registerAuthenticators,
   resetAuthenticatorsForTests,
@@ -66,17 +65,6 @@ const router = express.Router();
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
 const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
-const DEPRECATED_AUTH_STRATEGIES_WARNING =
-  'GET /auth/strategies is deprecated and will be removed in v1.8.0. Use GET /api/v1/auth/status instead.';
-// '@1783123200' = 2026-07-04T00:00:00Z, the date the /auth/strategies alias
-// started sending the deprecation signal (v1.6.0) — the RFC 9745
-// Deprecation value must be the instant the resource became deprecated, a
-// past/current date, never the same instant as the future Sunset removal
-// date below. This same instant used to double as the Deprecation value for
-// the now-removed GET /api/auth/methods alias (both were deprecated in the
-// same v1.6.0 release); it stays here for /auth/strategies alone.
-const DEPRECATED_AUTH_METHODS_DEPRECATION = '@1783123200';
-const DEPRECATED_AUTH_STRATEGIES_SUNSET = 'Sat, 01 Jul 2028 00:00:00 GMT';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
 type LoginFinish = () => void;
@@ -143,6 +131,30 @@ export async function requireAuthentication(
   }
 
   next();
+}
+
+const AUTH_STRATEGIES_TOMBSTONE_MESSAGE =
+  'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.';
+
+/**
+ * GET /auth/strategies was a legacy response-shape alias for GET
+ * /api/v1/auth/status ({ strategies, warnings } instead of { providers,
+ * errors }). Deprecated in v1.6.0, removed in v1.8.0 -- see DEPRECATIONS.md.
+ * Registered ahead of requireAuthentication below so it answers 410 whether
+ * or not the caller is authenticated, the same tombstone shape and helper
+ * the unversioned /api/* aliases use in app/api/index.ts, instead of falling
+ * through to the SPA shell or a bare 401.
+ * @param _req
+ * @param res
+ */
+function getAuthStrategiesTombstone(_req: Request, res: Response): void {
+  sendErrorResponse(res, 410, {
+    message: AUTH_STRATEGIES_TOMBSTONE_MESSAGE,
+    details: {
+      migration: '/api/v1/auth/status',
+      docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+    },
+  });
 }
 
 /**
@@ -359,13 +371,6 @@ function logout(req: AuthRequest, res: Response): void {
   });
 }
 
-function getStrategiesDeprecatedResponse(req: Request, res: Response): void {
-  log.warn(DEPRECATED_AUTH_STRATEGIES_WARNING);
-  res.setHeader('Deprecation', DEPRECATED_AUTH_METHODS_DEPRECATION);
-  res.setHeader('Sunset', DEPRECATED_AUTH_STRATEGIES_SUNSET);
-  getStrategies(req, res);
-}
-
 function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
   if (trustproxy === true) {
     return true;
@@ -463,8 +468,11 @@ export function init(app: Application): void {
     return next();
   });
 
-  // Return strategies
-  router.get('/strategies', getStrategiesDeprecatedResponse);
+  // GET /auth/strategies is a 410 tombstone (see getAuthStrategiesTombstone
+  // above) registered ahead of requireAuthentication below, so it answers
+  // the same regardless of whether the caller is authenticated.
+  router.get('/strategies', getAuthStrategiesTombstone);
+
   router.get('/status', getAuthStatus);
 
   // GET /api/auth/methods was a compatibility alias for clients that still

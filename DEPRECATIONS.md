@@ -22,20 +22,6 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 
 ---
 
-### Legacy auth strategies response shape (`GET /auth/strategies`)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 |
-| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
-
-`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers for its v1.8.0 removal.
-
-**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
-
----
-
 ## Removed compatibility behaviors
 
 ### `curl` in Docker image
@@ -62,7 +48,7 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 `DD_TRIGGER_*` and `dd.trigger.*` were accepted as compatibility aliases while the trigger taxonomy moved to action/notification prefixes, and were logged at `error` level throughout v1.6.0 as a loud migration signal. Both are removed in v1.7.0:
 
-- **`DD_TRIGGER_*` environment variables now fail startup.** Any detected `DD_TRIGGER_*` variable raises a startup error that lists every offending variable with its exact `DD_ACTION_*` / `DD_NOTIFICATION_*` replacement (action for `docker`/`dockercompose`/`command`, notification for every other provider), plus the `config migrate --source trigger` command and a link to this page. Drydock does not start until every listed variable is renamed.
+- **`DD_TRIGGER_*` environment variables now fail startup.** Any detected `DD_TRIGGER_*` variable raises a startup error that lists every offending variable with its exact `DD_ACTION_*` / `DD_NOTIFICATION_*` replacement (action for `docker`/`dockercompose`/`portainer`/`command`, notification for every other provider), plus the `config migrate --source trigger` command and a link to this page. Drydock does not start until every listed variable is renamed.
 - **`dd.trigger.include` / `dd.trigger.exclude` container labels no longer resolve to anything.** They stopped acting as a per-category fallback beneath `dd.action.include` / `dd.action.exclude` and `dd.notification.include` / `dd.notification.exclude`; only the scoped labels are read now. A container still carrying either legacy label logs an `error`-level warning (once per label key) and increments the `dd_legacy_input_total{source="label"}` counter, so a fleet that hasn't migrated its labels stays visible in the deprecation banner and Prometheus — the label is just no longer consulted for actual include/exclude filtering.
 
 **Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
@@ -87,7 +73,7 @@ The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
 | **Removed in** | v1.7.0 |
-| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` where the labels filter out the matching docker / dockercompose action trigger (v1.7.0 ignores the legacy `dd.trigger.*` labels — see the runtime removal above) |
+| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` where the labels filter out the matching docker / dockercompose / portainer action trigger (v1.7.0 ignores the legacy `dd.trigger.*` labels, see the runtime removal above) |
 
 In v1.5.x–v1.6.x the eligibility model classified `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill said *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queued the update (the confirm modal listed the soft blocker and switched the accept label to *Update anyway*). This preserved the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
 
@@ -209,6 +195,20 @@ Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unc
 `GET /api/auth/methods` was a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen could render before a session existed. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. Because it was registered directly on the app, ahead of the `/api` mount, it survived the general unversioned `/api/*` removal above on its own v1.7.0 timeline. That registration is gone as of v1.7.0: the route is no longer mounted anywhere, so a request to it now falls through to the same unversioned `/api/*` **410 Gone** tombstone described above. `GET /api/auth/status` is unaffected and remains a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
 
 **Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
+
+---
+
+### Legacy auth strategies response shape (`GET /auth/strategies`)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0 |
+| **Removed in** | v1.8.0 |
+| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
+
+`GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. As of v1.8.0 the route is no longer mounted for the old shape. Unlike the unversioned `/api/*` aliases above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead, `GET /auth/strategies` now has its own explicit **410 Gone** tombstone registered ahead of the authentication guard, so a request gets the same 410 response whether or not it carries credentials, rather than falling through to the SPA's catch-all route. `GET /api/auth/status` (and its versioned form `GET /api/v1/auth/status`) is unaffected and remains available.
+
+**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
 
 ---
 

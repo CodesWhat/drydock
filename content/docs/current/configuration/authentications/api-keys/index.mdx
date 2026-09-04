@@ -73,9 +73,9 @@ A key holds one or more scopes. Every route is reachable at exactly one declared
 | --- | --- |
 | `read` | Read every GET route — containers, logs, registries, stats, audit |
 | `containers:watch` | Trigger a watch or a scan, preview an update |
-| `containers:update` | Update, roll back, restart, cancel operations, and approve, reject or defer a queued update |
+| `containers:update` | Update, roll back, cancel operations, and approve, reject or defer a queued update |
 | `triggers:test` | Fire a trigger by hand and retry a queued notification |
-| `admin` | Every route the other scopes reach, plus settings and deletion |
+| `admin` | Every route the other scopes reach, plus start/stop/restart, settings and deletion |
 | `api-keys:manage` | Create, list and revoke API keys |
 
 `admin` implies every scope **except** `api-keys:manage`. That one is always granted on its own, so an automation key with full administrative reach still can't mint itself a different key or revoke the key you'd use to shut it down.

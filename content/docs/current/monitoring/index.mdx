@@ -187,6 +187,7 @@ Use the auth metrics below to detect brute-force and username-enumeration activi
 - `drydock_auth_username_mismatch_total` counter
 - `drydock_auth_account_locked_total` gauge
 - `drydock_auth_ip_locked_total` gauge
+- `drydock_auth_api_key_failure_total` counter, every rejected API key authentication attempt, including those the audit-entry throttle (at most one entry per source key per minute) suppresses from the audit trail
 
 #### Prometheus alerting rules
 
@@ -247,6 +248,19 @@ groups:
           description: >-
             p95 login duration is {{ $value | printf "%.2f" }}s for provider={{ $labels.provider }}.
             Possible causes: slow OIDC IdP, high bcrypt cost, resource contention.
+
+      # API key authentication abuse, more than 10 rejected key attempts in 5 minutes
+      - alert: DrydockApiKeyAuthFailureRate
+        expr: increase(drydock_auth_api_key_failure_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API key authentication failure rate on Drydock"
+          description: >-
+            {{ $value | printf "%.0f" }} rejected API key authentication attempts in the last 5
+            minutes. This counter includes attempts the audit-entry throttle suppresses, so it
+            can be elevated even when the audit trail looks quiet.
 ```
 
 Tune thresholds to match your baseline traffic. A single-operator instance will rarely see 10 failures in 5 minutes under normal use; busier multi-user deployments may need higher values.
@@ -263,6 +277,7 @@ Use these PromQL queries as a starting point for a Grafana dashboard row dedicat
 | Active lockouts | Stat / gauge | `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` (separate stats or combined bar gauge) |
 | Login latency p50 / p95 / p99 | Time series | `histogram_quantile(0.50, sum by (le) (rate(drydock_auth_login_duration_seconds_bucket[5m])))` (repeat for `0.95` and `0.99`) |
 | Success ratio | Gauge (percent) | `sum(rate(drydock_auth_login_total{outcome="success"}[5m])) / sum(rate(drydock_auth_login_total[5m]))` |
+| API key authentication failure rate | Time series | `rate(drydock_auth_api_key_failure_total[5m])` |
 
 Set the "Login outcomes" panel to use the `outcome` label as the legend and color `success` green, `invalid` yellow, `locked` orange, `error` red for quick visual scanning.
 

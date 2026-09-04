@@ -176,7 +176,7 @@ The `DD_TRIGGER_*` prefix has been replaced by semantic prefixes that distinguis
 | **Deprecated since** | v1.5.0 |
 | **Removed since** | v1.7.0 |
 | **Detection** | Startup error listing every detected variable with its exact replacement; drydock does not start until all are renamed |
-| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
+| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Portainer/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
 
 ### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
 
@@ -242,12 +242,12 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 ### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
 
-`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors. Its unversioned alias, `GET /api/auth/methods`, was removed outright in v1.7.0 (see above), ahead of this response-shape migration deadline.
+`GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. As of v1.8.0, the route no longer serves the old shape. Unlike `GET /api/auth/methods` above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead it has its own explicit **410 Gone** tombstone, registered ahead of the authentication guard so the response is the same whether or not the request carries credentials.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.6.0 |
-| **Detection** | Log warning on each request plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
+| **Removed since** | v1.8.0 |
 | **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` |
 
 ## Enforced security changes (no deprecation window)
@@ -305,5 +305,5 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | **Startup log warnings** | All runtime-detectable deprecations |
 | **UI deprecation banners** | Active `dd.trigger.*` container-label usage (the `DD_TRIGGER_*` env var prefix now fails startup instead, so there is no running instance left to surface a banner for) |
 | **Prometheus counters** | `dd_legacy_input_total{source,key}` for active `dd.trigger.*` label usage, API tombstones, and historical observations |
-| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings` and `GET /auth/strategies` |
+| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings` |
 | **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |

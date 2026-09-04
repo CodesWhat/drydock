@@ -33,7 +33,6 @@ import { API_KEY_AUTHENTICATOR_ID } from './api-key-auth.js';
 import {
   getAuthStatus,
   getLogoutRedirectUrl,
-  getStrategies,
   isAuthenticationReady,
   registerAuthenticators,
   resetAuthenticatorsForTests,
@@ -288,26 +287,6 @@ describe('auth-strategies', () => {
       expect((res.json as Mock).mock.calls[0][0]).toEqual({
         providers: [],
         errors: [],
-      });
-    });
-  });
-
-  describe('getStrategies', () => {
-    test('returns strategies with registration warnings', () => {
-      const auth = createMockAuthentication({
-        id: 'basic.local',
-        description: { type: 'basic', name: 'Local' },
-      });
-      mockGetState.mockReturnValue({ authentication: { local: auth } });
-      mockGetAuthenticationRegistrationErrors.mockReturnValue([]);
-      mockGetRegistrationWarnings.mockReturnValue(['Warning: config missing']);
-
-      const res = createMockResponse();
-      getStrategies({} as Request, res);
-
-      expect((res.json as Mock).mock.calls[0][0]).toEqual({
-        strategies: [{ type: 'basic', name: 'Local' }],
-        warnings: ['Warning: config missing'],
       });
     });
   });

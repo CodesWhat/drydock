@@ -5575,7 +5575,7 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('performContainerUpdate should skip per-service refresh when compose-file-once is already applied', async () => {
+  test('performContainerUpdate should recreate a later replica when compose-file-once is already applied', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({
       name: 'nginx',
@@ -5593,10 +5593,15 @@ describe('Dockercompose Trigger', () => {
     } as any);
 
     expect(updated).toBe(true);
-    expect(updateContainerWithComposeSpy).not.toHaveBeenCalled();
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      {},
+    );
     expect(hooksSpy).toHaveBeenCalledWith(container, 'nginx', {});
     expect(mockLog.info).toHaveBeenCalledWith(
-      expect.stringContaining('Skip per-service compose refresh for nginx'),
+      expect.stringContaining('Recreate nginx for compose-file-once service nginx'),
     );
   });
 
@@ -5746,11 +5751,21 @@ describe('Dockercompose Trigger', () => {
     ]);
 
     expect(pullImageSpy).toHaveBeenCalledTimes(1);
-    expect(updateContainerWithComposeSpy).toHaveBeenCalledTimes(1);
-    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledTimes(2);
+    expect(updateContainerWithComposeSpy).toHaveBeenNthCalledWith(
+      1,
       '/opt/drydock/test/stack.yml',
       'nginx',
       firstContainer,
+      expect.objectContaining({
+        skipPull: true,
+      }),
+    );
+    expect(updateContainerWithComposeSpy).toHaveBeenNthCalledWith(
+      2,
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      secondContainer,
       expect.objectContaining({
         skipPull: true,
       }),

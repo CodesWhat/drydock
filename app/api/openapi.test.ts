@@ -93,12 +93,15 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/auth/methods']).toBeUndefined();
   });
 
-  test('should model auth status, strategy, and logout response shapes', () => {
-    expect(openApiDocument.paths['/auth/strategies']?.get?.responses?.[200]).toEqual(
-      jsonResponse('Authentication strategies', {
-        $ref: '#/components/schemas/AuthStrategiesResponse',
-      }),
-    );
+  test('should not document the removed /auth/strategies alias', () => {
+    // Removed in v1.8.0 (see DEPRECATIONS.md); unlike /api/auth/methods,
+    // /auth/strategies is not behind the unversioned /api/* tombstone, so a
+    // request to it now falls through to the UI's SPA catch-all instead of
+    // any JSON error response. It has no OpenAPI entry either way.
+    expect(openApiDocument.paths['/auth/strategies']).toBeUndefined();
+  });
+
+  test('should model auth status and logout response shapes', () => {
     expect(openApiDocument.paths['/api/v1/auth/status']?.get?.responses?.[200]).toEqual(
       jsonResponse('Authentication provider status', {
         $ref: '#/components/schemas/AuthStatusResponse',

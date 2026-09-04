@@ -225,7 +225,6 @@ describe('the published document', () => {
       'GET /api/v1/auth/status',
       'GET /api/auth/status',
       'GET /auth/status',
-      'GET /auth/strategies',
       'POST /auth/login',
       'POST /auth/remember',
       'GET /auth/user',

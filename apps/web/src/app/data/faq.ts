@@ -12,7 +12,7 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "What is the difference between a notification and an action trigger?",
     answer:
-      "Notifications (DD_NOTIFICATION_* env vars) send a message when an update is detected — Slack, Discord, Telegram, Microsoft Teams, SMTP, Gotify, NTFY, MQTT, Kafka, HTTP webhooks, and more. Actions (DD_ACTION_* env vars) execute the update: the docker action re-pulls and restarts the container, dockercompose runs docker compose pull/up on your stack, and command invokes an arbitrary shell script. You can combine both in the same pipeline — notify a channel and apply the update. Note: DD_TRIGGER_* was removed in v1.7.0 and now fails startup with an error naming each offending variable and its DD_ACTION_* or DD_NOTIFICATION_* replacement; always use those canonical prefixes.",
+      "Notifications (DD_NOTIFICATION_* env vars) send a message when an update is detected, Slack, Discord, Telegram, Microsoft Teams, SMTP, Gotify, NTFY, MQTT, Kafka, HTTP webhooks, and more. Actions (DD_ACTION_* env vars) execute the update: the docker action re-pulls and restarts the container, dockercompose runs docker compose pull/up on your stack, portainer re-pulls and redeploys the container through the Portainer API, and command invokes an arbitrary shell script. You can combine both in the same pipeline, notify a channel and apply the update. Note: DD_TRIGGER_* was removed in v1.7.0 and now fails startup with an error naming each offending variable and its DD_ACTION_* or DD_NOTIFICATION_* replacement; always use those canonical prefixes.",
   },
   {
     question: "How do I control which containers Drydock watches and which tags it considers?",

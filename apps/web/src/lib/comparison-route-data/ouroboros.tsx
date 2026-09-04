@@ -10,7 +10,7 @@ Web UI|None (CLI only)|Full dashboard|self
 Auto-update containers|Yes|Yes (optional, monitor-first)|self
 Docker Compose updates|No|Yes, pull & recreate|self
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Notifications|Apprise passthrough (150+ platforms via Apprise URLs)|20 native trigger integrations|self
+Trigger integrations|Apprise passthrough (150+ platforms via Apprise URLs)|21 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
 REST API|None|Full REST API|self
@@ -33,7 +33,7 @@ eye|Monitor-First Design|Drydock is monitor-first by design — it detects updat
 shield|Security Scanning|Drydock integrates Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification. Ouroboros has no security scanning.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — far beyond Ouroboros's Docker-config-based approach.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention and automatic rollback on health check failure. Ouroboros has no rollback or backup mechanism.
-bell|20 Trigger Integrations|Drydock notifies across 17 native channels — Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more — plus Docker, Docker Compose, and Command actions. Ouroboros delegates notifications to Apprise (any Apprise-compatible URL works), but has no native trigger system — no scheduling, templating, threshold filtering, or batch mode.
+bell|21 Trigger Integrations|Drydock notifies across 17 native channels, Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more, plus Docker, Docker Compose, Portainer, and Command actions. Ouroboros delegates notifications to Apprise (any Apprise-compatible URL works), but has no native trigger system, no scheduling, templating, threshold filtering, or batch mode.
 `,
   highlightIconMap: {
     monitor: Monitor,
