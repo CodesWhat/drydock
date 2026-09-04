@@ -10,7 +10,7 @@ export type ControllerLocalWatcherIdentity = {
 
 /**
  * Container ids each controller-local watcher currently sees on its own Docker
- * daemon, keyed by that watcher's registry id (`docker.<name>` — a watcher the
+ * daemon, keyed by that watcher's registry id (`docker.<name>`, a watcher the
  * controller registered itself carries no agent prefix, per
  * `Component.getId()`).
  *
