@@ -17,7 +17,7 @@ On supported desktop and Android browsers, a dismissible install banner appears 
 
 The installed app (and the regular browser tab) is backed by a service worker that precaches the SPA shell — the HTML, JS, and CSS needed to boot Drydock — so the dashboard still loads without a network connection. The service worker updates itself automatically in the background and takes over immediately on the next load; there's no "update available" prompt to act on and no way to get stuck on a stale shell.
 
-<Callout type="info">All `/api/*` requests are always network-only and are never served from the service worker's cache, offline or not. Drydock is a live dashboard — showing stale container/update state would be worse than a request failing outright, so API calls always hit the live server and surface a normal connection error when it's unreachable.</Callout>
+<Callout type="info">All `/api/*` requests are always network-only and are never served from the service worker's cache, offline or not. Drydock is a live dashboard — showing stale container/update state would be worse than a request failing outright, so API calls always hit the live server and surface a normal connection error when it's unreachable. The same exclusion covers every other path the server owns rather than the SPA: `/auth/*` (including the OIDC `/auth/oidc/<name>/cb` callback), `/health`, and `/metrics`. Navigating to one of those always reaches the server, never the cached app shell.</Callout>
 
 ## Themes
 

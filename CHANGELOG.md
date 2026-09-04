@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **OIDC login on v1.7.0-rc.1 through rc.10 bounced straight back to the login page.** The service worker's navigation fallback denied `/api/` and nothing else, so every other top-level navigation was answered from the precached app shell. The identity provider redirects the browser to `/auth/oidc/<name>/cb?code=...`, which is a document navigation, so the callback was served `index.html` and never reached Express: no code exchange, no session, and the SPA booted and bounced to `/login`. Basic auth was unaffected because it authenticates over `fetch`, which the navigation fallback never touches. `skipWaiting` and `clientsClaim` re-register the worker on the next load, so clearing site data only helped until the page reloaded. The navigation fallback now skips every server-owned route (`/api`, `/auth/`, `/health`, `/metrics`) and serves the shell only for the SPA's own paths; the `/auth` settings view still loads from the shell, because Express matches that mount path too but has no handler for it, so the shell answers instead. v1.6 was never affected, it shipped no service worker. ([#939](https://github.com/CodesWhat/drydock/issues/939))
+
 ### Documentation
 
 - **The agents page didn't say registries have to be configured on every agent, not just the controller.** A traditional agent runs its own watcher and does its own registry matching and update checks, so `DD_REGISTRY_*` configured only on the controller left every agent-reported container from that registry stamped `unknown`, credentials are never pushed from controller to agent. The controller needs the same registry configured too, or the container's registry link in the UI resolves to a registry the controller was never told about. A new "Registries on agents" section spells this out with a worked Gitea example on both sides. Reported in [#945](https://github.com/CodesWhat/drydock/issues/945).
