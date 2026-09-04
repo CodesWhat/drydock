@@ -219,6 +219,18 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.10</strong></summary>
+
+- **Los envíos por lotes y por resumen con `once=true` ahora toman la misma reserva de la ranura de notificación que toma la ruta simple, de modo que un escaneo manual superpuesto a un escaneo de cron ya no puede anunciar la misma actualización dos veces.** El vaciado del resumen omite y descarta un resultado en búfer que un vaciado anterior ya envió, y el búfer de reintentos por lotes ya no lleva al activador una entrada sin reservar. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Dar de baja un watcher ahora borra el temporizador de plazo del escaneo de cron**, de modo que un watcher ya desmontado no registra una advertencia de plazo que ya no le corresponde, cada llamador que esperaba ese escaneo se resuelve y un escaneo solicitado tras el desmontaje se rechaza en lugar de iniciarse. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **La guía de inicio ahora indica que los scripts de hook se ejecutan dentro del contenedor de Drydock**, de modo que una ruta que solo existe en el host o en el contenedor actualizado falla, y la corrección de búsqueda de registro del agente ahora acredita a quien la escribió. ([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **El mismo párrafo de hooks ahora indica que un pre-hook fallido aborta la actualización de forma predeterminada y nombra `dd.hook.pre.abort=false` como la opción para desactivarlo**, en lugar de describir el aborto como incondicional. ([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+Notas completas de la versión en [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04).
+
+</details>
+
+<details open>
 <summary><strong>Aspectos destacados de v1.7.0-rc.9</strong></summary>
 
 - **`watchFromCron()` ahora es de ejecución única, de modo que los escaneos superpuestos en una flota grande ya no disparan el mismo activador varias veces para la misma actualización.** Un escaneo que nunca finaliza ahora compite contra un plazo límite para que no pueda bloquear los siguientes ciclos de cron. ([#979](https://github.com/CodesWhat/drydock/pull/979))

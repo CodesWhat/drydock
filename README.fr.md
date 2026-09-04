@@ -219,6 +219,18 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.10</strong></summary>
+
+- **Les envois par lot et par condensé avec `once=true` prennent désormais la même réservation de créneau de notification que le chemin simple, si bien qu'un scan manuel qui chevauche un scan cron ne peut plus annoncer deux fois la même mise à jour.** Le vidage du condensé ignore et évince un résultat mis en tampon qu'un vidage précédent avait déjà envoyé, et le tampon de réessai par lot ne porte plus au déclencheur une entrée sans réservation. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Le désenregistrement d'un watcher efface désormais le minuteur d'échéance du scan cron**, si bien qu'un watcher démonté ne journalise plus un avertissement d'échéance qui ne lui appartient plus, chaque appelant en attente de ce scan est résolu, et un scan demandé après le démontage est refusé au lieu d'être lancé. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Le guide de démarrage précise désormais que les scripts de hook s'exécutent à l'intérieur du conteneur Drydock**, si bien qu'un chemin qui n'existe que sur l'hôte ou dans le conteneur mis à jour échoue, et le correctif de recherche de registre de l'agent crédite désormais la personne qui l'a écrit. ([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **Le même paragraphe sur les hooks précise désormais qu'un pre-hook en échec interrompt la mise à jour par défaut et nomme `dd.hook.pre.abort=false` comme option de désactivation**, au lieu de décrire cette interruption comme inconditionnelle. ([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04).
+
+</details>
+
+<details open>
 <summary><strong>Points forts de la v1.7.0-rc.9</strong></summary>
 
 - **`watchFromCron()` est désormais à exécution unique (single-flight), si bien que des scans qui se chevauchent sur une grande flotte ne déclenchent plus le même déclencheur plusieurs fois pour une seule mise à jour.** Un scan qui ne se termine jamais est désormais confronté à une échéance pour qu'il ne puisse plus bloquer les cycles cron suivants. ([#979](https://github.com/CodesWhat/drydock/pull/979))

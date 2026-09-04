@@ -219,6 +219,18 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.10</strong></summary>
+
+- **Wysyłki zbiorcze i skrótowe z `once=true` biorą teraz tę samą rezerwację slotu powiadomienia co ścieżka prosta, dzięki czemu ręczny skan nakładający się na skan crona nie może już zgłosić tej samej aktualizacji dwukrotnie.** Opróżnianie bufora skrótów pomija i usuwa wynik z bufora, który wcześniejsze opróżnianie już wysłało, a bufor ponowień wsadowych nie przekazuje już do wyzwalacza wpisu bez rezerwacji. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Wyrejestrowanie watchera czyści teraz licznik terminu skanu crona**, dzięki czemu zdemontowany watcher nie zapisuje już ostrzeżenia o terminie, który do niego nie należy, każdy wywołujący czekający na ten skan zostaje rozwiązany, a skan zlecony po demontażu jest odrzucany zamiast uruchamiany. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Przewodnik pierwszych kroków mówi teraz, że skrypty hooków działają wewnątrz kontenera Drydock**, więc ścieżka istniejąca tylko na hoście lub w zaktualizowanym kontenerze kończy się niepowodzeniem, a poprawka wyszukiwania rejestru dla agenta wskazuje teraz jej autora. ([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **Ten sam akapit o hookach mówi teraz, że nieudany pre-hook domyślnie przerywa aktualizację, i wskazuje `dd.hook.pre.abort=false` jako sposób rezygnacji**, zamiast opisywać to przerwanie jako bezwarunkowe. ([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+Pełne informacje o wydaniu: [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04).
+
+</details>
+
+<details open>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.9</strong></summary>
 
 - **`watchFromCron()` działa teraz w trybie single-flight, dzięki czemu nakładające się skany w dużej flocie nie uruchamiają już tego samego wyzwalacza wielokrotnie dla jednej aktualizacji.** Skan, który nigdy się nie kończy, jest teraz uruchamiany z terminem, dzięki czemu nie może zablokować kolejnych cykli crona. ([#979](https://github.com/CodesWhat/drydock/pull/979))

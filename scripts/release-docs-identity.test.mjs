@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.9';
-const PREV_RC_VERSION = '1.7.0-rc.8';
-const RC_DATE = '2026-09-03';
-const RC_DISPLAY_DATE = 'September 3, 2026';
+const RC_VERSION = '1.7.0-rc.10';
+const PREV_RC_VERSION = '1.7.0-rc.9';
+const RC_DATE = '2026-09-04';
+const RC_DISPLAY_DATE = 'September 4, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -155,17 +155,12 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const pull of [979, 988]) {
+  for (const pull of [996, 998, 1001]) {
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${pull}`;
     assert.ok(updates.includes(pullLink), `updates page must link PR #${pull}`);
   }
 
-  for (const fragment of [
-    '`watchFromCron()`',
-    '`once=true`',
-    '`legacyConfigBody`',
-    '`DD_ANONYMOUS_AUTH_CONFIRM=true`',
-  ]) {
+  for (const fragment of ['`once=true`', '`watch()`', '`just-debounce`', 'batch retry buffer']) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }

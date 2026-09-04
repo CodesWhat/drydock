@@ -219,6 +219,18 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.10</strong></summary>
+
+- **Batch- und Digest-Sends mit `once=true` nehmen jetzt dieselbe Reservierung des Benachrichtigungs-Slots vor wie der einfache Pfad, sodass ein manueller Scan, der einen Cron-Scan überlappt, dasselbe Update nicht mehr zweimal melden kann.** Der Digest-Flush überspringt und verwirft ein gepuffertes Ergebnis, das ein früherer Flush bereits gesendet hat, und der Batch-Retry-Puffer trägt keinen unreservierten Eintrag mehr an den Trigger. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Das Deregistrieren eines Watchers löscht jetzt den Fristen-Timer des Cron-Scans**, sodass ein abgebauter Watcher keine Fristwarnung mehr protokolliert, die ihm nicht mehr gehört, jeder auf diesen Scan wartende Aufrufer aufgelöst wird und ein nach dem Abbau angeforderter Scan abgelehnt statt gestartet wird. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Der Getting-Started-Leitfaden sagt jetzt, dass Hook-Skripte innerhalb des Drydock-Containers laufen**, sodass ein Pfad, den es nur auf dem Host oder im aktualisierten Container gibt, fehlschlägt, und der Agent-Registry-Lookup-Fix nennt jetzt den Beitragenden, der ihn geschrieben hat. ([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **Derselbe Hooks-Absatz sagt jetzt, dass ein fehlgeschlagener Pre-Hook das Update standardmäßig abbricht, und nennt `dd.hook.pre.abort=false` als Opt-out**, statt den Abbruch als unbedingt zu beschreiben. ([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+Vollständige Release-Notes in [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04).
+
+</details>
+
+<details open>
 <summary><strong>Highlights von v1.7.0-rc.9</strong></summary>
 
 - **`watchFromCron()` ist jetzt Single-Flight, sodass überlappende Scans in einer großen Flotte nicht mehr denselben Trigger mehrfach für ein Update auslösen.** Ein Scan, der nie abschließt, läuft jetzt gegen eine Frist, damit er spätere Cron-Durchläufe nicht blockiert. ([#979](https://github.com/CodesWhat/drydock/pull/979))
