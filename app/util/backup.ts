@@ -74,7 +74,7 @@ export interface RollbackImageIdentityBinder {
     imageReference: string,
     container: unknown,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
-    options?: { preferredDigest?: string },
+    options?: { preferredDigest: string | null },
   ) => Promise<{ imageIdentity?: string; skipSecurityGate?: boolean }>;
   /**
    * Reports the same required/optional/disabled decision the update path
@@ -171,9 +171,10 @@ export async function resolveRollbackImageReference(
       // backup captured. Left to itself the binder would prefer
       // `container.result.digest`, which describes the update candidate this
       // rollback exists to undo. A record carrying a digest returns above, so
-      // what is passed here is in practice nothing at all, which is the point:
-      // the candidate's digest is not consulted (DR-64).
-      { preferredDigest: backup.imageDigest },
+      // the value passed here is in practice always `null`, which is the
+      // point: the candidate's digest is not consulted, and a tie nothing else
+      // can break comes back unbound rather than picked (DR-64).
+      { preferredDigest: backup.imageDigest ?? null },
     );
     if (binding.imageIdentity) {
       const separatorIndex = binding.imageIdentity.indexOf('@');

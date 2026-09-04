@@ -261,7 +261,7 @@ describe('Backup Store', () => {
         'registry.example/app:1.2.3',
         container,
         logContainer,
-        { preferredDigest: undefined },
+        { preferredDigest: null },
       );
     });
 
@@ -286,8 +286,10 @@ describe('Backup Store', () => {
         container,
         logContainer,
         // The record carries no digest, so the binder is told to prefer
-        // nothing rather than falling back to the candidate.
-        { preferredDigest: undefined },
+        // nothing. An explicit null, not an empty object: the field is
+        // required precisely so that "no preference" cannot be typed by
+        // leaving it out.
+        { preferredDigest: null },
       );
     });
 
@@ -436,7 +438,7 @@ describe('Backup Store', () => {
         'registry.example/app:1.2.3',
         container,
         logContainer,
-        { preferredDigest: undefined },
+        { preferredDigest: null },
       );
     });
 
@@ -463,7 +465,7 @@ describe('Backup Store', () => {
         'registry.example/app:1.2.3',
         container,
         logContainer,
-        { preferredDigest: undefined },
+        { preferredDigest: null },
       );
       expect(trigger.getRollbackIdentityBindingPolicy).not.toHaveBeenCalled();
       expect(logContainer.warn).toHaveBeenCalledWith(

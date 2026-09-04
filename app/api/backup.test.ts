@@ -870,7 +870,7 @@ describe('Backup Router', () => {
         'library/nginx:1.24',
         container,
         expect.anything(),
-        { preferredDigest: undefined },
+        { preferredDigest: null },
       );
       expect(mockTrigger.pullImage).toHaveBeenCalledWith(
         {},
@@ -1206,7 +1206,7 @@ describe('Backup Router', () => {
         'library/nginx:1.24',
         container,
         expect.anything(),
-        { preferredDigest: undefined },
+        { preferredDigest: null },
       );
       expect(mockTrigger.pullImage).toHaveBeenCalledWith(
         dockerApi,

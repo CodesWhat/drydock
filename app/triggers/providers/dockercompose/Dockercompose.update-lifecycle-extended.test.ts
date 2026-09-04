@@ -1662,23 +1662,28 @@ describe('Dockercompose Trigger', () => {
 
     // One pull for the service, shared by both replicas.
     expect(pullImageSpy).toHaveBeenCalledTimes(1);
-    // Both replicas are gated up front, and neither refresh gates again.
-    expect(callOrder.filter((entry) => entry.startsWith('gate:'))).toEqual([
-      'gate:nginx-1',
-      'gate:nginx-2',
-    ]);
-    expect(callOrder.indexOf('gate:nginx-2')).toBeLessThan(callOrder.indexOf('refresh:nginx-1'));
     // Every replica is recreated, and the steps the gate protects run once for
     // each of them rather than once for the service.
     expect(composeUpdateSpy).toHaveBeenCalledTimes(2);
     expect(preUpdateHookSpy).toHaveBeenCalledTimes(2);
     expect(pruneImagesSpy).toHaveBeenCalledTimes(2);
     expect(backupSpy).toHaveBeenCalledTimes(2);
-    for (const name of ['nginx-1', 'nginx-2']) {
-      expect(callOrder).toEqual(
-        expect.arrayContaining([`hook:${name}`, `prune:${name}`, `backup:${name}`]),
-      );
-    }
+    // Both replicas are gated in the preflight, before either is touched, and
+    // neither gates again inside its own refresh. After that each replica gets
+    // its own hook, prune and backup, in that order and before its refresh, so
+    // no replica can be recreated without them.
+    expect(callOrder).toEqual([
+      'gate:nginx-1',
+      'gate:nginx-2',
+      'hook:nginx-1',
+      'prune:nginx-1',
+      'backup:nginx-1',
+      'refresh:nginx-1',
+      'hook:nginx-2',
+      'prune:nginx-2',
+      'backup:nginx-2',
+      'refresh:nginx-2',
+    ]);
   });
 
   test('compose-file-once preflight failure terminalizes every active mapped operation', async () => {
