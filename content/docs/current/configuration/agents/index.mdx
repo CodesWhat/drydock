@@ -429,10 +429,12 @@ services:
     image: codeswhat/drydock
     ports:
       - "3000:3000"
+    volumes:
+      - ./certs/agent-ca.pem:/certs/agent-ca.pem:ro          # the CA that signed the agent's certificate
     environment:
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
       - DD_AGENT_REMOTE1_SECRET=pick-a-long-random-string   # must match the agent's DD_AGENT_SECRET
-      - DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem          # TLS to the agent, as in the setup example above
+      - DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem          # TLS to the agent; see Controller Environment Variables
       - DD_REGISTRY_GITEA_PRIVATE_URL=https://git.example.com
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=john
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe
