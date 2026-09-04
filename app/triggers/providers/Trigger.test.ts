@@ -3971,6 +3971,91 @@ test('handleContainerReports sends a retry-buffered container once across two ov
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
 });
 
+// once=false means "re-notify every cycle", but the flush records history on
+// every successful send regardless of `once`. Reserving on this path without a
+// `once` gate reads that just-written history back as "already digested" and
+// evicts the entry, so the digest would go out exactly once ever.
+test('flushDigestBuffer keeps sending the same result when once is disabled', async () => {
+  await trigger.register('trigger', 'test', 'digest-trigger', {
+    ...configurationValid,
+    mode: 'digest',
+    once: false,
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'test',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+  const batchSpy = vi.fn().mockResolvedValue(undefined);
+  trigger.triggerBatch = batchSpy;
+
+  await trigger.handleContainerReportDigest({ changed: true, container });
+  await trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  expect(
+    notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available-digest'),
+  ).toBe(notificationHistoryStore.computeResultHash(container));
+
+  // Same unchanged result, next cycle. It must go out again.
+  await trigger.handleContainerReportDigest({ changed: true, container });
+  await trigger.flushDigestBuffer();
+
+  expect(batchSpy).toHaveBeenCalledTimes(2);
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+// Under once=false a container legitimately re-sends a result it already
+// delivered, so a later failure can park an entry in the retry buffer whose
+// history already matches. Reserving there would read that as "already sent"
+// and drop the retry instead of retrying it.
+test('handleContainerReports retries a container it already delivered when once is disabled', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', {
+    ...configurationValid,
+    mode: 'batch',
+    once: false,
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+
+  // A successful batch records history for this exact result.
+  const deliveredSpy = vi.fn().mockResolvedValue(undefined);
+  trigger.triggerBatch = deliveredSpy;
+  await trigger.handleContainerReports([{ changed: true, container }]);
+  expect(deliveredSpy).toHaveBeenCalledTimes(1);
+  expect(
+    notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+  ).toBe(notificationHistoryStore.computeResultHash(container));
+
+  // once=false re-sends the same result next cycle; this one fails and parks it
+  // in the retry buffer with history that already matches.
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('network timeout'));
+  await trigger.handleContainerReports([{ changed: true, container }]);
+  expect(trigger.batchRetryBuffer.size).toBe(1);
+
+  storeContainer.getContainersRaw.mockReturnValue([container]);
+  const retrySpy = vi.fn().mockResolvedValue(undefined);
+  trigger.triggerBatch = retrySpy;
+  await trigger.handleContainerReports([]);
+
+  expect(retrySpy).toHaveBeenCalledTimes(1);
+  expect(trigger.batchRetryBuffer.size).toBe(0);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
 test('handleContainerReportDigest still buffers a genuinely new result after a flush', async () => {
   await trigger.register('trigger', 'test', 'digest-trigger', {
     ...configurationValid,
