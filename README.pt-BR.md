@@ -219,6 +219,18 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.10</strong></summary>
+
+- **Os envios em lote e por digest com `once=true` agora fazem a mesma reserva de vaga de notificação que o caminho simples faz, de modo que uma varredura manual sobreposta a uma varredura do cron não pode mais anunciar a mesma atualização duas vezes.** A descarga do digest ignora e descarta um resultado em buffer que uma descarga anterior já enviou, e o buffer de retentativas em lote não leva mais ao gatilho uma entrada sem reserva. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **Cancelar o registro de um watcher agora limpa o temporizador de prazo da varredura do cron**, de modo que um watcher desmontado não registra mais um aviso de prazo que já não lhe pertence, todo chamador que esperava por essa varredura é resolvido, e uma varredura solicitada após o desmonte é recusada em vez de iniciada. ([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **O guia de primeiros passos agora diz que os scripts de hook rodam dentro do contêiner do Drydock**, de modo que um caminho que só existe no host ou no contêiner atualizado falha, e a correção de busca de registro do agente agora credita quem a escreveu. ([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **O mesmo parágrafo sobre hooks agora diz que um pre-hook com falha aborta a atualização por padrão e nomeia `dd.hook.pre.abort=false` como a forma de desativar isso**, em vez de descrever o aborto como incondicional. ([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.9</strong></summary>
 
 - **`watchFromCron()` agora é single-flight, de modo que varreduras sobrepostas em uma frota grande não disparam mais o mesmo gatilho várias vezes para a mesma atualização.** Uma varredura que nunca termina agora compete contra um prazo, para que não possa travar os próximos ciclos do cron. ([#979](https://github.com/CodesWhat/drydock/pull/979))

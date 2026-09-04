@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.10] — 2026-09-04
+
 ### Fixed
 
 - **An update could be announced twice, and a torn-down watcher could still warn about a scan deadline it no longer owned.** The `once=true` reservation added for [#972](https://github.com/CodesWhat/drydock/issues/972) covered the simple notification path only, so batch and digest eligibility still did a plain read of the notification history, and that history is written after the send resolves. A manual single-container scan overlapping a cron scan therefore passed the check in both evaluations and sent the same candidate twice in batch mode, and in digest mode a report landing while a flush was still sending re-buffered the same result behind the send, so the post-send delete skipped it and the next flush sent it again. Batch and digest eligibility now take the same synchronous reservation the simple path does, the batch releases every reservation it took in a finally, and the digest flush holds one for exactly the results it is sending. Two paths that bypassed the gate entirely are closed with it. The digest flush swaps the current store container in for the buffered one at send time, and when that substitute was a result an earlier flush had already sent it went out again while the post-send delete quietly dropped the newer candidate the buffer was holding; it is now skipped and evicted instead, and a genuinely pending update re-enters the buffer on the next scan. Entries in the batch retry buffer, which every batch re-sends until one succeeds, took no reservation at all, so two overlapping retries both carried the same entry to the trigger. Separately, the cron scan's deadline timer lived only in the closure that raced it, so deregistering a watcher while its `watch()` was stalled left the timer running to the full deadline and then logged "exceeded its deadline" against a watcher that no longer existed, while the caller that started the scan and every caller coalesced into it stayed pending. The timer and a cancel handle now live on the watcher state, deregistration clears the timer and settles the race with its own sentinel so every caller resolves to an empty result with no deadline warning, and the per-scan cleanup is identity-guarded so a late settlement cannot clear a newer scan's handle. A scan requested after teardown is now refused outright, which also covers the docker-events debounce: `just-debounce` exposes no cancel, so its pending timeout still fires up to five seconds after the watcher is gone and used to start a full scan against it.
@@ -2689,7 +2691,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...HEAD
+[1.7.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...v1.7.0-rc.10
 [1.7.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.8...v1.7.0-rc.9
 [1.7.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.7...v1.7.0-rc.8
 [1.7.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.6...v1.7.0-rc.7
