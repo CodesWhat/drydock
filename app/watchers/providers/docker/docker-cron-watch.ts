@@ -184,6 +184,19 @@ export async function watchFromCronOrchestration(
   watcher: CronWatchOrchestrationWatcher,
   options: CronWatchOptions = {},
 ): Promise<ContainerReport[]> {
+  if (watcher.isWatcherDeregistered) {
+    // A timer captured before teardown can still fire after
+    // deregisterComponent() has run resetCronWatchState(): the docker-events
+    // debounce (just-debounce@1.1.0 exposes no cancel, so its pending timeout
+    // outlives the watcher), the startup delay, the discovery-settle timer and
+    // the maintenance-window queue all call in here from a closure. Starting a
+    // scan at that point runs a full watch() against a torn-down watcher and
+    // publishes a fresh refed deadline handle that the reset can no longer
+    // reach, so answer with the same empty result the deregistration path uses
+    // instead. init() clears this flag, so a re-registered watcher scans again.
+    return [];
+  }
+
   if (watcher.cronWatchInFlight) {
     watcher.cronWatchRescanRequested = true;
     watcher.cronWatchRescanReason = options.reason;

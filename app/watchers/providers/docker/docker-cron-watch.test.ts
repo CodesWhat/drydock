@@ -507,6 +507,33 @@ describe('watchFromCronOrchestration', () => {
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
+  test('refuses to start a scan once the watcher is deregistered', async () => {
+    vi.useFakeTimers();
+    try {
+      const watchMock = vi.fn().mockResolvedValue([]);
+      const watcher = createWatcher({ watch: watchMock });
+
+      // Teardown order: deregisterComponent() sets the flag, then resets state.
+      watcher.isWatcherDeregistered = true;
+      resetCronWatchState(watcher);
+
+      // A timer captured before teardown (the docker-events debounce, the
+      // startup delay, the discovery-settle timer) still fires afterwards.
+      await expect(
+        watchFromCronOrchestration(watcher, { reason: 'docker-event' }),
+      ).resolves.toEqual([]);
+
+      expect(watchMock).not.toHaveBeenCalled();
+      expect(watcher.cronWatchInFlight).toBeUndefined();
+      // No deadline handle published, so nothing is left for the reset that
+      // already ran to clean up.
+      expect(watcher.cronWatchDeadlineHandle).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('a settling stale scan does not clear a newer scan deadline handle', async () => {
     const staleDeferred = createDeferred<ContainerReport[]>();
     const freshDeferred = createDeferred<ContainerReport[]>();
