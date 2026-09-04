@@ -14140,6 +14140,149 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
   });
 });
 
+// #946 finding 1: a `command` action is an action the operator asked drydock to run on an
+// update, but it is not in UPDATE_ACTION_TRIGGER_TYPES, so it used to skip the deferral
+// branch entirely. Under the scan scope the closed window held it back indirectly (no scan,
+// no report); under the install scope the scan always runs, so without this gate the shell
+// command fired at any hour. Every action category defers now, notifications never do.
+describe('maintenance window gates command actions (#946)', () => {
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'local',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  } as any;
+
+  let queueMaintenanceWindowWatch: ReturnType<typeof vi.fn>;
+
+  function mockWindow(open: boolean) {
+    queueMaintenanceWindowWatch = vi.fn();
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': {
+          type: 'docker',
+          name: 'local',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => open,
+          queueMaintenanceWindowWatch,
+        },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+  }
+
+  test('a simple-mode command action is deferred and queues the catch-up', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockWindow(false);
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+    expect(queueMaintenanceWindowWatch).toHaveBeenCalledTimes(1);
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Outside maintenance window'));
+  });
+
+  test('a simple-mode command action runs normally inside the window', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockWindow(true);
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+  });
+
+  test('a batch command action sends only the containers the window allows', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'batch' };
+    queueMaintenanceWindowWatch = vi.fn();
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.closed': {
+          type: 'docker',
+          name: 'closed',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => false,
+          queueMaintenanceWindowWatch,
+        },
+        'docker.open': {
+          type: 'docker',
+          name: 'open',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => true,
+        },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([
+      { changed: true, container: { ...container, id: 'c-held', watcher: 'closed' } },
+      { changed: true, container: { ...container, id: 'c-ready', watcher: 'open' } },
+    ] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c-ready' })]);
+    const recordedIds = vi
+      .mocked(notificationHistoryStore.recordNotification)
+      .mock.calls.map((call) => call[1]);
+    expect(recordedIds).toEqual(['c-ready']);
+    expect(queueMaintenanceWindowWatch).toHaveBeenCalledTimes(1);
+  });
+
+  test('a batch command action with every container deferred sends nothing at all', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'batch' };
+    mockWindow(false);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([{ changed: true, container }] as any);
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test('a digest command action keeps a window-deferred container buffered', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'digest' };
+    mockWindow(false);
+    (trigger as any).digestBuffer.set('c1', container);
+    (trigger as any).digestBufferUpdatedAt.set('c1', Date.now());
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    expect((trigger as any).digestBuffer.size).toBe(1);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test('a notification trigger still sends a batch while the window is closed', async () => {
+    trigger.type = 'slack';
+    trigger.configuration = { ...configurationValid, mode: 'batch' };
+    mockWindow(false);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([{ changed: true, container }] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+    expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+  });
+});
+
 // spec-6.0.1-action-policy.md slice 4: update-action (docker/dockercompose)
 // triggers now gate every automatic dispatch decision point
 // (getMustTriggerDecision, consumed by the simple/batch/digest paths) on

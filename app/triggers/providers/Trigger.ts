@@ -2130,13 +2130,19 @@ class Trigger<
       logContainer.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
+    // Every action-category trigger is held back by the window, not only the ones that run
+    // the Docker update lifecycle. A `command` action runs an arbitrary shell command the
+    // operator attached to an update, which is exactly the kind of unattended work a window
+    // exists to confine to a slot; under the install scope the scan no longer holds it back
+    // indirectly, so this gate is the only thing that does. Notification triggers are
+    // unaffected: the window has never gated what drydock says, only what it does.
+    if (this.getCategory() === 'action' && this.deferAutoUpdateForMaintenanceWindow(container)) {
+      logContainer.debug(
+        'Outside maintenance window, deferring auto update until the window opens',
+      );
+      return;
+    }
     if (this.isUpdateActionTrigger()) {
-      if (this.deferAutoUpdateForMaintenanceWindow(container)) {
-        logContainer.debug(
-          'Outside maintenance window, deferring auto update until the window opens',
-        );
-        return;
-      }
       const accepted = await enqueueContainerUpdate(container, {
         trigger: this as unknown as {
           type: string;
@@ -2337,7 +2343,16 @@ class Trigger<
         }
         maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        await this.triggerBatch(containersToSend);
+        maintenanceWindowDeferredIds =
+          this.collectBatchMaintenanceWindowDeferredIds(containersToSend);
+        const readyToSend = containersToSend.filter(
+          (container) => !maintenanceWindowDeferredIds.has(container.id),
+        );
+        // A command action with every container deferred sends nothing at all rather than
+        // an empty batch; the containers below stay unrecorded and unbuffered either way.
+        if (readyToSend.length > 0) {
+          await this.triggerBatch(readyToSend);
+        }
       }
       status = 'success';
       const sent = containersToSend.filter(
@@ -2650,7 +2665,13 @@ class Trigger<
         }
         maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        await this.triggerBatch(containers);
+        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(containers);
+        const readyToSend = containers.filter(
+          (container) => !maintenanceWindowDeferredIds.has(container.id),
+        );
+        if (readyToSend.length > 0) {
+          await this.triggerBatch(readyToSend);
+        }
       }
       status = 'success';
       for (const container of containers) {
@@ -3292,22 +3313,16 @@ class Trigger<
   }
 
   /**
-   * Dispatch an accepted batch of automatic updates.
+   * The ids in `containers` whose automatic action the maintenance window holds back this
+   * cycle, plus the dependents that would otherwise be acted on out of order.
    *
-   * `dispatched` is false only when the batch was abandoned for a reason the caller must not
-   * treat as a successful send. `deferredIds` holds the containers this call did NOT enqueue
-   * because the maintenance window is closed for them (or for something they depend on): the
-   * caller must not record those as notified, or the `once=true` history gate would suppress
-   * the very rescan that is supposed to apply them once the window opens.
+   * Shared by every batched action path so `command` is gated exactly like `docker`: the
+   * update-action batch below routes through the admission queue, a command trigger goes
+   * straight to `triggerBatch`, and both must leave a window-deferred container alone.
+   * Callers outside `runAcceptedUpdateBatch` check the action category first; a notification
+   * trigger never defers.
    */
-  private async runAcceptedUpdateBatch(
-    containers: Container[],
-  ): Promise<{ dispatched: boolean; deferredIds: Set<string> }> {
-    if (getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
-      return { dispatched: false, deferredIds: new Set<string>() };
-    }
-
+  private collectMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
     const windowDeferred: Container[] = [];
     const deferredIds = new Set<string>();
     for (const container of containers) {
@@ -3347,8 +3362,6 @@ class Trigger<
       }
     }
 
-    const ready = containers.filter((container) => !deferredIds.has(container.id));
-
     for (const container of windowDeferred) {
       this.log.debug(
         `Outside maintenance window, deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} until the window opens`,
@@ -3359,6 +3372,39 @@ class Trigger<
         `Deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} because an upstream dependency is outside its maintenance window this cycle`,
       );
     }
+
+    return deferredIds;
+  }
+
+  /**
+   * The window-deferred ids for a batch a non-update action trigger (`command`) is about to
+   * send itself, or an empty set for a notification trigger, which the window never gates.
+   */
+  private collectBatchMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
+    return this.getCategory() === 'action'
+      ? this.collectMaintenanceWindowDeferredIds(containers)
+      : new Set<string>();
+  }
+
+  /**
+   * Dispatch an accepted batch of automatic updates.
+   *
+   * `dispatched` is false only when the batch was abandoned for a reason the caller must not
+   * treat as a successful send. `deferredIds` holds the containers this call did NOT enqueue
+   * because the maintenance window is closed for them (or for something they depend on): the
+   * caller must not record those as notified, or the `once=true` history gate would suppress
+   * the very rescan that is supposed to apply them once the window opens.
+   */
+  private async runAcceptedUpdateBatch(
+    containers: Container[],
+  ): Promise<{ dispatched: boolean; deferredIds: Set<string> }> {
+    if (getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+      return { dispatched: false, deferredIds: new Set<string>() };
+    }
+
+    const deferredIds = this.collectMaintenanceWindowDeferredIds(containers);
+    const ready = containers.filter((container) => !deferredIds.has(container.id));
 
     if (ready.length === 0) {
       return { dispatched: true, deferredIds };
