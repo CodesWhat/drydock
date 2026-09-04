@@ -658,7 +658,7 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('performContainerUpdate should not forward the hook to the compose refresh when the post-pull gate already completed', async () => {
+  test('performContainerUpdate should forward the hook with the gate suppressed when the post-pull gate already completed', async () => {
     trigger.configuration.dryrun = false;
     const updateContainerWithComposeSpy = vi
       .spyOn(trigger, 'updateContainerWithCompose')
@@ -681,13 +681,46 @@ describe('Dockercompose Trigger', () => {
       postPullHook,
     );
 
+    // The preflight already gated this service, but the hook still carries the
+    // deferred pre-update hook and prune/backup step, which the refresh only
+    // gets to run once it has checked the container (DR-75).
     expect(postPullHook).not.toHaveBeenCalled();
-    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
-      '/opt/drydock/test/stack.yml',
-      'nginx',
-      container,
-      expect.not.objectContaining({ postPullHook: expect.anything() }),
+    const forwardedHook = updateContainerWithComposeSpy.mock.calls[0][3].postPullHook;
+    expect(forwardedHook).toEqual(expect.any(Function));
+    await forwardedHook('operation-1', 'nginx:1.1.0@sha256:abcdef');
+    expect(postPullHook).toHaveBeenCalledWith('operation-1', 'nginx:1.1.0@sha256:abcdef', {
+      skipSecurityGate: true,
+    });
+  });
+
+  test('performContainerUpdate should keep a refusal to bind the image unbound when the post-pull gate already completed', async () => {
+    trigger.configuration.dryrun = false;
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      makeContainer({ id: 'container-unbound', name: 'nginx' }),
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        postPullGateCompleted: true,
+      },
+      postPullHook,
     );
+
+    // The unbound-image path already passes skipSecurityGate, so wrapping it
+    // must not drop the rest of the options it hands over.
+    const forwardedHook = updateContainerWithComposeSpy.mock.calls[0][3].postPullHook;
+    await forwardedHook('operation-2', undefined, { skipSecurityGate: true });
+    expect(postPullHook).toHaveBeenCalledWith('operation-2', undefined, {
+      skipSecurityGate: true,
+    });
   });
 
   test('buildComposeRuntimeContext should retain the pulled image identity', () => {

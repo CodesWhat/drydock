@@ -137,6 +137,24 @@ export function makeDockerContainerHandle({
 }
 
 /**
+ * Stand in for the call the real compose refresh makes into the post-pull
+ * hook, with the arguments it actually passes: the requested operation id, and
+ * the image identity when the caller bound one. Any test that mocks
+ * updateContainerWithCompose has to make this call, because the hook carries
+ * the deferred pre-update hook and prune/backup step and the lifecycle fails an
+ * update whose runtime override never invoked it.
+ */
+export async function invokeComposeRefreshPostPullHook(container, options = {}) {
+  const operationId = getRequestedOperationId(container, options.runtimeContext) ?? '';
+  const imageIdentity = options.runtimeContext?.imageIdentity;
+  if (imageIdentity) {
+    await options.postPullHook?.(operationId, imageIdentity);
+  } else {
+    await options.postPullHook?.(operationId);
+  }
+}
+
+/**
  * Set up the common spies used by processComposeFile tests that exercise
  * the write / trigger / hooks path.
  */
@@ -162,13 +180,7 @@ export function spyOnProcessComposeHelpers(
   const composeUpdateSpy = vi
     .spyOn(triggerInstance, 'updateContainerWithCompose')
     .mockImplementation(async (_composeFile, _service, container, options = {}) => {
-      const operationId = getRequestedOperationId(container, options.runtimeContext) ?? '';
-      const imageIdentity = options.runtimeContext?.imageIdentity;
-      if (imageIdentity) {
-        await options.postPullHook?.(operationId, imageIdentity);
-      } else {
-        await options.postPullHook?.(operationId);
-      }
+      await invokeComposeRefreshPostPullHook(container, options);
     });
   const hooksSpy = vi.spyOn(triggerInstance, 'runServicePostStartHooks').mockResolvedValue();
   const backupSpy = vi.spyOn(triggerInstance, 'backup').mockResolvedValue();

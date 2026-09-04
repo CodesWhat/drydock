@@ -1702,11 +1702,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const runtimeContext = composeContext?.runtimeContext;
     // Behind the gate go the pre-update hook and the prune/backup step, so a
     // candidate the gate rejects never fires an operator hook, deletes a cached
-    // image or writes a rollback row. The compose-file-once preflight has
-    // already gated every service before its lifecycle runs and passes no
-    // post-pull hook, so that path keeps the original ordering rather than
-    // deferring steps nothing would run.
-    const deferPreRuntimeUpdateLifecycle = composeContext?.postPullGateCompleted !== true;
+    // image or writes a rollback row. Compose-file-once gates in its preflight
+    // instead, but it defers the same steps for the same reason: the deferred
+    // point is inside the refresh, past the two guards that can still abort it
+    // there, one for a container that has vanished and one for an inspect that
+    // came back without usable runtime state. Running the steps ahead of those
+    // guards left the side effects behind on a refresh that then aborted
+    // (DR-75). performContainerUpdate hands that path a post-pull hook with the
+    // gate suppressed, so the deferred steps still have something to run them.
     if (
       runtimeContext?.dockerApi &&
       runtimeContext?.registry &&
@@ -1719,7 +1722,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         auth: runtimeContext.auth,
         newImage: runtimeContext.newImage,
         deferSignatureVerification: true,
-        deferPreRuntimeUpdateLifecycle,
+        deferPreRuntimeUpdateLifecycle: true,
         currentContainer: null,
         currentContainerSpec: null,
       };
@@ -1736,7 +1739,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       auth,
       newImage,
       deferSignatureVerification: true,
-      deferPreRuntimeUpdateLifecycle,
+      deferPreRuntimeUpdateLifecycle: true,
       currentContainer: null,
       currentContainerSpec: null,
     };
@@ -1855,7 +1858,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
       requiredComposeCtx,
       runtimeContext,
-      requiredComposeCtx.postPullGateCompleted ? undefined : postPullHook,
+      postPullHook,
     );
 
     await this.maybeRunPerServiceComposeRefresh(
@@ -1903,7 +1906,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeUpdateOptions.runtimeContext = runtimeContext;
     }
     if (postPullHook) {
-      composeUpdateOptions.postPullHook = postPullHook;
+      // A compose-file-once service was already gated by the preflight, so the
+      // hook must not gate it a second time. It is still forwarded, because the
+      // deferred pre-update hook and prune/backup step ride on it and belong
+      // after the refresh's own guards have cleared the container (DR-75).
+      composeUpdateOptions.postPullHook =
+        composeCtx.postPullGateCompleted === true
+          ? async (operationId, imageIdentity, options) =>
+              postPullHook(operationId, imageIdentity, { ...options, skipSecurityGate: true })
+          : postPullHook;
     }
 
     return composeUpdateOptions;

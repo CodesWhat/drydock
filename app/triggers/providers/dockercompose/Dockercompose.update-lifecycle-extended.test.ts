@@ -5,6 +5,7 @@ import * as updateOperationStore from '../../../store/update-operation.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import Dockercompose from './Dockercompose.js';
 import {
+  invokeComposeRefreshPostPullHook,
   makeCompose,
   makeContainer,
   makeDockerContainerHandle,
@@ -2223,7 +2224,12 @@ describe('Dockercompose Trigger', () => {
       });
     const composeUpdateSpy = vi
       .spyOn(trigger, 'updateContainerWithCompose')
-      .mockImplementation(async (_composeFile, _service, container) => {
+      .mockImplementation(async (_composeFile, _service, container, options = {}) => {
+        // Stand in for the real refresh: it checks the container is still there
+        // and that its inspect came back with usable runtime state, then calls
+        // the post-pull hook, and only then recreates.
+        callOrder.push(`check:${container.name}`);
+        await invokeComposeRefreshPostPullHook(container, options);
         callOrder.push(`refresh:${container.name}`);
       });
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
@@ -2242,16 +2248,20 @@ describe('Dockercompose Trigger', () => {
     expect(pruneImagesSpy).toHaveBeenCalledTimes(2);
     expect(backupSpy).toHaveBeenCalledTimes(2);
     // Both replicas are gated in the preflight, before either is touched, and
-    // neither gates again inside its own refresh. After that each replica gets
-    // its own hook, prune and backup, in that order and before its refresh, so
-    // no replica can be recreated without them.
+    // neither gates again inside its own refresh. Each replica then gets its
+    // own hook, prune and backup, in that order, after its refresh has checked
+    // the container and before that refresh recreates it, so no replica can be
+    // recreated without them and a refresh that aborts on a missing container
+    // or an unusable inspect leaves none of them behind (DR-75).
     expect(callOrder).toEqual([
       'gate:nginx-1',
       'gate:nginx-2',
+      'check:nginx-1',
       'hook:nginx-1',
       'prune:nginx-1',
       'backup:nginx-1',
       'refresh:nginx-1',
+      'check:nginx-2',
       'hook:nginx-2',
       'prune:nginx-2',
       'backup:nginx-2',
