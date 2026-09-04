@@ -60,6 +60,7 @@ import {
   startDigestCachePollCycleForRegistries,
 } from './digest-cache-lifecycle.js';
 import {
+  type CronWatchDeadlineHandle,
   type CronWatchOptions,
   type CronWatchOrchestrationWatcher,
   resetCronWatchState,
@@ -343,6 +344,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public cronWatchRescanRequested: boolean = false;
   public cronWatchRescanReason?: string;
   public cronWatchRescanIgnoreMaintenanceWindow: boolean = false;
+  public cronWatchDeadlineHandle?: CronWatchDeadlineHandle;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();

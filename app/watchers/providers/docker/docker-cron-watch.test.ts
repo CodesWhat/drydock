@@ -444,6 +444,104 @@ describe('watchFromCronOrchestration', () => {
 
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
+
+  test('settles the in-flight scan and clears the deadline timer when the watcher deregisters mid-scan', async () => {
+    vi.useFakeTimers();
+    try {
+      const stalled = createDeferred<ContainerReport[]>();
+      const watchMock = vi.fn().mockReturnValue(stalled.promise);
+      const watcher = createWatcher({ watch: watchMock });
+
+      const call = watchFromCronOrchestration(watcher, { reason: 'schedule' });
+      await Promise.resolve();
+      expect(watcher.cronWatchDeadlineHandle).toBeDefined();
+      expect(vi.getTimerCount()).toBe(1);
+
+      resetCronWatchState(watcher);
+
+      // Before the fix the deadline timer stayed ref'ed and the caller stayed
+      // pending on the stalled watch(), so the torn-down watcher warned about
+      // its own deadline minutes later.
+      await expect(call).resolves.toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(watcher.cronWatchDeadlineHandle).toBeUndefined();
+      expect(watcher.cronWatchInFlight).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(watcher.log?.warn).not.toHaveBeenCalled();
+
+      // The stalled scan settling afterwards is a no-op, not a follow-up.
+      stalled.resolve([]);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('settles coalesced callers too when the watcher deregisters mid-scan', async () => {
+    const stalled = createDeferred<ContainerReport[]>();
+    const watchMock = vi.fn().mockReturnValue(stalled.promise);
+    const watcher = createWatcher({ watch: watchMock });
+
+    const initiator = watchFromCronOrchestration(watcher, { reason: 'schedule' });
+    await Promise.resolve();
+    const coalesced = watchFromCronOrchestration(watcher, { reason: 'docker-event' });
+    expect(watcher.cronWatchRescanRequested).toBe(true);
+
+    watcher.isWatcherDeregistered = true;
+    resetCronWatchState(watcher);
+
+    // Coalesced callers hold the same bounded promise, so cancelling the race
+    // has to settle them as well - otherwise deregistering leaves them pending
+    // on a watch() that may never return.
+    await expect(initiator).resolves.toEqual([]);
+    await expect(coalesced).resolves.toEqual([]);
+    expect(watcher.cronWatchRescanRequested).toBe(false);
+    expect(watcher.log?.warn).not.toHaveBeenCalled();
+
+    stalled.resolve([]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(watchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('a settling stale scan does not clear a newer scan deadline handle', async () => {
+    const staleDeferred = createDeferred<ContainerReport[]>();
+    const freshDeferred = createDeferred<ContainerReport[]>();
+    const watchMock = vi
+      .fn()
+      .mockReturnValueOnce(staleDeferred.promise)
+      .mockReturnValueOnce(freshDeferred.promise)
+      .mockResolvedValue([]);
+    const watcher = createWatcher({ watch: watchMock });
+
+    const staleCall = watchFromCronOrchestration(watcher, { reason: 'schedule' });
+    await Promise.resolve();
+    const staleHandle = watcher.cronWatchDeadlineHandle;
+    expect(staleHandle).toBeDefined();
+
+    // Deregister, then re-register and start a fresh scan before the stale
+    // scan's cleanup has run.
+    resetCronWatchState(watcher);
+    const freshCall = watchFromCronOrchestration(watcher, { reason: 'schedule' });
+    const freshHandle = watcher.cronWatchDeadlineHandle;
+    expect(freshHandle).toBeDefined();
+    expect(freshHandle).not.toBe(staleHandle);
+
+    await expect(staleCall).resolves.toEqual([]);
+    expect(watcher.cronWatchDeadlineHandle).toBe(freshHandle);
+
+    freshDeferred.resolve([]);
+    await expect(freshCall).resolves.toEqual([]);
+    expect(watcher.cronWatchDeadlineHandle).toBeUndefined();
+
+    staleDeferred.resolve([]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(watchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('getCronIntervalMs', () => {
@@ -492,5 +590,17 @@ describe('resetCronWatchState', () => {
     expect(watcher.cronWatchRescanRequested).toBe(false);
     expect(watcher.cronWatchRescanReason).toBeUndefined();
     expect(watcher.cronWatchRescanIgnoreMaintenanceWindow).toBe(false);
+  });
+
+  test('clears and cancels the per-scan deadline handle when one is held', () => {
+    const cancel = vi.fn();
+    const timer = setTimeout(() => undefined, 60_000);
+    const watcher = createWatcher({ cronWatchDeadlineHandle: { timer, cancel } });
+
+    resetCronWatchState(watcher);
+
+    expect(watcher.cronWatchDeadlineHandle).toBeUndefined();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    clearTimeout(timer);
   });
 });
