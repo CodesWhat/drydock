@@ -2801,7 +2801,20 @@ class Trigger<
     this.log.info(
       `Maintenance window opened on ${payload.watcherId} - flushing the digest updates it deferred`,
     );
-    await this.flushDigestBuffer({ eventKind: 'update-available-digest' });
+    try {
+      await this.flushDigestBuffer({ eventKind: 'update-available-digest' });
+    } catch (e: unknown) {
+      // This handler must never reject. emitOrderedHandlers awaits each handler in turn and
+      // does not catch, so a throw here would abort the announcement for every later-ordered
+      // trigger and surface at the watcher as a failed announcement rather than as one
+      // trigger's failed flush. Put the marker back for the same reason the refusal above
+      // keeps it: this flush did not deliver either.
+      this.maintenanceWindowDeferredDigestWatchers.add(payload.watcherId);
+      this.log.warn(
+        `Failed to flush the digest updates deferred for ${payload.watcherId} (${Trigger.getErrorMessage(e)})`,
+      );
+      this.log.debug(e);
+    }
   }
 
   /**

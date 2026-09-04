@@ -14453,6 +14453,25 @@ describe('maintenance window opening flushes a digest action buffer (#946)', () 
     );
   });
 
+  // #946 D5: emitOrderedHandlers awaits each handler in turn with no catch of its own, so
+  // one trigger throwing here used to abort the announcement for every trigger ordered
+  // after it, and the watcher reported a failed announcement rather than a failed flush.
+  test('a flush that throws is contained and leaves the marker armed', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    actionTrigger.maintenanceWindowDeferredDigestWatchers.add('docker.local');
+    const warnSpy = vi.spyOn(actionTrigger.log, 'warn');
+    vi.spyOn(actionTrigger, 'flushDigestBuffer').mockRejectedValue(new Error('provider down'));
+
+    await expect(
+      actionTrigger.handleMaintenanceWindowOpenedEvent({ watcherId: 'docker.local' }),
+    ).resolves.toBeUndefined();
+
+    expect([...actionTrigger.maintenanceWindowDeferredDigestWatchers]).toEqual(['docker.local']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to flush the digest updates deferred for docker.local'),
+    );
+  });
+
   test('a digest trigger registers for window openings and drops the handler on deregister', async () => {
     const unregister = vi.fn();
     vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
