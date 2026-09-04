@@ -2767,13 +2767,14 @@ class Trigger<
   }
 
   /**
-   * A watcher's maintenance window opened and its catch-up scan has finished.
+   * A watcher's maintenance window opened and the scan that consumed its queued catch-up
+   * has finished.
    *
-   * The catch-up re-runs the scan, which is enough for the simple and batch paths: their
-   * dispatch hangs off the container report the scan emits, so the deferred install is
-   * applied there and then. A digest trigger's report handler only re-buffers, so without
-   * this the install would wait for the next digest cron - up to a day after the window
-   * that was supposed to apply it, and quite possibly after it closed again.
+   * That scan is enough for the simple and batch paths: their dispatch hangs off the
+   * container report it emits, so the deferred install is applied there and then. A digest
+   * trigger's report handler only re-buffers, so without this the install would wait for
+   * the next digest cron - up to a day after the window that was supposed to apply it, and
+   * quite possibly after it closed again.
    *
    * Only flushes when this trigger actually deferred something for this watcher, so a
    * window opening on an unrelated watcher never brings a digest forward.
@@ -2781,9 +2782,22 @@ class Trigger<
   private async handleMaintenanceWindowOpenedEvent(
     payload: event.MaintenanceWindowOpenedEventPayload,
   ): Promise<void> {
-    if (!this.maintenanceWindowDeferredDigestWatchers.delete(payload.watcherId)) {
+    if (!this.maintenanceWindowDeferredDigestWatchers.has(payload.watcherId)) {
       return;
     }
+    // The marker is the whole signal, so it is spent only by a flush that actually runs.
+    // flushUpdateDigestBuffer refuses a concurrent flush outright, and the one already
+    // running took its snapshot before this window opened, so consuming the marker here
+    // would lose the announcement until the next digest cron. Left armed instead: whatever
+    // that flush defers re-arms the watcher's catch-up queue, and the next scan to consume
+    // it announces again.
+    if (this.isDigestFlushInProgress) {
+      this.log.debug(
+        `Maintenance window opened on ${payload.watcherId} while a digest flush was already running - keeping the deferral marker for the next announcement`,
+      );
+      return;
+    }
+    this.maintenanceWindowDeferredDigestWatchers.delete(payload.watcherId);
     this.log.info(
       `Maintenance window opened on ${payload.watcherId} - flushing the digest updates it deferred`,
     );

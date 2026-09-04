@@ -14434,6 +14434,25 @@ describe('maintenance window opening flushes a digest action buffer (#946)', () 
     expect(flushSpy).not.toHaveBeenCalled();
   });
 
+  // #946 D4: the marker is the entire signal that this trigger deferred something for that
+  // watcher. Spending it on a flush that gets refused outright loses the announcement, and
+  // the next one is the digest cron, which is exactly the wait this event exists to skip.
+  test('a refused flush keeps the deferral marker instead of spending it', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    actionTrigger.maintenanceWindowDeferredDigestWatchers.add('docker.local');
+    actionTrigger.isDigestFlushInProgress = true;
+    const debugSpy = vi.spyOn(actionTrigger.log, 'debug');
+    const flushSpy = vi.spyOn(actionTrigger, 'flushDigestBuffer');
+
+    await actionTrigger.handleMaintenanceWindowOpenedEvent({ watcherId: 'docker.local' });
+
+    expect(flushSpy).not.toHaveBeenCalled();
+    expect([...actionTrigger.maintenanceWindowDeferredDigestWatchers]).toEqual(['docker.local']);
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('while a digest flush was already running'),
+    );
+  });
+
   test('a digest trigger registers for window openings and drops the handler on deregister', async () => {
     const unregister = vi.fn();
     vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
