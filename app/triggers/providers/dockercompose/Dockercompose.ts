@@ -2771,6 +2771,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       shouldStart: currentContainerSpec?.State?.Running === true,
       skipPull: true,
       forceRecreate: true,
+      // The caller names the image this recreates from, and the compose file
+      // was just rewritten to it above. Without handing it to the runtime
+      // refresh, that refresh re-derives its own target from the container's
+      // update candidate, so a rollback wrote the backup image into the
+      // compose file and then created the container from the very update it
+      // was undoing, while the operation reported success (DR-101).
+      runtimeContext: { newImage },
+      // Deliberately no `imageIdentity`: this path has no compose-file-once
+      // preflight behind it, so the refresh has to bind the pulled image for
+      // itself rather than reuse an identity nothing resolved.
     } as ComposeRuntimeRefreshOptions;
     if (composeFiles.length > 1) {
       composeUpdateOptions.composeFiles = composeFiles;

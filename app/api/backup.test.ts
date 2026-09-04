@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import { attachCreatedContainerCandidate } from '../triggers/providers/docker/created-container-candidate.js';
 import Docker from '../triggers/providers/docker/Docker.js';
+import Dockercompose from '../triggers/providers/dockercompose/Dockercompose.js';
 
 const {
   mockRouter,
@@ -29,6 +30,10 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/container', () => ({
   getContainer: mockGetContainer,
+  // Read lazily by the security gate the compose action builds on its first
+  // post-pull identity check, so the rollback path reaches them.
+  updateContainer: vi.fn(),
+  cacheSecurityState: vi.fn(),
 }));
 
 vi.mock('../store/backup', () => ({
@@ -538,6 +543,103 @@ describe('Backup Router', () => {
         message: 'Container rolled back successfully',
         backup: latestBackup,
       });
+    });
+
+    test('deploys the backup image, not the update candidate, through the REAL Dockercompose.recreateContainer', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { name: 'nginx', registry: { name: 'hub' }, tag: { value: '1.25' } },
+        updateKind: { kind: 'tag', remoteValue: '1.25' },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+        imageDigest: 'sha256:kept',
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const currentContainerSpec = {
+        Id: 'c1',
+        Name: '/nginx',
+        Config: { Image: 'nginx:1.25', Env: [], Labels: {} },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+        State: { Running: true },
+      };
+      const containerHandle = {
+        inspect: vi.fn().mockResolvedValue(currentContainerSpec),
+        stop: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+      const dockerApi = {
+        getContainer: vi.fn(() => containerHandle),
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({}) })),
+        info: vi.fn().mockResolvedValue({}),
+      };
+
+      const realCompose = new Dockercompose();
+      realCompose.log = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      } as any;
+      realCompose.configuration = {
+        dryrun: false,
+        backup: false,
+        composeFileLabel: 'dd.compose.file',
+      } as any;
+      vi.spyOn(realCompose, 'resolveComposeServiceContext').mockResolvedValue({
+        composeFile: '/opt/drydock/stack.yml',
+        composeFiles: ['/opt/drydock/stack.yml'],
+        service: 'web',
+      } as any);
+      vi.spyOn(realCompose, 'mutateComposeFile').mockResolvedValue({} as any);
+      const createContainerSpy = vi
+        .spyOn(realCompose, 'createContainer')
+        .mockResolvedValue({ start: vi.fn().mockResolvedValue(undefined) } as any);
+
+      const composeTrigger = {
+        type: 'dockercompose',
+        getWatcher: vi.fn(() => ({ dockerApi })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(containerHandle),
+        inspectContainer: vi.fn().mockResolvedValue(currentContainerSpec),
+        stopAndRemoveContainer: realCompose.stopAndRemoveContainer.bind(realCompose),
+        recreateContainer: realCompose.recreateContainer.bind(realCompose),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'dockercompose.default': composeTrigger },
+        registry: {
+          hub: {
+            getAuthPull: vi.fn().mockResolvedValue({}),
+            getImageFullName: (image, tag) => `${image.name}:${tag}`,
+          },
+        },
+        watcher: { 'docker.local': { dockerApi } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      // The container's own update candidate resolves to nginx:1.25, which is
+      // what the runtime refresh used to re-derive for itself while the compose
+      // file was rewritten to the backup and the response still said success.
+      expect(createContainerSpy).toHaveBeenCalledWith(
+        dockerApi,
+        expect.objectContaining({ Image: 'library/nginx:1.24' }),
+        'nginx',
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
     });
 
     test('should rollback successfully when a valid backupId is provided', async () => {
