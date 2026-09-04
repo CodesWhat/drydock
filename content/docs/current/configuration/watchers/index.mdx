@@ -687,7 +687,19 @@ docker run \
 
 A maintenance window restricts **when drydock is allowed to act on its own**. Outside the window, scheduled checks are skipped and automatic updates are deferred until the window next opens. Detection is not lost: drydock queues one pending check and runs it as soon as the window opens.
 
+<Callout type="warn" title="The window gates the whole scheduled scan, not just installing an update">
+Today, `MAINTENANCE_WINDOW` gates the entire scheduled watcher cycle, container discovery and registry checks, not only the step that installs an update. A closed window means the watcher does not run at all on its schedule, with consequences beyond deferred updates:
+
+- **New containers don't show up.** A container created outside the window is invisible in the UI and API until the next window opens and the queued check runs.
+- **Container state goes stale.** The UI shows whatever the last scan saw. If a container was stopped during the last window and you stop or start it again outside the window, drydock's records don't reflect the change until the next scan, a container drydock still thinks is stopped, but that's actually running, will fail a **Start** action because Docker refuses to start a container that's already running.
+- **Update notifications are deferred too**, along with the update itself, since they fire from the same scan.
+
+Separating detection from the installation step, so discovery and registry checks keep running on schedule and only the actual install waits for the window, is planned but not shipped.
+</Callout>
+
 The window never applies to you. **Manual updates from the UI or API are not gated by it** — the container's Update action stays available at any hour. When you use it outside the window, the confirm dialog notes that the update is currently policy-blocked with _"Outside maintenance window — auto update deferred until the window opens"_ and the button reads **Update anyway**. That is a heads-up, not a refusal. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility#maintenance-window-closed-in-the-update-dialog).
+
+A manual scan is not gated. Triggering a scan from the UI, or calling `POST /api/v1/containers/watch` (all watchers) or `POST /api/v1/containers/{id}/watch` (a single container) directly, runs immediately regardless of the window, those calls go straight to the watcher's `watch()` method, which the maintenance-window check never sits in front of. Only the scheduled cron tick (and the queued catch-up it leaves behind) is gated.
 
 Only allow automatic updates between 2 AM and 4 AM in Europe/Berlin:
 
