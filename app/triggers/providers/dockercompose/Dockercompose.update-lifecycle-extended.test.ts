@@ -1667,6 +1667,98 @@ describe('Dockercompose Trigger', () => {
     expect(startContainerSpy).not.toHaveBeenCalled();
   });
 
+  test('compose-file-once should refuse a moved tag on the replica that recovered the batch image ID (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The posture that used to slip through: no scanner, so the identity
+    // binding policy is `disabled` and the preflight's failed inspect records
+    // no image ID at all, plus the permissive availability policy. The first
+    // replica then arrives with pulledImageId undefined and resolves the ID
+    // itself, and keeping it under warn would leave it on the moved image
+    // while every replica after it was held to the ID it published and
+    // refused. The write-back sink is what marks it as part of the batch.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: false,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const firstContainer = makeContainer({
+      id: 'container-nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'container-nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // The preflight's inspect throws, which is the only way a compose-file-once
+    // context reaches a replica with no image ID on it. Every inspect after
+    // that succeeds, so the first replica recovers one.
+    let imageInspectCalls = 0;
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockImplementation(async () => {
+        imageInspectCalls += 1;
+        if (imageInspectCalls === 1) {
+          throw new Error('image inspect unavailable');
+        }
+        return {
+          Id: 'sha256:image-a',
+          RepoDigests: [],
+          Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+          Os: 'linux',
+        };
+      }),
+    });
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger as any, 'attemptRollbackRestoreOldContainer').mockResolvedValue({
+      status: 'rolled-back',
+    });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    // An external pull moves nginx:1.1.0 between the first replica's own
+    // resolve and its create, so this replica is the one that diverges.
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:image-b' }),
+    } as any);
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile(composeFile, [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:image-b but nginx:1.1.0 was pulled as sha256:image-a',
+    );
+
+    // Refused rather than kept, and the batch stops here: the second replica
+    // is never created, so the service is not left split across two images.
+    expect(removeCreated).toHaveBeenCalledWith({ force: true });
+    expect(startContainerSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).toHaveBeenCalledTimes(1);
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn'),
+    );
+  });
+
   test('compose-file-once should carry a recovered image ID to the next replica (DR-54)', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;

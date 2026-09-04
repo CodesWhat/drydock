@@ -3422,13 +3422,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    *
    * What a mismatch costs depends on where `expectedImageId` came from, which
    * is what `preflightedServiceIdentity` carries (DR-67). A preflighted
-   * identity was resolved once for the whole service before any container was
-   * touched, and every container of that service is created against it and
-   * runs on the one gate decision the preflight made, so keeping a mismatched
-   * one leaves it on an image the gate never cleared while its siblings run
-   * the image it did clear: a split service rather than a slower one. That is
-   * refused whatever the policy says. Without a preflight there is no shared
-   * decision to split, because each container pulls and resolves for itself,
+   * identity is one the whole service shares: every container of that service
+   * is created against it and runs on the one gate decision the preflight
+   * made, so keeping a mismatched one leaves it on an image the gate never
+   * cleared while its siblings run the image it did clear: a split service
+   * rather than a slower one. That is refused whatever the policy says, and it
+   * covers the first replica of a batch whose preflight inspect failed, which
+   * resolves the ID the rest of the batch is then held to. Without a preflight
+   * there is no shared decision to split, because each container pulls and
+   * resolves for itself,
    * and a moved tag is one container getting an image nobody asked for. That
    * is the availability-versus-certainty trade
    * `DD_SECURITY_AVAILABILITY_POLICY` already settles for the security gate,
@@ -3609,17 +3611,31 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // repo:tag from it. It becomes the expectation the recreated container is
     // checked against instead (DR-54).
     let expectedImageId = runtimeContext.pulledImageId;
-    // Whether this refresh was handed an identity the compose-file-once
-    // preflight resolved once for the whole service, ahead of every container
-    // in the batch, rather than one this container resolved for itself. It has
-    // to be read here, before the recovery below can fill `expectedImageId` in
-    // for this container alone: after that point the two are indistinguishable,
-    // because the recovery publishes the first replica's ID as the service's
-    // shared one (DR-54). A caller with no preflight at all, such as
-    // recreateContainer() or a direct updateContainerWithCompose(), reaches the
-    // post-create check with nothing shared to protect (DR-67).
+    // Whether this refresh belongs to a compose-file-once batch, whose
+    // containers all run on the one identity and the one gate decision the
+    // preflight settled ahead of every container in it, rather than resolving
+    // its own. It has to be read here, before the recovery below can fill
+    // `expectedImageId` in for this container alone: after that point the two
+    // are indistinguishable, because the recovery publishes the first replica's
+    // ID as the service's shared one (DR-54).
+    //
+    // The write-back sink is part of the test, not a belt-and-braces third
+    // clause. A preflight whose own inspect threw stores no image ID, so its
+    // first replica arrives with `pulledImageId` undefined and recovers one
+    // here, which is then published to every replica after it. Reading only the
+    // two identity fields would leave that first replica looking unpreflighted
+    // and keep it under `warn`, while its siblings compared against the ID it
+    // published and were refused: the split service this check exists to
+    // prevent. The sink only exists on a compose-file-once batch
+    // (attachRecoveredPulledImageIdSink), so it is the batch marker that
+    // survives a failed preflight inspect. A caller with no preflight at all,
+    // such as recreateContainer() or a direct updateContainerWithCompose(),
+    // carries none of the three and reaches the post-create check with nothing
+    // shared to protect (DR-67).
     const preflightedServiceIdentity =
-      runtimeContext.pulledImageId !== undefined || runtimeContext.imageIdentity !== undefined;
+      runtimeContext.pulledImageId !== undefined ||
+      runtimeContext.imageIdentity !== undefined ||
+      typeof runtimeContext.onPulledImageIdResolved === 'function';
     // Nothing to re-resolve once the preflight has an answer for the service.
     // Asking again per replica could bind a digest the preflight never saw,
     // which is the divergence this check exists to refuse, not to adopt.
