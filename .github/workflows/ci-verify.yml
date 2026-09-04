@@ -776,6 +776,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
 
+      # The multi-arch smoke build below cannot catch a base image pinned to a
+      # per-platform manifest digest: buildx resolves a digest identically for
+      # every --platform, so the arm64 stage builds green on an amd64 rootfs and
+      # the resulting image is x86-64 under an arm64 label (#1021). Check the
+      # pins on the PR that changes them.
+      - name: Verify base image pins are multi-arch indexes
+        run: scripts/check-dockerfile-base-indexes.sh Dockerfile linux/amd64,linux/arm64
+
       - name: Docker build (QA image + smoke test)
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:

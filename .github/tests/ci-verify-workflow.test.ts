@@ -571,3 +571,27 @@ test('load-test processor only exports Artillery hooks used by scenarios', () =>
 
   expect(processorSource).not.toContain('ensureContainerId');
 });
+
+test('build job checks base image pins before building, for the platforms it smoke-builds', () => {
+  const workflow = loadWorkflow();
+  const steps = workflow.jobs?.build?.steps ?? [];
+  const guardIndex = steps.findIndex(
+    (step) => step.name === 'Verify base image pins are multi-arch indexes',
+  );
+  const guard = steps[guardIndex];
+  const smokeBuild = getWorkflowStep('build', 'Docker build (multi-arch smoke)');
+  const smokePlatforms = /--platform ([^\s\\]+)/u.exec(String(smokeBuild?.with?.command))?.[1];
+
+  expect(guardIndex).toBeGreaterThan(-1);
+  expect(guardIndex).toBeLessThan(
+    steps.findIndex((step) => step.name === 'Docker build (QA image + smoke test)'),
+  );
+  expect(guardIndex).toBeLessThan(
+    steps.findIndex((step) => step.name === 'Docker build (multi-arch smoke)'),
+  );
+  // The smoke build cannot catch a per-platform manifest pin on its own: a
+  // digest resolves the same for every --platform, so the arm64 stage builds
+  // green on an amd64 rootfs (#1021). Both must cover the same platforms.
+  expect(smokePlatforms).toBe('linux/amd64,linux/arm64');
+  expect(guard?.run).toBe(`scripts/check-dockerfile-base-indexes.sh Dockerfile ${smokePlatforms}`);
+});
