@@ -315,7 +315,7 @@ labels:
   - dd.hook.post=/usr/local/bin/notify-healthcheck.sh
 ```
 
-Both paths are scripts you write and mount into the drydock container yourself: hooks run inside that container (with `DD_HOOKS_ENABLED=true`), so a path that only exists on the host or in the updated container fails, and a failed pre-hook aborts the update. Hook commands are validated against a restricted shell-safe grammar and reject redirection (`>`, `<`), command chaining (`;`, `&&`, `||`, `|`), and command substitution. A command that needs any of those, like a `pg_dump ... > file.sql` backup, has to live in a mounted script that the hook label simply invokes. See [Lifecycle hooks](/docs/configuration/hooks#command-validation).
+Both paths are scripts you write and mount into the drydock container yourself: hooks run inside that container (with `DD_HOOKS_ENABLED=true`), so a path that only exists on the host or in the updated container fails, and a failed pre-hook aborts the update by default (`dd.hook.pre.abort=false` lets the update continue). Hook commands are validated against a restricted shell-safe grammar and reject redirection (`>`, `<`), command chaining (`;`, `&&`, `||`, `|`), and command substitution. A command that needs any of those, like a `pg_dump ... > file.sql` backup, has to live in a mounted script that the hook label simply invokes. See [Lifecycle hooks](/docs/configuration/hooks#command-validation).
 
 ### Vulnerability scanning (Update Bouncer)
 
