@@ -392,6 +392,56 @@ services:
 
 <Callout type="info">**You do not need to define `DD_ACTION_DOCKER_*` on the controller for each agent.** During the handshake, the controller automatically discovers the agent's triggers and creates internal proxies. The controller only needs its own `DD_ACTION_DOCKER_*` for updating containers on its local host.</Callout>
 
+## Registries on agents
+
+A traditional agent runs its own Docker watcher and does its own registry matching and update checks, it does not inherit the controller's registry configuration. Whatever registries the agent's containers are pulled from, that agent needs the matching `DD_REGISTRY_*` variables configured on itself, with the same values you'd use on a standalone instance.
+
+<Callout type="warn">**Credentials are not pushed from the controller to agents.** If you configure `DD_REGISTRY_GITEA_PRIVATE_*` only on the controller, every agent-reported container that comes from that registry shows up as registry `unknown`, the agent never learned about it.</Callout>
+
+The controller needs the same registry configured too, even though it isn't doing the matching for that agent's containers. The controller's UI links a container to its registry page, but that page is served from the controller's own registry configuration, if the controller was never given `DD_REGISTRY_GITEA_PRIVATE_*`, the link resolves to a registry the controller doesn't know about.
+
+In short: for a registry used by an agent's containers, configure the same `DD_REGISTRY_{provider}_{name}_*` variables on **both** that agent and the controller.
+
+**Agent**: needs the registry to do the matching and update check:
+
+```yaml
+services:
+  drydock-agent:
+    image: codeswhat/drydock
+    command: --agent
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_AGENT_SECRET=pick-a-long-random-string
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_REGISTRY_GITEA_PRIVATE_URL=https://git.example.com
+      - DD_REGISTRY_GITEA_PRIVATE_LOGIN=john
+      - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe
+```
+
+**Controller**: needs the same registry so the container's registry link resolves:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./certs/agent-ca.pem:/certs/agent-ca.pem:ro          # the CA that signed the agent's certificate
+    environment:
+      - DD_AGENT_REMOTE1_HOST=192.168.1.50
+      - DD_AGENT_REMOTE1_SECRET=pick-a-long-random-string   # must match the agent's DD_AGENT_SECRET
+      - DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem          # TLS to the agent; see Controller Environment Variables
+      - DD_REGISTRY_GITEA_PRIVATE_URL=https://git.example.com
+      - DD_REGISTRY_GITEA_PRIVATE_LOGIN=john
+      - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe
+```
+
+See the [Gitea registry](/docs/configuration/registries/gitea) page for the full variable list, including `AUTH`, `CAFILE`, `INSECURE`, and mTLS options.
+
 ## Reliability notes
 
 ### Transient enumeration failures
