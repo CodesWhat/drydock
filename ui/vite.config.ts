@@ -11,6 +11,38 @@ import { VitePWA } from 'vite-plugin-pwa';
 // against url.pathname instead so this rule actually engages.
 export const isApiRequest = ({ url }: { url: URL }): boolean => url.pathname.startsWith('/api/');
 
+// Every path Express owns on the SPA's own origin. A top-level navigation to
+// one of these has to reach the server, so the precached app shell must never
+// answer it. Taken from the server's route table:
+//
+//   /api, /api/v1  REST API (app/api/index.ts), the SSE stream at
+//                  /api/v1/events/ui, the agent websocket at /api/portwing/ws
+//   /auth/...      login, logout, user and status (app/api/auth.ts), plus the
+//                  per-provider OIDC pair /auth/oidc/<name>/redirect and
+//                  /auth/oidc/<name>/cb (app/authentications/providers/oidc)
+//   /health        readiness probe (app/api/index.ts)
+//   /metrics       prometheus exposition (app/api/index.ts)
+//
+// Bare "/auth" is deliberately left out: that exact path is a SPA view
+// (ui/src/router/routes.ts, ROUTES.AUTH) and Express owns only its subpaths,
+// so the pattern requires the trailing slash.
+//
+// Unlike a RegExpRoute urlPattern (see isApiRequest above), workbox tests a
+// NavigationRoute denylist against url.pathname + url.search, so anchoring on
+// the path is correct here. The [/?] alternative is what lets a bare
+// "/health?verbose=1" match without also matching "/healthcheck".
+export const SERVER_OWNED_NAVIGATION_PATTERNS: RegExp[] = [
+  /^\/api(?:[/?]|$)/,
+  /^\/auth\//,
+  /^\/health(?:[/?]|$)/,
+  /^\/metrics(?:[/?]|$)/,
+];
+
+// Mirrors workbox NavigationRoute's own denylist loop so the patterns can be
+// asserted against real callback URLs in tests.
+export const isServerOwnedNavigation = (pathnameAndSearch: string): boolean =>
+  SERVER_OWNED_NAVIGATION_PATTERNS.some((pattern) => pattern.test(pathnameAndSearch));
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -68,7 +100,15 @@ export default defineConfig({
         // Drydock is a live dashboard — stale API data is worse than a
         // request failing outright, so /api is never handled by the SW,
         // neither for navigations nor for runtime fetches.
-        navigateFallbackDenylist: [/^\/api\//],
+        //
+        // The navigation fallback skips every other server-owned route too.
+        // Answering /auth/oidc/<name>/cb with index.html meant the OIDC code
+        // exchange never reached Express, so login bounced back to the login
+        // page (#939). Those routes get no runtimeCaching rule on purpose:
+        // with nothing matching, workbox never calls respondWith and the
+        // browser performs the request itself, which keeps the callback's
+        // redirect out of the service worker entirely.
+        navigateFallbackDenylist: SERVER_OWNED_NAVIGATION_PATTERNS,
         runtimeCaching: [
           {
             urlPattern: isApiRequest,
