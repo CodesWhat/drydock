@@ -3756,10 +3756,20 @@ test('handleContainerReport reserves a key in inFlightOnceNotificationKeys while
   const call = trigger.handleContainerReport({ changed: true, container });
 
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+  const expectedKey = `${trigger.getId()}::${container.id}::update-available::${notificationHistoryStore.computeResultHash(container)}`;
+  expect(trigger.inFlightOnceNotificationKeys.has(expectedKey)).toBe(true);
+
+  // A second and third identical report submitted while the first is still
+  // in flight must both be turned away by the held reservation, so
+  // trigger.trigger() (the send) never gets invoked for either of them.
+  const call2 = trigger.handleContainerReport({ changed: true, container });
+  const call3 = trigger.handleContainerReport({ changed: true, container });
+  expect(trigger.trigger).toHaveBeenCalledTimes(1);
 
   resolveSend();
-  await call;
+  await Promise.all([call, call2, call3]);
 
+  expect(trigger.trigger).toHaveBeenCalledTimes(1);
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
 });
 

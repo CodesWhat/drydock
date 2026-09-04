@@ -1547,12 +1547,18 @@ class Trigger<
   /**
    * Release a reservation taken by `reserveOnceNotificationSlot`. Safe to
    * call even when no reservation was taken (e.g. `once=false`, or no stable
-   * container id), deleting an absent key is a no-op.
+   * container id) -- it returns before hashing under `once=false`, and
+   * deleting an absent key is otherwise a no-op.
    */
   private releaseOnceNotificationSlot(
     container: Container,
     eventKind: notificationHistoryStore.NotificationEventKind,
   ): void {
+    // once=false never reserves, so there is nothing to release and no
+    // reason to hash the container.
+    if (!this.configuration.once) {
+      return;
+    }
     const containerId =
       typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
     if (!containerId) {
@@ -2354,9 +2360,12 @@ class Trigger<
       this.log.debug(e);
     } finally {
       this.incrementTriggerCounter(status);
-      // Release every reservation shouldHandleBatchContainerReport() took for
-      // this batch, however it ended, so a later genuinely-new result for any
-      // of these containers is never blocked by it.
+      // reservedContainers holds every reservation taken for this batch from
+      // both sources above: the retry-buffer loop and shouldHandleBatchContainerReport()
+      // on the report path. Release all of them here, however the batch ended,
+      // so a later genuinely-new result for any of these containers is never
+      // blocked by it. Under once=false neither source actually reserved
+      // anything, so this loop is a no-op.
       for (const container of reservedContainers) {
         this.releaseOnceNotificationSlot(container, 'update-available');
       }
