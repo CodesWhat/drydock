@@ -1787,6 +1787,7 @@ describe('Dockercompose Trigger', () => {
     const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
       start: vi.fn().mockResolvedValue(undefined),
     } as any);
+    const verifyCompatibilitySpy = vi.spyOn(trigger, 'verifyPulledImageCompatibility');
 
     await trigger.recreateContainer(
       mockDockerApi,
@@ -1805,6 +1806,67 @@ describe('Dockercompose Trigger', () => {
     );
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(createContainerSpy).toHaveBeenCalledTimes(1);
+    // The container this recreates has an update candidate of 1.1.0, so
+    // anything that re-derives its own target lands on the update instead of
+    // the 1.0.0 the caller asked for and the compose file now carries.
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
+    expect(verifyCompatibilitySpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      'nginx:1.0.0',
+      expect.anything(),
+    );
+  });
+
+  test('recreateContainer integration should recreate from the requested image after a resync moved the tag to the candidate', async () => {
+    trigger.configuration.dryrun = false;
+    // What the store holds once maybeFastResyncAfterUpdate has run: the tag
+    // value is already the candidate and there is no scan result left to read,
+    // so the container itself no longer says anything about 1.0.0.
+    const container = makeContainer({
+      name: 'nginx',
+      tagValue: '1.1.0',
+      remoteValue: null,
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0',
+      container,
+      mockLog,
+    );
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('nginx:1.0.0'),
+    );
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
   });
 
   test('recreateContainer should restore original compose text when runtime refresh fails and rollback succeeds', async () => {

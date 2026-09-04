@@ -1119,6 +1119,9 @@ describe('Dockercompose Trigger', () => {
         skipPull: true,
         forceRecreate: true,
         composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+        // The image the caller asked for, so the refresh cannot re-derive the
+        // container's update candidate instead of it.
+        runtimeContext: { newImage: 'nginx:1.1.0' },
       },
     );
   });
