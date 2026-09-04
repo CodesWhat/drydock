@@ -180,6 +180,16 @@ type ComposeRuntimeContext = {
   securityGateUnboundWarnRecorded?: boolean;
   operationId?: string;
   registry?: unknown;
+  /**
+   * Which digest breaks a tie when the daemon records several `RepoDigests`
+   * for the pulled repository, set only by a caller that names the image this
+   * refresh deploys. `null` means "no preference, and do not fall back to the
+   * update candidate's digest": a rollback pulls the image its backup
+   * retained, which the candidate describes nothing about, so an unresolvable
+   * tie is left unbound rather than picked (DR-64). Left undefined by the
+   * update paths, which keep the candidate tie-break.
+   */
+  preferredDigest?: string | null;
 };
 
 type ComposeUpdateLifecycleContext = {
@@ -3272,11 +3282,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * Skipped when dockerApi does not expose getImage/info (older mocks / proxies) —
    * in that case we fall through to the existing stop/create sequence and let
    * Docker surface its own error.
+   *
+   * `requireLocalImage` turns a failed inspect from "let create report it" into
+   * the refusal it has to be when nothing pulled on this path. Letting create
+   * report a missing image is only harmless behind a pull, which would have
+   * failed first; behind `skipPull` the create is reached with the running
+   * container already removed, and the rollback net then restores the old
+   * `Config.Image`, which on an automatic rollback is the failing update the
+   * rollback was undoing (DR-110).
    */
   async verifyPulledImageCompatibility(
     dockerApi: DockerApiLike,
     newImage: string,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options: { requireLocalImage?: boolean } = {},
   ): Promise<void> {
     if (typeof dockerApi.getImage !== 'function') {
       return;
@@ -3284,7 +3303,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     let imageInspect: { Architecture?: string; Os?: string } | undefined;
     try {
       imageInspect = await dockerApi.getImage(newImage).inspect();
-    } catch {
+    } catch (error: unknown) {
+      if (options.requireLocalImage === true) {
+        throw new Error(
+          `Cannot recreate from ${newImage}: the image is not available locally and this operation does not pull it (${getErrorMessage(error)}). ` +
+            `The running container has been left untouched.`,
+        );
+      }
       // Image inspect failed — not a hard error; Docker will surface the real
       // problem during container creation.
       return;
@@ -3657,6 +3682,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         newImage,
         container,
         logContainer,
+        // Only a caller that named the image this refresh deploys gets to
+        // replace the candidate tie-break, and saying so is what makes an
+        // unresolved tie fail closed instead of picking one. The update paths
+        // pass nothing and keep reading `container.result.digest` (DR-64).
+        runtimeContext.preferredDigest !== undefined
+          ? { preferredDigest: runtimeContext.preferredDigest }
+          : undefined,
       );
       imageIdentity = identityOutcome.imageIdentity;
       securityGateUnboundWarn = identityOutcome.unboundWarn;
@@ -3715,6 +3747,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       dockerApi as DockerApiLike,
       pinnedImage,
       logContainer,
+      // Nothing pulled on this refresh, so a missing image has to stop it here
+      // rather than at create, which is past the stop/remove below (DR-110).
+      { requireLocalImage: skipPull },
     );
     const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
       dockerApi,
@@ -3860,6 +3895,27 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       shouldStart: currentContainerSpec?.State?.Running === true,
       skipPull: true,
       forceRecreate: true,
+      // The caller names the image this recreates from, and the compose file
+      // was just rewritten to it above. Without handing it to the runtime
+      // refresh, that refresh re-derives its own target from the container's
+      // update candidate, so a rollback wrote the backup image into the
+      // compose file and then created the container from the very update it
+      // was undoing, while the operation reported success (DR-101).
+      runtimeContext: {
+        newImage,
+        // No digest to hand over: a digest-pinned newImage is already
+        // matched by the pulled reference itself in selectPulledRepoDigest,
+        // so re-parsing it here would only be read back never used. Passing
+        // this key at all is still required, though, so the options bag
+        // marks the pull caller-pinned and `container.result.digest` (the
+        // candidate this recreate is moving away from) never breaks the tie
+        // by default (DR-64).
+        preferredDigest: null,
+      },
+      // Deliberately no `pulledImageId`, `imageIdentity` or
+      // `onPulledImageIdResolved`: this path has no compose-file-once
+      // preflight behind it, so it must not read as a preflighted service
+      // identity in the post-create image check (DR-67).
     } as ComposeRuntimeRefreshOptions;
     if (composeFiles.length > 1) {
       composeUpdateOptions.composeFiles = composeFiles;
