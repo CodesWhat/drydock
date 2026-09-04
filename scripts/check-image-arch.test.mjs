@@ -170,7 +170,7 @@ test('probes the image with the platform, an sh entrypoint, and od at offset 18'
   assert.equal(result.code, 0);
   assert.match(
     result.dockerArgs,
-    /^run --rm --platform linux\/arm64 --entrypoint sh drydock:test -c/u,
+    /^run --rm --pull always --platform linux\/arm64 --entrypoint sh drydock:test -c/u,
   );
   assert.match(result.dockerArgs, /od -An -tx1 -j18 -N2/u);
   for (const path of BINARIES) {

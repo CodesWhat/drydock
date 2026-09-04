@@ -782,7 +782,11 @@ jobs:
       # the resulting image is x86-64 under an arm64 label (#1021). Check the
       # pins on the PR that changes them.
       - name: Verify base image pins are multi-arch indexes
-        run: scripts/check-dockerfile-base-indexes.sh Dockerfile linux/amd64,linux/arm64
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 3
+          max_attempts: 3
+          command: scripts/check-dockerfile-base-indexes.sh Dockerfile linux/amd64,linux/arm64
 
       - name: Docker build (QA image + smoke test)
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
