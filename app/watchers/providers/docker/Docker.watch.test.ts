@@ -1139,7 +1139,7 @@ describe('Docker Watcher', () => {
     });
   });
 
-  describe('controller-local enumerated container ids (#1013)', () => {
+  describe('controller-local enumerated container ids (DR-106)', () => {
     // The agent ingestion gate decides ownership of a no-record container id
     // on what the controller's own watchers are enumerating, because watcher
     // names collide by default: a controller with no DD_WATCHER_* and an
@@ -1191,6 +1191,23 @@ describe('Docker Watcher', () => {
       await docker.deregisterComponent();
 
       expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
+    });
+
+    test('seeds the id set during init(), before the first startup cron tick fires', async () => {
+      // register() awaits init(), and the startup watch is only *scheduled*
+      // there (START_WATCHER_DELAY_MS later). Fake timers with no advance
+      // proves the claim exists the moment init() resolves, not because the
+      // scheduled tick already ran.
+      vi.useFakeTimers();
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'startup-id', Labels: {}, Names: ['/a'] },
+      ]);
+
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+
+      expect(findControllerLocalWatcherClaimingContainerId('startup-id')).toBe('docker.local');
+      // listContainers() ran exactly once: the seed, not a cron tick.
+      expect(mockDockerApi.listContainers).toHaveBeenCalledTimes(1);
     });
   });
 

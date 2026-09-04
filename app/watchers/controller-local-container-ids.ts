@@ -33,6 +33,11 @@ export type ControllerLocalWatcherIdentity = {
  * controller-local" is decided once at write time, where the component's own
  * `agent` field is authoritative, instead of being re-derived from a registry
  * key string on every read.
+ *
+ * Residual risk: when a watcher's `watchevents` option is off, its set is
+ * only replaced on the cron cadence, so a container that appears on the
+ * controller's host between ticks does not enter the set (and so cannot be
+ * claimed against an agent's report) until the next tick runs.
  */
 const enumeratedContainerIdsByWatcher = new Map<string, Set<string>>();
 
@@ -59,6 +64,60 @@ export function recordControllerLocalEnumeration(
     }
   }
   enumeratedContainerIdsByWatcher.set(watcher.getId(), ids);
+}
+
+/**
+ * Minimal shape of a Docker client this module needs to seed a watcher's id
+ * set at startup. Structural, like `ControllerLocalWatcherIdentity`, so this
+ * module never has to import `dockerode` or the Docker watcher class.
+ */
+export type ContainerListingDockerApi = {
+  listContainers(options: { all: boolean }): Promise<Array<{ Id?: string }>>;
+};
+
+/**
+ * Minimal shape of a watcher's logger this module needs to warn about a
+ * failed seed. Structural for the same reason as the types above.
+ */
+export type WarnLogger = {
+  warn(message: string): void;
+};
+
+/**
+ * Seed a controller-local watcher's id set once at startup, before its first
+ * scheduled enumeration runs. `Docker.init()` schedules that first watch
+ * `START_WATCHER_DELAY_MS` after registration, but `app/index.ts` starts the
+ * agent SSE connection as soon as `registry.init()` resolves, and an agent's
+ * `dd:ack` runs `handshake()` within tens of milliseconds of connecting. On a
+ * fresh store, a controller-host container id could otherwise reach the agent
+ * ingestion gate before the scheduled tick ever populates the set, and an
+ * empty set is indistinguishable from "no controller watcher owns this id."
+ * Calling this from `Docker.init()`, awaited before registration resolves,
+ * closes that window.
+ *
+ * An unreachable daemon at boot must not fail watcher registration, so a
+ * `listContainers()` failure here is swallowed and only logged through
+ * `logger`, when one is given; the scheduled enumeration still runs on its
+ * own cadence regardless of whether the seed succeeded.
+ * @param watcher the watcher that will own the seeded ids
+ * @param dockerApi the Docker client to enumerate once
+ * @param logger the watcher's logger, for a seed failure warning
+ */
+export async function seedControllerLocalEnumeration(
+  watcher: ControllerLocalWatcherIdentity,
+  dockerApi: ContainerListingDockerApi,
+  logger?: WarnLogger,
+): Promise<void> {
+  try {
+    const containers = await dockerApi.listContainers({ all: true });
+    recordControllerLocalEnumeration(
+      watcher,
+      containers.map((container) => container.Id),
+    );
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    logger?.warn(`Unable to seed controller-local container ids at startup (${message})`);
+  }
 }
 
 /**

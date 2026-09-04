@@ -1003,7 +1003,7 @@ export class AgentClient {
       // The evidence is the id, not the watcher name: the controller's
       // default watcher and an agent following the quickstart are both
       // called `local`, so a name check refused every genuine agent
-      // container instead (#1013).
+      // container instead (DR-106).
       const claimingWatcherId = findControllerLocalWatcherClaimingContainerId(containerId);
       if (claimingWatcherId) {
         return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: the controller's own watcher ${sanitizeLogParam(claimingWatcherId)} is currently running that container id`;

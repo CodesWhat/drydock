@@ -22,10 +22,16 @@ import { expect, test } from 'vitest';
 // whichever scan consumes the armed catch-up queue rather than only by the 60s poll. The
 // decision of when to announce lives in runCronWatch in docker-cron-watch.ts; this method
 // is the emit plus the warn that keeps a failed announce from failing the scan.
-test('Docker watcher implementation should stay under 1640 lines', () => {
+// Bumped from 1640 for the DR-106 controller-local ownership fix (one import + one call
+// site in getContainers()); the id-tracking logic itself lives in
+// controller-local-container-ids.ts.
+// Bumped from 1646 for the DR-106 startup-seed fix (one import + one call site in
+// init()); the seeding logic itself lives in seedControllerLocalEnumeration in
+// controller-local-container-ids.ts.
+test('Docker watcher implementation should stay under 1650 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1640);
+  expect(lineCount).toBeLessThanOrEqual(1650);
 });
