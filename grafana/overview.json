@@ -328,8 +328,67 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#00838f"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 5 },
+      "id": 53,
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background_gradient",
+        "textMode": "auto",
+        "wideLayout": true,
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "pluginVersion": "11.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(dd_watcher_maintenance_deferred_updates_total)",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A",
+          "instant": false
+        }
+      ],
+      "title": "Maintenance Deferred Updates",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
       "id": 10,
       "panels": [],
       "title": "Container Updates",
@@ -472,7 +531,7 @@
           }
         ]
       },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 6 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 10 },
       "id": 11,
       "options": {
         "cellHeight": "md",
@@ -552,7 +611,7 @@
     },
     {
       "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
       "id": 20,
       "title": "Triggers & Activity",
       "type": "row",
@@ -582,7 +641,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 14, "x": 0, "y": 19 },
+          "gridPos": { "h": 8, "w": 14, "x": 0, "y": 23 },
           "id": 21,
           "options": {
             "barRadius": 0.1,
@@ -645,7 +704,7 @@
               }
             ]
           },
-          "gridPos": { "h": 8, "w": 10, "x": 14, "y": 19 },
+          "gridPos": { "h": 8, "w": 10, "x": 14, "y": 23 },
           "id": 22,
           "options": {
             "displayLabels": ["percent"],
@@ -677,7 +736,7 @@
     },
     {
       "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
       "id": 30,
       "title": "Audit & Webhooks",
       "type": "row",
@@ -714,7 +773,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
           "id": 31,
           "options": {
             "legend": {
@@ -752,7 +811,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 28 },
+          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 32 },
           "id": 32,
           "options": {
             "colorMode": "background_gradient",
@@ -793,7 +852,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 28 },
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 32 },
           "id": 33,
           "options": {
             "colorMode": "background_gradient",
@@ -825,7 +884,7 @@
     },
     {
       "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
       "id": 40,
       "title": "Registries",
       "type": "row",
@@ -867,7 +926,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 37 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
           "id": 41,
           "options": {
             "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom" },
@@ -921,7 +980,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 37 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
           "id": 42,
           "options": {
             "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom" },
@@ -946,7 +1005,7 @@
     },
     {
       "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
       "id": 50,
       "title": "Watchers",
       "type": "row",
@@ -983,7 +1042,7 @@
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 46 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
           "id": 51,
           "options": {
             "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
@@ -1028,7 +1087,7 @@
               }
             ]
           },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 46 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 50 },
           "id": 52,
           "options": {
             "cellHeight": "sm",
