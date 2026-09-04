@@ -14140,6 +14140,225 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
   });
 });
 
+// #946 finding 3: the catch-up scan re-runs watch(), which is enough for the simple and
+// batch paths because their dispatch hangs off the report it emits. A digest trigger's
+// report handler only re-buffers, so without a flush the deferred install waited for the
+// next digest cron - up to a day after the window that was supposed to apply it.
+describe('maintenance window opening flushes a digest action buffer (#946)', () => {
+  const bufferedContainer = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'local',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  } as any;
+
+  function makeDigestActionTrigger() {
+    const instance = new Trigger() as any;
+    instance.log = trigger.log;
+    instance.configuration = { ...configurationValid, mode: 'digest' };
+    instance.type = 'docker';
+    instance.name = 'update';
+    return instance;
+  }
+
+  function bufferOne(instance: any, container = bufferedContainer) {
+    instance.digestBuffer.set(container.id, container);
+    instance.digestBufferUpdatedAt.set(container.id, Date.now());
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+  }
+
+  test('a deferred digest install lands when the window opens instead of at the next digest cron', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    let windowOpen = false;
+    const queueMaintenanceWindowWatch = vi.fn();
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': {
+          type: 'docker',
+          name: 'local',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => windowOpen,
+          queueMaintenanceWindowWatch,
+        },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    bufferOne(actionTrigger);
+    const { enqueueContainerUpdates: enqueueMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueMock).mockClear();
+    vi.mocked(enqueueMock).mockResolvedValue({ accepted: [], rejected: [] } as any);
+
+    // 08:00 digest cron, window closed: nothing is enqueued and the entry stays buffered.
+    await actionTrigger.flushDigestBuffer();
+
+    expect(vi.mocked(enqueueMock)).not.toHaveBeenCalled();
+    expect(actionTrigger.digestBuffer.size).toBe(1);
+    expect(queueMaintenanceWindowWatch).toHaveBeenCalled();
+
+    // 02:00 the window opens, the watcher runs its catch-up scan and announces it.
+    windowOpen = true;
+    await actionTrigger.handleMaintenanceWindowOpenedEvent({ watcherId: 'docker.local' });
+
+    expect(vi.mocked(enqueueMock)).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'c1' })],
+      expect.objectContaining({ source: 'automatic' }),
+    );
+    expect(actionTrigger.digestBuffer.size).toBe(0);
+  });
+
+  test('records only the watchers that actually deferred in a mixed flush', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    const held = { ...bufferedContainer, id: 'c-held', name: 'held', watcher: 'closed' };
+    const ready = { ...bufferedContainer, id: 'c-ready', name: 'ready', watcher: 'open' };
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.closed': {
+          type: 'docker',
+          name: 'closed',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => false,
+        },
+        'docker.open': {
+          type: 'docker',
+          name: 'open',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => true,
+        },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    for (const container of [held, ready]) {
+      actionTrigger.digestBuffer.set(container.id, container);
+      actionTrigger.digestBufferUpdatedAt.set(container.id, Date.now());
+    }
+    storeContainer.getContainersRaw.mockReturnValue([held, ready]);
+    const { enqueueContainerUpdates: enqueueMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueMock).mockResolvedValue({ accepted: [], rejected: [] } as any);
+
+    await actionTrigger.flushDigestBuffer();
+
+    expect([...actionTrigger.maintenanceWindowDeferredDigestWatchers]).toEqual(['docker.closed']);
+    expect(actionTrigger.digestBuffer.size).toBe(1);
+  });
+
+  test('a window opening on an unrelated watcher does not bring the digest forward', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': {
+          type: 'docker',
+          name: 'local',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => false,
+        },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    bufferOne(actionTrigger);
+
+    await actionTrigger.flushDigestBuffer();
+    const flushSpy = vi.spyOn(actionTrigger, 'flushDigestBuffer');
+
+    await actionTrigger.handleMaintenanceWindowOpenedEvent({ watcherId: 'docker.elsewhere' });
+
+    expect(flushSpy).not.toHaveBeenCalled();
+    expect(actionTrigger.digestBuffer.size).toBe(1);
+  });
+
+  test('a flush with nothing deferred arms no window opening at all', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    mockRegistryGetState.mockReturnValue({
+      watcher: {},
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    bufferOne(actionTrigger);
+    const { enqueueContainerUpdates: enqueueMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueMock).mockResolvedValue({ accepted: [], rejected: [] } as any);
+
+    await actionTrigger.flushDigestBuffer();
+    const flushSpy = vi.spyOn(actionTrigger, 'flushDigestBuffer');
+    await actionTrigger.handleMaintenanceWindowOpenedEvent({ watcherId: 'docker.local' });
+
+    expect(flushSpy).not.toHaveBeenCalled();
+  });
+
+  test('a deferred container whose watcher cannot be identified arms no window opening', async () => {
+    const actionTrigger = makeDigestActionTrigger();
+    const idLessWatcher = { ...bufferedContainer, watcher: '' };
+    bufferOne(actionTrigger, idLessWatcher);
+    actionTrigger.runAcceptedUpdateBatch = vi
+      .fn()
+      .mockResolvedValue({ dispatched: true, deferredIds: new Set(['c1']) });
+
+    await actionTrigger.flushDigestBuffer();
+    const flushSpy = vi.spyOn(actionTrigger, 'flushDigestBuffer');
+    await actionTrigger.handleMaintenanceWindowOpenedEvent({ watcherId: 'docker.local' });
+
+    expect(flushSpy).not.toHaveBeenCalled();
+  });
+
+  test('a digest trigger registers for window openings and drops the handler on deregister', async () => {
+    const unregister = vi.fn();
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityScanCycleComplete).mockReturnValue(vi.fn());
+    vi.mocked(event.registerMaintenanceWindowOpened).mockReturnValue(unregister);
+
+    const actionTrigger = makeDigestActionTrigger();
+    await actionTrigger.register('trigger', 'docker', 'update', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+
+    expect(event.registerMaintenanceWindowOpened).toHaveBeenCalled();
+    const handler = vi.mocked(event.registerMaintenanceWindowOpened).mock.calls[0][0];
+    const handlerSpy = vi
+      .spyOn(actionTrigger, 'handleMaintenanceWindowOpenedEvent')
+      .mockResolvedValue(undefined);
+    await handler({ watcherId: 'docker.local' });
+    expect(handlerSpy).toHaveBeenCalledWith({ watcherId: 'docker.local' });
+
+    actionTrigger.maintenanceWindowDeferredDigestWatchers.add('docker.local');
+    await actionTrigger.deregisterComponent();
+
+    expect(unregister).toHaveBeenCalled();
+    expect(actionTrigger.maintenanceWindowDeferredDigestWatchers.size).toBe(0);
+  });
+
+  test('a simple-mode trigger never registers for window openings', async () => {
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityScanCycleComplete).mockReturnValue(vi.fn());
+    vi.mocked(event.registerMaintenanceWindowOpened).mockReturnValue(vi.fn());
+
+    const simpleTrigger = new Trigger() as any;
+    simpleTrigger.log = trigger.log;
+    await simpleTrigger.register('trigger', 'docker', 'simple-update', {
+      ...configurationValid,
+      mode: 'simple',
+    });
+
+    expect(event.registerMaintenanceWindowOpened).not.toHaveBeenCalled();
+  });
+});
+
 // #946 finding 1: a `command` action is an action the operator asked drydock to run on an
 // update, but it is not in UPDATE_ACTION_TRIGGER_TYPES, so it used to skip the deferral
 // branch entirely. Under the scan scope the closed window held it back indirectly (no scan,

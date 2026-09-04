@@ -24,6 +24,7 @@ const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 import type { NotificationOutboxEntry } from '../../model/notification-outbox.js';
 import {
   getContainerMaintenanceWindowWatcher,
+  getContainerWatcherRegistryId,
   resolveMaintenanceWindowScope,
 } from '../../model/watcher-maintenance-window.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
@@ -782,6 +783,15 @@ class Trigger<
   private digestCronTask?: ScheduledTask;
   private isDigestFlushInProgress = false;
   private unregisterSecurityScanCycleComplete?: () => void;
+  private unregisterMaintenanceWindowOpened?: () => void;
+  /**
+   * Registry ids of the watchers whose maintenance window held an install back during a
+   * digest flush. Only the digest path records here: the simple and batch paths are driven
+   * by the container report the catch-up scan itself emits, so they need no second signal,
+   * while a digest flush runs on its own cron and would otherwise leave the deferred
+   * install sitting in the buffer until the next one.
+   */
+  private readonly maintenanceWindowDeferredDigestWatchers = new Set<string>();
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -2674,6 +2684,7 @@ class Trigger<
         }
       }
       status = 'success';
+      this.recordDigestMaintenanceWindowDeferrals(containers, maintenanceWindowDeferredIds);
       for (const container of containers) {
         if (!maintenanceWindowDeferredIds.has(container.id)) {
           this.recordNotifiedForResult(container, 'update-available-digest');
@@ -2699,6 +2710,52 @@ class Trigger<
         this.releaseOnceNotificationSlot(container, digestEventKind);
       }
     }
+  }
+
+  /**
+   * Remember which watchers held this flush's installs back, so the window opening on one of
+   * them can flush the buffer again instead of leaving the install for the next digest cron.
+   */
+  private recordDigestMaintenanceWindowDeferrals(
+    containers: Container[],
+    deferredIds: Set<string>,
+  ): void {
+    if (deferredIds.size === 0) {
+      return;
+    }
+    for (const container of containers) {
+      if (!deferredIds.has(container.id)) {
+        continue;
+      }
+      const watcherId = getContainerWatcherRegistryId(container);
+      if (watcherId) {
+        this.maintenanceWindowDeferredDigestWatchers.add(watcherId);
+      }
+    }
+  }
+
+  /**
+   * A watcher's maintenance window opened and its catch-up scan has finished.
+   *
+   * The catch-up re-runs the scan, which is enough for the simple and batch paths: their
+   * dispatch hangs off the container report the scan emits, so the deferred install is
+   * applied there and then. A digest trigger's report handler only re-buffers, so without
+   * this the install would wait for the next digest cron - up to a day after the window
+   * that was supposed to apply it, and quite possibly after it closed again.
+   *
+   * Only flushes when this trigger actually deferred something for this watcher, so a
+   * window opening on an unrelated watcher never brings a digest forward.
+   */
+  private async handleMaintenanceWindowOpenedEvent(
+    payload: event.MaintenanceWindowOpenedEventPayload,
+  ): Promise<void> {
+    if (!this.maintenanceWindowDeferredDigestWatchers.delete(payload.watcherId)) {
+      return;
+    }
+    this.log.info(
+      `Maintenance window opened on ${payload.watcherId} - flushing the digest updates it deferred`,
+    );
+    await this.flushDigestBuffer({ eventKind: 'update-available-digest' });
   }
 
   /**
@@ -2973,6 +3030,15 @@ class Trigger<
             order: this.configuration.order,
           },
         );
+        // A window opening only matters to a digest trigger: every other mode dispatches
+        // off the container report the catch-up scan emits.
+        this.unregisterMaintenanceWindowOpened = event.registerMaintenanceWindowOpened(
+          async (payload) => this.handleMaintenanceWindowOpenedEvent(payload),
+          {
+            id: this.getId(),
+            order: this.configuration.order,
+          },
+        );
         const digestCronExpression = this.configuration.digestcron ?? '0 8 * * *';
         this.digestCronTask = cron.schedule(digestCronExpression, () => {
           void this.flushDigestBuffer({ eventKind: 'update-available-digest' });
@@ -3065,6 +3131,10 @@ class Trigger<
 
     this.unregisterDigestContainerReport?.();
     this.unregisterDigestContainerReport = undefined;
+
+    this.unregisterMaintenanceWindowOpened?.();
+    this.unregisterMaintenanceWindowOpened = undefined;
+    this.maintenanceWindowDeferredDigestWatchers.clear();
 
     this.unregisterContainerReports?.();
     this.unregisterContainerReports = undefined;

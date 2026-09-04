@@ -15,10 +15,13 @@ import { expect, test } from 'vitest';
 // joi enum, and one import. The scope vocabulary lives in
 // app/model/watcher-maintenance-window.ts and the gate predicate the two call
 // sites share is isScanGatedByMaintenanceWindow in maintenance.ts.
-test('Docker watcher implementation should stay under 1620 lines', () => {
+// Bumped from 1620 for the #946 maintenance-window-opened emit: one call plus its
+// comment in checkQueuedMaintenanceWindowWatch. The event itself lives in
+// app/event/index.ts and the flush it drives lives in triggers/providers/Trigger.ts.
+test('Docker watcher implementation should stay under 1625 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1620);
+  expect(lineCount).toBeLessThanOrEqual(1625);
 });

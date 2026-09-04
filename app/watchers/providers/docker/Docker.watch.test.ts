@@ -591,6 +591,54 @@ describe('Docker Watcher', () => {
       }
     });
 
+    // #946 finding 3: the catch-up scan re-buffers for a digest trigger and nothing else,
+    // so the watcher announces the opening and the trigger flushes what it deferred.
+    test('announces the window opening after the catch-up scan has run', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      const order: string[] = [];
+      docker.watch = vi.fn().mockImplementation(async () => {
+        order.push('watch');
+        return [];
+      });
+      event.emitMaintenanceWindowOpened.mockImplementation(async () => {
+        order.push('emit');
+      });
+
+      // Armed by a deferral, then the window opens under the 60s poll.
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(event.emitMaintenanceWindowOpened).toHaveBeenCalledWith({ watcherId: 'docker.test' });
+      // Announced only after the scan, so the deferred containers are back in the store with
+      // fresh state before any trigger flushes on them.
+      expect(order).toEqual(['watch', 'emit']);
+    });
+
+    test('does not announce a window opening when the catch-up scan throws', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watch = vi.fn().mockRejectedValue(new Error('socket gone'));
+
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(event.emitMaintenanceWindowOpened).not.toHaveBeenCalled();
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to run queued maintenance watch'),
+      );
+    });
+
     test('should clear queued maintenance watch when normal cron runs inside window', async () => {
       vi.useFakeTimers();
       try {

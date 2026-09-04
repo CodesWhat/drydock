@@ -45,6 +45,23 @@ export interface MaintenanceWindowWatcher {
 }
 
 /**
+ * The component-registry key of the watcher that owns a container, or undefined when the
+ * container names no watcher. Matches `Component.getId()` for a docker watcher, so it is
+ * also what a watcher-scoped event carries to identify itself to a trigger.
+ */
+export function getContainerWatcherRegistryId(
+  container: Pick<Container, 'agent' | 'watcher'>,
+): string | undefined {
+  const watcherName = typeof container.watcher === 'string' ? container.watcher.trim() : '';
+  if (!watcherName) {
+    return undefined;
+  }
+
+  const agentName = typeof container.agent === 'string' ? container.agent.trim() : '';
+  return `${agentName ? `${agentName}.` : ''}docker.${watcherName}`;
+}
+
+/**
  * Resolve the watcher that owns a container from the component-registry watcher state.
  * Returns undefined when the container names no watcher, or when the registry holds no
  * entry under the derived id (deregistered watcher, agent mid-handshake).
@@ -53,13 +70,11 @@ export function getContainerMaintenanceWindowWatcher(
   container: Pick<Container, 'agent' | 'watcher'>,
   watchers: Readonly<Record<string, unknown>> | undefined,
 ): MaintenanceWindowWatcher | undefined {
-  const watcherName = typeof container.watcher === 'string' ? container.watcher.trim() : '';
-  if (!watcherName) {
+  const watcherId = getContainerWatcherRegistryId(container);
+  if (!watcherId) {
     return undefined;
   }
 
-  const agentName = typeof container.agent === 'string' ? container.agent.trim() : '';
-  const watcherId = `${agentName ? `${agentName}.` : ''}docker.${watcherName}`;
   return watchers?.[watcherId] as MaintenanceWindowWatcher | undefined;
 }
 

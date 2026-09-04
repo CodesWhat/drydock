@@ -625,6 +625,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         ignoreMaintenanceWindow: true,
         reason: 'maintenance-window',
       });
+      // watch() awaits its report emit, so every deferred container is back in the store
+      // with fresh state by now. A digest-mode action trigger only re-buffers on a report,
+      // so tell it to flush rather than leaving the install until its next digest cron.
+      await event.emitMaintenanceWindowOpened({ watcherId: this.getId() });
     } catch (e: unknown) {
       this.ensureLogger();
       if (this.log && typeof this.log.warn === 'function') {

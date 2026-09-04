@@ -4,6 +4,7 @@ import {
   DEFAULT_MAINTENANCE_WINDOW_SCOPE,
   getContainerMaintenanceWindowOpen,
   getContainerMaintenanceWindowWatcher,
+  getContainerWatcherRegistryId,
   MAINTENANCE_WINDOW_SCOPES,
   resolveMaintenanceWindowScope,
 } from './watcher-maintenance-window.js';
@@ -24,6 +25,25 @@ describe('model/watcher-maintenance-window scope vocabulary', () => {
     expect(resolveMaintenanceWindowScope(undefined)).toBe('install');
     expect(resolveMaintenanceWindowScope('Scan')).toBe('install');
     expect(resolveMaintenanceWindowScope(7)).toBe('install');
+  });
+});
+
+describe('getContainerWatcherRegistryId', () => {
+  test('matches Component.getId() for a controller-owned and an agent-owned watcher', () => {
+    expect(getContainerWatcherRegistryId(localContainer)).toBe('docker.local');
+    expect(
+      getContainerWatcherRegistryId({
+        agent: ' my-agent ',
+        watcher: ' remote ',
+      } as WindowContainer),
+    ).toBe('my-agent.docker.remote');
+  });
+
+  test('returns undefined when the container names no watcher', () => {
+    expect(getContainerWatcherRegistryId({ watcher: '  ' } as WindowContainer)).toBeUndefined();
+    expect(
+      getContainerWatcherRegistryId({ watcher: undefined } as WindowContainer),
+    ).toBeUndefined();
   });
 });
 
