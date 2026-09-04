@@ -57,6 +57,7 @@ import {
   startDigestCachePollCycleForRegistries,
 } from './digest-cache-lifecycle.js';
 import {
+  type CronWatchDeadlineHandle,
   type CronWatchOptions,
   type CronWatchOrchestrationWatcher,
   resetCronWatchState,
@@ -355,6 +356,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public cronWatchRescanRequested: boolean = false;
   public cronWatchRescanReason?: string;
   public cronWatchRescanIgnoreMaintenanceWindow: boolean = false;
+  public cronWatchDeadlineHandle?: CronWatchDeadlineHandle;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public unregisterContainerUpdateApplied?: () => void;
@@ -659,10 +661,19 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // listen to docker events
     if (this.configuration.watchevents) {
       this.isDockerEventsListenerActive = true;
-      this.watchCronDebounced = debounce(
-        (reason: string = 'docker-event') => void this.watchFromCron({ reason }),
-        DEBOUNCED_WATCH_CRON_MS,
-      );
+      this.watchCronDebounced = debounce((reason: string = 'docker-event') => {
+        // just-debounce exposes no cancel, so deregisterComponent() cannot
+        // clear a pending timeout and this fires up to DEBOUNCED_WATCH_CRON_MS
+        // after teardown. watchFromCronOrchestration() refuses a deregistered
+        // watcher too; stopping here keeps the dead scan off the call stack
+        // entirely. The catch matches the coalesced follow-up scan's in
+        // docker-cron-watch.ts: a bare `void` would surface a failed scan as
+        // an unhandled rejection.
+        if (this.isWatcherDeregistered) {
+          return;
+        }
+        void this.watchFromCron({ reason }).catch(() => undefined);
+      }, DEBOUNCED_WATCH_CRON_MS);
       this.listenDockerEventsTimeout = setTimeout(
         this.listenDockerEvents.bind(this),
         START_WATCHER_DELAY_MS,

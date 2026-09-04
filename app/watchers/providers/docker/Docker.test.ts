@@ -678,6 +678,35 @@ describe('Docker Watcher', () => {
       expect(docker.watchFromCron).toHaveBeenCalledWith({ reason: 'docker-event' });
     });
 
+    test('watchCronDebounced swallows a failed scan instead of leaking an unhandled rejection', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        watchevents: true,
+      });
+      await docker.init();
+      docker.watchFromCron = vi.fn().mockRejectedValue(new Error('scan failed'));
+
+      docker.watchCronDebounced();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(docker.watchFromCron).toHaveBeenCalledWith({ reason: 'docker-event' });
+    });
+
+    test('watchCronDebounced does not start a scan once the watcher is deregistered', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        watchevents: true,
+      });
+      docker.watchFromCron = vi.fn().mockResolvedValue([]);
+      await docker.init();
+
+      // just-debounce exposes no cancel, so deregisterComponent() cannot clear
+      // a pending timeout and the callback still fires after teardown.
+      docker.isWatcherDeregistered = true;
+      docker.watchCronDebounced();
+
+      expect(docker.watchFromCron).not.toHaveBeenCalled();
+    });
+
     test('should not setup events when disabled', async () => {
       await docker.register('watcher', 'docker', 'test', {
         watchevents: false,

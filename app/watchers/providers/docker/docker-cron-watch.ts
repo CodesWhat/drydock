@@ -7,6 +7,19 @@ export interface CronWatchOptions {
 }
 
 /**
+ * Per-scan deadline state for the in-flight single-flight scan (#979). Held
+ * on the watcher so `resetCronWatchState()` can reach it: `cancel()` settles
+ * the deadline race with the deregistration sentinel so every caller sharing
+ * the bounded promise resolves immediately, and `timer` is the ref'ed
+ * `setTimeout` that would otherwise hold the event loop open until the
+ * deadline and then warn against a torn-down watcher.
+ */
+export interface CronWatchDeadlineHandle {
+  timer: ReturnType<typeof setTimeout>;
+  cancel: () => void;
+}
+
+/**
  * Duck-typed subset of Docker watcher state/methods needed to orchestrate
  * `watchFromCron()`'s single-flight coalescing (#972). Mirrors the pattern in
  * docker-event-orchestration.ts: the state lives on the real Docker instance
@@ -30,6 +43,7 @@ export interface CronWatchOrchestrationWatcher {
   cronWatchRescanRequested: boolean;
   cronWatchRescanReason?: string;
   cronWatchRescanIgnoreMaintenanceWindow: boolean;
+  cronWatchDeadlineHandle?: CronWatchDeadlineHandle;
   ensureLogger: () => void;
   isMaintenanceWindowOpen: () => boolean;
   queueMaintenanceWindowWatch: () => void;
@@ -71,12 +85,25 @@ export function getCronIntervalMs(watcher: CronIntervalWatcher): number | undefi
  * waiting for it when it eventually settles; the isWatcherDeregistered guard
  * in watchFromCronOrchestration() covers the remaining window by dropping
  * the follow-up instead of starting a new scan on a torn-down watcher.
+ *
+ * The scan itself cannot be cancelled, but its deadline can. Clearing the
+ * ref'ed timer stops it holding the event loop open, and cancelling settles
+ * the deadline race with the deregistration sentinel so the initiating call
+ * and every coalesced caller resolve to the same empty result now instead of
+ * hanging on a stalled watch() until the deadline fires and warns that a
+ * torn-down watcher missed one.
  */
 export function resetCronWatchState(watcher: CronWatchOrchestrationWatcher): void {
+  const deadlineHandle = watcher.cronWatchDeadlineHandle;
+  watcher.cronWatchDeadlineHandle = undefined;
   watcher.cronWatchInFlight = undefined;
   watcher.cronWatchRescanRequested = false;
   watcher.cronWatchRescanReason = undefined;
   watcher.cronWatchRescanIgnoreMaintenanceWindow = false;
+  if (deadlineHandle) {
+    clearTimeout(deadlineHandle.timer);
+    deadlineHandle.cancel();
+  }
 }
 
 /**
@@ -110,6 +137,12 @@ function getCronWatchDeadlineMs(watcher: CronWatchOrchestrationWatcher): number 
 // Sentinel distinguishing "the deadline timer fired" from a real, possibly
 // empty, watch() result racing it.
 const CRON_WATCH_DEADLINE = Symbol('cron-watch-deadline');
+
+// Sentinel for "resetCronWatchState() settled this race on deregister".
+// Distinct from CRON_WATCH_DEADLINE so the deregistration path returns the
+// same empty result without the "exceeded its deadline" warning - nothing
+// was late here, the watcher was torn down.
+const CRON_WATCH_DEREGISTERED = Symbol('cron-watch-deregistered');
 
 /**
  * Watch containers (called by cron scheduled tasks).
@@ -151,6 +184,19 @@ export async function watchFromCronOrchestration(
   watcher: CronWatchOrchestrationWatcher,
   options: CronWatchOptions = {},
 ): Promise<ContainerReport[]> {
+  if (watcher.isWatcherDeregistered) {
+    // A timer captured before teardown can still fire after
+    // deregisterComponent() has run resetCronWatchState(): the docker-events
+    // debounce (just-debounce@1.1.0 exposes no cancel, so its pending timeout
+    // outlives the watcher), the startup delay and the maintenance-window
+    // queue all call in here from a closure. Starting a scan at that point
+    // runs a full watch() against a torn-down watcher and
+    // publishes a fresh refed deadline handle that the reset can no longer
+    // reach, so answer with the same empty result the deregistration path uses
+    // instead. init() clears this flag, so a re-registered watcher scans again.
+    return [];
+  }
+
   if (watcher.cronWatchInFlight) {
     watcher.cronWatchRescanRequested = true;
     watcher.cronWatchRescanReason = options.reason;
@@ -213,12 +259,23 @@ export async function watchFromCronOrchestration(
   inFlight.then(settleAndFollowUp, settleAndFollowUp);
 
   const deadlineMs = getCronWatchDeadlineMs(watcher);
-  // The Promise executor below runs synchronously, so deadlineTimer is
-  // always assigned before this line finishes executing.
+  // The Promise executor below runs synchronously, so both are always
+  // assigned before this statement finishes executing.
   let deadlineTimer!: ReturnType<typeof setTimeout>;
-  const deadline = new Promise<typeof CRON_WATCH_DEADLINE>((resolve) => {
-    deadlineTimer = setTimeout(() => resolve(CRON_WATCH_DEADLINE), deadlineMs);
-  });
+  let cancelDeadline!: () => void;
+  const deadline = new Promise<typeof CRON_WATCH_DEADLINE | typeof CRON_WATCH_DEREGISTERED>(
+    (resolve) => {
+      deadlineTimer = setTimeout(() => resolve(CRON_WATCH_DEADLINE), deadlineMs);
+      cancelDeadline = () => resolve(CRON_WATCH_DEREGISTERED);
+    },
+  );
+  // Published on the watcher so deregistration can reach this scan's timer
+  // and settle its race; see resetCronWatchState().
+  const deadlineHandle: CronWatchDeadlineHandle = {
+    timer: deadlineTimer,
+    cancel: cancelDeadline,
+  };
+  watcher.cronWatchDeadlineHandle = deadlineHandle;
 
   // Stored on the watcher below so a coalesced caller shares this exact
   // race instead of the raw (unbounded) scan promise - otherwise only the
@@ -227,6 +284,14 @@ export async function watchFromCronOrchestration(
   bounded = (async (): Promise<ContainerReport[]> => {
     try {
       const winner = await Promise.race([inFlight, deadline]);
+      if (winner === CRON_WATCH_DEREGISTERED) {
+        // resetCronWatchState() already cleared the single-flight state and
+        // nobody wants this scan's result any more. Settle the initiating
+        // call and every coalesced caller with the same empty result the
+        // maintenance-window skip uses, and log nothing: no deadline was
+        // missed.
+        return [];
+      }
       if (winner !== CRON_WATCH_DEADLINE) {
         return winner;
       }
@@ -246,6 +311,12 @@ export async function watchFromCronOrchestration(
       return [];
     } finally {
       clearTimeout(deadlineTimer);
+      // Per-scan identity: after a deregister-and-restart the watcher may
+      // already carry a newer scan's handle, and clearing that one would
+      // leave its timer unreachable to the next reset.
+      if (watcher.cronWatchDeadlineHandle === deadlineHandle) {
+        watcher.cronWatchDeadlineHandle = undefined;
+      }
     }
   })();
 
