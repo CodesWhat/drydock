@@ -437,6 +437,6 @@ scripts/start-drydock.sh:private-key:102
 test/migration/tls.key:private-key:1
 test/mosquitto/config/minica-key.pem:private-key:1
 test/mosquitto/config/mosquitto.dev/key.pem:private-key:1
-test/qa-agent-test.yml:generic-api-key:52
+test/qa-agent-test.yml:generic-api-key:54
 test/qa-proxy-certs/key.pem:private-key:1
 test/server.key:private-key:1

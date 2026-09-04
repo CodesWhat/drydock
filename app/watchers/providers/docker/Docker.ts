@@ -1304,10 +1304,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const containers = (await this.dockerApi.listContainers(
       listContainersOptions,
     )) as unknown as DockerContainerSummaryLike[];
-    recordControllerLocalEnumeration(
-      this,
-      containers.map((container) => container.Id),
-    );
+    // getContainers() can still be in flight when deregisterComponent()
+    // already called forgetControllerLocalEnumeration(this). Recording the
+    // claim set here would resurrect it for a dead watcher, permanently
+    // blocking any agent that reuses that container id (nothing else ever
+    // clears a claim for a watcher that's gone).
+    if (!this.isWatcherDeregistered) {
+      recordControllerLocalEnumeration(
+        this,
+        containers.map((container) => container.Id),
+      );
+    }
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
     const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] =

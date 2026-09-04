@@ -1193,6 +1193,30 @@ describe('Docker Watcher', () => {
       expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
     });
 
+    test('a getContainers() call that finishes after deregisterComponent() does not resurrect the claim set', async () => {
+      // getContainers() can still be awaiting listContainers() when
+      // deregisterComponent() already called forgetControllerLocalEnumeration().
+      // Recording the claim set once the pending call finally settles would
+      // resurrect it for a dead watcher, permanently blocking any agent that
+      // reuses that container id.
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+      docker.log = createMockLog();
+
+      let resolveListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingListContainers = new Promise<unknown[]>((resolve) => {
+        resolveListContainers = resolve;
+      });
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingListContainers);
+
+      const getContainersPromise = docker.getContainers();
+
+      await docker.deregisterComponent();
+      resolveListContainers([{ Id: 'id-a', Labels: {}, Names: ['/a'] }]);
+      await getContainersPromise;
+
+      expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
+    });
+
     test('seeds the id set during init(), before the first startup cron tick fires', async () => {
       // register() awaits init(), and the startup watch is only *scheduled*
       // there (START_WATCHER_DELAY_MS later). Fake timers with no advance
