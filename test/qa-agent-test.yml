@@ -13,9 +13,10 @@ services:
       - DD_ALLOW_INSECURE_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_LOG_LEVEL=debug
+      # The agent watches the same daemon, so the controller must not: any
+      # DD_WATCHER_LOCAL_* key here would register a local watcher and make
+      # DD_LOCAL_WATCHER=false a no-op.
       - DD_LOCAL_WATCHER=false
-      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=true
-      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
       - DD_SESSION_SECRET=qa-agent-test-session
