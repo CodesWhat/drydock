@@ -3686,6 +3686,169 @@ test('handleContainerReport still sends for a genuinely new result once the prev
   expect(trigger.trigger).toHaveBeenCalledTimes(2);
 });
 
+// Regression test for #972 on the batch path: shouldHandleBatchContainerReport
+// only read the once=true history, and the batch send records it after
+// triggerBatch() resolves, so a manual single-container scan overlapping a
+// cron scan passed the check in both and sent the same candidate twice.
+test('handleContainerReports sends once for two overlapping batches of the same once=true history key', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', {
+    ...configurationValid,
+    mode: 'batch',
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  const batchSpy = vi.fn().mockReturnValue(sendPromise);
+  trigger.triggerBatch = batchSpy;
+
+  const call1 = trigger.handleContainerReports([{ changed: true, container }]);
+  const call2 = trigger.handleContainerReports([{ changed: true, container }]);
+
+  // call1 runs synchronously up to its triggerBatch() await, so call2 already
+  // sees the reservation held when it evaluates the same report.
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+
+  resolveSend();
+  await Promise.all([call1, call2]);
+
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  expect(
+    notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+  ).toBe(notificationHistoryStore.computeResultHash(container));
+  // The release has to key on exactly what the reserve keyed on, or the
+  // reservation outlives the batch and mutes this container for good.
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+test('handleContainerReports still batches a genuinely new result once the previous batch is done', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', {
+    ...configurationValid,
+    mode: 'batch',
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.1-pg17' },
+    result: { tag: '2.29.1-pg17' },
+  };
+  const batchSpy = vi.fn().mockResolvedValue(undefined);
+  trigger.triggerBatch = batchSpy;
+
+  await trigger.handleContainerReports([{ changed: true, container }]);
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+
+  const updatedContainer = {
+    ...container,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+  await trigger.handleContainerReports([{ changed: true, container: updatedContainer }]);
+  expect(batchSpy).toHaveBeenCalledTimes(2);
+});
+
+// Regression test for #972 on the digest path: the flush records history only
+// after triggerBatch() resolves, so a report landing mid-flush read "not
+// digested yet", replaced the buffer entry behind the send, and the identity
+// check then skipped the post-send delete - so the next flush sent the exact
+// same result again.
+test('flushDigestBuffer sends once when a report for the same result lands mid-flush', async () => {
+  await trigger.register('trigger', 'test', 'digest-trigger', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'test',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+
+  await trigger.handleContainerReportDigest({ changed: true, container });
+  expect(trigger.digestBuffer.size).toBe(1);
+
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  const batchSpy = vi.fn().mockReturnValue(sendPromise);
+  trigger.triggerBatch = batchSpy;
+
+  const flush = trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+
+  // A manual scan hands the same candidate to the same trigger while the
+  // digest send is still in flight.
+  await trigger.handleContainerReportDigest({ changed: true, container: { ...container } });
+
+  resolveSend();
+  await flush;
+
+  // The mid-flush report did not replace the buffer entry, so the post-send
+  // delete landed and the next flush has nothing left to send.
+  await trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(
+    notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available-digest'),
+  ).toBe(notificationHistoryStore.computeResultHash(container));
+  // Both the buffer-time reservation and the flush's own have to be released
+  // on keys that match what took them, or the container never buffers again.
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+test('handleContainerReportDigest still buffers a genuinely new result after a flush', async () => {
+  await trigger.register('trigger', 'test', 'digest-trigger', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'test',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+  const batchSpy = vi.fn().mockResolvedValue(undefined);
+  trigger.triggerBatch = batchSpy;
+
+  await trigger.handleContainerReportDigest({ changed: true, container });
+  await trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+
+  // The flush released its reservation, so the next candidate still buffers.
+  const updatedContainer = {
+    ...container,
+    updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0' },
+    result: { tag: '3.0' },
+  };
+  await trigger.handleContainerReportDigest({ changed: true, container: updatedContainer });
+  await trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(2);
+});
+
 test('handleContainerReport should debug log when simple mode skips a report without an available update', async () => {
   const debugSpy = vi.spyOn(log, 'debug');
 

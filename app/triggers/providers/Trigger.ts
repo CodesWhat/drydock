@@ -1494,8 +1494,9 @@ class Trigger<
   }
 
   /**
-   * Atomic check-and-reserve for the `once=true` history gate on the simple
-   * update-available path. `hasAlreadyNotifiedForResult` is a pure read, and
+   * Atomic check-and-reserve for the `once=true` history gate, used by the
+   * simple, batch and digest update-available paths.
+   * `hasAlreadyNotifiedForResult` is a pure read, and
    * the write (`recordNotifiedForResult`) only lands after the trigger's send
    * resolves, an `await` away. Two overlapping cron scans (#972) can both
    * evaluate the same first-seen candidate for the same trigger in that
@@ -1848,7 +1849,13 @@ class Trigger<
     if (!this.configuration.once) {
       return true;
     }
-    return !this.hasAlreadyNotifiedForResult(containerReport.container, eventKind);
+    // Reserve, not just check (#972): the digest send records history only
+    // after `flushUpdateDigestBuffer` awaits `triggerBatch()`, so a report
+    // arriving mid-flush used to read "not digested yet", replace the buffer
+    // entry behind the send, and get the same result sent again on the next
+    // flush. `handleContainerReportDigest` releases the reservation it took,
+    // in its finally; the flush holds its own across the send.
+    return this.reserveOnceNotificationSlot(containerReport.container, eventKind);
   }
 
   private getContainerLogger(container: Container): Component['log'] {
@@ -1971,7 +1978,12 @@ class Trigger<
     if (!this.configuration.once) {
       return true;
     }
-    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
+    // Reserve, not just check (#972): the batch send records history only
+    // after `triggerBatch()` resolves, so a manual scan overlapping a cron
+    // scan used to read "not notified yet" for the same candidate in both
+    // and send it twice. `handleContainerReports` releases every reservation
+    // it took, in its finally.
+    return this.reserveOnceNotificationSlot(containerReport.container, 'update-available');
   }
 
   private getBatchRetryContainers(containerReports: ContainerReport[]) {
@@ -2263,8 +2275,14 @@ class Trigger<
         container,
       );
     }
+    // Tracked apart from containersToSendByBusinessId: that map is keyed by
+    // business id, so two reports resolving to the same key leave only the
+    // last one in the map even though both took a reservation, and releasing
+    // from the map would strand the one it replaced.
+    const reservedContainers: Container[] = [];
     for (const containerReport of containerReports) {
       if (this.shouldHandleBatchContainerReport(containerReport)) {
+        reservedContainers.push(containerReport.container);
         containersToSendByBusinessId.set(
           getContainerNotificationKey(containerReport.container) ||
             fullName(containerReport.container),
@@ -2273,6 +2291,8 @@ class Trigger<
       }
     }
     const containersToSend = Array.from(containersToSendByBusinessId.values());
+    // Nothing to release here: every reserved container was also set into the
+    // map above, so an empty send list means no reservation was taken.
     if (containersToSend.length === 0) {
       return;
     }
@@ -2320,6 +2340,12 @@ class Trigger<
       this.log.debug(e);
     } finally {
       this.incrementTriggerCounter(status);
+      // Release every reservation shouldHandleBatchContainerReport() took for
+      // this batch, however it ended, so a later genuinely-new result for any
+      // of these containers is never blocked by it.
+      for (const container of reservedContainers) {
+        this.releaseOnceNotificationSlot(container, 'update-available');
+      }
     }
   }
 
@@ -2361,23 +2387,33 @@ class Trigger<
       this.log.debug('Global update mode does not allow automatic digest actions => ignore');
       return;
     }
-    if (!this.shouldHandleDigestContainerReport(containerReport)) {
-      const alreadyBuffered = this.hasAlreadyNotifiedForResult(
-        container,
-        'update-available-digest',
-      );
+    // One binding for the kind this method reserves, logs and releases on, so
+    // the reserve inside shouldHandleDigestContainerReport() and the release
+    // below cannot drift apart: passing a different kind to the eligibility
+    // check would otherwise leak the reservation it took.
+    const digestEventKind = 'update-available-digest';
+    if (!this.shouldHandleDigestContainerReport(containerReport, digestEventKind)) {
+      const alreadyBuffered = this.hasAlreadyNotifiedForResult(container, digestEventKind);
       this.log.debug(
         `Skipping update-available digest buffer for ${containerName} (once=${this.configuration.once === true}, updateAvailable=${container.updateAvailable}, alreadyBuffered=${alreadyBuffered})`,
       );
       return;
     }
-    if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
-      return;
+    try {
+      if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+        return;
+      }
+      if (!this.mustTrigger(container)) {
+        return;
+      }
+      this.bufferContainerForDigest(container);
+    } finally {
+      // Release the reservation taken by shouldHandleDigestContainerReport()
+      // above, whether or not this report was buffered, so the next flush can
+      // take its own. A report turned away by that check returns before this
+      // block and never touches the reservation the flush is holding.
+      this.releaseOnceNotificationSlot(container, digestEventKind);
     }
-    if (!this.mustTrigger(container)) {
-      return;
-    }
-    this.bufferContainerForDigest(container);
   }
 
   /**
@@ -2524,6 +2560,14 @@ class Trigger<
 
     const containers = dispatchEntries.map(({ currentContainer }) => currentContainer);
     this.log.info(`Digest flush: sending ${containers.length} update(s)`);
+    // Hold the once-gate reservation for exactly the results being sent, for
+    // the whole span between deciding to send and recording the send, so a
+    // report that lands mid-flush cannot re-buffer the same result behind it.
+    // Nothing between here and the try below can throw, so the finally always
+    // pairs with this.
+    for (const container of containers) {
+      this.reserveOnceNotificationSlot(container, 'update-available-digest');
+    }
     let status: 'success' | 'error' = 'error';
     this.isDigestFlushInProgress = true;
     try {
@@ -2552,6 +2596,9 @@ class Trigger<
     } finally {
       this.isDigestFlushInProgress = false;
       this.incrementTriggerCounter(status);
+      for (const container of containers) {
+        this.releaseOnceNotificationSlot(container, 'update-available-digest');
+      }
     }
   }
 
