@@ -516,6 +516,59 @@ describe('Backup Router', () => {
       });
     });
 
+    test('should pull the backup image exactly once and never through the rollback pull helper', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+          imageDigest: 'sha256:kept',
+        },
+      ]);
+
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        // The automatic rollback's own pull. This route pulls for itself
+        // before it calls in, so putting the fetch inside recreateContainer
+        // would have made the manual route pull twice (DR-110).
+        pullRollbackImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue({}),
+        inspectContainer: vi.fn().mockResolvedValue({ State: { Running: true } }),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.local': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.pullImage).toHaveBeenCalledTimes(1);
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        {},
+        {},
+        'library/nginx@sha256:kept',
+        expect.anything(),
+      );
+      expect(mockTrigger.pullRollbackImage).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should roll back an agent-owned container whose agent advertises controller docker transport', async () => {
       const handler = getHandler('post', '/:id/rollback');
       const container = {
