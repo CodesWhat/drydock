@@ -729,8 +729,8 @@ describe('AgentClient', () => {
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('owned by controller'),
       );
-      // watchContainer() always returns the raw agent response — processing
-      // failure is silent by design, matching every other call site.
+      // watchContainer() always returns the raw agent response, since
+      // processing failure is silent by design, matching every other call site.
       expect(result).toBe(report);
     });
 
@@ -868,6 +868,88 @@ describe('AgentClient', () => {
       );
     });
 
+    test('pruneOldContainers keep-set: a recreated container under a colliding watcher name keeps its new id', () => {
+      // The prune runs before the ingest gate and reuses the same rule, so a
+      // name-based refusal dropped every recreated agent container out of the
+      // keep-set: the stale row was deleted with no replacement signal and the
+      // new id never landed. Nothing on the controller's host is running the
+      // new id, so the agent keeps it.
+      mockRegistryState.watcher['docker.local'] = {};
+      recordControllerLocalEnumeration(controllerLocalWatcher, ['controller-host-id']);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        { id: 'old-id', name: 'web', watcher: 'local', agent: 'test-agent' },
+      ] as never);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+
+      (client as any).pruneOldContainers([{ id: 'new-id', name: 'web', watcher: 'local' }]);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
+        replacementExpected: true,
+      });
+    });
+
+    test.each([
+      ['another agent', { agent: 'other-agent' }],
+      ['the controller', {}],
+    ])(
+      'handleContainerSync(): an id owned by %s never reaches the prune (F2)',
+      async (_ownerKind, ownerFields) => {
+        // The prune ran unfiltered before F2: a foreign id in the frame took
+        // part in the keep-set and in the #496 replacement-identity match,
+        // so naming a container this agent does not own but that reuses one
+        // of this agent's own container names was enough to turn the removal
+        // of this agent's own row into a replacement (retaining the update
+        // policy and skipping the Home Assistant discovery cleanup) instead
+        // of a genuine removal, or, worse, to keep a row this agent no
+        // longer owns out of the keep-set entirely.
+        vi.mocked(storeContainer.getContainers).mockReturnValue([
+          {
+            id: 'stale-1',
+            name: 'web',
+            watcher: 'local',
+            agent: 'test-agent',
+          },
+        ] as never);
+        vi.mocked(storeContainer.getContainer).mockImplementation((id: string) =>
+          id === 'foreign-1'
+            ? ({ id: 'foreign-1', name: 'web', watcher: 'local', ...ownerFields } as never)
+            : undefined,
+        );
+
+        await client.handleContainerSync([
+          { id: 'foreign-1', name: 'web', watcher: 'local' } as never,
+        ]);
+
+        expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1');
+        expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('stale-1', {
+          replacementExpected: true,
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+        expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            `owned by ${ownerFields.agent === undefined ? 'controller' : ownerFields.agent}`,
+          ),
+        );
+      },
+    );
+
+    test('handleContainerSync(): the agent owns the replacement identity of its own containers (F2 positive control)', async () => {
+      // Positive control for the prune filter above: a same-identity row this
+      // agent does own is still flagged as a replacement rather than a removal.
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        { id: 'stale-1', name: 'web', watcher: 'local', agent: 'test-agent' },
+      ] as never);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => c);
+
+      await client.handleContainerSync([{ id: 'fresh-1', name: 'web', watcher: 'local' } as never]);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1', {
+        replacementExpected: true,
+      });
+    });
+
     test('watch(): an agent recheck of its own container still updates the store', async () => {
       vi.mocked(storeContainer.getContainer).mockReturnValue({
         id: 'c1',
@@ -936,15 +1018,16 @@ describe('AgentClient', () => {
       ]);
     });
 
-    // Pinned regression lock, not a bug repro: the ownership gate deliberately
-    // does not reject a `watcher` mismatch against the stored record. Bulk
-    // ingestion is exactly how a legitimate watcher rename (an operator
-    // renaming a DD_WATCHER_<NAME>_SOCKET key) propagates. pruneOldContainers
-    // keys on container id, which a rename doesn't change, so if this path
-    // rejected on watcher mismatch the record would never be pruned and
-    // never retried — updates would silently stop landing forever. If
-    // someone "fixes" this by adding a watcher-equality check here, this
-    // test must fail.
+    // Pinned regression lock, not a bug repro: the bulk ownership gate
+    // deliberately does not reject a `watcher` mismatch against the stored
+    // record (the incremental event gate does, per F3, but bulk ingestion
+    // is exactly how a legitimate watcher rename, an operator renaming a
+    // DD_WATCHER_<NAME>_SOCKET key, propagates). pruneOldContainers keys on
+    // container id, which a rename doesn't change, so if this path rejected
+    // on watcher mismatch the record would never be pruned and never
+    // retried, and updates would silently stop landing forever. If someone
+    // "fixes" this by adding a watcher-equality check here, this test must
+    // fail.
     test('handleContainerSync(): a watcher rename on an already-owned container is NOT rejected', async () => {
       vi.mocked(storeContainer.getContainer).mockReturnValue({
         id: 'c1',
@@ -1432,7 +1515,10 @@ describe('AgentClient', () => {
       client.pruneOldContainers(newContainers);
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledTimes(15);
-      expect(newIdReads).toBeLessThanOrEqual(80);
+      // Three reads per incoming container: the ownership filter, the keep-set,
+      // and the identity-key spread. The bound this guards is quadratic
+      // rescanning, which for 30 by 30 would be 900 reads, not the constant.
+      expect(newIdReads).toBeLessThanOrEqual(100);
       expect(storeIdReads).toBeLessThanOrEqual(80);
     });
 
@@ -2344,17 +2430,23 @@ describe('AgentClient', () => {
       expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
     });
 
-    describe('incremental container event ownership gate (F1, DR-106)', () => {
+    describe('incremental container event ownership gate (F1, F3, DR-106)', () => {
       // handleContainerChangeEvent (dd:container-added/dd:container-updated)
       // and handleContainerRemovedEvent (dd:container-removed) used to call
       // processContainer()/deleteContainer() directly with no ownership check
       // at all, so an authenticated agent could upsert or delete a container
       // id it does not own just by naming it in an incremental event, no bulk
       // snapshot required. Both handlers now run through the same
-      // canIngestAuthoritativeContainer() gate the bulk paths use, and reject
-      // a shapeless payload (EdgeAgentAdapter can hand `handleContainerChangeEvent`
-      // an undefined container when a `dd:container_added`/`_updated` frame
-      // carries no `container` field) before it ever reaches that gate.
+      // canIngestAuthoritativeContainer() gate the bulk paths use, including
+      // its shapeless-payload guard (EdgeAgentAdapter can hand
+      // `handleContainerChangeEvent` an undefined container when a
+      // `dd:container_added`/`_updated` frame carries no `container` field),
+      // which warns rather than silently returning. Unlike the bulk gate,
+      // the event path also rejects a `watcher` mismatch against an
+      // existing owned record (F3): an incremental event names a single
+      // container directly, so a mismatched watcher there is far more
+      // likely to be stale or spoofed than the legitimate watcher rename
+      // bulk ingestion has to tolerate.
 
       test('dd:container-updated: rejects an upsert for a container owned by a different agent', async () => {
         vi.mocked(storeContainer.getContainer).mockReturnValue({
@@ -2438,12 +2530,78 @@ describe('AgentClient', () => {
         expect(storeContainer.updateContainer).not.toHaveBeenCalled();
         expect(storeContainer.insertContainer).not.toHaveBeenCalled();
         expect(event.emitContainerReport).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          'Ignoring authoritative container upsert without a valid payload from agent test-agent',
+        );
       });
 
       test('dd:container-removed: an undefined payload is ignored without touching the store', async () => {
         await client.handleEvent('dd:container-removed', undefined);
 
         expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          'Ignoring authoritative container removal without a valid payload from agent test-agent',
+        );
+      });
+
+      test('dd:container-updated: rejects an upsert whose watcher does not match the stored record (F3)', async () => {
+        vi.mocked(storeContainer.getContainer).mockReturnValue({
+          id: 'c1',
+          name: 'owned',
+          watcher: 'old-watcher-name',
+          agent: 'test-agent',
+        } as never);
+
+        await client.handleEvent('dd:container-updated', {
+          id: 'c1',
+          name: 'owned',
+          watcher: 'spoofed-watcher-name',
+        });
+
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+        expect(event.emitContainerReport).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          'Ignoring authoritative container upsert for c1 from agent test-agent: watcher does not match',
+        );
+      });
+
+      test('dd:container-removed: rejects a removal whose watcher does not match the stored record (F3)', async () => {
+        vi.mocked(storeContainer.getContainer).mockReturnValue({
+          id: 'c1',
+          name: 'owned',
+          watcher: 'old-watcher-name',
+          agent: 'test-agent',
+        } as never);
+
+        await client.handleEvent('dd:container-removed', {
+          id: 'c1',
+          watcher: 'spoofed-watcher-name',
+        });
+
+        expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          'Ignoring authoritative container removal for c1 from agent test-agent: watcher does not match',
+        );
+      });
+
+      test('dd:container-removed: a removal payload with no watcher field is NOT rejected on watcher mismatch (F3)', async () => {
+        // dd:container-removed frames commonly carry only an id. Rejecting
+        // those on a "mismatch" against `undefined` would refuse every
+        // ordinary removal, so the check only applies when the event
+        // actually names a watcher.
+        vi.mocked(storeContainer.getContainer).mockReturnValue({
+          id: 'c1',
+          name: 'owned',
+          watcher: 'local',
+          agent: 'test-agent',
+        } as never);
+
+        await client.handleEvent('dd:container-removed', { id: 'c1' });
+
+        expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
+        expect(mockLogChild.warn).not.toHaveBeenCalledWith(
+          expect.stringContaining('watcher does not match'),
+        );
       });
     });
 

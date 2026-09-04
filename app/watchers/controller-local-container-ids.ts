@@ -24,8 +24,8 @@ export type ControllerLocalDockerApi = {
 
 /**
  * Container ids each controller-local watcher currently sees on its own Docker
- * daemon, keyed by that watcher's registry id (`docker.<name>` — a watcher the
- * controller registered itself carries no agent prefix, per
+ * daemon, keyed by that watcher's registry id (`docker.<name>`, since a watcher
+ * the controller registered itself carries no agent prefix, per
  * `Component.getId()`).
  *
  * The agent ingestion gate in `agent/AgentClient.ts` reads this to decide
