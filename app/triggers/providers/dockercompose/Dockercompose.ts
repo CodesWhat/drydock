@@ -3404,16 +3404,23 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * here runs inside the recreate's own try, so the candidate is removed and
    * the previous container is restored by the rollback net.
    *
-   * On the ordinary path a moved tag is one container getting an image nobody
-   * asked for, which is the availability-versus-certainty trade
+   * What a mismatch costs depends on where `expectedImageId` came from, which
+   * is what `preflightedServiceIdentity` carries (DR-67). A preflighted
+   * identity was resolved once for the whole service before any container was
+   * touched, and every container of that service is created against it and
+   * runs on the one gate decision the preflight made, so keeping a mismatched
+   * one leaves it on an image the gate never cleared while its siblings run
+   * the image it did clear: a split service rather than a slower one. That is
+   * refused whatever the policy says. Without a preflight there is no shared
+   * decision to split, because each container pulls and resolves for itself,
+   * and a moved tag is one container getting an image nobody asked for. That
+   * is the availability-versus-certainty trade
    * `DD_SECURITY_AVAILABILITY_POLICY` already settles for the security gate,
-   * so it is settled the same way here (DR-67): `warn` names both image IDs
-   * and lets the container stand, `block` keeps the refusal. Compose-file-once
-   * ignores the policy, because there the replicas of a service share one gate
-   * decision made in the preflight, and accepting a moved tag for one of them
-   * leaves that replica running an image the gate never cleared while its
-   * siblings run the image it did clear, which is a split service rather than
-   * a slower one.
+   * so it is settled the same way here: `warn` names both image IDs and lets
+   * the container stand, `block`, the default, keeps the refusal. Whether the
+   * service has one container or ten does not enter into it; a scaled service
+   * on the unpreflighted path keeps going container by container under `warn`,
+   * each one on its own resolved image and each one logged.
    */
   private async assertReplacementContainerImage(
     newContainer: unknown,
@@ -3421,6 +3428,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     newImage: string,
     container: { name: string },
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    preflightedServiceIdentity: boolean,
   ): Promise<void> {
     if (!expectedImageId) {
       // Either the create reference is already digest-pinned, which cannot
@@ -3439,7 +3447,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const movedTagDetail =
       `Recreated container ${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
       'the local tag moved between the pull and the recreate';
-    if (this.isComposeFileOnceEnabled() || !this.isSecurityAvailabilityPolicyPermissive()) {
+    if (preflightedServiceIdentity || !this.isSecurityAvailabilityPolicyPermissive()) {
       throw new Error(movedTagDetail);
     }
     logContainer.warn(
@@ -3454,7 +3462,8 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     cloneRuntimeConfigOptions,
-    expectedImageId?: string,
+    expectedImageId: string | undefined,
+    preflightedServiceIdentity: boolean,
   ): Promise<void> {
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
@@ -3476,6 +3485,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         newImage,
         container,
         logContainer,
+        preflightedServiceIdentity,
       );
 
       if (currentContainerSpec.State.Running) {
@@ -3570,6 +3580,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // repo:tag from it. It becomes the expectation the recreated container is
     // checked against instead (DR-54).
     let expectedImageId = runtimeContext.pulledImageId;
+    // Whether this refresh was handed an identity the compose-file-once
+    // preflight resolved once for the whole service, ahead of every container
+    // in the batch, rather than one this container resolved for itself. It has
+    // to be read here, before the recovery below can fill `expectedImageId` in
+    // for this container alone: after that point the two are indistinguishable,
+    // because the recovery publishes the first replica's ID as the service's
+    // shared one (DR-54). A caller with no preflight at all, such as
+    // recreateContainer() or a direct updateContainerWithCompose(), reaches the
+    // post-create check with nothing shared to protect (DR-67).
+    const preflightedServiceIdentity =
+      runtimeContext.pulledImageId !== undefined || runtimeContext.imageIdentity !== undefined;
     // Nothing to re-resolve once the preflight has an answer for the service.
     // Asking again per replica could bind a digest the preflight never saw,
     // which is the divergence this check exists to refuse, not to adopt.
@@ -3684,6 +3705,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         logContainer,
         cloneRuntimeConfigOptions,
         expectedImageId,
+        preflightedServiceIdentity,
       );
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
