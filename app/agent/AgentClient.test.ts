@@ -888,7 +888,7 @@ describe('AgentClient', () => {
       });
     });
 
-    test.each([
+    test.each<[string, { agent?: string }]>([
       ['another agent', { agent: 'other-agent' }],
       ['the controller', {}],
     ])(

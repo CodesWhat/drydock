@@ -23,6 +23,17 @@ export type ControllerLocalDockerApi = {
 };
 
 /**
+ * Upper bound on how long the startup seed waits for `listContainers()`
+ * before giving up. A stalled daemon must not keep `Docker.init()` pending
+ * indefinitely: `registerWatchers()` awaits every watcher's `init()`, so one
+ * hung seed would block registry initialization for every other component.
+ */
+export const CONTROLLER_LOCAL_SEED_TIMEOUT_MS = 10_000;
+
+/** Sentinel distinguishing a timed-out race from an actual container list. */
+const CONTROLLER_LOCAL_SEED_TIMED_OUT = Symbol('controller-local-seed-timed-out');
+
+/**
  * Container ids each controller-local watcher currently sees on its own Docker
  * daemon, keyed by that watcher's registry id (`docker.<name>`, since a watcher
  * the controller registered itself carries no agent prefix, per
@@ -90,6 +101,15 @@ export function recordControllerLocalEnumeration(
  * A daemon that cannot be reached should not fail watcher registration over
  * this: the error is logged and swallowed rather than thrown, and the
  * watcher's regular enumeration cycle gets another chance once it starts.
+ *
+ * A daemon that never answers gets the same treatment on a clock: `init()`
+ * awaits this call, and `registerWatchers()` awaits every watcher's
+ * `init()`, so a `listContainers()` that never settles would otherwise hang
+ * registry initialization for every other component forever. The seed races
+ * the call against `CONTROLLER_LOCAL_SEED_TIMEOUT_MS` and gives up (logging
+ * and recording nothing) if the daemon hasn't answered by then; a late
+ * answer or error after the timeout has already won is simply ignored, not
+ * recorded and not re-thrown.
  * @param watcher the watcher performing the seed enumeration
  * @param dockerApi the dockerode client to enumerate containers from
  */
@@ -100,16 +120,34 @@ export async function seedControllerLocalEnumeration(
   if (typeof watcher.agent === 'string' && watcher.agent.length > 0) {
     return;
   }
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutRace = new Promise<typeof CONTROLLER_LOCAL_SEED_TIMED_OUT>((resolve) => {
+    timeoutHandle = setTimeout(
+      () => resolve(CONTROLLER_LOCAL_SEED_TIMED_OUT),
+      CONTROLLER_LOCAL_SEED_TIMEOUT_MS,
+    );
+  });
+
   try {
-    const containers = await dockerApi.listContainers({ all: true });
+    const result = await Promise.race([dockerApi.listContainers({ all: true }), timeoutRace]);
+    if (result === CONTROLLER_LOCAL_SEED_TIMED_OUT) {
+      watcher.log?.warn(
+        `Controller-local container id seed timed out after ${CONTROLLER_LOCAL_SEED_TIMEOUT_MS}ms; ` +
+          'agent ownership checks start permissive until the first scan',
+      );
+      return;
+    }
     recordControllerLocalEnumeration(
       watcher,
-      containers.map((container) => container.Id),
+      result.map((container) => container.Id),
     );
   } catch (e: unknown) {
     watcher.log?.warn(
       `Unable to seed controller-local container ids ahead of the first scan (${getErrorMessage(e)})`,
     );
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 }
 

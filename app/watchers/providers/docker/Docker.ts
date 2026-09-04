@@ -641,6 +641,29 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.isWatcherDeregistered = false;
     this.warnIfNarrowMaintenanceWindow();
     await this.initWatcher();
+    // Refresh remote auth (e.g. an OIDC access token) before the seed below
+    // makes its own listContainers() call: initWatcherWithRemoteAuth() only
+    // applies static credentials (basic/bearer), it never fetches or
+    // refreshes an OIDC token. Without this, the seed's request goes out
+    // unauthenticated against a remote OIDC watcher, fails, and gets
+    // silently swallowed - leaving no ids recorded and the ownership gate
+    // open. This is a no-op for a local socket watcher, which has no `host`
+    // and so no remote auth to refresh.
+    //
+    // Best-effort like the seed call itself: a remote-auth failure here
+    // (blocked auth, unreachable IdP, ...) must not fail registration. The
+    // watcher stays registered with remote sync disabled/deferred, exactly
+    // as initWatcherWithRemoteAuth() and getContainers() already treat this
+    // failure elsewhere; registerComponents() aggregates every watcher's
+    // registration into one Promise.allSettled, so one watcher's auth
+    // trouble would otherwise abort the whole registry's startup.
+    try {
+      await this.ensureRemoteAuthHeaders();
+    } catch (e: unknown) {
+      this.log.warn(
+        `Unable to refresh remote auth ahead of the startup ownership seed (${getErrorMessage(e)})`,
+      );
+    }
     // Seed the enumerated-id set here, ahead of the startup timer below, so
     // an agent that handshakes immediately after registry.init() cannot
     // claim a no-record id this watcher's own daemon already holds. The

@@ -1095,6 +1095,27 @@ describe('Docker Watcher', () => {
       expect(mockDockerApi.listContainers).toHaveBeenCalled();
     });
 
+    test('should refresh the oidc token before the startup ownership seed enumerates containers', async () => {
+      // Captures the Authorization header present at the moment each
+      // listContainers() call runs. init()'s seedControllerLocalEnumeration()
+      // call must see a header set by ensureRemoteAuthHeaders(), not the
+      // static (host-only) headers initWatcherWithRemoteAuth() applies.
+      const authorizationHeadersAtCallTime: Array<string | undefined> = [];
+      mockDockerApi.listContainers.mockImplementation(() => {
+        authorizationHeadersAtCallTime.push(mockDockerApi.modem.headers.Authorization);
+        return Promise.resolve([]);
+      });
+
+      await docker.register('watcher', 'docker', 'test', createOidcConfig());
+
+      expect(mockAxios.post).toHaveBeenCalledWith(
+        'https://idp.example.com/oauth/token',
+        expect.stringContaining('grant_type=client_credentials'),
+        expect.anything(),
+      );
+      expect(authorizationHeadersAtCallTime).toEqual(['Bearer oidc-token']);
+    });
+
     test('should use refresh_token grant when refresh token is available', async () => {
       mockDockerApi.listContainers.mockResolvedValue([]);
       await docker.register(
@@ -1278,9 +1299,13 @@ describe('Docker Watcher', () => {
         });
       });
 
-      await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
-
       docker.sleep = vi.fn().mockResolvedValue(undefined);
+
+      // register()'s init() now refreshes remote auth ahead of the startup
+      // ownership seed, so the device-code flow (and its slow_down retry)
+      // runs here rather than waiting for a later getContainers() call; mock
+      // sleep before register() so the retry doesn't wait out real timers.
+      await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
 
       await docker.getContainers();
 
@@ -1437,6 +1462,10 @@ describe('Docker Watcher', () => {
       mockLog.child.mockReturnThis();
       docker.log = mockLog;
       docker.sleep = vi.fn().mockResolvedValue(undefined);
+      // register()'s init() already completed the device flow eagerly and
+      // cached the token; clear it so this call refreshes again and its own
+      // device-code log line lands on the mock log just installed above.
+      docker.remoteOidcAccessToken = undefined;
 
       await docker.ensureRemoteAuthHeaders();
 
@@ -1957,17 +1986,27 @@ describe('Docker Watcher', () => {
           return Promise.resolve({
             data: {
               device_code: 'code-no-uri',
+              // No interval/expires_in either, so pollIntervalMs/pollTimeoutMs
+              // fall back to OIDC_DEVICE_POLL_INTERVAL_MS/_TIMEOUT_MS - the
+              // only case in this file that exercises that default branch.
               // No user_code, no verification_uri
             },
           });
         }
         return Promise.resolve({ data: createTokenResponse() });
       });
+      // Mock sleep before register(): its init() now refreshes remote auth
+      // (device flow included) ahead of the startup ownership seed, so the
+      // real 5s OIDC_DEVICE_POLL_INTERVAL_MS default must not be a real wait.
+      docker.sleep = vi.fn().mockResolvedValue(undefined);
       await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
       const mockLog = createMockLogWithChild();
       mockLog.child.mockReturnThis();
       docker.log = mockLog;
-      docker.sleep = vi.fn().mockResolvedValue(undefined);
+      // register()'s init() already completed the device flow eagerly and
+      // cached the token; clear it so this call refreshes again and its own
+      // device-code log line lands on the mock log just installed above.
+      docker.remoteOidcAccessToken = undefined;
       await docker.ensureRemoteAuthHeaders();
       expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('user_code=N/A'));
     });
