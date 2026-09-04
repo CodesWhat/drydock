@@ -52,6 +52,8 @@ A **hard** blocker never reaches this dialog: the Update button is disabled and 
 
 Someone has set a maintenance window on this container's watcher (`DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW`), and right now the clock is outside it. Drydock is telling you it wouldn't have applied this update by itself yet. It found the update on its ordinary schedule and is holding the install until the window opens. It has no bearing on the manual update you just asked for: click **Update anyway** and it runs.
 
+One case where the line overstates what happens: containers watched by a remote agent are not deferred by the controller yet. The dialog shows this blocker from the window state the agent reports, but the hold itself only applies to containers on the controller's own watchers.
+
 Two things commonly cause this line to show up more than expected:
 
 - **The window is narrower than it looks.** `MAINTENANCE_WINDOW` is matched minute by minute, so `0 2-3 * * *` is open only at 02:00 and 03:00 for one minute each, not from 2 AM to 4 AM. Use `* 2-3 * * *`. See [Watchers — Maintenance window](/docs/configuration/watchers#maintenance-window).
