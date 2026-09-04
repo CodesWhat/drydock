@@ -275,6 +275,18 @@ function getContainerNotificationKey(
   return undefined;
 }
 
+/**
+ * The key the maintenance-window deferral set is built on.
+ *
+ * Not `container.id`: a degenerate record with no id would put `undefined` in the set and
+ * every other id-less container in the same batch would then read as deferred, so one that
+ * really was sent would keep its retry-buffer entry and send again. This is the same stable
+ * business id the retry and digest buffers key on, which stays distinct without an id.
+ */
+function getMaintenanceWindowDeferralKey(container: Container): string {
+  return getContainerNotificationKey(container) || fullName(container);
+}
+
 function getContainerUpdateAppliedEventContainerName(
   payload: ContainerUpdateAppliedEventPayload,
 ): string | undefined {
@@ -2357,7 +2369,8 @@ class Trigger<
         maintenanceWindowDeferredIds =
           this.collectBatchMaintenanceWindowDeferredIds(containersToSend);
         const readyToSend = containersToSend.filter(
-          (container) => !maintenanceWindowDeferredIds.has(container.id),
+          (container) =>
+            !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
         );
         // A command action with every container deferred sends nothing at all rather than
         // an empty batch; the containers below stay unrecorded and unbuffered either way.
@@ -2367,7 +2380,8 @@ class Trigger<
       }
       status = 'success';
       const sent = containersToSend.filter(
-        (container) => !maintenanceWindowDeferredIds.has(container.id),
+        (container) =>
+          !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
       );
       for (const container of sent) {
         this.recordNotifiedForResult(container, 'update-available');
@@ -2678,7 +2692,8 @@ class Trigger<
       } else {
         maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(containers);
         const readyToSend = containers.filter(
-          (container) => !maintenanceWindowDeferredIds.has(container.id),
+          (container) =>
+            !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
         );
         if (readyToSend.length > 0) {
           await this.triggerBatch(readyToSend);
@@ -2687,12 +2702,12 @@ class Trigger<
       status = 'success';
       this.recordDigestMaintenanceWindowDeferrals(containers, maintenanceWindowDeferredIds);
       for (const container of containers) {
-        if (!maintenanceWindowDeferredIds.has(container.id)) {
+        if (!maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container))) {
           this.recordNotifiedForResult(container, 'update-available-digest');
         }
       }
       for (const { containerName, bufferedContainer, currentContainer } of reservedEntries) {
-        if (maintenanceWindowDeferredIds.has(currentContainer.id)) {
+        if (maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(currentContainer))) {
           continue;
         }
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
@@ -2725,7 +2740,7 @@ class Trigger<
       return;
     }
     for (const container of containers) {
-      if (!deferredIds.has(container.id)) {
+      if (!deferredIds.has(getMaintenanceWindowDeferralKey(container))) {
         continue;
       }
       const watcherId = getContainerWatcherRegistryId(container);
@@ -3416,11 +3431,21 @@ class Trigger<
    */
   private collectMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
     const windowDeferred: Container[] = [];
-    const deferredIds = new Set<string>();
+    // Two views of one decision. The dependency walk below keys on `container.id` because
+    // that is what buildDependencyGraph emits; callers get the business-id view, which stays
+    // distinct for a record that has no id at all.
+    const deferredContainerIds = new Set<string>();
+    const deferredKeys = new Set<string>();
+    const markDeferred = (container: Container) => {
+      if (typeof container.id === 'string' && container.id !== '') {
+        deferredContainerIds.add(container.id);
+      }
+      deferredKeys.add(getMaintenanceWindowDeferralKey(container));
+    };
     for (const container of containers) {
       if (this.deferAutoUpdateForMaintenanceWindow(container)) {
         windowDeferred.push(container);
-        deferredIds.add(container.id);
+        markDeferred(container);
       }
     }
 
@@ -3438,7 +3463,7 @@ class Trigger<
           blockedContainer.id,
           dependentsByDependency,
         )) {
-          if (deferredIds.has(dependentId)) {
+          if (deferredContainerIds.has(dependentId)) {
             continue;
           }
           const dependent = containerById.get(dependentId);
@@ -3448,7 +3473,7 @@ class Trigger<
           if (!dependent) {
             continue;
           }
-          deferredIds.add(dependentId);
+          markDeferred(dependent);
           dependencyDeferred.push(dependent);
           // Counted on the same metric as a directly window-deferred container, labelled by
           // the dependent's own watcher, which is not necessarily the one holding the window.
@@ -3474,7 +3499,7 @@ class Trigger<
       );
     }
 
-    return deferredIds;
+    return deferredKeys;
   }
 
   /**
@@ -3505,7 +3530,9 @@ class Trigger<
     }
 
     const deferredIds = this.collectMaintenanceWindowDeferredIds(containers);
-    const ready = containers.filter((container) => !deferredIds.has(container.id));
+    const ready = containers.filter(
+      (container) => !deferredIds.has(getMaintenanceWindowDeferralKey(container)),
+    );
 
     if (ready.length === 0) {
       return { dispatched: true, deferredIds };

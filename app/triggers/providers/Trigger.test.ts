@@ -14618,6 +14618,50 @@ describe('maintenance window gates command actions (#946)', () => {
     expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
     expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
   });
+
+  // #946 finding 7: the deferral set is keyed on the business id, not on container.id.
+  // Two degenerate records with no id used to collapse onto one `undefined` entry, so
+  // deferring either one marked both, and the one that really was sent kept its retry
+  // buffer entry and went out again on the next batch.
+  test('two containers with no id do not share a deferral entry', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'batch' };
+    queueMaintenanceWindowWatch = vi.fn();
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.closed': {
+          type: 'docker',
+          name: 'closed',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => false,
+          queueMaintenanceWindowWatch,
+        },
+        'docker.open': {
+          type: 'docker',
+          name: 'open',
+          configuration: { maintenancewindowscope: 'install' },
+          isMaintenanceWindowOpen: () => true,
+        },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const held = { ...container, id: undefined, name: 'held', watcher: 'closed' } as any;
+    const ready = { ...container, id: undefined, name: 'ready', watcher: 'open' } as any;
+    (trigger as any).batchRetryBufferStore.set('open_ready', ready, Date.now());
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([
+      { changed: true, container: held },
+      { changed: true, container: ready },
+    ] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ name: 'ready' })]);
+    expect((trigger as any).batchRetryBuffer.has('open_ready')).toBe(false);
+    expect(queueMaintenanceWindowWatch).toHaveBeenCalledTimes(1);
+  });
 });
 
 // spec-6.0.1-action-policy.md slice 4: update-action (docker/dockercompose)
