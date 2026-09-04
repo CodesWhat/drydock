@@ -1116,6 +1116,58 @@ describe('Docker Watcher', () => {
       expect(authorizationHeadersAtCallTime).toEqual(['Bearer oidc-token']);
     });
 
+    test('defers a first-time interactive OIDC device flow past the startup seed instead of blocking init()', async () => {
+      // registerWatchers() awaits every watcher's init() via Promise.all():
+      // if init() awaited the device flow inline, one watcher waiting on a
+      // human to visit a URL (up to OIDC_DEVICE_POLL_TIMEOUT_MS) would stall
+      // the whole controller's startup. init() must resolve without ever
+      // reaching the device-code endpoint; the deferred flow still runs on
+      // this watcher's first scheduled scan, unchanged from before.
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      docker.name = 'test';
+      docker.type = 'docker';
+      const mockLog = createMockLog(['info', 'warn']);
+      docker.log = mockLog;
+      docker.configuration = docker.validateConfiguration(createDeviceFlowConfig()) as any;
+
+      await docker.init();
+
+      expect(mockAxios.post).not.toHaveBeenCalled();
+      expect(mockLog.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'needs first-time OIDC device authorization; deferring it to the first scheduled scan',
+        ),
+      );
+      expect(docker.remoteOidcAccessToken).toBeUndefined();
+    });
+
+    test('still refreshes eagerly ahead of the seed when a device-capable oidc watcher already holds a valid cached token', async () => {
+      // Having a deviceurl configured is not itself enough to defer: the
+      // guard only fires when a refresh is actually required. A watcher
+      // sitting on a still-valid cached token refreshes (trivially, from
+      // cache) the same as any other remote-auth watcher.
+      const authorizationHeadersAtCallTime: Array<string | undefined> = [];
+      mockDockerApi.listContainers.mockImplementation(() => {
+        authorizationHeadersAtCallTime.push(mockDockerApi.modem.headers.Authorization);
+        return Promise.resolve([]);
+      });
+      docker.name = 'test';
+      docker.type = 'docker';
+      const mockLog = createMockLog(['info', 'warn']);
+      docker.log = mockLog;
+      docker.configuration = docker.validateConfiguration(createDeviceFlowConfig()) as any;
+      docker.remoteOidcAccessToken = 'cached-device-token';
+      docker.remoteOidcAccessTokenExpiresAt = Date.now() + 60 * 60 * 1000;
+
+      await docker.init();
+
+      expect(mockAxios.post).not.toHaveBeenCalled();
+      expect(mockLog.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('needs first-time OIDC device authorization'),
+      );
+      expect(authorizationHeadersAtCallTime).toEqual(['Bearer cached-device-token']);
+    });
+
     test('should use refresh_token grant when refresh token is available', async () => {
       mockDockerApi.listContainers.mockResolvedValue([]);
       await docker.register(

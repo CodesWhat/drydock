@@ -682,20 +682,19 @@ describe('Docker Watcher', () => {
     });
 
     test('should warn when ensureRemoteAuthHeaders fails in listenDockerEvents', async () => {
+      // Rejected before register(): init() now refreshes remote auth headers
+      // before the controller-local seed too, so a token endpoint that only
+      // starts failing after registration would leave a cached token behind
+      // and this refresh would have nothing left to fail on.
+      mockAxios.post.mockRejectedValue(new Error('Network error'));
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
         protocol: 'https',
         auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } },
       });
-      mockAxios.post.mockRejectedValue(new Error('Network error'));
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
-      // register()'s init() already refreshed remote auth once (before
-      // mockAxios.post above started rejecting); clear the cached token so
-      // listenDockerEvents()'s own ensureRemoteAuthHeaders() call actually
-      // hits the (now-failing) mock instead of reusing a still-fresh token.
-      (docker as any).remoteOidcAccessToken = undefined;
       await docker.listenDockerEvents();
       expect(logMock.warn).toHaveBeenCalledWith(
         expect.stringContaining('Unable to initialize remote watcher auth'),
