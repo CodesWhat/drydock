@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.7-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.8-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,18 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.8 highlights</strong></summary>
+
+- **Overlapping scans no longer fire the same trigger repeatedly for one update** — a full scan can take minutes, and the cron schedule, the docker-events debounce and the startup timer could each start one while the previous was still running, so a tag first seen mid-burst passed the `once=true` history check in every overlapping scan before any of them recorded it. `watchFromCron()` is now single-flight: a request arriving during a scan records that a rescan is wanted, and exactly one follow-up runs once the current scan finishes. Reported by [@tarzan77cz](https://github.com/tarzan77cz). ([#972](https://github.com/CodesWhat/drydock/issues/972))
+- **A `once=true` trigger no longer re-fires hours later for an update it already announced** — the notification-history hash for a tag update included the digest and fell back to the image's `created` timestamp when the digest was missing, so a rate-limited digest lookup swapped `created` into the hash for one scan and back out on the next, and the history stopped matching. A tag update on a container with digest watching configured is now keyed on the tag alone. Reported by [@tarzan77cz](https://github.com/tarzan77cz). ([#972](https://github.com/CodesWhat/drydock/issues/972))
+- **Batch and digest updates can no longer be sent twice by an overlapping manual scan** — the `once=true` reservation covered the simple notification path only, so batch and digest eligibility still did a plain read of a history that is written after the send resolves. Both now take the same synchronous reservation. The cron scan's deadline timer also moved onto the watcher state, so deregistering a watcher clears it instead of leaving it to warn about a scan nothing owns, and a scan requested after teardown is refused outright. ([#999](https://github.com/CodesWhat/drydock/pull/999))
+- **Deprecation docs match the shipped code again** — the compose curl-healthcheck snippet doubles its `$` so it expands inside the container instead of the host, the settings entry names `PUT /api/v1/settings` rather than the tombstoned unversioned path, and the WebSocket origin-check, anonymous-auth grandfather and session cookie rename entries that were missing from the generated page are back. ([#985](https://github.com/CodesWhat/drydock/pull/985))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc8--2026-09-04).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.7 highlights</strong></summary>
 
 - **`DD_AGENT_ALLOW_INSECURE_SECRET` no longer registers a phantom agent named `allow`** — the flag matched the generic `dd.agent` prefix parser and produced an `{insecure: {secret: 'true'}}` agent that failed to register on every install setting the flag, whether or not any real agents were configured. Reported by [@depuits](https://github.com/depuits). ([#945](https://github.com/CodesWhat/drydock/issues/945))

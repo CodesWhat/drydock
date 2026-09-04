@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.8] — 2026-09-04
+
 ### Fixed
 
 - **`watchFromCron()` had no re-entrancy guard, so overlapping scans on a large fleet fired the same trigger multiple times for one update.** A full scan can take minutes, and the cron schedule, the docker-events debounce, and the startup timer could all start one while the previous scan was still running. Each overlapping call ran its own `watch()`, and a tag first seen mid-burst passed the `once=true` history check in every one of them before any of them recorded it, so a trigger like Telegram fired once per overlapping scan for the same update. `watchFromCron()` is now single-flight: a request while a scan is running does not start a second one, it records that a rescan was requested, and exactly one follow-up scan runs once the current scan finishes, so a docker event that arrives mid-scan is not lost. A scan that never settles cannot wedge later ticks either: the in-flight scan is raced against a deadline, and when it fires every caller waiting on that scan, the one that started it and any that coalesced into it, resolves to an empty result and the next tick starts a fresh scan. The "Cron started" log line now also names what triggered the scan (schedule, docker-event, startup, or maintenance-window). Reported by [@tarzan77cz](https://github.com/tarzan77cz) in [#972](https://github.com/CodesWhat/drydock/issues/972).
@@ -2464,7 +2466,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.7...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.8...HEAD
+[1.6.1-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.7...v1.6.1-rc.8
 [1.6.1-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.6...v1.6.1-rc.7
 [1.6.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.5...v1.6.1-rc.6
 [1.6.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.4...v1.6.1-rc.5
