@@ -54,6 +54,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
+import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import { ddRegistryLookupImage, ddRegistryLookupUrl } from '../watchers/providers/docker/label.js';
 import type { AgentAuthMode } from './components/Agent.js';
@@ -961,15 +962,15 @@ export class AgentClient {
    * snapshot path reaches with no other check in between: handshake,
    * watcher-snapshot fallback, on-demand watch/watchContainer, and edge
    * container sync. Without this, any of those paths can report an id
-   * already owned by another agent or by the controller's own local
-   * watcher and have `buildContainerReport`'s unconditional
+   * already owned by another agent, or an id one of the controller's own
+   * watchers is running, and have `buildContainerReport`'s unconditional
    * `container.agent = this.name` stamp reassign it.
    *
-   * Carries the first two of `canMutateContainer`'s three checks — no
-   * existing record while claiming the controller-local watcher namespace,
-   * and an existing record owned by a different agent — but deliberately
-   * NOT its third (rejecting a `watcher` mismatch against the stored
-   * record). Bulk ingestion is exactly how a legitimate watcher rename
+   * Carries the first two of `canMutateContainer`'s three checks (no
+   * existing record for an id one of the controller's own watchers is
+   * currently enumerating, and an existing record owned by a different
+   * agent) but deliberately NOT its third (rejecting a `watcher` mismatch
+   * against the stored record). Bulk ingestion is exactly how a legitimate watcher rename
    * propagates (an operator renaming a `DD_WATCHER_<NAME>_SOCKET` key), and
    * rejecting on watcher mismatch here would refuse every subsequent
    * report for that container id forever: `pruneOldContainers` keys on
@@ -990,8 +991,21 @@ export class AgentClient {
 
     const existing = storeContainer.getContainer(containerId);
     if (!existing) {
-      if (this.claimsControllerLocalWatcherNamespace(container.watcher)) {
-        return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`;
+      // No store row yet, so ownership has to be decided on evidence outside
+      // the store. An agent could otherwise pre-insert a container id that
+      // lives on the controller's host before the controller's own watch
+      // cycle writes the real record (the discovery settle window is 30s
+      // wide), claim it via `buildContainerReport`'s `container.agent` stamp,
+      // and redirect every later lifecycle action on that container to
+      // itself, because `isTriggerCompatibleWithContainer` in
+      // `api/docker-trigger.ts` routes purely on the stored `agent` field.
+      // The evidence is the id, not the watcher name: the controller's
+      // default watcher and an agent following the quickstart are both
+      // called `local`, so a name check refused every genuine agent
+      // container instead (#1013).
+      const claimingWatcherId = findControllerLocalWatcherClaimingContainerId(containerId);
+      if (claimingWatcherId) {
+        return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: the controller's own watcher ${sanitizeLogParam(claimingWatcherId)} is currently running that container id`;
       }
       return undefined;
     }
@@ -1469,9 +1483,12 @@ export class AgentClient {
       if (operation !== 'upsert') {
         return false;
       }
-      if (this.claimsControllerLocalWatcherNamespace(candidate.watcher)) {
+      // Same no-record ownership rule as `getAuthoritativeIngestRejection`;
+      // the reasoning is documented there.
+      const claimingWatcherId = findControllerLocalWatcherClaimingContainerId(candidate.id);
+      if (claimingWatcherId) {
         this.log.warn(
-          `Ignoring container ${operation} for ${sanitizeLogParam(candidate.id)} from agent ${this.name}: watcher '${sanitizeLogParam(candidate.watcher as string)}' belongs to the controller's local watcher namespace`,
+          `Ignoring container ${operation} for ${sanitizeLogParam(candidate.id)} from agent ${this.name}: the controller's own watcher ${sanitizeLogParam(claimingWatcherId)} is currently running that container id`,
         );
         return false;
       }
@@ -1493,30 +1510,6 @@ export class AgentClient {
       return false;
     }
     return true;
-  }
-
-  /**
-   * True when `watcherName` names a watcher registered directly by the
-   * controller (no `agent` prefix on its registry component id, e.g.
-   * `docker.local`) rather than by any connected agent (whose components are
-   * always registered as `<agentName>.docker.<watcherName>`, per
-   * `Component.getId()`). An agent cannot forge this: it only controls its
-   * own handshake-reported watcher descriptors, which the controller always
-   * registers under that agent's own prefix, never bare.
-   *
-   * Used to close the no-record race in `canMutateContainer`: without it, an
-   * agent could pre-insert a container under a controller-local container id
-   * before the controller's own watch cycle writes the real record, claiming
-   * ownership (via `buildContainerReport`'s `container.agent` stamp) and
-   * redirecting future lifecycle actions on that container to itself
-   * (`isTriggerCompatibleWithContainer` in `api/docker-trigger.ts` routes
-   * purely on the stored `agent` field).
-   */
-  private claimsControllerLocalWatcherNamespace(watcherName: unknown): boolean {
-    if (typeof watcherName !== 'string' || watcherName.length === 0) {
-      return false;
-    }
-    return Boolean(registry.getState().watcher[`docker.${watcherName}`]);
   }
 
   private async handleContainerChangeEvent(data: unknown) {

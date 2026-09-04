@@ -30,6 +30,10 @@ import * as registry from '../../../registry/index.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { sleep } from '../../../util/sleep.js';
+import {
+  forgetControllerLocalEnumeration,
+  recordControllerLocalEnumeration,
+} from '../../controller-local-container-ids.js';
 import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
@@ -912,6 +916,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async deregisterComponent() {
     this.isWatcherDeregistered = true;
     this.isDockerEventsListenerActive = false;
+    forgetControllerLocalEnumeration(this);
 
     if (this.watchCron) {
       this.watchCron.stop();
@@ -1260,6 +1265,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const containers = (await this.dockerApi.listContainers(
       listContainersOptions,
     )) as unknown as DockerContainerSummaryLike[];
+    const enumeratedContainerIds = containers.map((container) => container.Id);
+    recordControllerLocalEnumeration(this, enumeratedContainerIds);
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
     const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] =
