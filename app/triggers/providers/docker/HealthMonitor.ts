@@ -44,6 +44,7 @@ interface TriggerInstanceLike {
 
 interface HealthMonitorOptions {
   dockerApi: unknown;
+  container: MonitoredContainer;
   containerId: string;
   containerName: string;
   backupImageTag: string;
@@ -55,7 +56,24 @@ interface HealthMonitorOptions {
   log: unknown;
 }
 
-interface ContainerRef {
+/**
+ * The watcher-discovered container the update ran against. Carried whole
+ * because a rollback is a trigger lifecycle call like any other: the compose
+ * action reads the registry name, the watcher and the compose labels off it to
+ * find the service to rewrite, and an `{ id, name }` stand-in threw a
+ * TypeError before it got as far as the compose file (DR-101). The fields
+ * named here are the ones this module's own consumers read; the rest ride
+ * along under the index signature.
+ */
+interface MonitoredContainer {
+  watcher?: string;
+  agent?: string;
+  labels?: Record<string, string>;
+  image?: { registry?: { name?: string } };
+  [field: string]: unknown;
+}
+
+interface ContainerRef extends MonitoredContainer {
   id: string;
   name: string;
 }
@@ -99,8 +117,18 @@ function getInspectionHealthState(inspection: unknown): UnknownRecord | null {
   return asUnknownRecord(stateRecord?.Health);
 }
 
-function createContainerRef(containerId: string, containerName: string): ContainerRef {
-  return { id: containerId, name: containerName };
+/**
+ * The container the rollback addresses: everything the watcher knows about it,
+ * with the identity of the replacement that went unhealthy. The replacement
+ * has its own Docker id, so the monitored id wins over the one the watcher
+ * recorded for the container this update replaced.
+ */
+function createContainerRef(
+  containerId: string,
+  containerName: string,
+  container: MonitoredContainer,
+): ContainerRef {
+  return { ...container, id: containerId, name: containerName };
 }
 
 function cleanupTimers(timers: MonitorTimers): void {
@@ -267,6 +295,7 @@ function handleWindowExpiry(
 export function startHealthMonitor(options: HealthMonitorOptions): AbortController {
   const {
     dockerApi: dockerApiOption,
+    container,
     containerId,
     containerName,
     backupImageTag,
@@ -284,7 +313,7 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
   const abortController = new AbortController();
   const { signal } = abortController;
   const timers: MonitorTimers = {};
-  const containerRef = createContainerRef(containerId, containerName);
+  const containerRef = createContainerRef(containerId, containerName, container);
 
   const cleanup = () => cleanupTimers(timers);
   signal.addEventListener('abort', cleanup);
