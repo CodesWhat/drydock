@@ -3373,7 +3373,14 @@ class Trigger<
     if (
       resolveMaintenanceWindowScope(watcher.configuration?.maintenancewindowscope) === 'install'
     ) {
-      watcher.queueMaintenanceWindowWatch?.();
+      // Same guard the other arming sites carry (docker-cron-watch.ts). A watcher sets this
+      // in its own teardown, before registry.deregisterComponent removes it from the state
+      // map, and its clearMaintenanceWindowQueue has already run by then: arming here would
+      // publish a ref'ed 60s timer on a torn-down watcher that re-queues itself forever,
+      // with nothing left to reach it.
+      if (!watcher.isWatcherDeregistered) {
+        watcher.queueMaintenanceWindowWatch?.();
+      }
       const counter = getMaintenanceSkipCounter();
       if (counter) {
         counter.labels({ type: watcher.type, name: watcher.name }).inc();

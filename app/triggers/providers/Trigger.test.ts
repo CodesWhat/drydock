@@ -13791,6 +13791,24 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
     expect(mockMaintenanceSkipInc).not.toHaveBeenCalled();
   });
 
+  // #946 finding 4: a watcher sets isWatcherDeregistered in its own teardown, before the
+  // registry drops it from the state map, and its clearMaintenanceWindowQueue has already
+  // run. Arming from here would publish a ref'ed 60s timer that re-queues itself forever.
+  test('a deferral does not arm the catch-up on a deregistered watcher', () => {
+    const queueMaintenanceWindowWatch = vi.fn();
+    mockWindowWatcher({
+      configuration: { maintenancewindowscope: 'install' },
+      isMaintenanceWindowOpen: () => false,
+      queueMaintenanceWindowWatch,
+      isWatcherDeregistered: true,
+    });
+
+    expect((trigger as any).deferAutoUpdateForMaintenanceWindow(container)).toBe(true);
+    expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+    // The install was still held back, so it is still counted.
+    expect(mockMaintenanceSkipInc).toHaveBeenCalledTimes(1);
+  });
+
   test('a deferral tolerates a watcher with no queue method and an uninitialised counter', () => {
     mockGetMaintenanceSkipCounter.mockReturnValue(undefined);
     mockWindowWatcher({ isMaintenanceWindowOpen: () => false });

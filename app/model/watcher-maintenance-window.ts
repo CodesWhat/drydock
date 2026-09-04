@@ -42,6 +42,11 @@ export interface MaintenanceWindowWatcher {
   };
   isMaintenanceWindowOpen?: () => boolean;
   queueMaintenanceWindowWatch?: () => void;
+  /**
+   * Set by the watcher's own teardown, before `registry.deregisterComponent` removes it from
+   * the state map, so an entry read from the registry can still be a torn-down watcher.
+   */
+  isWatcherDeregistered?: boolean;
 }
 
 /**
