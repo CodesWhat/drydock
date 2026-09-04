@@ -215,7 +215,10 @@ describe('Docker Watcher', () => {
 
     // Setup dockerode mock
     mockDockerApi = {
-      listContainers: vi.fn(),
+      // Resolves empty by default so init()'s startup seed call (DR-106)
+      // has something to await; tests that care about listContainers()
+      // results override this per-case.
+      listContainers: vi.fn().mockResolvedValue([]),
       getContainer: vi.fn(),
       getEvents: vi.fn(),
       getImage: vi.fn(),
@@ -1179,6 +1182,31 @@ describe('Docker Watcher', () => {
       expect(mockDockerApi.listContainers).toHaveBeenCalled();
     });
 
+    test('refreshes the oidc access token before the controller-local startup seed calls listContainers()', async () => {
+      // init() runs the seed's listContainers() call before any explicit
+      // getContainers() call. Without refreshing the token first, that
+      // request goes out with no Authorization header, fails, and the seed
+      // swallows the failure, silently seeding nothing for a remote OIDC
+      // watcher (CodeRabbit finding on the v1.6 sibling PR).
+      mockDockerApi.listContainers.mockResolvedValue([]);
+
+      await docker.register(
+        'watcher',
+        'docker',
+        'test',
+        createOidcConfig({
+          clientid: 'dd-client',
+          clientsecret: 'dd-secret',
+          scope: 'docker.read',
+        }),
+      );
+
+      const tokenFetchCallOrder = mockAxios.post.mock.invocationCallOrder[0];
+      const seedListContainersCallOrder = mockDockerApi.listContainers.mock.invocationCallOrder[0];
+      expect(tokenFetchCallOrder).toBeLessThan(seedListContainersCallOrder);
+      expect(mockDockerApi.modem.headers.Authorization).toBe('Bearer oidc-token');
+    });
+
     test('should use refresh_token grant when refresh token is available', async () => {
       mockDockerApi.listContainers.mockResolvedValue([]);
       await docker.register(
@@ -1205,6 +1233,9 @@ describe('Docker Watcher', () => {
         }),
       } as any);
       await docker.register('watcher', 'docker', 'test', createOidcConfig());
+      // register()'s init() already ran the startup seed call; clear it so
+      // the count below reflects only the two getContainers() calls.
+      mockDockerApi.listContainers.mockClear();
 
       await docker.getContainers();
       await docker.getContainers();
@@ -1703,6 +1734,9 @@ describe('Docker Watcher', () => {
       docker.configuration.auth = { type: '' };
       await docker.initWatcher();
       mockDockerApi.listContainers.mockResolvedValue([]);
+      // register()'s init() already ran the startup seed call; clear it so
+      // the assertion below is about getContainers()'s own call, not that one.
+      mockDockerApi.listContainers.mockClear();
 
       await expect(docker.getContainers()).rejects.toThrow('credentials are incomplete');
       expect(mockDockerApi.listContainers).not.toHaveBeenCalled();
