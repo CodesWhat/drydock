@@ -180,6 +180,16 @@ type ComposeRuntimeContext = {
   securityGateUnboundWarnRecorded?: boolean;
   operationId?: string;
   registry?: unknown;
+  /**
+   * Which digest breaks a tie when the daemon records several `RepoDigests`
+   * for the pulled repository, set only by a caller that names the image this
+   * refresh deploys. `null` means "no preference, and do not fall back to the
+   * update candidate's digest": a rollback pulls the image its backup
+   * retained, which the candidate describes nothing about, so an unresolvable
+   * tie is left unbound rather than picked (DR-64). Left undefined by the
+   * update paths, which keep the candidate tie-break.
+   */
+  preferredDigest?: string | null;
 };
 
 type ComposeUpdateLifecycleContext = {
@@ -740,6 +750,21 @@ function getImageRepositoryKey(imageReference: unknown): string {
   return hasExplicitRegistryHost(repositoryWithoutHubHost)
     ? repositoryWithoutHubHost
     : repositoryWithoutHubHost.replace(HUB_LIBRARY_NAMESPACE_PREFIX, '');
+}
+
+/**
+ * The manifest digest an image reference pins, or null when it names only a
+ * mutable tag. What a caller that already knows which image it is deploying
+ * hands the identity binder as its tie-break between several `RepoDigests`.
+ * The digest is not validated here; `selectPulledRepoDigest` only uses one
+ * that matches a candidate, so anything else falls through to the same
+ * unresolved-tie handling as null.
+ * @param imageReference
+ * @returns the digest, or null when the reference pins none
+ */
+function getPinnedManifestDigest(imageReference: string): string | null {
+  const separatorIndex = imageReference.lastIndexOf('@');
+  return separatorIndex >= 0 ? imageReference.slice(separatorIndex + 1) : null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -3657,6 +3682,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         newImage,
         container,
         logContainer,
+        // Only a caller that named the image this refresh deploys gets to
+        // replace the candidate tie-break, and saying so is what makes an
+        // unresolved tie fail closed instead of picking one. The update paths
+        // pass nothing and keep reading `container.result.digest` (DR-64).
+        runtimeContext.preferredDigest !== undefined
+          ? { preferredDigest: runtimeContext.preferredDigest }
+          : undefined,
       );
       imageIdentity = identityOutcome.imageIdentity;
       securityGateUnboundWarn = identityOutcome.unboundWarn;
@@ -3860,6 +3892,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       shouldStart: currentContainerSpec?.State?.Running === true,
       skipPull: true,
       forceRecreate: true,
+      // The caller names the image this recreates from, and the compose file
+      // was just rewritten to it above. Without handing it to the runtime
+      // refresh, that refresh re-derives its own target from the container's
+      // update candidate, so a rollback wrote the backup image into the
+      // compose file and then created the container from the very update it
+      // was undoing, while the operation reported success (DR-101).
+      runtimeContext: {
+        newImage,
+        // A rollback reference carries the digest its backup captured when
+        // there is one. Nothing else may break a tie between several
+        // RepoDigests here: `container.result.digest` is the candidate's
+        // manifest, which is what this recreate is moving away from (DR-64).
+        preferredDigest: getPinnedManifestDigest(newImage),
+      },
+      // Deliberately no `pulledImageId`, `imageIdentity` or
+      // `onPulledImageIdResolved`: this path has no compose-file-once
+      // preflight behind it, so it must not read as a preflighted service
+      // identity in the post-create image check (DR-67).
     } as ComposeRuntimeRefreshOptions;
     if (composeFiles.length > 1) {
       composeUpdateOptions.composeFiles = composeFiles;

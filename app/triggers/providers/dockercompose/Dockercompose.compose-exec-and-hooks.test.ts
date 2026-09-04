@@ -1809,6 +1809,7 @@ describe('Dockercompose Trigger', () => {
     const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
       start: vi.fn().mockResolvedValue(undefined),
     } as any);
+    const verifyCompatibilitySpy = vi.spyOn(trigger, 'verifyPulledImageCompatibility');
 
     await trigger.recreateContainer(
       mockDockerApi,
@@ -1827,6 +1828,168 @@ describe('Dockercompose Trigger', () => {
     );
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(createContainerSpy).toHaveBeenCalledTimes(1);
+    // The container this recreates has an update candidate of 1.1.0, so
+    // anything that re-derives its own target lands on the update instead of
+    // the 1.0.0 the caller asked for and the compose file now carries.
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
+    expect(verifyCompatibilitySpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      'nginx:1.0.0',
+      expect.anything(),
+    );
+  });
+
+  test('recreateContainer integration should recreate from the requested image after a resync moved the tag to the candidate', async () => {
+    trigger.configuration.dryrun = false;
+    // What the store holds once maybeFastResyncAfterUpdate has run: the tag
+    // value is already the candidate and there is no scan result left to read,
+    // so the container itself no longer says anything about 1.0.0.
+    const container = makeContainer({
+      name: 'nginx',
+      tagValue: '1.1.0',
+      remoteValue: null,
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0',
+      container,
+      mockLog,
+    );
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('nginx:1.0.0'),
+    );
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
+  });
+
+  test('recreateContainer integration should leave a republished index unbound instead of pinning the update candidate digest', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+      // The manifest the watcher resolved for the update this recreate undoes.
+      result: { digest: 'sha256:bbbb' },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    // One local image ID carrying both the retained manifest and the
+    // republished one, which is the tie capturePulledImageIdentity has to break.
+    mockDockerApi.getImage = vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:localimage',
+        RepoDigests: ['nginx@sha256:aaaa', 'nginx@sha256:bbbb'],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0',
+      container,
+      mockLog,
+    );
+
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('none of them is the manifest this pull was pinned to'),
+    );
+  });
+
+  test('recreateContainer integration should break a digest tie with the digest the requested image pins', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+      result: { digest: 'sha256:bbbb' },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    mockDockerApi.getImage = vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:localimage',
+        RepoDigests: ['nginx@sha256:aaaa', 'nginx@sha256:bbbb'],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:localimage' }),
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0@sha256:aaaa',
+      container,
+      mockLog,
+    );
+
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0@sha256:aaaa' }),
+      'nginx',
+      expect.anything(),
+    );
   });
 
   test('recreateContainer should restore original compose text when runtime refresh fails and rollback succeeds', async () => {
