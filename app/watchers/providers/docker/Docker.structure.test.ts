@@ -11,10 +11,17 @@ import { expect, test } from 'vitest';
 // seed, since registerWatchers() awaits every watcher's init() via
 // Promise.all() and a flow that waits on a human would stall the whole
 // controller's startup, not just this watcher.
-test('Docker watcher implementation should stay under 1690 lines', () => {
+// Bumped from 1690 for the concurrent-getContainers() generation-counter fix:
+// a controllerLocalEnumerationGeneration field, the guard (and explanatory
+// comment) around the recordControllerLocalEnumeration() call in
+// getContainers() now also carries the isWatcherDeregistered check that
+// guards against a call settling after deregisterComponent(), so an older
+// concurrent call's listContainers() result can't overwrite a newer call's
+// claim set.
+test('Docker watcher implementation should stay under 1707 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1690);
+  expect(lineCount).toBeLessThanOrEqual(1707);
 });
