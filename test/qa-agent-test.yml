@@ -51,7 +51,7 @@ services:
     container_name: test-with-env
     environment:
       - REDIS_PASSWORD=supersecretpassword
-      - API_KEY=sk-test-1234567890
+      - API_KEY=sk-test-1234567890  # gitleaks:allow
       - DATABASE_URL=postgres://user:pass@db:5432/app
     labels:
       - dd.watch=true
