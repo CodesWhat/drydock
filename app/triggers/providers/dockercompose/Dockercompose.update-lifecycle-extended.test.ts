@@ -1402,6 +1402,7 @@ describe('Dockercompose Trigger', () => {
       .mockResolvedValue({ status: 'rolled-back' });
     const removeCreated = vi.fn().mockResolvedValue(undefined);
     const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
     // A concurrent docker pull moved nginx:1.1.0 between the pull and the
     // create, so the container that came back runs a different image.
     vi.spyOn(trigger, 'createContainer').mockResolvedValue({
@@ -1425,6 +1426,17 @@ describe('Dockercompose Trigger', () => {
       'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
         'the local tag moved between the pull and the recreate. ' +
         'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+    // With no scanner the identity binding policy is `disabled` and records
+    // nothing, so this is the only audit row the container gets.
+    expect(securityAuditSpy).toHaveBeenCalledTimes(1);
+    expect(securityAuditSpy).toHaveBeenCalledWith(
+      'security-scan-skipped',
+      container,
+      'error',
+      'Security scan skipped because the local tag moved between the pull and the recreate: ' +
+        'nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
     );
   });
 
@@ -1507,6 +1519,7 @@ describe('Dockercompose Trigger', () => {
       .mockResolvedValue({ status: 'rolled-back' });
     const removeCreated = vi.fn().mockResolvedValue(undefined);
     const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
     const postPullHook = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(trigger, 'createContainer').mockResolvedValue({
       start: vi.fn().mockResolvedValue(undefined),
@@ -1531,6 +1544,17 @@ describe('Dockercompose Trigger', () => {
       'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
         'the local tag moved between the pull and the recreate. ' +
         'Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn',
+    );
+    // Two separate skips, and the moved tag gets its own row rather than being
+    // folded into the unbound-image one the binding policy already recorded.
+    expect(securityAuditSpy).toHaveBeenCalledTimes(2);
+    expect(securityAuditSpy).toHaveBeenLastCalledWith(
+      'security-scan-skipped',
+      container,
+      'error',
+      'Security scan skipped because the local tag moved between the pull and the recreate: ' +
+        'nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image; ' +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
     );
   });
 

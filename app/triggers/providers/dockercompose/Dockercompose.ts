@@ -3426,7 +3426,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     newContainer: unknown,
     expectedImageId: string | undefined,
     newImage: string,
-    container: { name: string },
+    container: { name: string; watcher?: string; image?: { name?: string } },
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     preflightedServiceIdentity: boolean,
   ): Promise<void> {
@@ -3452,6 +3452,19 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
     logContainer.warn(
       `${movedTagDetail}. Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn`,
+    );
+    // The container is now running an image nothing verified or scanned, and
+    // on the path this branch is actually reached from there is no other row
+    // saying so: an install with no scanner has an identity binding policy of
+    // `disabled`, which never records the unbound-image skip. This is the only
+    // record, so it names both the image that was pulled and the one that ran.
+    this.recordSecurityAudit(
+      'security-scan-skipped',
+      container,
+      'error',
+      `Security scan skipped because the local tag moved between the pull and the recreate: ` +
+        `${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
     );
   }
 
