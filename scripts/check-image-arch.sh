@@ -74,7 +74,7 @@ trap 'rm -f "${docker_stderr}"' EXIT
 # A pull failure or a missing emulator is a legitimate non-zero here, so keep
 # the output instead of letting set -e abort with nothing to read.
 output=""
-if ! output="$(docker run --rm --platform "${platform}" --entrypoint sh "${image_ref}" -c "${probe}" 2>"${docker_stderr}")"; then
+if ! output="$(docker run --rm --pull always --platform "${platform}" --entrypoint sh "${image_ref}" -c "${probe}" 2>"${docker_stderr}")"; then
 	echo "::error::Could not read ${image_ref} as ${platform}: $(cat "${docker_stderr}")"
 	exit 1
 fi

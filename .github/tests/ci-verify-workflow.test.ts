@@ -519,5 +519,7 @@ test('build job checks base image pins before building, for the platforms it smo
   // digest resolves the same for every --platform, so the arm64 stage builds
   // green on an amd64 rootfs (#1021). Both must cover the same platforms.
   expect(smokePlatforms).toBe('linux/amd64,linux/arm64');
-  expect(guard?.run).toBe(`scripts/check-dockerfile-base-indexes.sh Dockerfile ${smokePlatforms}`);
+  expect(guard?.with?.command).toBe(
+    `scripts/check-dockerfile-base-indexes.sh Dockerfile ${smokePlatforms}`,
+  );
 });
