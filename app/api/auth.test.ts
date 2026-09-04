@@ -1418,22 +1418,32 @@ describe('Auth Router', () => {
       );
     });
 
-    test('should emit deprecation headers and warnings for the legacy strategies response shape', () => {
-      registry.getState.mockReturnValue({ authentication: {} });
+    test('should register a 410 tombstone for the removed /auth/strategies alias, ahead of authentication', () => {
+      // Removed in v1.8.0 (see DEPRECATIONS.md). Unlike /api/auth/methods,
+      // /auth/strategies is mounted under the bare /auth router rather than
+      // /api/*, so it is never covered by the unversioned-API tombstone.
+      // Registered before requireAuthentication so it answers 410 with or
+      // without credentials, instead of falling through to the SPA shell
+      // (authenticated) or a bare 401 (unauthenticated).
       const app = createApp();
       auth.init(app);
-      const call = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
-      const handler = call[1];
-      const res = createResponse();
 
-      handler({}, res);
-
-      expect(log.warn).toHaveBeenCalledWith(
-        'GET /auth/strategies is deprecated and will be removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+      const strategiesRouteIndex = mockRouter.get.mock.calls.findIndex(
+        (c) => c[0] === '/strategies',
       );
-      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
-      expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Sat, 01 Jul 2028 00:00:00 GMT');
-      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+      const strategiesRouteOrder = mockRouter.get.mock.invocationCallOrder[strategiesRouteIndex];
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const authMiddlewareOrder = mockRouter.use.mock.invocationCallOrder[authMiddlewareIndex];
+
+      expect(strategiesRouteIndex).toBeGreaterThanOrEqual(0);
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+      expect(strategiesRouteOrder).toBeLessThan(authMiddlewareOrder);
+
+      // No authentication middleware in the route's own handler chain either.
+      expect(mockRouter.get.mock.calls[strategiesRouteIndex]).toHaveLength(2);
     });
 
     test('should register public auth status endpoints for login-time diagnostics', () => {
@@ -1464,7 +1474,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('should register /strategies, /status, /remember, /login, /logout, /user routes', () => {
+    test('should register /status, /remember, /login, /logout, /user routes', () => {
       const app = createApp();
       registry.getState.mockReturnValue({ authentication: {} });
       auth.init(app);
@@ -1472,7 +1482,6 @@ describe('Auth Router', () => {
       const getRoutes = mockRouter.get.mock.calls.map((c) => c[0]);
       const postRoutes = mockRouter.post.mock.calls.map((c) => c[0]);
 
-      expect(getRoutes).toContain('/strategies');
       expect(getRoutes).toContain('/status');
       expect(getRoutes).toContain('/user');
       expect(postRoutes).toContain('/remember');
@@ -1631,100 +1640,6 @@ describe('Auth Router', () => {
   });
 
   describe('route handlers', () => {
-    test('getStrategies should return unique sorted strategies', () => {
-      const mockAuth1 = {
-        getId: vi.fn(() => 'basic.b'),
-        getStrategy: vi.fn(() => ({})),
-        getStrategyDescription: vi.fn(() => ({
-          type: 'basic',
-          name: 'b',
-        })),
-      };
-      const mockAuth2 = {
-        getId: vi.fn(() => 'oauth.a'),
-        getStrategy: vi.fn(() => ({})),
-        getStrategyDescription: vi.fn(() => ({
-          type: 'oauth',
-          name: 'a',
-        })),
-      };
-      // Duplicate to test dedup
-      const mockAuth3 = {
-        getId: vi.fn(() => 'basic.b2'),
-        getStrategy: vi.fn(() => ({})),
-        getStrategyDescription: vi.fn(() => ({
-          type: 'basic',
-          name: 'b',
-        })),
-      };
-      registry.getState.mockReturnValue({
-        authentication: {
-          'basic.b': mockAuth1,
-          'oauth.a': mockAuth2,
-          'basic.b2': mockAuth3,
-        },
-      });
-
-      const app = createApp();
-      auth.init(app);
-
-      const strategiesCall = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
-      const handler = strategiesCall[1];
-      const res = createResponse();
-      handler({}, res);
-
-      // Should be sorted by name and deduplicated, wrapped in { strategies, warnings }
-      expect(res.json).toHaveBeenCalledWith({
-        strategies: [
-          { type: 'oauth', name: 'a' },
-          { type: 'basic', name: 'b' },
-        ],
-        warnings: [],
-      });
-    });
-
-    test('getStrategies should deduplicate with near-linear type lookups', () => {
-      let typeReads = 0;
-      const authentication = Object.fromEntries(
-        Array.from({ length: 40 }, (_, index) => {
-          const id = `oauth.${index}`;
-          return [
-            id,
-            {
-              getId: vi.fn(() => id),
-              getStrategy: vi.fn(() => ({})),
-              getStrategyDescription: vi.fn(() => {
-                const strategy = {};
-                Object.defineProperty(strategy, 'type', {
-                  enumerable: true,
-                  get: () => {
-                    typeReads += 1;
-                    return 'oauth';
-                  },
-                });
-                Object.defineProperty(strategy, 'name', {
-                  enumerable: true,
-                  value: `provider-${String(index).padStart(2, '0')}`,
-                });
-                return strategy;
-              }),
-            },
-          ];
-        }),
-      );
-      registry.getState.mockReturnValue({ authentication });
-
-      const app = createApp();
-      auth.init(app);
-      const strategiesCall = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
-      const handler = strategiesCall[1];
-      const res = createResponse();
-      handler({}, res);
-
-      expect(res.json).toHaveBeenCalled();
-      expect(typeReads).toBeLessThanOrEqual(80);
-    });
-
     test('getStatus should return providers and auth registration errors', () => {
       registry.getState.mockReturnValue({
         authentication: {
@@ -1753,6 +1668,36 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         providers: [{ type: 'oauth', name: 'provider', logoutUrl: 'https://logout.example.com' }],
         errors: [{ provider: 'basic:andi', error: 'hash is required' }],
+      });
+    });
+
+    test('getAuthStrategiesTombstone should return 410 with migration details, unauthenticated', () => {
+      const handler = getRouteHandler('get', '/strategies');
+      const res = createResponse();
+      handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+        details: {
+          migration: '/api/v1/auth/status',
+          docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+        },
+      });
+    });
+
+    test('getAuthStrategiesTombstone should return the same 410 body for an authenticated caller', () => {
+      const handler = getRouteHandler('get', '/strategies');
+      const res = createResponse();
+      handler({ principal: { kind: 'session', username: 'john' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+        details: {
+          migration: '/api/v1/auth/status',
+          docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+        },
       });
     });
 

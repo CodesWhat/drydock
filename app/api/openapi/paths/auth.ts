@@ -40,19 +40,6 @@ export const authPaths = {
       },
     },
   },
-  '/auth/strategies': {
-    get: {
-      tags: ['Authentication'],
-      summary: 'Get enabled authentication strategies (legacy response shape)',
-      operationId: 'getAuthStrategies',
-      security: [],
-      responses: {
-        200: jsonResponse('Authentication strategies', {
-          $ref: '#/components/schemas/AuthStrategiesResponse',
-        }),
-      },
-    },
-  },
   '/auth/login': {
     post: {
       tags: ['Authentication', 'Actions'],

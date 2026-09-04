@@ -81,6 +81,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/metrics` | `GET` | Prometheus metrics (bearer token via `DD_SERVER_METRICS_TOKEN`, session auth fallback, or no auth via `DD_SERVER_METRICS_AUTH=false`) |
 | `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
+| `/api/v1/approvals` | `GET`, `GET /summary`, `GET /:id`, `POST /:id/approve`, `POST /:id/reject`, `POST /:id/defer` | [Approvals](#approvals) (pending-approval queue: list, count, detail, and decide) |
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
 | `/api/v1/notifications/outbox` | `GET`, `POST /:id/retry`, `DELETE /:id` | [Notification outbox](#notification-outbox) (admin retry/discard for failed deliveries) |
 | `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
@@ -329,6 +330,64 @@ curl -X DELETE http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id
 
 Returns 204 on success, 404 if the entry does not exist, or 500 on an internal error.
 
+## Approvals
+
+The pending-approval queue holds container updates waiting on an operator decision. Approve dispatches the update through the same admission path as the container panel's Update button, reject writes the container's `skipTags`/`skipDigests` policy, and defer writes a snooze; all three record an audit entry (`update-approved`, `update-rejected`, `update-deferred`) and emit an SSE event (see [Event types](#event-types)).
+
+### List approvals
+
+```bash
+curl "http://drydock:3000/api/v1/approvals?status=pending&limit=25"
+```
+
+Scope: `read`. Defaults to `status=pending`. Supports `status` (`pending`, `deferred`, `decided`, or `all`), `containerId`, `agent`, `semverDiff` (`major`, `minor`, `patch`, `prerelease`, or `unknown`), a free-text `q` filter (max 200 characters), and `limit`/`offset` pagination. Returns 200 with `{ data, total, limit, offset, hasMore }`, or 400 if a filter value is invalid.
+
+### Get approvals summary
+
+```bash
+curl http://drydock:3000/api/v1/approvals/summary
+```
+
+Scope: `read`. Returns 200 with `{ pending, deferred, decidedToday }` — `decidedToday` counts decisions since UTC midnight, not the running total of decided approvals — used for the nav badge and dashboard tile.
+
+### Get a single approval
+
+```bash
+curl http://drydock:3000/api/v1/approvals/approval-id
+```
+
+Scope: `read`. Returns 200 with `{ approval, eligibility, holdReasons }` (`eligibility` is omitted and `holdReasons` is empty when the approval's container no longer exists), or 404 if the approval does not exist.
+
+### Approve a queued update
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/approval-id/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"note": "cleared with the on-call team"}'
+```
+
+Scope: `containers:update`. Body accepts an optional `note` (string, max 500 characters); no other properties are allowed. Dispatches the update exactly as `POST /containers/:id/update` would, so it returns the same outcomes that endpoint returns, including the `updateMode: notify` 409. Also returns 403 if container actions are disabled, 404 if the approval or its container no longer exists, or 409 if the approval was already decided or its candidate was superseded by a newer sighting.
+
+### Reject a queued update
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/approval-id/reject \
+  -H 'Content-Type: application/json' \
+  -d '{"note": "holding for the next patch release"}'
+```
+
+Scope: `containers:update`. Body accepts an optional `note`, same rules as approve. Writes the container's skip policy and returns 200 with `{ approval }`. Same 404/409 conditions as approve.
+
+### Defer a queued update
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/approval-id/defer \
+  -H 'Content-Type: application/json' \
+  -d '{"days": 14, "note": "checking with the vendor first"}'
+```
+
+Scope: `containers:update`. Body accepts `until` (an RFC 3339 date-time in the future, at most 365 days out) or `days` (integer, 1 to 365, defaults to 7), plus an optional `note`. You don't need to send both; if both are present, `until` takes precedence. Writes the container's snooze to the same instant and returns 200 with `{ approval }`. Returns 400 if `until`/`days` is invalid, plus the same 404/409 conditions as approve.
+
 ## Audit trail
 
 Returns paginated audit log entries for container lifecycle events, updates, rollbacks, webhooks, and more.
@@ -374,7 +433,7 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 
 ### Action types
 
-`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `mqtt-command-update`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`
 
 ## Server-Sent Events (SSE)
 
@@ -411,6 +470,9 @@ The replay buffer is an in-memory 5-minute ring buffer. If the requested event i
 | `dd:update-applied` | `{ "containerName": "...", "containerId": "...", "newContainerId": "...", "operationId": "...", "batchId": "..." }` | An update was successfully applied to a container |
 | `dd:update-failed` | `{ "containerName": "...", "error": "...", "operationId": "...", "batchId": "...", "phase": "...", "rollbackReason": "..." }` | An update attempt failed (or was rolled back) |
 | `dd:batch-update-completed` | `{ "batchId": "...", "total": int, "succeeded": int, "failed": int, "durationMs": int, "items": [...] }` | A batch update run finished |
+| `dd:approval-created` | `{ "id": "...", "containerId": "...", "containerName": "...", "decision": "pending", "pendingCount": int }` | A container update entered the pending-approval queue |
+| `dd:approval-decided` | `{ "id": "...", "containerId": "...", "containerName": "...", "decision": "...", "pendingCount": int }` | An operator approved, rejected, or deferred a queued update; `decision` is `approved`, `rejected`, or `deferred` |
+| `dd:approval-resolved` | `{ "id": "...", "containerId": "...", "containerName": "...", "decision": "...", "pendingCount": int }` | A queued row left the queue without an operator decision, for example its candidate was superseded or the container was removed |
 | `dd:agent-connected` | Agent payload | A remote agent connected to the controller |
 | `dd:agent-disconnected` | Agent payload | A remote agent disconnected |
 | `dd:agent-stats-changed` | `{ "agentName": "..." }` | A remote agent's stats changed and should be refetched |
@@ -595,15 +657,7 @@ curl http://drydock:3000/api/v1/auth/status
 
 The same status payload is also available at `GET /auth/status`; `GET /api/auth/status` remains as the unversioned compatibility alias.
 
-### Get available strategies
-
-Returns the list of configured authentication strategies. This endpoint is unauthenticated so the login screen can render.
-
-```bash
-curl http://drydock:3000/auth/strategies
-```
-
-The `{ strategies, warnings }` response shape from `GET /auth/strategies` is deprecated and scheduled for removal in v1.8.0. Migrate to `GET /api/v1/auth/status`; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
+The legacy `{ strategies, warnings }` response shape at `GET /auth/strategies` was removed in v1.8.0. The route now answers `410 Gone` regardless of whether the request is authenticated, with a JSON body of `{ "error": "...", "details": { "migration": "/api/v1/auth/status", "docs": "..." } }`. Use `GET /api/v1/auth/status` instead; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
 
 The legacy `GET /api/auth/methods` alias was removed in v1.7.0 and now returns `410 Gone`; see [Deprecations](/docs/deprecations#api-auth-methods).
 

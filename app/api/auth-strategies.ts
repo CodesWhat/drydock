@@ -115,21 +115,6 @@ export function getAuthStatus(_req: Request, res: Response): void {
   res.json(getAuthStatusPayload());
 }
 
-/**
- * Return the registered strategies from the registry.
- * Includes registration warnings so the login UI can surface them.
- * @param req
- * @param res
- */
-export function getStrategies(_req: Request, res: Response): void {
-  const status = getAuthStatusPayload();
-  const warnings = registry.getRegistrationWarnings();
-  res.json({
-    strategies: status.providers,
-    warnings,
-  });
-}
-
 export function getLogoutRedirectUrl(): string | undefined {
   const strategyWithRedirectUrl = getUniqueStrategies().find(
     (strategy: StrategyDescription): boolean => !!strategy.logoutUrl,
