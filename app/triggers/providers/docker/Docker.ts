@@ -418,6 +418,23 @@ type PulledImageReference = {
   tag?: string;
 };
 
+/**
+ * What the caller knows about the pull that the binding code cannot work out
+ * for itself.
+ */
+type PulledImageIdentityOptions = {
+  /**
+   * The digest to prefer when the daemon records several `RepoDigests` for the
+   * pulled repository. Passing this object at all replaces the update
+   * candidate's digest (`container.result.digest`) as that tie-break, including
+   * when the digest inside it is undefined: a manual rollback pulls the
+   * backup's retained image, which the candidate's digest describes nothing
+   * about, so it passes what its backup record captured and nothing else
+   * (DR-64).
+   */
+  preferredDigest?: string;
+};
+
 type PulledImageInspectApi = {
   getImage?: (imageRef: string) => {
     inspect: () => Promise<{
@@ -1870,12 +1887,14 @@ class Docker<
     imageReference: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
   ): Promise<PulledImageIdentityBinding> {
     const outcome = await this.capturePulledImageIdentity(
       dockerApi,
       imageReference,
       container,
       logContainer,
+      options,
     );
     if (outcome.unboundWarn) {
       this.recordUnboundSecurityWarning(container, outcome.reason);
@@ -1889,6 +1908,7 @@ class Docker<
     imageReference: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
   ): Promise<PulledImageIdentityOutcome> {
     const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
     if (typeof dockerApi.getImage !== 'function') {
@@ -1917,11 +1937,17 @@ class Docker<
         return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
       });
       const tag = parsedImage.tag?.trim();
+      // Which digest breaks a tie is the caller's to say. The update path has
+      // the candidate the watcher resolved for this container; a rollback has
+      // only what its backup captured, and reading the candidate here anyway
+      // would pin the rollback to the manifest it is undoing (DR-64).
+      const preferredDigest = options ? options.preferredDigest : container?.result?.digest;
       const matchingRepoDigest = await this.selectPulledRepoDigest(
         matchingRepoDigests,
         container,
         logContainer,
         { reference: imageReference, parsedImage, tag },
+        preferredDigest,
       );
       if (imageId && matchingRepoDigest && tag) {
         const separatorIndex = matchingRepoDigest.indexOf('@');
@@ -1964,9 +1990,10 @@ class Docker<
    * gated for this update, while the operation still reports success.
    *
    * Prefers the digest the pulled reference itself names when it is
-   * digest-pinned, then the digest the watcher already resolved for this
-   * candidate (`container.result.digest`, set during discovery, no extra
-   * lookup). Falls back to a registry manifest lookup, which is cheap when the
+   * digest-pinned, then `preferredDigest`, the digest the caller already knows
+   * describes this pull: the candidate the watcher resolved during discovery
+   * on the update path, the backup record's captured digest on a rollback.
+   * Falls back to a registry manifest lookup, which is cheap when the
    * same image was already resolved earlier in the same poll cycle
    * (BaseRegistry caches it). Otherwise picks deterministically and logs every
    * candidate so the ambiguity is visible instead of silently picked.
@@ -1976,6 +2003,7 @@ class Docker<
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     pulled: PulledImageReference,
+    preferredDigest?: string,
   ): Promise<string | undefined> {
     if (candidates.length <= 1) {
       return candidates[0];
@@ -1996,9 +2024,8 @@ class Docker<
       }
     }
 
-    const resolvedDigest = container?.result?.digest;
-    if (typeof resolvedDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(resolvedDigest)) {
-      const preferred = candidates.find((candidate) => digestOf(candidate) === resolvedDigest);
+    if (typeof preferredDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(preferredDigest)) {
+      const preferred = candidates.find((candidate) => digestOf(candidate) === preferredDigest);
       if (preferred) {
         return preferred;
       }

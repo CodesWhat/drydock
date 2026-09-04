@@ -1,3 +1,4 @@
+import { resolveRollbackImageReference } from '../../../util/backup.js';
 import {
   configurationValid,
   createMockLog,
@@ -443,6 +444,51 @@ describe('disambiguating multiple RepoDigests for the same repository', () => {
     expect(logContainer.warn).not.toHaveBeenCalled();
   });
 
+  test('lets the caller name the digest that breaks the tie instead of the candidate', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi.fn();
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer({ result: { digest: PULLED_DIGEST } });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer, {
+        preferredDigest: RETAGGED_DIGEST,
+      }),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${RETAGGED_DIGEST}` });
+    expect(registryState.registry.hub.getImageManifestDigest).not.toHaveBeenCalled();
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  // Asking for a preference and having none is not the same as not asking:
+  // the caller that pulled something the watcher's candidate does not describe
+  // has to be able to take that digest out of the running (DR-64).
+  test('drops the candidate digest entirely when the caller asks for a preference it does not have', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`, `nginx@${PULLED_DIGEST}`],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockResolvedValue({ digest: RETAGGED_DIGEST });
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    const container = createTriggerContainer({ result: { digest: PULLED_DIGEST } });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:1.1.0', container, logContainer, {}),
+    ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${RETAGGED_DIGEST}` });
+    expect(registryState.registry.hub.getImageManifestDigest).toHaveBeenCalled();
+    expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
   test('falls back to a registry manifest lookup when the watcher result has no matching digest', async () => {
     mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
     const dockerApi = createImageApi({
@@ -752,5 +798,57 @@ describe('getRollbackIdentityBindingPolicy', () => {
     const container = createTriggerContainer();
 
     expect(docker.getRollbackIdentityBindingPolicy(container)).toBe('disabled');
+  });
+});
+
+// A manual rollback pulls the image its backup retained, not the update
+// candidate, so the digest the watcher resolved for that candidate describes
+// the wrong manifest here. It only becomes visible when the retained image
+// carries two RepoDigests under the same repository and one of them is the
+// candidate's, which is exactly the republished-index case the tie-break was
+// written for (DR-64).
+describe('resolving the rollback reference through the identity binder', () => {
+  const CANDIDATE_DIGEST = PULLED_DIGEST;
+  const BACKUP_IMAGE_DIGEST = RETAGGED_DIGEST;
+
+  test('pins the rollback to the backup image, not to the update candidate', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [
+        `my-registry/test/test@${BACKUP_IMAGE_DIGEST}`,
+        `my-registry/test/test@${CANDIDATE_DIGEST}`,
+      ],
+    });
+    const registryState = mockGetState();
+    registryState.registry.hub.getImageManifestDigest = vi
+      .fn()
+      .mockImplementation(async (image) =>
+        image.tag.value === '1.0.0'
+          ? { digest: BACKUP_IMAGE_DIGEST }
+          : { digest: CANDIDATE_DIGEST },
+      );
+    mockGetState.mockReturnValue(registryState);
+    const logContainer = createLogContainer();
+    // Runs 1.0.0 with 4.5.6 discovered as the candidate; the backup retains
+    // the 1.0.0 image the rollback has to get back to.
+    const container = createTriggerContainer({ result: { digest: CANDIDATE_DIGEST } });
+
+    const reference = await resolveRollbackImageReference(
+      docker,
+      dockerApi,
+      container,
+      { imageName: 'my-registry/test/test', imageTag: '1.0.0' },
+      logContainer,
+    );
+
+    expect(reference).toBe(`my-registry/test/test:1.0.0@${BACKUP_IMAGE_DIGEST}`);
+    expect(reference).not.toContain(CANDIDATE_DIGEST);
+    expect(registryState.registry.hub.getImageManifestDigest).toHaveBeenCalledWith({
+      ...container.image,
+      name: 'test/test',
+      tag: { ...container.image.tag, value: '1.0.0' },
+    });
+    expect(logContainer.warn).not.toHaveBeenCalled();
   });
 });
