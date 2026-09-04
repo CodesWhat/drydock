@@ -291,6 +291,31 @@ test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () =
   delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ;
 });
 
+test('getWatcherConfiguration should map the MAINTENANCE_WINDOW_SCOPE alias', async () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '* 2-3 * * *';
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE = 'scan';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations.local.maintenancewindowscope).toStrictEqual('scan');
+  expect(watcherConfigurations.local.maintenancewindow).toStrictEqual('* 2-3 * * *');
+  // The nested parser would otherwise leave dd.watcher.local.maintenance.window.scope behind.
+  expect(watcherConfigurations.local.maintenance).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW;
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE;
+});
+
+test('getWatcherConfiguration should ignore a MAINTENANCE_WINDOW_SCOPE alias without a watcher name', async () => {
+  configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW_SCOPE = 'scan';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations.maintenancewindowscope).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW_SCOPE;
+});
+
 test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases regardless of insertion order', async () => {
   configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW_TZ = 'UTC';
   configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW = '30 1 * * *';
