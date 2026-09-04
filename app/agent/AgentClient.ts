@@ -54,6 +54,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
+import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -869,13 +870,24 @@ export class AgentClient {
 
   /**
    * Ownership gate for the bulk/authoritative ingestion funnel
-   * (`processAuthoritativeContainer`), which every full-inventory and
-   * snapshot path reaches with no other check in between: handshake,
-   * watcher-snapshot fallback, on-demand watch/watchContainer, and edge
-   * container sync. Without this, any of those paths can report an id
-   * already owned by another agent or by the controller's own local
-   * watcher and have `buildContainerReport`'s unconditional
-   * `container.agent = this.name` stamp reassign it.
+   * (`processAuthoritativeContainer`) and the incremental
+   * `dd:container-added`/`dd:container-updated`/`dd:container-removed`
+   * event handlers, which together are every path that can insert, update,
+   * or delete a store row on an agent's report. Without this, any of those
+   * paths can report an id already owned by another agent, or an id one of
+   * the controller's own watchers is currently running, and have
+   * `buildContainerReport`'s unconditional `container.agent = this.name`
+   * stamp reassign it, or have `deleteContainer` remove a row the reporting
+   * agent doesn't own.
+   *
+   * The no-record check consults `findControllerLocalWatcherClaimingContainerId`
+   * rather than a watcher-name comparison, because a watcher name is not
+   * evidence of ownership: a controller with no `DD_WATCHER_*` registers its
+   * default watcher as `local`, and the agent quickstart sets
+   * `DD_WATCHER_LOCAL_SOCKET` on the agent, so both sides are routinely
+   * called `local` while watching entirely different hosts. The container
+   * ids the controller's own daemon actually enumerated are evidence;
+   * ownership is decided on those instead.
    *
    * Deliberately does not reject a `watcher` mismatch against an existing
    * owned record. Bulk ingestion is exactly how a legitimate watcher rename
@@ -886,19 +898,23 @@ export class AgentClient {
    * pruned and never retried. Updates would just stop landing with no
    * error surfaced.
    */
-  private canIngestAuthoritativeContainer(container: Container): boolean {
+  private canIngestAuthoritativeContainer(
+    container: Container,
+    action: 'ingest' | 'upsert' | 'removal' = 'ingest',
+  ): boolean {
     if (typeof container.id !== 'string' || container.id.length === 0) {
       this.log.warn(
-        `Ignoring authoritative container ingest without an id from agent ${this.name}`,
+        `Ignoring authoritative container ${action} without an id from agent ${this.name}`,
       );
       return false;
     }
 
     const existing = storeContainer.getContainer(container.id);
     if (!existing) {
-      if (this.claimsControllerLocalWatcherNamespace(container.watcher)) {
+      const claimingWatcherId = findControllerLocalWatcherClaimingContainerId(container.id);
+      if (claimingWatcherId) {
         this.log.warn(
-          `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`,
+          `Ignoring authoritative container ${action} for ${sanitizeLogParam(container.id)} from agent ${this.name}: the controller's own watcher ${sanitizeLogParam(claimingWatcherId)} is currently running that container id`,
         );
         return false;
       }
@@ -906,34 +922,11 @@ export class AgentClient {
     }
     if (existing.agent !== this.name) {
       this.log.warn(
-        `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
+        `Ignoring authoritative container ${action} for ${sanitizeLogParam(container.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
       );
       return false;
     }
     return true;
-  }
-
-  /**
-   * True when `watcherName` names a watcher registered directly by the
-   * controller (no `agent` prefix on its registry component id, e.g.
-   * `docker.local`) rather than by any connected agent (whose components are
-   * always registered as `<agentName>.docker.<watcherName>`, per
-   * `Component.getId()`). An agent cannot forge this: it only controls its
-   * own handshake-reported watcher descriptors, which the controller always
-   * registers under that agent's own prefix, never bare.
-   *
-   * Used to close the no-record race in `canIngestAuthoritativeContainer`:
-   * without it, an agent could pre-insert a container under a
-   * controller-local container id before the controller's own watch cycle
-   * writes the real record, claiming ownership (via `buildContainerReport`'s
-   * `container.agent` stamp) and redirecting future lifecycle actions on
-   * that container to itself.
-   */
-  private claimsControllerLocalWatcherNamespace(watcherName: unknown): boolean {
-    if (typeof watcherName !== 'string' || watcherName.length === 0) {
-      return false;
-    }
-    return Boolean(registry.getState().watcher[`docker.${watcherName}`]);
   }
 
   private async processAuthoritativeContainer(
@@ -1351,6 +1344,12 @@ export class AgentClient {
   }
 
   private async handleContainerChangeEvent(data: unknown) {
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+    if (!this.canIngestAuthoritativeContainer(data as Container, 'upsert')) {
+      return;
+    }
     const containerReport = await this.processContainer(data as Container);
     this.rememberPendingWatcherCycleReport(containerReport);
     if (containerReport?.container) {
@@ -1392,6 +1391,12 @@ export class AgentClient {
   }
 
   private handleContainerRemovedEvent(data: unknown) {
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+    if (!this.canIngestAuthoritativeContainer(data as Container, 'removal')) {
+      return;
+    }
     const removedContainerData = data as { id: string };
     this.clearPendingFreshState(removedContainerData.id);
     this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);

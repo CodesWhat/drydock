@@ -111,7 +111,10 @@ describe('Docker Watcher', () => {
 
     // Setup dockerode mock
     mockDockerApi = {
-      listContainers: vi.fn(),
+      // Defaults to an empty list so init()'s seedControllerLocalEnumeration
+      // call (DR-106 addendum) has something to resolve; tests exercising
+      // getContainers() override this per case as before.
+      listContainers: vi.fn().mockResolvedValue([]),
       getContainer: vi.fn(),
       getEvents: vi.fn(),
       getImage: vi.fn(),

@@ -4,6 +4,10 @@ import { fullName } from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
+import {
+  _resetControllerLocalContainerIdsForTests,
+  findControllerLocalWatcherClaimingContainerId,
+} from '../../controller-local-container-ids.js';
 import { _resetRegistryWebhookFreshStateForTests } from '../../registry-webhook-fresh.js';
 import {
   filterRecreatedContainerAliases as testable_filterRecreatedContainerAliases,
@@ -209,10 +213,14 @@ describe('Docker Watcher', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     _resetRegistryWebhookFreshStateForTests();
+    _resetControllerLocalContainerIdsForTests();
 
     // Setup dockerode mock
     mockDockerApi = {
-      listContainers: vi.fn(),
+      // Defaults to an empty list so init()'s seedControllerLocalEnumeration
+      // call (DR-106 addendum) has something to resolve; tests exercising
+      // getContainers() override this per case as before.
+      listContainers: vi.fn().mockResolvedValue([]),
       getContainer: vi.fn(),
       getEvents: vi.fn(),
       getImage: vi.fn(),
@@ -651,6 +659,21 @@ describe('Docker Watcher', () => {
       expect(mockCron.schedule).toHaveBeenCalledWith('0 * * * *', expect.any(Function), {
         maxRandomDelay: 60000,
       });
+    });
+
+    // DR-106 addendum: an agent handshake can reach the ownership gate as
+    // soon as registry.init() resolves, well before the startup timer below
+    // fires the first getContainers() enumeration. init() has to seed the
+    // controller-local id set itself so that race window does not exist.
+    test('seeds controller-local container ids before the startup timer fires', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([{ Id: 'seeded-container' }]);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+
+      expect(mockDockerApi.listContainers).toHaveBeenCalledWith({ all: true });
+      expect(findControllerLocalWatcherClaimingContainerId('seeded-container')).toBe('docker.test');
     });
 
     test('should setup docker events listener', async () => {
@@ -1103,7 +1126,10 @@ describe('Docker Watcher', () => {
       await docker.getContainers();
 
       expect(mockAxios.post).toHaveBeenCalledTimes(1);
-      expect(mockDockerApi.listContainers).toHaveBeenCalledTimes(2);
+      // 3, not 2: register() also calls init(), which now seeds
+      // controller-local ids with its own listContainers call (DR-106
+      // addendum) ahead of the two explicit getContainers() calls above.
+      expect(mockDockerApi.listContainers).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -1596,6 +1622,10 @@ describe('Docker Watcher', () => {
       docker.configuration.auth = { type: '' };
       await docker.initWatcher();
       mockDockerApi.listContainers.mockResolvedValue([]);
+      // register() above already seeded controller-local ids once (DR-106
+      // addendum) while auth was not yet blocked; clear that call so this
+      // only asserts getContainers() itself never reaches listContainers.
+      mockDockerApi.listContainers.mockClear();
 
       await expect(docker.getContainers()).rejects.toThrow('credentials are incomplete');
       expect(mockDockerApi.listContainers).not.toHaveBeenCalled();
