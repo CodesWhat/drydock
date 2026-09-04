@@ -23,9 +23,12 @@ export const isApiRequest = ({ url }: { url: URL }): boolean => url.pathname.sta
 //   /health        readiness probe (app/api/index.ts)
 //   /metrics       prometheus exposition (app/api/index.ts)
 //
-// Bare "/auth" is deliberately left out: that exact path is a SPA view
-// (ui/src/router/routes.ts, ROUTES.AUTH) and Express owns only its subpaths,
-// so the pattern requires the trailing slash.
+// Bare "/auth" is deliberately left out: app.use('/auth', router) in
+// app/api/auth.ts matches that exact mount path too, it just defines no
+// handler for it (only subpaths like /auth/login do), so an unauthenticated
+// GET falls through to requireAuthentication and returns 401. The SPA view
+// at that route (ui/src/router/routes.ts, ROUTES.AUTH) should answer
+// instead, so the pattern requires the trailing slash.
 //
 // Unlike a RegExpRoute urlPattern (see isApiRequest above), workbox tests a
 // NavigationRoute denylist against url.pathname + url.search, so anchoring on
@@ -38,10 +41,14 @@ export const SERVER_OWNED_NAVIGATION_PATTERNS: RegExp[] = [
   /^\/metrics(?:[/?]|$)/,
 ];
 
-// Mirrors workbox NavigationRoute's own denylist loop so the patterns can be
-// asserted against real callback URLs in tests.
-export const isServerOwnedNavigation = (pathnameAndSearch: string): boolean =>
-  SERVER_OWNED_NAVIGATION_PATTERNS.some((pattern) => pattern.test(pathnameAndSearch));
+// Mirrors workbox NavigationRoute's own denylist loop — including its
+// url.pathname + url.search join (see
+// node_modules/workbox-routing/NavigationRoute.js) — so the patterns can be
+// asserted against real navigation URLs in tests.
+export const isServerOwnedNavigation = (url: URL): boolean => {
+  const pathnameAndSearch = url.pathname + url.search;
+  return SERVER_OWNED_NAVIGATION_PATTERNS.some((pattern) => pattern.test(pathnameAndSearch));
+};
 
 // https://vitejs.dev/config/
 export default defineConfig({
