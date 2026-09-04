@@ -41,7 +41,10 @@ vi.mock('../../../prometheus/watcher');
 vi.mock('parse-docker-image-name');
 vi.mock('node:fs');
 vi.mock('axios');
-vi.mock('./maintenance.js', () => ({
+// Partial: isScanGatedByMaintenanceWindow stays real so the maintenancewindowscope
+// branches are exercised rather than restated here.
+vi.mock('./maintenance.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./maintenance.js')>()),
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
   hasNarrowMinuteField: vi.fn(() => false),
@@ -455,6 +458,7 @@ describe('Docker Watcher', () => {
         cron: '0 * * * *',
         maintenancewindow: '0 2 * * *',
         maintenancewindowtz: 'UTC',
+        maintenancewindowscope: 'scan',
       });
       docker.log = createMockLog(['info']);
       docker.watch = vi.fn().mockResolvedValue([]);
@@ -469,6 +473,139 @@ describe('Docker Watcher', () => {
       docker.clearMaintenanceWindowQueue();
     });
 
+    test('should run the scan outside the window under the default install scope', async () => {
+      const maintenanceInc = vi.fn();
+      mockPrometheus.getMaintenanceSkipCounter.mockReturnValue({
+        labels: vi.fn().mockReturnValue({ inc: maintenanceInc }),
+      });
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      await docker.watchFromCron();
+
+      expect(docker.configuration.maintenancewindowscope).toBe('install');
+      expect(docker.watch).toHaveBeenCalledTimes(1);
+      expect(docker.maintenanceWindowWatchQueued).toBe(false);
+      expect(maintenanceInc).not.toHaveBeenCalled();
+    });
+
+    // #946 finding 2: the arm a digest flush takes lands hours after the scan that produced
+    // the reports, so it is only ever seen by a LATER cron tick. That tick used to clear it
+    // unconditionally, which under the install scope meant nothing was left to apply the
+    // deferred install when the window opened, every day, forever.
+    test('an ordinary tick outside the window keeps a catch-up armed by a digest flush', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      // 08:00 digest flush: Trigger.deferAutoUpdateForMaintenanceWindow arms the catch-up.
+      docker.queueMaintenanceWindowWatch();
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+
+      // 12:00 ordinary cron tick, window still closed.
+      await docker.watchFromCron();
+
+      expect(docker.watch).toHaveBeenCalledTimes(1);
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+      expect(docker.maintenanceWindowQueueTimeout).toBeDefined();
+      expect(event.emitMaintenanceWindowOpened).not.toHaveBeenCalled();
+      docker.clearMaintenanceWindowQueue();
+    });
+
+    // #946 D1: this tick is the one that consumes the arm, and consuming it cancels the
+    // 60s poll that used to be the only announcer, so the tick has to announce or the
+    // digest trigger's deferred install waits for the next digest cron.
+    test('a tick inside an open window clears a catch-up armed by a webhook scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      docker.queueMaintenanceWindowWatch();
+      await docker.watchFromCron();
+
+      expect(docker.maintenanceWindowWatchQueued).toBe(false);
+      expect(docker.maintenanceWindowQueueTimeout).toBeUndefined();
+      expect(event.emitMaintenanceWindowOpened).toHaveBeenCalledWith({ watcherId: 'docker.test' });
+    });
+
+    test('a failed announcement is logged and does not fail the scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+      event.emitMaintenanceWindowOpened.mockRejectedValue(new Error('handler exploded'));
+
+      docker.queueMaintenanceWindowWatch();
+
+      await expect(docker.watchFromCron()).resolves.toEqual([]);
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to announce the maintenance window opening'),
+      );
+    });
+
+    test('a failed announcement on a logger with no warn still does not fail the scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+      event.emitMaintenanceWindowOpened.mockRejectedValue(new Error('handler exploded'));
+
+      docker.queueMaintenanceWindowWatch();
+
+      await expect(docker.watchFromCron()).resolves.toEqual([]);
+      expect(docker.log.warn).toBeUndefined();
+    });
+
+    test('should report the next cron run as nextRunAt under the install scope', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+      maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
+      mockCron.createTask.mockReturnValue({
+        destroy: vi.fn(),
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 4 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      // Even with a catch-up queued for a deferred install, the scan itself is on its cron.
+      docker.maintenanceWindowWatchQueued = true;
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T03:00:00.000Z');
+    });
+
     test('should execute queued watch when maintenance window opens', async () => {
       vi.useFakeTimers();
       try {
@@ -478,6 +615,7 @@ describe('Docker Watcher', () => {
           cron: '0 * * * *',
           maintenancewindow: '0 2 * * *',
           maintenancewindowtz: 'UTC',
+          maintenancewindowscope: 'scan',
         });
         docker.log = createMockLog(['info', 'warn']);
         docker.watch = vi.fn().mockResolvedValue([]);
@@ -496,6 +634,54 @@ describe('Docker Watcher', () => {
       }
     });
 
+    // #946 finding 3: the catch-up scan re-buffers for a digest trigger and nothing else,
+    // so the watcher announces the opening and the trigger flushes what it deferred.
+    test('announces the window opening after the catch-up scan has run', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      const order: string[] = [];
+      docker.watch = vi.fn().mockImplementation(async () => {
+        order.push('watch');
+        return [];
+      });
+      event.emitMaintenanceWindowOpened.mockImplementation(async () => {
+        order.push('emit');
+      });
+
+      // Armed by a deferral, then the window opens under the 60s poll.
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(event.emitMaintenanceWindowOpened).toHaveBeenCalledWith({ watcherId: 'docker.test' });
+      // Announced only after the scan, so the deferred containers are back in the store with
+      // fresh state before any trigger flushes on them.
+      expect(order).toEqual(['watch', 'emit']);
+    });
+
+    test('does not announce a window opening when the catch-up scan throws', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watch = vi.fn().mockRejectedValue(new Error('socket gone'));
+
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(event.emitMaintenanceWindowOpened).not.toHaveBeenCalled();
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to run queued maintenance watch'),
+      );
+    });
+
     test('should clear queued maintenance watch when normal cron runs inside window', async () => {
       vi.useFakeTimers();
       try {
@@ -505,6 +691,7 @@ describe('Docker Watcher', () => {
           cron: '0 * * * *',
           maintenancewindow: '0 2 * * *',
           maintenancewindowtz: 'UTC',
+          maintenancewindowscope: 'scan',
         });
         docker.log = createMockLog(['info']);
         docker.watch = vi.fn().mockResolvedValue([]);
@@ -670,6 +857,7 @@ describe('Docker Watcher', () => {
         cron: '0 * * * *',
         maintenancewindow: '0 4 * * *',
         maintenancewindowtz: 'UTC',
+        maintenancewindowscope: 'scan',
       });
       docker.maintenanceWindowWatchQueued = true;
 
@@ -693,6 +881,7 @@ describe('Docker Watcher', () => {
         cron: '0 * * * *',
         maintenancewindow: '0 4 * * *',
         maintenancewindowtz: 'UTC',
+        maintenancewindowscope: 'scan',
       });
 
       expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T04:00:00.000Z');

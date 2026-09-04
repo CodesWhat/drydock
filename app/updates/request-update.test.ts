@@ -195,6 +195,41 @@ describe('request-update', () => {
     expect(accepted.operationId).toEqual(expect.any(String));
   });
 
+  // #946: the maintenance window scopes what drydock does on its own. A manual request is
+  // never gated by it, whichever scope the owning watcher is configured with, because
+  // admission passes no maintenanceWindowOpen into computeUpdateEligibility at all.
+  test.each(['install', 'scan'] as const)(
+    'a manual update outside a closed maintenance window is admitted under scope=%s',
+    async (maintenancewindowscope) => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
+      };
+      mockGetState.mockReturnValue({
+        trigger: {},
+        watcher: {
+          'docker.local': {
+            type: 'docker',
+            name: 'local',
+            configuration: {
+              maintenancewindow: '* 2-3 * * *',
+              maintenancewindowscope,
+              maintenancewindowopen: false,
+            },
+            isMaintenanceWindowOpen: () => false,
+          },
+        },
+      });
+
+      const accepted = await requestContainerUpdate(createContainer({ watcher: 'local' }), {
+        trigger,
+      });
+
+      expect(accepted.operationId).toEqual(expect.any(String));
+    },
+  );
+
   test('requestContainerUpdate enqueues an operation and runs the provided trigger with the operation id', async () => {
     const trigger = {
       type: 'docker',

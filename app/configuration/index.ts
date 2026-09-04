@@ -244,30 +244,32 @@ export function getPortwingAuthorizedKeysPath(): string | undefined {
   return raw || undefined;
 }
 
+// Longest suffix first: `_MAINTENANCE_WINDOW` is a prefix of the other two as a string, so a
+// shorter-first walk would never reach `_MAINTENANCE_WINDOW_TZ` / `_MAINTENANCE_WINDOW_SCOPE`
+// if the match were ever loosened from endsWith to includes.
+const WATCHER_MAINTENANCE_ENV_ALIASES = [
+  ['_MAINTENANCE_WINDOW_SCOPE', 'maintenancewindowscope'],
+  ['_MAINTENANCE_WINDOW_TZ', 'maintenancewindowtz'],
+  ['_MAINTENANCE_WINDOW', 'maintenancewindow'],
+] as const;
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';
-  const tzSuffix = '_MAINTENANCE_WINDOW_TZ';
-  const windowSuffix = '_MAINTENANCE_WINDOW';
 
   if (!envKeyUpper.startsWith(prefix)) {
     return undefined;
   }
 
-  if (envKeyUpper.endsWith(tzSuffix)) {
-    const watcherName = envKeyUpper.slice(prefix.length, -tzSuffix.length);
+  for (const [suffix, key] of WATCHER_MAINTENANCE_ENV_ALIASES) {
+    if (!envKeyUpper.endsWith(suffix)) {
+      continue;
+    }
+    const watcherName = envKeyUpper.slice(prefix.length, -suffix.length);
     if (!watcherName) {
       return undefined;
     }
-    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindowtz' };
-  }
-
-  if (envKeyUpper.endsWith(windowSuffix)) {
-    const watcherName = envKeyUpper.slice(prefix.length, -windowSuffix.length);
-    if (!watcherName) {
-      return undefined;
-    }
-    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindow' };
+    return { watcherName: watcherName.toLowerCase(), key };
   }
 
   return undefined;

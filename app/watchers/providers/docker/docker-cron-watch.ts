@@ -1,4 +1,5 @@
 import type { ContainerReport } from '../../../model/container.js';
+import { resolveMaintenanceWindowScope } from '../../../model/watcher-maintenance-window.js';
 import { getMaintenanceSkipCounter } from '../../../prometheus/watcher.js';
 
 export interface CronWatchOptions {
@@ -36,9 +37,21 @@ export interface CronWatchOrchestrationWatcher {
   configuration: {
     cron: string;
     maintenancewindow?: string;
+    /**
+     * `'scan'` gates this scan on the maintenance window; anything else (including the
+     * `'install'` default, and an unset value on a watcher configured before the option
+     * existed) leaves the scan on its own cron and defers only the install.
+     */
+    maintenancewindowscope?: string;
   };
   isCronWatchInProgress: boolean;
   isWatcherDeregistered: boolean;
+  /**
+   * Whether a maintenance-window catch-up is armed. Read before the clear below so the scan
+   * that consumes the arm can announce the opening; the arming site is outside watch()
+   * (a digest flush, a webhook, a manual single-container scan), so nothing else knows.
+   */
+  maintenanceWindowWatchQueued: boolean;
   cronWatchInFlight?: Promise<ContainerReport[]>;
   cronWatchRescanRequested: boolean;
   cronWatchRescanReason?: string;
@@ -48,6 +61,7 @@ export interface CronWatchOrchestrationWatcher {
   isMaintenanceWindowOpen: () => boolean;
   queueMaintenanceWindowWatch: () => void;
   clearMaintenanceWindowQueue: () => void;
+  announceMaintenanceWindowOpened: () => Promise<void>;
   watch: () => Promise<ContainerReport[]>;
   getNextScheduledRunDate: (fromDate?: Date) => Date | undefined;
 }
@@ -338,9 +352,14 @@ async function runCronWatch(
     return [];
   }
 
-  // Check maintenance window before proceeding
+  // Check maintenance window before proceeding. Only the `scan` scope gates the scan
+  // itself; under the default `install` scope the scan runs on its own cron whatever the
+  // window says, so discovery, registry checks, container-state refresh and update
+  // notifications are never held back, and only the automatic install is deferred (see
+  // Trigger.deferAutoUpdateForMaintenanceWindow, which also queues the catch-up below).
   if (
     !ignoreMaintenanceWindow &&
+    resolveMaintenanceWindowScope(watcher.configuration.maintenancewindowscope) === 'scan' &&
     watcher.configuration.maintenancewindow &&
     !watcher.isMaintenanceWindowOpen()
   ) {
@@ -352,7 +371,21 @@ async function runCronWatch(
     }
     return [];
   }
-  watcher.clearMaintenanceWindowQueue();
+
+  // Only a scan that can actually deliver what the queue is holding may clear it: the
+  // catch-up scan itself, or a scan that runs while the window is open. Under the scan
+  // scope this is the whole reachable set anyway, so nothing changes there. Under the
+  // install scope the arm is taken outside watch() - a digest flush, a webhook, a manual
+  // single-container scan - and clearing it on every ordinary tick threw away the only
+  // thing that was going to apply the deferred install once the window opened.
+  const catchUpWasArmed = watcher.maintenanceWindowWatchQueued;
+  const consumesQueuedCatchUp =
+    ignoreMaintenanceWindow ||
+    !watcher.configuration.maintenancewindow ||
+    watcher.isMaintenanceWindowOpen();
+  if (consumesQueuedCatchUp) {
+    watcher.clearMaintenanceWindowQueue();
+  }
 
   watcher.log.info(`Cron started (${watcher.configuration.cron}, reason: ${reason})`);
 
@@ -383,5 +416,16 @@ async function runCronWatch(
   if (watcher.log && typeof watcher.log.info === 'function') {
     watcher.log.info(`Cron finished (${stats})`);
   }
+
+  // Whichever scan clears an armed queue is the one that has to announce the opening, not
+  // just the once-a-minute poll: clearing also cancels that poll, so an ordinary cron tick
+  // landing inside the open window used to consume the arm in silence and a digest-mode
+  // action trigger sat on its deferred install until the next digest cron. Announced here,
+  // after watch() has awaited its report emit, so every deferred container is back in the
+  // store with fresh state before any trigger flushes on it.
+  if (catchUpWasArmed && consumesQueuedCatchUp) {
+    await watcher.announceMaintenanceWindowOpened();
+  }
+
   return containerReports;
 }

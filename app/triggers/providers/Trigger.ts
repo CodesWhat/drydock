@@ -22,7 +22,14 @@ import {
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
 import type { NotificationOutboxEntry } from '../../model/notification-outbox.js';
+import {
+  getContainerMaintenanceWindowWatcher,
+  getContainerWatcherRegistryId,
+  type MaintenanceWindowWatcher,
+  resolveMaintenanceWindowScope,
+} from '../../model/watcher-maintenance-window.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
+import { getMaintenanceDeferredUpdateCounter } from '../../prometheus/watcher.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 import * as registry from '../../registry/index.js';
 import { redactTriggerConfigurationInfrastructureDetails } from '../../registry/trigger-config-redaction.js';
@@ -111,6 +118,26 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'container-unhealthy',
   'maturity-cleared',
 ]);
+
+/**
+ * The rules dispatched through `dispatchContainerForEvent` where an unattended install is
+ * still ahead, so a maintenance window has something left to hold back.
+ *
+ * `maturity-cleared` is the only one. Every other rule reachable there reports on something
+ * that already happened: `update-applied` and `update-failed` after the update ran,
+ * `security-alert` on a scan result, `container-unhealthy` on a health transition,
+ * `agent-disconnect` and `agent-reconnect` on connectivity. Deferring one of those does not
+ * postpone work, it destroys the report, and nothing re-delivers it: a post-update command
+ * hook attached to a manual `Update anyway` at 15:00 would simply never run. Note the
+ * synthetic agent containers dodge the window today only because `buildAgentContainer` sets
+ * `watcher: 'agent'`, which resolves to no registered watcher; this set is what actually
+ * keeps them out, so adding a rule here is a decision, not a formality.
+ *
+ * `update-available` never reaches `dispatchContainerForEvent` at all: the auto-update
+ * paths (`runUpdateAvailableSimpleTrigger`, `runAcceptedUpdateBatch`, the digest flush)
+ * carry their own window gate.
+ */
+const PRE_INSTALL_NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>(['maturity-cleared']);
 
 type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
@@ -266,6 +293,18 @@ function getContainerNotificationKey(
   }
 
   return undefined;
+}
+
+/**
+ * The key the maintenance-window deferral set is built on.
+ *
+ * Not `container.id`: a degenerate record with no id would put `undefined` in the set and
+ * every other id-less container in the same batch would then read as deferred, so one that
+ * really was sent would keep its retry-buffer entry and send again. This is the same stable
+ * business id the retry and digest buffers key on, which stays distinct without an id.
+ */
+function getMaintenanceWindowDeferralKey(container: Container): string {
+  return getContainerNotificationKey(container) || fullName(container);
 }
 
 function getContainerUpdateAppliedEventContainerName(
@@ -777,6 +816,15 @@ class Trigger<
   private digestCronTask?: ScheduledTask;
   private isDigestFlushInProgress = false;
   private unregisterSecurityScanCycleComplete?: () => void;
+  private unregisterMaintenanceWindowOpened?: () => void;
+  /**
+   * Registry ids of the watchers whose maintenance window held an install back during a
+   * digest flush. Only the digest path records here: the simple and batch paths are driven
+   * by the container report the catch-up scan itself emits, so they need no second signal,
+   * while a digest flush runs on its own cron and would otherwise leave the deferred
+   * install sitting in the buffer until the next one.
+   */
+  private readonly maintenanceWindowDeferredDigestWatchers = new Set<string>();
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -1083,6 +1131,26 @@ class Trigger<
     if (!mustTriggerDecision.allowed) {
       this.log.debug(
         `Trigger conditions not met for ${ruleId} event => ignore (${mustTriggerDecision.reason})`,
+      );
+      return false;
+    }
+
+    // A `command` action's trigger() runs the shell command the operator attached to an
+    // update, so on a rule that still has an install ahead of it the maintenance window has
+    // to hold it back here as well. The update-action types short-circuit at the top of this
+    // method and never reach it; a command trigger does, driven by the maturity-gate
+    // scheduler's own cron, which has nothing to do with the watcher's scan, so this is the
+    // only gate standing between it and an unattended command at 3pm. The rule check comes
+    // first because deferring has side effects (it arms the watcher's catch-up poll and
+    // counts a deferred update), and a reporting rule must trigger neither. Notification
+    // triggers are untouched either way: the window has never gated what drydock says.
+    if (
+      PRE_INSTALL_NOTIFICATION_RULE_IDS.has(ruleId) &&
+      this.getCategory() === 'action' &&
+      this.deferAutoUpdateForMaintenanceWindow(container)
+    ) {
+      this.log.debug(
+        `Outside maintenance window, deferring ${ruleId} action until the window opens`,
       );
       return false;
     }
@@ -2125,13 +2193,19 @@ class Trigger<
       logContainer.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
+    // Every action-category trigger is held back by the window, not only the ones that run
+    // the Docker update lifecycle. A `command` action runs an arbitrary shell command the
+    // operator attached to an update, which is exactly the kind of unattended work a window
+    // exists to confine to a slot; under the install scope the scan no longer holds it back
+    // indirectly, so this gate is the only thing that does. Notification triggers are
+    // unaffected: the window has never gated what drydock says, only what it does.
+    if (this.getCategory() === 'action' && this.deferAutoUpdateForMaintenanceWindow(container)) {
+      logContainer.debug(
+        'Outside maintenance window, deferring auto update until the window opens',
+      );
+      return;
+    }
     if (this.isUpdateActionTrigger()) {
-      if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
-        logContainer.debug(
-          'Outside maintenance window, deferring auto update until the window opens',
-        );
-        return;
-      }
       const accepted = await enqueueContainerUpdate(container, {
         trigger: this as unknown as {
           type: string;
@@ -2318,22 +2392,42 @@ class Trigger<
     }
 
     let status: 'success' | 'error' = 'error';
+    // Containers runAcceptedUpdateBatch held back for the maintenance window. They were not
+    // sent, so they must not be recorded as notified or dropped from the retry buffer, or
+    // the `once=true` gate would turn the window-open rescan into a no-op and the deferred
+    // update would never be applied.
+    let maintenanceWindowDeferredIds = new Set<string>();
     try {
       this.log.debug('Run batch');
       if (this.isUpdateActionTrigger()) {
-        const dispatched = await this.runAcceptedUpdateBatch(containersToSend);
-        if (!dispatched) {
+        const batchResult = await this.runAcceptedUpdateBatch(containersToSend);
+        if (!batchResult.dispatched) {
           return;
         }
+        maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        await this.triggerBatch(containersToSend);
+        maintenanceWindowDeferredIds =
+          this.collectBatchMaintenanceWindowDeferredIds(containersToSend);
+        const readyToSend = containersToSend.filter(
+          (container) =>
+            !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
+        );
+        // A command action with every container deferred sends nothing at all rather than
+        // an empty batch; the containers below stay unrecorded and unbuffered either way.
+        if (readyToSend.length > 0) {
+          await this.triggerBatch(readyToSend);
+        }
       }
       status = 'success';
-      for (const container of containersToSend) {
+      const sent = containersToSend.filter(
+        (container) =>
+          !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
+      );
+      for (const container of sent) {
         this.recordNotifiedForResult(container, 'update-available');
       }
       if (this.batchRetryBuffer.size > 0) {
-        for (const container of containersToSend) {
+        for (const container of sent) {
           this.batchRetryBufferStore.delete(
             getContainerNotificationKey(container) || fullName(container),
           );
@@ -2623,21 +2717,39 @@ class Trigger<
     const containers = reservedEntries.map(({ currentContainer }) => currentContainer);
     this.log.info(`Digest flush: sending ${containers.length} update(s)`);
     let status: 'success' | 'error' = 'error';
+    // See the same guard in handleContainerReports: a window-deferred container was never
+    // sent, so it keeps both its history slot and its buffer entry and re-enters the flush
+    // that follows the window opening.
+    let maintenanceWindowDeferredIds = new Set<string>();
     this.isDigestFlushInProgress = true;
     try {
       if (this.isUpdateActionTrigger()) {
-        const dispatched = await this.runAcceptedUpdateBatch(containers);
-        if (!dispatched) {
+        const batchResult = await this.runAcceptedUpdateBatch(containers);
+        if (!batchResult.dispatched) {
           return;
         }
+        maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        await this.triggerBatch(containers);
+        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(containers);
+        const readyToSend = containers.filter(
+          (container) =>
+            !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
+        );
+        if (readyToSend.length > 0) {
+          await this.triggerBatch(readyToSend);
+        }
       }
       status = 'success';
+      this.recordDigestMaintenanceWindowDeferrals(containers, maintenanceWindowDeferredIds);
       for (const container of containers) {
-        this.recordNotifiedForResult(container, 'update-available-digest');
+        if (!maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container))) {
+          this.recordNotifiedForResult(container, 'update-available-digest');
+        }
       }
-      for (const { containerName, bufferedContainer } of reservedEntries) {
+      for (const { containerName, bufferedContainer, currentContainer } of reservedEntries) {
+        if (maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(currentContainer))) {
+          continue;
+        }
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
           this.digestBufferStore.delete(containerName);
         }
@@ -2653,6 +2765,79 @@ class Trigger<
       for (const container of containers) {
         this.releaseOnceNotificationSlot(container, digestEventKind);
       }
+    }
+  }
+
+  /**
+   * Remember which watchers held this flush's installs back, so the window opening on one of
+   * them can flush the buffer again instead of leaving the install for the next digest cron.
+   */
+  private recordDigestMaintenanceWindowDeferrals(
+    containers: Container[],
+    deferredIds: Set<string>,
+  ): void {
+    if (deferredIds.size === 0) {
+      return;
+    }
+    for (const container of containers) {
+      if (!deferredIds.has(getMaintenanceWindowDeferralKey(container))) {
+        continue;
+      }
+      const watcherId = getContainerWatcherRegistryId(container);
+      if (watcherId) {
+        this.maintenanceWindowDeferredDigestWatchers.add(watcherId);
+      }
+    }
+  }
+
+  /**
+   * A watcher's maintenance window opened and the scan that consumed its queued catch-up
+   * has finished.
+   *
+   * That scan is enough for the simple and batch paths: their dispatch hangs off the
+   * container report it emits, so the deferred install is applied there and then. A digest
+   * trigger's report handler only re-buffers, so without this the install would wait for
+   * the next digest cron - up to a day after the window that was supposed to apply it, and
+   * quite possibly after it closed again.
+   *
+   * Only flushes when this trigger actually deferred something for this watcher, so a
+   * window opening on an unrelated watcher never brings a digest forward.
+   */
+  private async handleMaintenanceWindowOpenedEvent(
+    payload: event.MaintenanceWindowOpenedEventPayload,
+  ): Promise<void> {
+    if (!this.maintenanceWindowDeferredDigestWatchers.has(payload.watcherId)) {
+      return;
+    }
+    // The marker is the whole signal, so it is spent only by a flush that actually runs.
+    // flushUpdateDigestBuffer refuses a concurrent flush outright, and the one already
+    // running took its snapshot before this window opened, so consuming the marker here
+    // would lose the announcement until the next digest cron. Left armed instead: whatever
+    // that flush defers re-arms the watcher's catch-up queue, and the next scan to consume
+    // it announces again.
+    if (this.isDigestFlushInProgress) {
+      this.log.debug(
+        `Maintenance window opened on ${payload.watcherId} while a digest flush was already running - keeping the deferral marker for the next announcement`,
+      );
+      return;
+    }
+    this.maintenanceWindowDeferredDigestWatchers.delete(payload.watcherId);
+    this.log.info(
+      `Maintenance window opened on ${payload.watcherId} - flushing the digest updates it deferred`,
+    );
+    try {
+      await this.flushDigestBuffer({ eventKind: 'update-available-digest' });
+    } catch (e: unknown) {
+      // This handler must never reject. emitOrderedHandlers awaits each handler in turn and
+      // does not catch, so a throw here would abort the announcement for every later-ordered
+      // trigger and surface at the watcher as a failed announcement rather than as one
+      // trigger's failed flush. Put the marker back for the same reason the refusal above
+      // keeps it: this flush did not deliver either.
+      this.maintenanceWindowDeferredDigestWatchers.add(payload.watcherId);
+      this.log.warn(
+        `Failed to flush the digest updates deferred for ${payload.watcherId} (${Trigger.getErrorMessage(e)})`,
+      );
+      this.log.debug(e);
     }
   }
 
@@ -2928,6 +3113,15 @@ class Trigger<
             order: this.configuration.order,
           },
         );
+        // A window opening only matters to a digest trigger: every other mode dispatches
+        // off the container report the catch-up scan emits.
+        this.unregisterMaintenanceWindowOpened = event.registerMaintenanceWindowOpened(
+          async (payload) => this.handleMaintenanceWindowOpenedEvent(payload),
+          {
+            id: this.getId(),
+            order: this.configuration.order,
+          },
+        );
         const digestCronExpression = this.configuration.digestcron ?? '0 8 * * *';
         this.digestCronTask = cron.schedule(digestCronExpression, () => {
           void this.flushDigestBuffer({ eventKind: 'update-available-digest' });
@@ -3020,6 +3214,10 @@ class Trigger<
 
     this.unregisterDigestContainerReport?.();
     this.unregisterDigestContainerReport = undefined;
+
+    this.unregisterMaintenanceWindowOpened?.();
+    this.unregisterMaintenanceWindowOpened = undefined;
+    this.maintenanceWindowDeferredDigestWatchers.clear();
 
     this.unregisterContainerReports?.();
     this.unregisterContainerReports = undefined;
@@ -3237,32 +3435,84 @@ class Trigger<
    * be resolved, or does not expose isMaintenanceWindowOpen, the update proceeds.
    * isMaintenanceWindowOpen() itself returns true when no window is configured,
    * so an unconfigured window also lets updates through.
+   *
+   * Not a pure predicate: under the default `maintenancewindowscope=install` this is the
+   * only gate the window still has (the scheduled scan runs on its own cron), so deferring
+   * here also queues the watcher's maintenance-window catch-up, the same queue the scan
+   * gate uses under `scope=scan`. That catch-up polls once a minute and re-runs the scan the
+   * moment the window opens, at which point this returns false and the deferred update is
+   * enqueued for real.
+   *
+   * Under `scope=scan` the queue is left alone: the scan gate already owns it, and a scan
+   * that reaches this point at all did so by explicitly ignoring the window, so re-queueing
+   * from here would only duplicate work the gate has done.
+   *
+   * The deferral is counted on `dd_watcher_maintenance_deferred_updates_total` under either
+   * scope, because an install really was held back either way.
+   * `dd_watcher_maintenance_skip_total` keeps its own meaning, one per skipped scan cycle,
+   * and is never touched from here.
    */
-  private isAutoUpdateDeferredByMaintenanceWindow(container: Container): boolean {
-    const watcherName = typeof container.watcher === 'string' ? container.watcher.trim() : '';
-    if (watcherName === '') return false;
-    const watcherId = container.agent
-      ? `${container.agent}.docker.${watcherName}`
-      : `docker.${watcherName}`;
-    const watcher = registry.getState().watcher[watcherId] as unknown as
-      | { isMaintenanceWindowOpen?: () => boolean }
-      | undefined;
+  private deferAutoUpdateForMaintenanceWindow(container: Container): boolean {
+    const watcher = getContainerMaintenanceWindowWatcher(container, registry.getState().watcher);
     if (!watcher || typeof watcher.isMaintenanceWindowOpen !== 'function') return false;
-    return !watcher.isMaintenanceWindowOpen();
+    if (watcher.isMaintenanceWindowOpen()) return false;
+
+    if (
+      resolveMaintenanceWindowScope(watcher.configuration?.maintenancewindowscope) === 'install'
+    ) {
+      // Same guard the other arming sites carry (docker-cron-watch.ts). A watcher sets this
+      // in its own teardown, before registry.deregisterComponent removes it from the state
+      // map, and its clearMaintenanceWindowQueue has already run by then: arming here would
+      // publish a ref'ed 60s timer on a torn-down watcher that re-queues itself forever,
+      // with nothing left to reach it.
+      if (!watcher.isWatcherDeregistered) {
+        watcher.queueMaintenanceWindowWatch?.();
+      }
+    }
+    this.countDeferredUpdate(watcher);
+    return true;
   }
 
-  private async runAcceptedUpdateBatch(containers: Container[]): Promise<boolean> {
-    if (getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
-      return false;
+  /**
+   * Count one automatic update the maintenance window held back, labelled by the watcher that
+   * owns the container. One sample per container per dispatch evaluation: a batch that defers
+   * fifty containers counts fifty, and the next scan that still finds them deferred counts
+   * fifty again, because each is a decision not to install that was actually taken.
+   */
+  private countDeferredUpdate(watcher: Pick<MaintenanceWindowWatcher, 'type' | 'name'>): void {
+    const counter = getMaintenanceDeferredUpdateCounter();
+    if (counter) {
+      counter.labels({ type: watcher.type, name: watcher.name }).inc();
     }
+  }
 
+  /**
+   * The ids in `containers` whose automatic action the maintenance window holds back this
+   * cycle, plus the dependents that would otherwise be acted on out of order.
+   *
+   * Shared by every batched action path so `command` is gated exactly like `docker`: the
+   * update-action batch below routes through the admission queue, a command trigger goes
+   * straight to `triggerBatch`, and both must leave a window-deferred container alone.
+   * Callers outside `runAcceptedUpdateBatch` check the action category first; a notification
+   * trigger never defers.
+   */
+  private collectMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
     const windowDeferred: Container[] = [];
-    const deferredIds = new Set<string>();
+    // Two views of one decision. The dependency walk below keys on `container.id` because
+    // that is what buildDependencyGraph emits; callers get the business-id view, which stays
+    // distinct for a record that has no id at all.
+    const deferredContainerIds = new Set<string>();
+    const deferredKeys = new Set<string>();
+    const markDeferred = (container: Container) => {
+      if (typeof container.id === 'string' && container.id !== '') {
+        deferredContainerIds.add(container.id);
+      }
+      deferredKeys.add(getMaintenanceWindowDeferralKey(container));
+    };
     for (const container of containers) {
-      if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
+      if (this.deferAutoUpdateForMaintenanceWindow(container)) {
         windowDeferred.push(container);
-        deferredIds.add(container.id);
+        markDeferred(container);
       }
     }
 
@@ -3280,7 +3530,7 @@ class Trigger<
           blockedContainer.id,
           dependentsByDependency,
         )) {
-          if (deferredIds.has(dependentId)) {
+          if (deferredContainerIds.has(dependentId)) {
             continue;
           }
           const dependent = containerById.get(dependentId);
@@ -3290,13 +3540,20 @@ class Trigger<
           if (!dependent) {
             continue;
           }
-          deferredIds.add(dependentId);
+          markDeferred(dependent);
           dependencyDeferred.push(dependent);
+          // Counted on the same metric as a directly window-deferred container, labelled by
+          // the dependent's own watcher, which is not necessarily the one holding the window.
+          const dependentWatcher = getContainerMaintenanceWindowWatcher(
+            dependent,
+            registry.getState().watcher,
+          );
+          if (dependentWatcher) {
+            this.countDeferredUpdate(dependentWatcher);
+          }
         }
       }
     }
-
-    const ready = containers.filter((container) => !deferredIds.has(container.id));
 
     for (const container of windowDeferred) {
       this.log.debug(
@@ -3309,8 +3566,43 @@ class Trigger<
       );
     }
 
+    return deferredKeys;
+  }
+
+  /**
+   * The window-deferred ids for a batch a non-update action trigger (`command`) is about to
+   * send itself, or an empty set for a notification trigger, which the window never gates.
+   */
+  private collectBatchMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
+    return this.getCategory() === 'action'
+      ? this.collectMaintenanceWindowDeferredIds(containers)
+      : new Set<string>();
+  }
+
+  /**
+   * Dispatch an accepted batch of automatic updates.
+   *
+   * `dispatched` is false only when the batch was abandoned for a reason the caller must not
+   * treat as a successful send. `deferredIds` holds the containers this call did NOT enqueue
+   * because the maintenance window is closed for them (or for something they depend on): the
+   * caller must not record those as notified, or the `once=true` history gate would suppress
+   * the very rescan that is supposed to apply them once the window opens.
+   */
+  private async runAcceptedUpdateBatch(
+    containers: Container[],
+  ): Promise<{ dispatched: boolean; deferredIds: Set<string> }> {
+    if (getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+      return { dispatched: false, deferredIds: new Set<string>() };
+    }
+
+    const deferredIds = this.collectMaintenanceWindowDeferredIds(containers);
+    const ready = containers.filter(
+      (container) => !deferredIds.has(getMaintenanceWindowDeferralKey(container)),
+    );
+
     if (ready.length === 0) {
-      return true;
+      return { dispatched: true, deferredIds };
     }
 
     const { accepted, rejected } = await enqueueContainerUpdates(ready, {
@@ -3334,7 +3626,7 @@ class Trigger<
     }
 
     if (accepted.length === 0) {
-      return !modeChangedDuringAdmission;
+      return { dispatched: !modeChangedDuringAdmission, deferredIds };
     }
 
     // A mode switch can happen midway through a multi-container admission
@@ -3343,7 +3635,7 @@ class Trigger<
     // suffix entries as notified. Subsequent watcher state reconciles accepted
     // operations normally while preserving the unaccepted entries for later.
     dispatchAccepted(accepted);
-    return !modeChangedDuringAdmission;
+    return { dispatched: !modeChangedDuringAdmission, deferredIds };
   }
 
   getMetadata(): Record<string, unknown> {

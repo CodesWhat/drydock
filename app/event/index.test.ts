@@ -339,6 +339,30 @@ test('deregistration of security scan cycle complete handler should work', async
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('emitMaintenanceWindowOpened should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = { watcherId: 'docker.local' };
+  event.registerMaintenanceWindowOpened(handler, { order: 10 });
+  await event.emitMaintenanceWindowOpened(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of maintenance window opened handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerMaintenanceWindowOpened(handler, { order: 10 });
+  deregister();
+  await event.emitMaintenanceWindowOpened({ watcherId: 'docker.local' });
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('clearAllListenersForTests drops maintenance window opened handlers', async () => {
+  const handler = vi.fn();
+  event.registerMaintenanceWindowOpened(handler, { order: 10 });
+  event.clearAllListenersForTests();
+  await event.emitMaintenanceWindowOpened({ watcherId: 'docker.local' });
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('emitAgentDisconnected should call registered handlers with payload', async () => {
   const handler = vi.fn();
   const payload = {
