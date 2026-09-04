@@ -141,7 +141,7 @@ dd_watcher_logger_init_failures_total{type="docker",name="local"} 0
 # TYPE dd_legacy_input_total counter
 dd_legacy_input_total{source="label",key="dd.trigger.include"} 1
 
-# HELP dd_watcher_maintenance_skip_total The number of watch cycles skipped due to maintenance window
+# HELP dd_watcher_maintenance_skip_total The number of watch cycles skipped, or automatic installs deferred, due to maintenance window
 # TYPE dd_watcher_maintenance_skip_total counter
 dd_watcher_maintenance_skip_total{type="docker",name="local"} 0
 

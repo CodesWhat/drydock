@@ -22,6 +22,11 @@ import * as event from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { type Container, type ContainerReport, fullName } from '../../../model/container.js';
 import {
+  DEFAULT_MAINTENANCE_WINDOW_SCOPE,
+  MAINTENANCE_WINDOW_SCOPES,
+  type MaintenanceWindowScope,
+} from '../../../model/watcher-maintenance-window.js';
+import {
   getLoggerInitFailureCounter,
   getWatchContainerGauge,
 } from '../../../prometheus/watcher.js';
@@ -138,6 +143,7 @@ import {
   getNextMaintenanceWindow,
   hasNarrowMinuteField,
   isInMaintenanceWindow,
+  isScanGatedByMaintenanceWindow,
 } from './maintenance.js';
 import {
   createMutableOidcState,
@@ -168,6 +174,7 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   watchevents: boolean;
   maintenancewindow?: string;
   maintenancewindowtz: string;
+  maintenancewindowscope: MaintenanceWindowScope;
   maturitymode?: 'all' | 'mature';
   maturityminagedays?: number;
   imgset?: Record<string, Record<string, unknown>>;
@@ -402,6 +409,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       watchevents: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
+      maintenancewindowscope: this.joi
+        .string()
+        .valid(...MAINTENANCE_WINDOW_SCOPES)
+        .default(DEFAULT_MAINTENANCE_WINDOW_SCOPE),
       maturitymode: this.joi.string().valid('all', 'mature'),
       maturityminagedays: this.joi.number().integer().min(1).max(365),
       discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
@@ -545,7 +556,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   override getNextRunAt(): string | undefined {
     const now = new Date();
 
-    if (!this.configuration.maintenancewindow) {
+    // Under the install scope the scan is never held back by the window, so the next run is
+    // just the next cron match; reporting the next window would say the watcher is asleep
+    // until 2am when it is in fact scanning on schedule.
+    if (!isScanGatedByMaintenanceWindow(this.configuration)) {
       return this.getNextScheduledRunDate(now)?.toISOString();
     }
 
@@ -961,8 +975,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       return;
     }
     // Gate the fast resync by the maintenance window — if the window is closed, skip
-    // the resync scan just as watchFromCron does.
-    if (this.configuration.maintenancewindow && !this.isMaintenanceWindowOpen()) {
+    // the resync scan just as watchFromCron does. Scan scope only: the install scope keeps
+    // every detection path running so container state never goes stale.
+    if (isScanGatedByMaintenanceWindow(this.configuration) && !this.isMaintenanceWindowOpen()) {
       this.log.debug(
         `Skipping fast resync after update for "${matched.name}" — outside maintenance window`,
       );

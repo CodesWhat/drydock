@@ -1,4 +1,5 @@
 import type { ContainerReport } from '../../../model/container.js';
+import { resolveMaintenanceWindowScope } from '../../../model/watcher-maintenance-window.js';
 import { getMaintenanceSkipCounter } from '../../../prometheus/watcher.js';
 
 export interface CronWatchOptions {
@@ -36,6 +37,12 @@ export interface CronWatchOrchestrationWatcher {
   configuration: {
     cron: string;
     maintenancewindow?: string;
+    /**
+     * `'scan'` gates this scan on the maintenance window; anything else (including the
+     * `'install'` default, and an unset value on a watcher configured before the option
+     * existed) leaves the scan on its own cron and defers only the install.
+     */
+    maintenancewindowscope?: string;
   };
   isCronWatchInProgress: boolean;
   isWatcherDeregistered: boolean;
@@ -338,9 +345,14 @@ async function runCronWatch(
     return [];
   }
 
-  // Check maintenance window before proceeding
+  // Check maintenance window before proceeding. Only the `scan` scope gates the scan
+  // itself; under the default `install` scope the scan runs on its own cron whatever the
+  // window says, so discovery, registry checks, container-state refresh and update
+  // notifications are never held back, and only the automatic install is deferred (see
+  // Trigger.deferAutoUpdateForMaintenanceWindow, which also queues the catch-up below).
   if (
     !ignoreMaintenanceWindow &&
+    resolveMaintenanceWindowScope(watcher.configuration.maintenancewindowscope) === 'scan' &&
     watcher.configuration.maintenancewindow &&
     !watcher.isMaintenanceWindowOpen()
   ) {

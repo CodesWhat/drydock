@@ -54,7 +54,10 @@ vi.mock('../../../prometheus/watcher');
 vi.mock('parse-docker-image-name');
 vi.mock('node:fs');
 vi.mock('axios');
-vi.mock('./maintenance.js', () => ({
+// Partial: isScanGatedByMaintenanceWindow stays real so the maintenancewindowscope
+// branches are exercised rather than restated here.
+vi.mock('./maintenance.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./maintenance.js')>()),
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
   hasNarrowMinuteField: vi.fn(() => false),
@@ -429,6 +432,28 @@ describe('Docker Watcher', () => {
           maturitymode: 'invalid',
         }),
       ).toThrow();
+    });
+
+    test('defaults maintenancewindowscope to install and accepts scan (#946)', () => {
+      expect(
+        docker.validateConfiguration({ socket: '/var/run/docker.sock' }).maintenancewindowscope,
+      ).toBe('install');
+      expect(
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          maintenancewindowscope: 'scan',
+        }).maintenancewindowscope,
+      ).toBe('scan');
+    });
+
+    test('rejects an unknown maintenancewindowscope (#946)', () => {
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          maintenancewindow: '* 2-3 * * *',
+          maintenancewindowscope: 'installs',
+        }),
+      ).toThrow(/maintenancewindowscope/);
     });
 
     test('defaults discoverysettlems to 30000ms when unset (#156)', () => {
@@ -1094,9 +1119,13 @@ describe('Docker Watcher', () => {
     });
 
     // Maintenance window gate — maybeFastResyncAfterUpdate must respect the same
-    // window check as watchFromCron (Fix 2, #321).
-    test('callback does not call watchContainer when maintenance window is closed', async () => {
-      await docker.register('watcher', 'docker', 'test', { maintenancewindow: '0 2 * * *' });
+    // window check as watchFromCron (Fix 2, #321), which as of #946 means the scan scope
+    // only: under the default install scope the resync runs so container state stays fresh.
+    test('callback does not call watchContainer when maintenance window is closed under scope=scan', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowscope: 'scan',
+      });
       await docker.init();
 
       const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
@@ -1116,6 +1145,25 @@ describe('Docker Watcher', () => {
       expect(mockLog.debug).toHaveBeenCalledWith(
         expect.stringContaining('outside maintenance window'),
       );
+    });
+
+    test('callback calls watchContainer with a closed window under the default install scope', async () => {
+      await docker.register('watcher', 'docker', 'test', { maintenancewindow: '0 2 * * *' });
+      await docker.init();
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+      maintenance.isInMaintenanceWindow.mockReturnValue(false); // window CLOSED
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
     });
 
     test('callback calls watchContainer when maintenance window is open', async () => {
@@ -3016,9 +3064,10 @@ describe('Docker Watcher', () => {
       await expect(docker.checkQueuedMaintenanceWindowWatch()).resolves.toBeUndefined();
     });
 
-    test('getNextRunAt should return undefined when a maintenance window is configured but no cron match exists', () => {
+    test('getNextRunAt should return undefined when a scan-scoped window is configured but no cron match exists', () => {
       docker.configuration.cron = '0 * * * *';
       docker.configuration.maintenancewindow = '0 2 * * *';
+      docker.configuration.maintenancewindowscope = 'scan';
       vi.spyOn(docker, 'getNextScheduledRunDate').mockReturnValue(undefined);
 
       expect(docker.getNextRunAt()).toBeUndefined();
@@ -3028,6 +3077,7 @@ describe('Docker Watcher', () => {
       const nextRun = new Date('2026-04-09T12:00:00.000Z');
       docker.configuration.cron = '0 * * * *';
       docker.configuration.maintenancewindow = '0 2 * * *';
+      docker.configuration.maintenancewindowscope = 'scan';
       vi.spyOn(docker, 'getNextScheduledRunDate').mockReturnValue(nextRun);
       maintenance.isInMaintenanceWindow.mockReturnValue(true);
 

@@ -79,9 +79,13 @@ describe('watchFromCronOrchestration', () => {
     expect(watcher.watch).not.toHaveBeenCalled();
   });
 
-  test('skips the scan and queues a watch when outside the maintenance window', async () => {
+  test('skips the scan and queues a watch outside the window under maintenancewindowscope=scan', async () => {
     const watcher = createWatcher({
-      configuration: { cron: '0 * * * *', maintenancewindow: '0 2 * * *' },
+      configuration: {
+        cron: '0 * * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowscope: 'scan',
+      },
       isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
     });
 
@@ -92,9 +96,42 @@ describe('watchFromCronOrchestration', () => {
     expect(watcher.watch).not.toHaveBeenCalled();
   });
 
-  test('ignoreMaintenanceWindow bypasses a closed maintenance window', async () => {
+  test('runs the scan outside the window under maintenancewindowscope=install', async () => {
+    const watcher = createWatcher({
+      configuration: {
+        cron: '0 * * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowscope: 'install',
+      },
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
+    });
+
+    await watchFromCronOrchestration(watcher);
+
+    expect(watcher.watch).toHaveBeenCalled();
+    expect(watcher.queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+    expect(watcher.clearMaintenanceWindowQueue).toHaveBeenCalled();
+  });
+
+  test('runs the scan outside the window when no scope is configured at all', async () => {
     const watcher = createWatcher({
       configuration: { cron: '0 * * * *', maintenancewindow: '0 2 * * *' },
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
+    });
+
+    await watchFromCronOrchestration(watcher);
+
+    expect(watcher.watch).toHaveBeenCalled();
+    expect(watcher.queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+  });
+
+  test('ignoreMaintenanceWindow bypasses a closed maintenance window', async () => {
+    const watcher = createWatcher({
+      configuration: {
+        cron: '0 * * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowscope: 'scan',
+      },
       isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
     });
 
@@ -160,7 +197,11 @@ describe('watchFromCronOrchestration', () => {
     const isMaintenanceWindowOpen = vi.fn().mockReturnValue(true);
     const watchMock = vi.fn().mockReturnValueOnce(deferred.promise).mockResolvedValue([]);
     const watcher = createWatcher({
-      configuration: { cron: '0 * * * *', maintenancewindow: '0 2 * * *' },
+      configuration: {
+        cron: '0 * * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowscope: 'scan',
+      },
       isMaintenanceWindowOpen,
       watch: watchMock,
     });
