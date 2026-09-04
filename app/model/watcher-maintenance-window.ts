@@ -3,10 +3,10 @@ import type { Container } from './container.js';
 /**
  * Accepted values for `DD_WATCHER_{name}_MAINTENANCE_WINDOW_SCOPE`.
  *
- * - `install` — the window gates automatic installation only. The scheduled scan keeps running
+ * - `install`: the window gates automatic installation only. The scheduled scan keeps running
  *   on its own cron, so discovery, registry checks, container-state refresh and update
  *   notifications behave as if no window were configured. This is the default.
- * - `scan` — the window gates the whole scheduled scan, which is what every release before
+ * - `scan`: the window gates the whole scheduled scan, which is what every release before
  *   v1.8.0 did: outside the window nothing is looked at, and one pending scan is queued and
  *   replayed when the window opens.
  */
@@ -19,7 +19,7 @@ export const DEFAULT_MAINTENANCE_WINDOW_SCOPE: MaintenanceWindowScope = 'install
 /**
  * Normalize a configured (or agent-reported, and therefore unvalidated) scope value.
  * Anything other than the literal `'scan'` resolves to the default, so a watcher whose
- * configuration predates the option — or a masked remote watcher that does not report it —
+ * configuration predates the option (or a masked remote watcher that does not report it)
  * gets the new install-scoped behaviour rather than failing closed on the scan gate.
  */
 export function resolveMaintenanceWindowScope(value: unknown): MaintenanceWindowScope {

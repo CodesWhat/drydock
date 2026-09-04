@@ -3371,7 +3371,7 @@ class Trigger<
    *
    * Not a pure predicate: under the default `maintenancewindowscope=install` this is the
    * only gate the window still has (the scheduled scan runs on its own cron), so deferring
-   * here also queues the watcher's maintenance-window catch-up — the same queue the scan
+   * here also queues the watcher's maintenance-window catch-up, the same queue the scan
    * gate uses under `scope=scan`. That catch-up polls once a minute and re-runs the scan the
    * moment the window opens, at which point this returns false and the deferred update is
    * enqueued for real.
