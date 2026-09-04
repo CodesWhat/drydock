@@ -14527,6 +14527,62 @@ describe('maintenance window gates command actions (#946)', () => {
     expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Outside maintenance window'));
   });
 
+  // #946 D2: the maturity gate has its own scheduler, so a matured container is dispatched
+  // from a cron that knows nothing about the watcher's window. update-action types
+  // short-circuit out of dispatchContainerForEvent; a command action runs its shell command
+  // there, which is exactly the unattended work the window exists to confine.
+  test('a command action is deferred on a maturity-cleared event outside the window', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockWindow(false);
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleMaturityGateClearedEvent({
+      container,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+      pendingSince: '2026-01-01T00:00:00.000Z',
+      minAgeDays: 7,
+      clockSource: 'publishedAt',
+    });
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(queueMaintenanceWindowWatch).toHaveBeenCalledTimes(1);
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('deferring maturity-cleared action'),
+    );
+  });
+
+  test('a command action runs a maturity-cleared event inside the window', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockWindow(true);
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleMaturityGateClearedEvent({
+      container,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+  });
+
+  test('a notification trigger still dispatches maturity-cleared while the window is closed', async () => {
+    trigger.type = 'slack';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockWindow(false);
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleMaturityGateClearedEvent({
+      container,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+  });
+
   test('a simple-mode command action runs normally inside the window', async () => {
     trigger.type = 'command';
     trigger.configuration = { ...configurationValid, mode: 'simple' };

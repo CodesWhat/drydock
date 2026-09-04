@@ -1115,6 +1115,22 @@ class Trigger<
       return false;
     }
 
+    // A `command` action's trigger() runs the shell command the operator attached to an
+    // update, so the maintenance window has to hold it back here as well. The update-action
+    // types short-circuit at the top of this method and never reach it; a command trigger
+    // does, driven by the maturity-gate scheduler's own cron, which has nothing to do with
+    // the watcher's scan, so this is the only gate standing between it and an unattended
+    // command at 3pm. Notification triggers are untouched: the window has never gated what
+    // drydock says. Nothing re-delivers a deferred lifecycle event, by design - the update
+    // itself is still picked up by the ordinary update-available path once the window opens,
+    // and replaying an update-applied hours late would be worse than skipping it.
+    if (this.getCategory() === 'action' && this.deferAutoUpdateForMaintenanceWindow(container)) {
+      this.log.debug(
+        `Outside maintenance window, deferring ${ruleId} action until the window opens`,
+      );
+      return false;
+    }
+
     const notificationEvent = getNotificationEvent(container);
     // Agent connectivity notifications synthesize one-off container payloads and should always
     // dispatch immediately, even when the trigger itself is configured for batch updates.
