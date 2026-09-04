@@ -2150,9 +2150,29 @@ export class AgentClient {
         this.buildRequestConfig('POST', target, {}),
       );
       const reports = response.data;
-      await this.processAuthoritativeContainers(reports.map((report) => report.container));
       const containers = reports.map((report) => report.container);
-      this.pruneOldContainers(containers, watcherName);
+      // Prune (and stash any same-identity replacement's update policy) before
+      // processAuthoritativeContainers() inserts/updates below — insertContainer()
+      // consumes the stash as its first action, so it must already exist.
+      // pruneOldContainers() stashes updatePolicy for a replacement via
+      // deleteContainer(..., {replacementExpected: true}); insertContainer()
+      // restores it. Running the insert first leaves nothing to consume, so a
+      // recreated agent-owned container would silently lose its maturity policy
+      // on every watch-driven replacement.
+      //
+      // An empty report list is ambiguous the same way a zero-container handshake
+      // is: it could mean the watcher genuinely has nothing to report, or that
+      // enumeration failed entirely on the agent (Docker.watch() returns []
+      // without distinguishing the two). Skip the prune in that case rather than
+      // wiping every container this watcher owns.
+      if (containers.length > 0) {
+        this.pruneOldContainers(containers, watcherName);
+      } else if (this.hasConnectedOnce) {
+        this.log.warn(
+          'Watch returned 0 containers; preserving last-known state until the next watch cycle completes',
+        );
+      }
+      await this.processAuthoritativeContainers(containers);
       this.scheduleStatsChanged();
       return reports;
     } catch (error: unknown) {
