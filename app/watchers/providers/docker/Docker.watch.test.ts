@@ -5,6 +5,10 @@ import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
 import {
+  _resetControllerLocalContainerIdsForTests,
+  findControllerLocalWatcherClaimingContainerId,
+} from '../../controller-local-container-ids.js';
+import {
   _resetRegistryWebhookFreshStateForTests,
   markContainerFreshForScheduledPollSkip,
 } from '../../registry-webhook-fresh.js';
@@ -119,6 +123,7 @@ describe('Docker Watcher', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     _resetRegistryWebhookFreshStateForTests();
+    _resetControllerLocalContainerIdsForTests();
 
     // Setup dockerode mock
     mockDockerApi = {
@@ -1131,6 +1136,61 @@ describe('Docker Watcher', () => {
       expect(docker.log.debug).toHaveBeenCalledWith(
         expect.stringContaining('Skipping scheduled poll'),
       );
+    });
+  });
+
+  describe('controller-local enumerated container ids (#1013)', () => {
+    // The agent ingestion gate decides ownership of a no-record container id
+    // on what the controller's own watchers are enumerating, because watcher
+    // names collide by default: a controller with no DD_WATCHER_* and an
+    // agent following the quickstart are both called `local`.
+
+    test('records every id listContainers returned, replacing the set each cycle', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'id-a', Labels: {}, Names: ['/a'] },
+        { Id: 'id-b', Labels: {}, Names: ['/b'] },
+      ]);
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+      docker.log = createMockLog();
+
+      await docker.getContainers();
+
+      // Recorded straight off listContainers(), before the watch filter and
+      // the discovery settle window, which is the window the gate closes.
+      expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBe('docker.local');
+      expect(findControllerLocalWatcherClaimingContainerId('id-b')).toBe('docker.local');
+
+      mockDockerApi.listContainers.mockResolvedValue([{ Id: 'id-b', Labels: {}, Names: ['/b'] }]);
+      await docker.getContainers();
+
+      expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
+      expect(findControllerLocalWatcherClaimingContainerId('id-b')).toBe('docker.local');
+    });
+
+    test('records nothing for a controller-Docker-transport agent watcher', async () => {
+      // This watcher runs in the controller process but enumerates the agent's
+      // daemon, so recording its ids would make that agent collide with itself.
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'agent-id', Labels: {}, Names: ['/x'] },
+      ]);
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false }, 'remote1');
+      docker.log = createMockLog();
+
+      await docker.getContainers();
+
+      expect(findControllerLocalWatcherClaimingContainerId('agent-id')).toBeUndefined();
+    });
+
+    test('deregistering the watcher clears the ids it was claiming', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([{ Id: 'id-a', Labels: {}, Names: ['/a'] }]);
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+      docker.log = createMockLog();
+      await docker.getContainers();
+      expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBe('docker.local');
+
+      await docker.deregisterComponent();
+
+      expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
     });
   });
 
