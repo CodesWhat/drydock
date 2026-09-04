@@ -3965,6 +3965,70 @@ describe('AgentClient', () => {
         expect.stringContaining('Failed to emit agent stats changed event'),
       );
     });
+
+    test('should warn and skip prune when watch returns 0 containers after a prior successful connect (#565)', async () => {
+      // Non-empty handshake first, to set hasConnectedOnce.
+      axios.get
+        .mockResolvedValueOnce({
+          data: [{ id: 'c1', name: 'web', watcher: 'local' }],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      // Watch returns zero — should warn and skip prune.
+      axios.post.mockResolvedValue({ data: [] });
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1', name: 'web', watcher: 'local' }]);
+
+      await client.watch('docker', 'local');
+
+      expect(client.log.warn).toHaveBeenCalledWith(
+        'Watch returned 0 containers; preserving last-known state until the next watch cycle completes',
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('first-ever empty watch report list should not warn (no prior connect)', async () => {
+      axios.post.mockResolvedValue({ data: [] });
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1', name: 'web', watcher: 'local' }]);
+
+      await client.watch('docker', 'local');
+
+      expect(client.log.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('preserving last-known state'),
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('should prune before ingesting when watch returns at least one container', async () => {
+      const reports = [{ container: { id: 'c1', name: 'web', watcher: 'local' } }];
+      axios.post.mockResolvedValue({ data: reports });
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'gone', name: 'gone', watcher: 'local' },
+      ]);
+
+      const callOrder: string[] = [];
+      storeContainer.deleteContainer.mockImplementation(() => {
+        callOrder.push('prune');
+      });
+      storeContainer.insertContainer.mockImplementation((c) => {
+        callOrder.push('ingest');
+        return { ...c, updateAvailable: false };
+      });
+
+      await client.watch('docker', 'local');
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone');
+      expect(callOrder).toEqual(['prune', 'ingest']);
+    });
   });
 
   describe('getWatcher', () => {
