@@ -39,10 +39,15 @@ import { expect, test } from 'vitest';
 // and the seed's listContainers() call is bounded by
 // CONTROLLER_LOCAL_SEED_TIMEOUT_MS; the seeding logic itself lives in
 // seedControllerLocalEnumeration in controller-local-container-ids.ts.
-test('Docker watcher implementation should stay under 1730 lines', () => {
+// Bumped from 1730 for the concurrent-getContainers() generation-counter fix:
+// a controllerLocalEnumerationGeneration field plus the guard (and
+// explanatory comment) around the recordControllerLocalEnumeration() call in
+// getContainers(), so an older concurrent call's listContainers() result
+// can't overwrite a newer call's claim set.
+test('Docker watcher implementation should stay under 1748 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1730);
+  expect(lineCount).toBeLessThanOrEqual(1748);
 });

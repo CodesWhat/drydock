@@ -1217,6 +1217,39 @@ describe('Docker Watcher', () => {
       expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
     });
 
+    test("records only the newest generation's ids when an older getContainers() call settles later", async () => {
+      // The agent API can call watch() (and so getContainers()) directly
+      // while a scheduled/event scan runs it through
+      // watchFromCronOrchestration(), so two calls can be in flight at once.
+      // If the older call's listContainers() settles after the newer one,
+      // it must not overwrite the newer call's claim set.
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+      docker.log = createMockLog();
+
+      let resolveFirstListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingFirstListContainers = new Promise<unknown[]>((resolve) => {
+        resolveFirstListContainers = resolve;
+      });
+      let resolveSecondListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingSecondListContainers = new Promise<unknown[]>((resolve) => {
+        resolveSecondListContainers = resolve;
+      });
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingFirstListContainers);
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingSecondListContainers);
+
+      const firstGetContainersPromise = docker.getContainers();
+      const secondGetContainersPromise = docker.getContainers();
+
+      resolveSecondListContainers([{ Id: 'new', Labels: {}, Names: ['/new'] }]);
+      await secondGetContainersPromise;
+
+      resolveFirstListContainers([{ Id: 'old', Labels: {}, Names: ['/old'] }]);
+      await firstGetContainersPromise;
+
+      expect(findControllerLocalWatcherClaimingContainerId('new')).toBe('docker.local');
+      expect(findControllerLocalWatcherClaimingContainerId('old')).toBeUndefined();
+    });
+
     test('seeds the id set during init(), before the first startup cron tick fires', async () => {
       // register() awaits init(), and the startup watch is only *scheduled*
       // there (START_WATCHER_DELAY_MS later). Fake timers with no advance

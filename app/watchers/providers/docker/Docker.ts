@@ -354,6 +354,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
+  // Bumped on every getContainers() call before its first await, so a
+  // stale call's listContainers() result can tell it no longer owns the
+  // right to record the claim set (see recordControllerLocalEnumeration()
+  // guard in getContainers()).
+  private controllerLocalEnumerationGeneration: number = 0;
   // Single-flight state for watchFromCron; see watchFromCronOrchestration()
   // in docker-cron-watch.ts for the coalescing contract.
   public cronWatchInFlight?: Promise<ContainerReport[]>;
@@ -1337,6 +1342,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
   async getContainers(diagnostics?: { enrichmentErrors: number }): Promise<Container[]> {
     this.ensureLogger();
+    // Captured before the first await so two concurrent getContainers()
+    // calls (the agent API's watch() can run alongside a scheduled/event
+    // scan through watchFromCronOrchestration()) each get a distinct,
+    // correctly-ordered generation number.
+    const enumerationGeneration = ++this.controllerLocalEnumerationGeneration;
     await this.ensureRemoteAuthHeaders();
     let containersFromTheStore: Container[] = [];
     let sameSourceContainersFromTheStore: Container[] = [];
@@ -1380,8 +1390,16 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // already called forgetControllerLocalEnumeration(this). Recording the
     // claim set here would resurrect it for a dead watcher, permanently
     // blocking any agent that reuses that container id (nothing else ever
-    // clears a claim for a watcher that's gone).
-    if (!this.isWatcherDeregistered) {
+    // clears a claim for a watcher that's gone). The generation check
+    // guards the sibling race: the agent API's watch() can call
+    // getContainers() directly while a scheduled/event scan runs through
+    // watchFromCronOrchestration(), so two calls can overlap and an older
+    // one's listContainers() result can settle after a newer one. Only the
+    // newest generation's result gets recorded.
+    if (
+      !this.isWatcherDeregistered &&
+      enumerationGeneration === this.controllerLocalEnumerationGeneration
+    ) {
       recordControllerLocalEnumeration(
         this,
         containers.map((container) => container.Id),
