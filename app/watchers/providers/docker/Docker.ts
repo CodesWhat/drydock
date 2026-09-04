@@ -35,6 +35,11 @@ import * as registry from '../../../registry/index.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { sleep } from '../../../util/sleep.js';
+import {
+  forgetControllerLocalEnumeration,
+  recordControllerLocalEnumeration,
+  seedControllerLocalEnumeration,
+} from '../../controller-local-container-ids.js';
 import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
@@ -147,7 +152,11 @@ import {
 } from './maintenance.js';
 import {
   createMutableOidcState,
+  getOidcGrantType,
   getRemoteAuthResolution as getRemoteAuthResolutionState,
+  isRemoteOidcTokenRefreshRequired,
+  OIDC_DEVICE_URL_PATHS,
+  OIDC_GRANT_TYPE_PATHS,
 } from './oidc.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
 
@@ -345,6 +354,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
+  // Bumped on every getContainers() call before its first await, so a
+  // stale call's listContainers() result can tell it no longer owns the
+  // right to record the claim set (see recordControllerLocalEnumeration()
+  // guard in getContainers()).
+  private controllerLocalEnumerationGeneration: number = 0;
   // Single-flight state for watchFromCron; see watchFromCronOrchestration()
   // in docker-cron-watch.ts for the coalescing contract.
   public cronWatchInFlight?: Promise<ContainerReport[]>;
@@ -664,6 +678,38 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.warnIfNarrowMaintenanceWindow();
     await warnIfCurlHealthcheckOverride(this.log);
     await this.initWatcher();
+    // A remote watcher's OIDC bearer header is not set by initWatcher(); it
+    // is refreshed lazily, the same way getContainers() refreshes it before
+    // its own listContainers() call below. Skipping this would send the
+    // seed's listContainers() out with no Authorization header on a remote
+    // OIDC watcher, so it fails and the seed swallows the failure, silently
+    // seeding nothing. A blocked-auth watcher (remoteAuthBlockedReason set)
+    // throws here; catch it the same way getContainers() callers do, so a
+    // watcher that registers in blocked mode still finishes init() rather
+    // than failing registration outright.
+    //
+    // Exception: a watcher that still needs its first-time interactive OIDC
+    // device authorization is left alone here. registerWatchers() awaits
+    // every watcher's init() via Promise.all(), so awaiting a flow that
+    // waits on a human to visit a URL and enter a code (up to
+    // OIDC_DEVICE_POLL_TIMEOUT_MS) would stall the whole controller's
+    // startup, not just this watcher. That watcher's first scheduled scan
+    // still runs the flow, same as before this change; only the seed below
+    // goes out unauthenticated this once.
+    if (this.wouldRefreshRequireInteractiveOidcDeviceFlow()) {
+      this.log.info(
+        `Remote watcher ${this.name} needs first-time OIDC device authorization; deferring it to the first scheduled scan instead of blocking startup`,
+      );
+    } else {
+      try {
+        await this.ensureRemoteAuthHeaders();
+      } catch (e: unknown) {
+        this.log.warn(
+          `Unable to refresh remote auth before seeding controller-local container ids (${getErrorMessage(e)})`,
+        );
+      }
+    }
+    await seedControllerLocalEnumeration(this, this.dockerApi, this.log);
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(
       this.configuration.cron,
@@ -752,6 +798,43 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
   getOidcAuthNumber(paths: string[]) {
     return getFirstConfigNumber(this.getOidcAuthConfiguration(), paths);
+  }
+
+  /**
+   * True when refreshing this watcher's remote auth right now would start
+   * (or resume) an interactive OIDC device-code authorization rather than a
+   * plain network round trip. `init()` uses this to decide whether it is
+   * safe to await `ensureRemoteAuthHeaders()` before the controller-local
+   * seed. A cached, still-valid token or a non-interactive grant
+   * (client_credentials, refresh_token) returns false: those refresh in a
+   * single HTTP round trip and are safe to await inline. Mirrors
+   * `determineGrantType()`'s own device-flow eligibility check (grant type
+   * resolves to device_code AND a device authorization URL is configured);
+   * a device_code grant with no device URL falls back to client_credentials
+   * there too, so it is not treated as interactive here either.
+   */
+  private wouldRefreshRequireInteractiveOidcDeviceFlow(): boolean {
+    const auth = this.configuration.auth;
+    if (!this.configuration.host || !auth) {
+      return false;
+    }
+    const { authType } = this.getRemoteAuthResolution(auth);
+    if (authType !== 'oidc') {
+      return false;
+    }
+    if (!isRemoteOidcTokenRefreshRequired(this.getOidcStateAdapter())) {
+      return false;
+    }
+    const deviceUrl = this.getOidcAuthString(OIDC_DEVICE_URL_PATHS);
+    if (!deviceUrl) {
+      return false;
+    }
+    const grantType = getOidcGrantType({
+      configuredGrantType: this.getOidcAuthString(OIDC_GRANT_TYPE_PATHS),
+      refreshToken: this.remoteOidcRefreshToken,
+      deviceUrl,
+    });
+    return grantType === 'urn:ietf:params:oauth:grant-type:device_code';
   }
 
   private asRemoteAuthWatcher(): DockerRemoteAuthWatcher {
@@ -948,6 +1031,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async deregisterComponent() {
     this.isWatcherDeregistered = true;
     this.isDockerEventsListenerActive = false;
+    forgetControllerLocalEnumeration(this);
 
     if (this.watchCron) {
       this.watchCron.stop();
@@ -1258,6 +1342,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
   async getContainers(diagnostics?: { enrichmentErrors: number }): Promise<Container[]> {
     this.ensureLogger();
+    // Captured before the first await so two concurrent getContainers()
+    // calls (the agent API's watch() can run alongside a scheduled/event
+    // scan through watchFromCronOrchestration()) each get a distinct,
+    // correctly-ordered generation number.
+    const enumerationGeneration = ++this.controllerLocalEnumerationGeneration;
     await this.ensureRemoteAuthHeaders();
     let containersFromTheStore: Container[] = [];
     let sameSourceContainersFromTheStore: Container[] = [];
@@ -1297,6 +1386,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const containers = (await this.dockerApi.listContainers(
       listContainersOptions,
     )) as unknown as DockerContainerSummaryLike[];
+    // getContainers() can still be in flight when deregisterComponent()
+    // already called forgetControllerLocalEnumeration(this). Recording the
+    // claim set here would resurrect it for a dead watcher, permanently
+    // blocking any agent that reuses that container id (nothing else ever
+    // clears a claim for a watcher that's gone). The generation check
+    // guards the sibling race: the agent API's watch() can call
+    // getContainers() directly while a scheduled/event scan runs through
+    // watchFromCronOrchestration(), so two calls can overlap and an older
+    // one's listContainers() result can settle after a newer one. Only the
+    // newest generation's result gets recorded.
+    if (
+      !this.isWatcherDeregistered &&
+      enumerationGeneration === this.controllerLocalEnumerationGeneration
+    ) {
+      recordControllerLocalEnumeration(
+        this,
+        containers.map((container) => container.Id),
+      );
+    }
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
     const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] =
