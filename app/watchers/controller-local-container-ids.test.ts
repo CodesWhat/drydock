@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import {
   _resetControllerLocalContainerIdsForTests,
+  CONTROLLER_LOCAL_SEED_TIMEOUT_MS,
   findControllerLocalWatcherClaimingContainerId,
   forgetControllerLocalEnumeration,
   recordControllerLocalEnumeration,
@@ -125,6 +126,81 @@ describe('controller-local-container-ids', () => {
       await expect(
         seedControllerLocalEnumeration(watcher('docker.local'), dockerApi),
       ).resolves.toBeUndefined();
+    });
+
+    test('a never-settling listContainers resolves the seed after advancing the clock, with the warn and no recorded ids', async () => {
+      vi.useFakeTimers();
+      try {
+        const dockerApi = {
+          listContainers: vi.fn().mockReturnValue(new Promise(() => undefined)),
+        };
+        const logger = { warn: vi.fn() };
+
+        const seedPromise = seedControllerLocalEnumeration(
+          watcher('docker.local'),
+          dockerApi,
+          logger,
+        );
+        await vi.advanceTimersByTimeAsync(CONTROLLER_LOCAL_SEED_TIMEOUT_MS);
+        await expect(seedPromise).resolves.toBeUndefined();
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining(`timed out after ${CONTROLLER_LOCAL_SEED_TIMEOUT_MS}ms`),
+        );
+        expect(findControllerLocalWatcherClaimingContainerId('anything')).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('a late resolution after the timeout does not record either', async () => {
+      vi.useFakeTimers();
+      try {
+        let resolveListContainers: (value: Array<{ Id: string }>) => void = () => undefined;
+        const pendingListContainers = new Promise<Array<{ Id: string }>>((resolve) => {
+          resolveListContainers = resolve;
+        });
+        const dockerApi = {
+          listContainers: vi.fn().mockReturnValue(pendingListContainers),
+        };
+        const logger = { warn: vi.fn() };
+
+        const seedPromise = seedControllerLocalEnumeration(
+          watcher('docker.local'),
+          dockerApi,
+          logger,
+        );
+        await vi.advanceTimersByTimeAsync(CONTROLLER_LOCAL_SEED_TIMEOUT_MS);
+        await seedPromise;
+
+        resolveListContainers([{ Id: 'late-id' }]);
+        // Let the now-settled listContainers() promise's continuation, if any
+        // ever ran, drain before asserting nothing recorded it.
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(findControllerLocalWatcherClaimingContainerId('late-id')).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('a normal resolution clears the timer (no open handle)', async () => {
+      vi.useFakeTimers();
+      try {
+        const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+        const dockerApi = {
+          listContainers: vi.fn().mockResolvedValue([{ Id: 'a' }]),
+        };
+
+        await seedControllerLocalEnumeration(watcher('docker.local'), dockerApi);
+
+        expect(clearTimeoutSpy).toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+        expect(findControllerLocalWatcherClaimingContainerId('a')).toBe('docker.local');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

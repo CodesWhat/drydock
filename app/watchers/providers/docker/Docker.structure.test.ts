@@ -33,10 +33,16 @@ import { expect, test } from 'vitest';
 // recordControllerLocalEnumeration() call, so a getContainers() call that
 // settles after deregisterComponent() can't resurrect a dead watcher's
 // claim set.
-test('Docker watcher implementation should stay under 1657 lines', () => {
+// Bumped from 1657 for the DR-106 remote-auth-refresh + seed-timeout fix:
+// init() now refreshes a remote watcher's OIDC auth headers before the
+// startup seed runs, guarded by wouldRefreshRequireInteractiveOidcDeviceFlow(),
+// and the seed's listContainers() call is bounded by
+// CONTROLLER_LOCAL_SEED_TIMEOUT_MS; the seeding logic itself lives in
+// seedControllerLocalEnumeration in controller-local-container-ids.ts.
+test('Docker watcher implementation should stay under 1730 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1657);
+  expect(lineCount).toBeLessThanOrEqual(1730);
 });

@@ -1236,6 +1236,31 @@ describe('Docker Watcher', () => {
       expect(mockDockerApi.listContainers).toHaveBeenCalled();
     });
 
+    test('refreshes the oidc access token before the controller-local startup seed calls listContainers()', async () => {
+      // init() runs the seed's listContainers() call before any explicit
+      // getContainers() call. Without refreshing the token first, that
+      // request goes out with no Authorization header, fails, and the seed
+      // swallows the failure, silently seeding nothing for a remote OIDC
+      // watcher (CodeRabbit finding on the v1.6 sibling PR).
+      mockDockerApi.listContainers.mockResolvedValue([]);
+
+      await docker.register(
+        'watcher',
+        'docker',
+        'test',
+        createOidcConfig({
+          clientid: 'dd-client',
+          clientsecret: 'dd-secret',
+          scope: 'docker.read',
+        }),
+      );
+
+      const tokenFetchCallOrder = mockAxios.post.mock.invocationCallOrder[0];
+      const seedListContainersCallOrder = mockDockerApi.listContainers.mock.invocationCallOrder[0];
+      expect(tokenFetchCallOrder).toBeLessThan(seedListContainersCallOrder);
+      expect(mockDockerApi.modem.headers.Authorization).toBe('Bearer oidc-token');
+    });
+
     test('should use refresh_token grant when refresh token is available', async () => {
       mockDockerApi.listContainers.mockResolvedValue([]);
       await docker.register(
