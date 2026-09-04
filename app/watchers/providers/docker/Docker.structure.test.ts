@@ -19,10 +19,15 @@ import { expect, test } from 'vitest';
 // recordControllerLocalEnumeration() call, so a getContainers() call that
 // settles after deregisterComponent() can't resurrect a dead watcher's
 // claim set.
-test('Docker watcher implementation should stay under 1621 lines', () => {
+// Bumped from 1621 for the CodeRabbit finding on the v1.6 sibling PR: init()
+// now refreshes remote auth headers before the DR-106 startup seed so a
+// remote OIDC watcher's seed call doesn't go out unauthenticated, guarded by
+// wouldRefreshRequireInteractiveOidcDeviceFlow() so a first-time device-code
+// authorization can't block registerWatchers().
+test('Docker watcher implementation should stay under 1700 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1621);
+  expect(lineCount).toBeLessThanOrEqual(1700);
 });
