@@ -36,12 +36,24 @@ function createMockLog() {
   };
 }
 
-function createMockDockerApi(inspectResult) {
-  return {
+// `imageInspect` stands in for dockerApi.getImage(ref).inspect(): a resolving
+// one is a backup image already on the host, a rejecting one is a backup image
+// the rollback still has to pull. Left off, the api has no getImage at all,
+// which is what the older mocks and the agent proxies look like.
+function createMockDockerApi(inspectResult, imageInspect?) {
+  const dockerApi: Record<string, unknown> = {
     getContainer: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue(inspectResult),
     }),
   };
+  if (imageInspect) {
+    dockerApi.getImage = vi.fn().mockReturnValue({ inspect: imageInspect });
+  }
+  return dockerApi;
+}
+
+function createImageNotOnHostInspect() {
+  return vi.fn().mockRejectedValue(Object.assign(new Error('no such image'), { statusCode: 404 }));
 }
 
 // The watcher-discovered container the update ran against. Its own id is the
@@ -883,9 +895,12 @@ describe('HealthMonitor', () => {
 
   test('rolls back through the REAL Dockercompose.recreateContainer, which resolves its service from the container', async () => {
     var log = createMockLog();
-    var dockerApi = createMockDockerApi({
-      State: { Running: true, Health: { Status: 'unhealthy' } },
-    });
+    var dockerApi = createMockDockerApi(
+      { State: { Running: true, Health: { Status: 'unhealthy' } } },
+      // Backup image gone from the host, which is the only state where the
+      // rollback still has a pull to do.
+      createImageNotOnHostInspect(),
+    );
     mockGetState.mockReturnValue({
       registry: {
         hub: {
@@ -975,6 +990,94 @@ describe('HealthMonitor', () => {
     abortController.abort();
   });
 
+  test('rolls back from a backup image already on the host without reaching the registry', async () => {
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi(
+      { State: { Running: true, Health: { Status: 'unhealthy' } } },
+      vi.fn().mockResolvedValue({ Id: 'sha256:already-here' }),
+    );
+    // Airgapped host, or a Docker Hub anonymous 429: anything that touches the
+    // registry fails. The retained backup image is all this rollback needs.
+    var getAuthPull = vi.fn().mockRejectedValue(new Error('registry unreachable'));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getImageFullName: (image, tag) => `${image.name}:${tag}`,
+          getAuthPull,
+        },
+      },
+      watcher: { 'docker.local': { dockerApi } },
+    });
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-000',
+        containerName: 'test-container',
+        imageName: 'library/nginx',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'dockercompose.default',
+      },
+    ]);
+
+    var composeTrigger = new Dockercompose();
+    var pullImageSpy = vi.spyOn(composeTrigger, 'pullImage').mockResolvedValue(undefined);
+    composeTrigger.log = { ...createMockLog(), child: vi.fn().mockReturnThis() } as any;
+    composeTrigger.configuration = {
+      dryrun: false,
+      backup: false,
+      composeFileLabel: 'dd.compose.file',
+    } as any;
+    vi.spyOn(composeTrigger, 'resolveComposeServiceContext').mockResolvedValue({
+      composeFile: '/opt/drydock/stack.yml',
+      composeFiles: ['/opt/drydock/stack.yml'],
+      service: 'web',
+    } as any);
+    vi.spyOn(composeTrigger, 'mutateComposeFile').mockResolvedValue({} as any);
+    var refreshSpy = vi
+      .spyOn(composeTrigger as any, 'refreshComposeServiceWithDockerApi')
+      .mockResolvedValue(undefined);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance: composeTrigger,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    // Prune retains the backup image, so the pull that DR-110 added is
+    // redundant in exactly the case where it fails. Skipping it keeps the
+    // offline rollback working, and the credential lookup has to sit behind
+    // the same check because it is a network call of its own.
+    expect(dockerApi.getImage).toHaveBeenCalledWith('library/nginx:1.0.0');
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(getAuthPull).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith(
+      expect.stringContaining('Backup image library/nginx:1.0.0 is already on the host'),
+    );
+    expect(refreshSpy).toHaveBeenCalledWith(
+      '/opt/drydock/stack.yml',
+      'web',
+      expect.objectContaining({ id: 'container-123', name: 'test-container' }),
+      expect.objectContaining({
+        runtimeContext: { newImage: 'library/nginx:1.0.0' },
+      }),
+    );
+    expect(log.error).not.toHaveBeenCalled();
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auto-rollback', status: 'success' }),
+    );
+
+    abortController.abort();
+  });
+
   test('should pull the digest-pinned backup reference before any destructive step', async () => {
     var log = createMockLog();
     var triggerInstance = createMockTriggerInstance();
@@ -1001,9 +1104,13 @@ describe('HealthMonitor', () => {
       NetworkSettings: { Networks: {} },
     });
 
-    var dockerApi = createMockDockerApi({
-      State: { Running: true, Health: { Status: 'unhealthy' } },
-    });
+    var dockerApi = createMockDockerApi(
+      { State: { Running: true, Health: { Status: 'unhealthy' } } },
+      // The api the monitor hands to the trigger reports the backup image as
+      // gone, so this is the ordering on the path that still pulls; the trigger
+      // skips the pull outright when the image is already on the host.
+      createImageNotOnHostInspect(),
+    );
     mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
@@ -1055,7 +1162,9 @@ describe('HealthMonitor', () => {
     var log = createMockLog();
     var triggerInstance = createMockTriggerInstance();
     triggerInstance.pullRollbackImage.mockRejectedValue(
-      new Error('(HTTP code 404) no such image: library/nginx:1.0.0 not found'),
+      new Error(
+        'Backup image library/nginx:1.0.0 is neither on the host nor pullable: (HTTP code 404) no such image: library/nginx:1.0.0 not found',
+      ),
     );
 
     var dockerApi = createMockDockerApi({
@@ -1100,7 +1209,7 @@ describe('HealthMonitor', () => {
       expect.objectContaining({
         action: 'auto-rollback',
         status: 'error',
-        details: expect.stringContaining('no such image'),
+        details: expect.stringContaining('neither on the host nor pullable'),
       }),
     );
 
