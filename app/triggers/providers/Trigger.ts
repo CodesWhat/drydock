@@ -119,6 +119,26 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'maturity-cleared',
 ]);
 
+/**
+ * The rules dispatched through `dispatchContainerForEvent` where an unattended install is
+ * still ahead, so a maintenance window has something left to hold back.
+ *
+ * `maturity-cleared` is the only one. Every other rule reachable there reports on something
+ * that already happened: `update-applied` and `update-failed` after the update ran,
+ * `security-alert` on a scan result, `container-unhealthy` on a health transition,
+ * `agent-disconnect` and `agent-reconnect` on connectivity. Deferring one of those does not
+ * postpone work, it destroys the report, and nothing re-delivers it: a post-update command
+ * hook attached to a manual `Update anyway` at 15:00 would simply never run. Note the
+ * synthetic agent containers dodge the window today only because `buildAgentContainer` sets
+ * `watcher: 'agent'`, which resolves to no registered watcher; this set is what actually
+ * keeps them out, so adding a rule here is a decision, not a formality.
+ *
+ * `update-available` never reaches `dispatchContainerForEvent` at all: the auto-update
+ * paths (`runUpdateAvailableSimpleTrigger`, `runAcceptedUpdateBatch`, the digest flush)
+ * carry their own window gate.
+ */
+const PRE_INSTALL_NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>(['maturity-cleared']);
+
 type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
 interface SecurityAlertSummary {
@@ -1116,15 +1136,19 @@ class Trigger<
     }
 
     // A `command` action's trigger() runs the shell command the operator attached to an
-    // update, so the maintenance window has to hold it back here as well. The update-action
-    // types short-circuit at the top of this method and never reach it; a command trigger
-    // does, driven by the maturity-gate scheduler's own cron, which has nothing to do with
-    // the watcher's scan, so this is the only gate standing between it and an unattended
-    // command at 3pm. Notification triggers are untouched: the window has never gated what
-    // drydock says. Nothing re-delivers a deferred lifecycle event, by design - the update
-    // itself is still picked up by the ordinary update-available path once the window opens,
-    // and replaying an update-applied hours late would be worse than skipping it.
-    if (this.getCategory() === 'action' && this.deferAutoUpdateForMaintenanceWindow(container)) {
+    // update, so on a rule that still has an install ahead of it the maintenance window has
+    // to hold it back here as well. The update-action types short-circuit at the top of this
+    // method and never reach it; a command trigger does, driven by the maturity-gate
+    // scheduler's own cron, which has nothing to do with the watcher's scan, so this is the
+    // only gate standing between it and an unattended command at 3pm. The rule check comes
+    // first because deferring has side effects (it arms the watcher's catch-up poll and
+    // counts a deferred update), and a reporting rule must trigger neither. Notification
+    // triggers are untouched either way: the window has never gated what drydock says.
+    if (
+      PRE_INSTALL_NOTIFICATION_RULE_IDS.has(ruleId) &&
+      this.getCategory() === 'action' &&
+      this.deferAutoUpdateForMaintenanceWindow(container)
+    ) {
       this.log.debug(
         `Outside maintenance window, deferring ${ruleId} action until the window opens`,
       );

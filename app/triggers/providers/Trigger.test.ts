@@ -14591,6 +14591,48 @@ describe('maintenance window gates command actions (#946)', () => {
     );
   });
 
+  // #946 D2 follow-up: the gate belongs to the rules that still have an install ahead of
+  // them. update-applied, update-failed, security-alert and container-unhealthy report on
+  // something that already happened, so deferring one destroys the report rather than
+  // postponing work, and nothing re-delivers it. The concrete break: a command action used
+  // as a post-update hook, Update anyway clicked at 15:00, hook never runs, and on the way
+  // out the window arms a catch-up poll and counts a deferred update for an install that
+  // already finished.
+  test('a command action still reports lifecycle rules while the window is closed', async () => {
+    trigger.type = 'command';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockWindow(false);
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateAppliedEvent({ containerName: 'local_app', container });
+    await trigger.handleContainerUpdateFailedEvent({
+      containerName: 'local_app',
+      container,
+      error: 'boom',
+    } as any);
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_app',
+      container,
+      details: 'critical:1',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    } as any);
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'local_app',
+      container,
+      previousHealth: 'healthy',
+    } as any);
+
+    expect(triggerSpy.mock.calls.map((call) => (call[0] as any).notificationEvent.kind)).toEqual([
+      'update-applied',
+      'update-failed',
+      'security-alert',
+      'container-unhealthy',
+    ]);
+    // Reporting a finished update is not pending work: nothing to catch up on, nothing to count.
+    expect(queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+    expect(mockDeferredUpdateInc).not.toHaveBeenCalled();
+  });
+
   test('a command action runs a maturity-cleared event inside the window', async () => {
     trigger.type = 'command';
     trigger.configuration = { ...configurationValid, mode: 'simple' };
