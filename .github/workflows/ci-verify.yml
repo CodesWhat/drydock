@@ -50,6 +50,14 @@ concurrency:
 
 permissions: {}
 
+env:
+  # npm's default fetch-timeout is 300000ms, the same as the retry wrapper's
+  # timeout_minutes, so a stalled registry fetch always burned the whole
+  # attempt before either side gave up (runner image 20260831 / npm 11.19.0,
+  # 2026-09-03). Fail the fetch at 60s and let npm retry it itself.
+  NPM_CONFIG_FETCH_TIMEOUT: "60000"
+  NPM_CONFIG_FETCH_RETRIES: "5"
+
 jobs:
   security-actions:
     name: "Security: Actions"
@@ -463,7 +471,7 @@ jobs:
       - name: Install app dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd app && npm ci
@@ -471,7 +479,7 @@ jobs:
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd ui && npm ci
@@ -545,7 +553,7 @@ jobs:
       - name: Install repository dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: npm ci --ignore-scripts
@@ -556,7 +564,7 @@ jobs:
       - name: Install app dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd app && npm ci
@@ -567,7 +575,7 @@ jobs:
       - name: Install demo dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd apps/demo && npm ci --ignore-scripts
@@ -579,7 +587,7 @@ jobs:
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd ui && npm ci
@@ -674,7 +682,7 @@ jobs:
       - name: Install apps/web dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd apps/web && npm ci
@@ -719,7 +727,7 @@ jobs:
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd ui && npm ci
@@ -731,7 +739,7 @@ jobs:
       - name: Install demo dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd apps/demo && npm ci --ignore-scripts
@@ -1481,7 +1489,7 @@ jobs:
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd e2e && npm ci
@@ -1603,7 +1611,7 @@ jobs:
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd e2e && npm ci
