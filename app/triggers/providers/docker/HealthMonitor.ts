@@ -25,6 +25,12 @@ interface DockerApiLike {
 }
 
 interface TriggerInstanceLike {
+  pullRollbackImage(
+    dockerApi: DockerApiLike,
+    rollbackImage: string,
+    containerRef: ContainerRef,
+    log: LoggerLike,
+  ): Promise<void>;
   getCurrentContainer(dockerApi: DockerApiLike, containerRef: ContainerRef): Promise<unknown>;
   inspectContainer(container: unknown, log: LoggerLike): Promise<unknown>;
   stopAndRemoveContainer(
@@ -195,6 +201,14 @@ async function performRollback(context: RollbackContext): Promise<void> {
     const backupImage = buildRollbackImageReference(latestBackup, backupImageDigest);
 
     log.info(`Auto-rollback: pulling backup image ${backupImage}`);
+    // Actually pull it, and pull it first. Neither recreate path fetches the
+    // image for itself, so a backup that is no longer on the host used to fail
+    // at create: on the Docker path after stopAndRemoveContainer had already
+    // taken the running container away, and on the compose path after the
+    // runtime refresh removed it and then "restored" the failing image the
+    // rollback exists to undo. Pulling ahead of every destructive step turns
+    // that into a refusal that leaves the container running (DR-110).
+    await triggerInstance.pullRollbackImage(dockerApi, backupImage, containerRef, log);
 
     const currentContainer = await triggerInstance.getCurrentContainer(dockerApi, containerRef);
     if (!currentContainer) {
