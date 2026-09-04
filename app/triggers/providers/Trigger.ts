@@ -1511,12 +1511,21 @@ class Trigger<
    * MUST release the reservation via `releaseOnceNotificationSlot` once this
    * evaluation is done, whether or not it actually sent, so a later
    * genuinely-new result (different resultHash) is never blocked by it.
+   *
+   * Owns the `once` gate itself: when `once` is false, returns true without
+   * reserving anything, so every caller may call this unconditionally
+   * instead of repeating an `if (!this.configuration.once) return true;`
+   * guard first.
    * @returns {boolean} true if this evaluation may proceed to send.
    */
   private reserveOnceNotificationSlot(
     container: Container,
     eventKind: notificationHistoryStore.NotificationEventKind,
   ): boolean {
+    // once=false never dedups, so there is nothing to reserve.
+    if (!this.configuration.once) {
+      return true;
+    }
     if (this.hasAlreadyNotifiedForResult(container, eventKind)) {
       return false;
     }
@@ -1538,12 +1547,18 @@ class Trigger<
   /**
    * Release a reservation taken by `reserveOnceNotificationSlot`. Safe to
    * call even when no reservation was taken (e.g. `once=false`, or no stable
-   * container id), deleting an absent key is a no-op.
+   * container id) -- it returns before hashing under `once=false`, and
+   * deleting an absent key is otherwise a no-op.
    */
   private releaseOnceNotificationSlot(
     container: Container,
     eventKind: notificationHistoryStore.NotificationEventKind,
   ): void {
+    // once=false never reserves, so there is nothing to release and no
+    // reason to hash the container.
+    if (!this.configuration.once) {
+      return;
+    }
     const containerId =
       typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
     if (!containerId) {
@@ -1809,9 +1824,6 @@ class Trigger<
       return false;
     }
 
-    if (!this.configuration.once) {
-      return true;
-    }
     // Reserve, not just check: closes the race documented on
     // reserveOnceNotificationSlot() where two overlapping scans both read
     // "not notified yet" for the same candidate (#972). The caller
@@ -1846,9 +1858,6 @@ class Trigger<
       return false;
     }
 
-    if (!this.configuration.once) {
-      return true;
-    }
     // Reserve, not just check (#972): the digest send records history only
     // after `flushUpdateDigestBuffer` awaits `triggerBatch()`, so a report
     // arriving mid-flush used to read "not digested yet", replace the buffer
@@ -1974,9 +1983,6 @@ class Trigger<
       )
     ) {
       return false;
-    }
-    if (!this.configuration.once) {
-      return true;
     }
     // Reserve, not just check (#972): the batch send records history only
     // after `triggerBatch()` resolves, so a manual scan overlapping a cron
@@ -2277,27 +2283,21 @@ class Trigger<
     for (const container of this.getBatchRetryContainers(containerReports)) {
       const businessId = getContainerNotificationKey(container) || fullName(container);
       // Retry entries skip the eligibility check - they already passed it when
-      // they were first batched - but under once=true they take the same
-      // reservation, or two overlapping batches both pull the same entry out
-      // of the retry buffer and send it twice, which the reservation on the
-      // report path alone does not stop. A reservation that fails then means
-      // this exact result is already sent or already in flight elsewhere and
-      // the retry is spent: drop it from this send and clear it, and a send
-      // that fails again re-buffers it from the catch below.
-      //
-      // Gated on `once` because reserveOnceNotificationSlot() opens with a
-      // plain history read and recordNotifiedForResult() runs whether or not
-      // `once` is set. Under once=false a container legitimately re-sends a
-      // result it already delivered, so a later failure can park an entry in
-      // the retry buffer whose history already matches - reserving there would
-      // read that as "already sent" and drop the retry instead of retrying it.
-      if (this.configuration.once) {
-        if (!this.reserveOnceNotificationSlot(container, 'update-available')) {
-          this.batchRetryBufferStore.delete(businessId);
-          continue;
-        }
-        reservedContainers.push(container);
+      // they were first batched - but they take the same reservation, or two
+      // overlapping batches both pull the same entry out of the retry buffer
+      // and send it twice, which the reservation on the report path alone
+      // does not stop. A reservation that fails then means this exact result
+      // is already sent or already in flight elsewhere and the retry is
+      // spent: drop it from this send and clear it, and a send that fails
+      // again re-buffers it from the catch below. Under once=false
+      // reserveOnceNotificationSlot() returns true without reserving, so a
+      // container that legitimately re-sends a result it already delivered
+      // is never read as "already sent" and dropped here.
+      if (!this.reserveOnceNotificationSlot(container, 'update-available')) {
+        this.batchRetryBufferStore.delete(businessId);
+        continue;
       }
+      reservedContainers.push(container);
       containersToSendByBusinessId.set(businessId, container);
     }
     for (const containerReport of containerReports) {
@@ -2360,9 +2360,12 @@ class Trigger<
       this.log.debug(e);
     } finally {
       this.incrementTriggerCounter(status);
-      // Release every reservation shouldHandleBatchContainerReport() took for
-      // this batch, however it ended, so a later genuinely-new result for any
-      // of these containers is never blocked by it.
+      // reservedContainers holds every reservation taken for this batch from
+      // both sources above: the retry-buffer loop and shouldHandleBatchContainerReport()
+      // on the report path. Release all of them here, however the batch ended,
+      // so a later genuinely-new result for any of these containers is never
+      // blocked by it. Under once=false neither source actually reserved
+      // anything, so this loop is a no-op.
       for (const container of reservedContainers) {
         this.releaseOnceNotificationSlot(container, 'update-available');
       }
@@ -2593,17 +2596,12 @@ class Trigger<
     // candidate the store no longer shows, and a genuinely pending update
     // re-enters the buffer on the next scan's report.
     const reservedEntries = dispatchEntries.filter((entry) => {
-      // Gated on `once` for the same reason the eligibility checks are: the
-      // reservation opens with a plain history read, and the flush records
-      // history on every successful send regardless of `once`. Under
-      // once=false the next scan re-buffers the same unchanged result by
-      // design, and reserving here would match that just-written history and
-      // evict the entry instead of sending it, so the digest would go out
-      // exactly once ever. Nothing is reserved on this path, so the release in
-      // the finally is a no-op.
-      if (!this.configuration.once) {
-        return true;
-      }
+      // Reserve, not just check: closes the same race as the eligibility
+      // checks, a report landing mid-flush pulling the same result out from
+      // under this send. Under once=false reserveOnceNotificationSlot()
+      // returns true without reserving, so the next scan can still re-buffer
+      // the same unchanged result by design; nothing is reserved on that
+      // path, so the release in the finally is a no-op.
       if (this.reserveOnceNotificationSlot(entry.currentContainer, digestEventKind)) {
         return true;
       }

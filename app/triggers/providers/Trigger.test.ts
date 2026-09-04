@@ -3686,6 +3686,93 @@ test('handleContainerReport still sends for a genuinely new result once the prev
   expect(trigger.trigger).toHaveBeenCalledTimes(2);
 });
 
+// DR-73: reserveOnceNotificationSlot now owns the `once` gate itself instead
+// of every caller repeating `if (!this.configuration.once) return true;`
+// first. Assert directly that with once=false it returns true without ever
+// touching inFlightOnceNotificationKeys, so two overlapping evaluations of
+// the exact same result both send instead of the second being turned away
+// the way the once=true test above shows it is.
+test('handleContainerReport never reserves and both concurrent reports send when once is disabled', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', {
+    ...configurationValid,
+    once: false,
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  const sendSpy = vi.fn().mockReturnValue(sendPromise);
+  trigger.trigger = sendSpy;
+
+  const call1 = trigger.handleContainerReport({ changed: true, container });
+  const call2 = trigger.handleContainerReport({ changed: true, container });
+
+  // Both evaluations ran their synchronous reserve-then-send prefix before
+  // either send resolved, so a reservation taken by call1 would have turned
+  // call2 away here.
+  expect(sendSpy).toHaveBeenCalledTimes(2);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+
+  resolveSend();
+  await Promise.all([call1, call2]);
+
+  expect(sendSpy).toHaveBeenCalledTimes(2);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+// DR-73 counterpart: with once=true, reserveOnceNotificationSlot does hold a
+// key in inFlightOnceNotificationKeys for the span of the send, and releases
+// it once the evaluation is done.
+test('handleContainerReport reserves a key in inFlightOnceNotificationKeys while once is enabled', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  trigger.trigger = vi.fn().mockReturnValue(sendPromise);
+
+  const call = trigger.handleContainerReport({ changed: true, container });
+
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+  const expectedKey = `${trigger.getId()}::${container.id}::update-available::${notificationHistoryStore.computeResultHash(container)}`;
+  expect(trigger.inFlightOnceNotificationKeys.has(expectedKey)).toBe(true);
+
+  // A second and third identical report submitted while the first is still
+  // in flight must both be turned away by the held reservation, so
+  // trigger.trigger() (the send) never gets invoked for either of them.
+  const call2 = trigger.handleContainerReport({ changed: true, container });
+  const call3 = trigger.handleContainerReport({ changed: true, container });
+  expect(trigger.trigger).toHaveBeenCalledTimes(1);
+
+  resolveSend();
+  await Promise.all([call, call2, call3]);
+
+  expect(trigger.trigger).toHaveBeenCalledTimes(1);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
 // Regression test for #972 on the batch path: shouldHandleBatchContainerReport
 // only read the once=true history, and the batch send records it after
 // triggerBatch() resolves, so a manual single-container scan overlapping a
