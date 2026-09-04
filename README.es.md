@@ -70,7 +70,7 @@
 | Inicio rápido         | [Inicio rápido](https://getdrydock.com/docs/quickstart)                                                                                |
 | Registro de cambios   | [`CHANGELOG.md`](CHANGELOG.md)                                                                                                         |
 | Deprecations          | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                                                   |
-| Hoja de ruta          | Consulte la sección [Hoja de ruta](#roadmap) más arriba                                                                                |
+| Hoja de ruta          | Consulte la sección [Hoja de ruta](#roadmap) más abajo                                                                                |
 | Contribuyendo         | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                                                   |
 | Código de conducta    | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                                             |
 | Governance            | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                                       |
@@ -85,6 +85,8 @@
 
 **Recomendado: use un proxy de socket** para restringir a qué puntos finales de la API de Docker puede acceder Drydock. Esto evita darle al contenedor acceso completo al socket Docker.
 
+> **Nota:** Compose trata `$` como sintaxis de interpolación de variables, por lo que un hash argon2id pegado con un solo `$` llega a Drydock dañado. Duplique cada `$` como `$$` al pegar el hash real, por ejemplo `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
+
 ```yaml
 services:
   drydock:
@@ -92,6 +94,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -118,12 +122,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>Alternativa: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> proxy de socket</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) es un filtro de socket Docker de denegación predeterminado del mismo ecosistema CodesWhat, con un ajuste preestablecido creado para drydock:
+
+> **Nota:** Compose trata `$` como sintaxis de interpolación de variables, por lo que un hash argon2id pegado con un solo `$` llega a Drydock dañado. Duplique cada `$` como `$$` al pegar el hash real, por ejemplo `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
 
 ```yaml
 services:
@@ -132,6 +141,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -154,6 +165,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 Consulte el ajuste preestablecido [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) de sockguard para obtener un `sockguard.yaml` inicial (el mismo ajuste preestablecido portwing se envía en sus propios ejemplos).
@@ -168,12 +182,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **Advertencia:** El acceso directo al socket otorga al contenedor control total sobre el demonio Docker. Utilice la configuración de proxy de socket anterior para implementaciones de producción. Consulte la [Guía de seguridad de Docker Socket](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) para conocer todas las opciones, incluido TLS remoto y Docker sin raíz.
+>
+> Use comillas simples alrededor del valor del hash, como se muestra. Las comillas dobles permiten que el shell expanda `$` antes de que docker lo vea, dañando un hash argon2id real.
 
 </details>
 
@@ -200,6 +217,32 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <hr>
 
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
+
+<details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` ahora es de ejecución única, de modo que los escaneos superpuestos en una flota grande ya no disparan el mismo activador varias veces para la misma actualización.** Un escaneo que nunca finaliza ahora compite contra un plazo límite para que no pueda bloquear los siguientes ciclos de cron. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Un activador `once=true` ya no se dispara de nuevo horas después para una actualización de etiqueta que ya había anunciado, cuando un registro limita la tasa de la consulta de digest**, porque la clave del historial de notificaciones ahora es estable ante ese fallo en lugar de alternar entre dos formatos de hash. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Los banners de obsolescencia de la interfaz para las variables de entorno `DD_TRIGGER_*` eliminadas y la anulación del healthcheck basada en curl ahora indican que esas cosas ya desaparecieron**, en lugar de señalar una fecha límite de eliminación que ya pasó. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Una auditoría de documentación corrigió el README, DEPRECATIONS.md y la documentación de configuración/activadores/registros/API/monitoreo/agentes frente al código real de este árbol**, y los fragmentos de Get Started del sitio de marketing ahora despliegan una instancia que realmente queda saludable. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Notas completas de la versión en [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.8</strong></summary>
+
+- **Las rutas de actualización nativa de Docker y de Compose ahora fijan un digest inmutable de la imagen extraída antes de la verificación de firma, el escaneo y el reemplazo**, cerrando la ventana de reetiquetado de registro en ambas rutas. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **La autoactualización ya no revierte un reemplazo verificado por salud cuando falla la limpieza del contenedor antiguo**, y el manejador de instantáneas del watcher deja de tratar una lista de contenedores vacía como una eliminación masiva. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` ahora se aplica a los contenedores reportados por agentes de transporte Docker del controlador**, de modo que los contenedores reportados por Portwing respetan la misma anulación de registro que los observados localmente. ([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` ya no crea un agente fantasma llamado `allow`**, y un contenedor marcado como `unknown` antes de configurar su registro ahora se recupera al actualizar. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))
+- **Los volcados de depuración redactan las URL de servicio de Apprise, los ID de usuario de Rocket.Chat y los ID de chat de Telegram**, cerrando el último hueco de credenciales específico de proveedor en ese endpoint. ([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **Llegan cuatro correcciones del barrido de control de calidad de rc.6**: un aviso de Trivy corregido, una página 404 real, recuentos de búsqueda de auditoría precisos y un panel de servidores que respeta su propio botón Actualizar. ([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+Notas completas de la versión en [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03).
+
+</details>
 
 <details open>
 <summary><strong>Aspectos destacados de v1.7.0-rc.7</strong></summary>
@@ -427,7 +470,7 @@ La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores 
 
 ### Registros (23)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Muelle · LSCR · Puerto · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
 ### Acciones (4)
 
@@ -435,7 +478,7 @@ Docker · Docker Compose · Portainer · Command
 
 ### Notificaciones (17)
 
-Informar · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
 ### Autenticación
 

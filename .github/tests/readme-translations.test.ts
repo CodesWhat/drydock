@@ -66,122 +66,128 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.9</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.9</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.9</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.7</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.9</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.7</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.9</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.7 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.9 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    pagination: string;
-    updates: string;
-    selfUpdate: string;
-    security: string;
-    compose: string;
-    sessions: string;
-    roadmap: string;
+    singleFlight: string;
+    deadline: string;
+    onceKey: string;
+    deprecationBanner: string;
+    docsAudit: string;
+    getStarted: string;
   }
 > = {
   'README.de.md': {
-    pagination: '**Die Registry-Paginierung folgt jetzt dem Cursor jeder Registry**',
-    updates:
-      '**Updates bleiben erfolgreich, wenn die Bereinigung nach der Gesundheitsprüfung fehlschlägt**',
-    selfUpdate: 'Self-Updates warten vor dem exklusiven Gate auf aktive Lebenszyklen',
-    security:
-      '**Die Anmeldedaten-Redaktion deckt jetzt Trigger, Registries, Debug-Dumps und Lookalike-Hosts ab**',
-    compose: '**Compose-Umschreibungen prüfen vor dem Schreiben das Laufzeit-Repository**',
-    sessions: '**Header-authentifizierte Anfragen speichern keine Sessions mehr**',
-    roadmap: '**Der Wettbewerbsvergleich und die Roadmap wurden für 2026 aktualisiert**',
+    singleFlight:
+      '**`watchFromCron()` ist jetzt Single-Flight, sodass überlappende Scans in einer großen Flotte nicht mehr denselben Trigger mehrfach für ein Update auslösen.**',
+    deadline: 'läuft jetzt gegen eine Frist',
+    onceKey:
+      '**Ein `once=true`-Trigger löst nicht mehr Stunden später erneut für ein bereits gemeldetes Tag-Update aus, wenn eine Registry die Digest-Abfrage ratenbegrenzt**',
+    deprecationBanner:
+      '**Die Deprecation-Banner der UI für die entfernten `DD_TRIGGER_*`-Umgebungsvariablen und die curl-basierte Healthcheck-Überschreibung sagen jetzt, dass diese Dinge bereits entfernt sind**',
+    docsAudit:
+      '**Ein Dokumentations-Audit hat README, DEPRECATIONS.md und die Konfigurations-/Trigger-/Registry-/API-/Monitoring-/Agenten-Dokumentation gegen den tatsächlichen Code dieses Codebaums korrigiert**',
+    getStarted:
+      'die Get-Started-Snippets der Marketing-Website starten jetzt eine Instanz, die tatsächlich gesund wird',
   },
   'README.es.md': {
-    pagination: '**La paginación de los registros sigue ahora el cursor de cada registro**',
-    updates:
-      '**Las actualizaciones siguen siendo exitosas cuando falla la limpieza después de la comprobación de salud**',
-    selfUpdate:
-      'las autoactualizaciones esperan a que terminen los ciclos activos antes de tomar el bloqueo exclusivo',
-    security:
-      '**La redacción de credenciales cubre ahora activadores, registros, volcados de depuración y hosts parecidos**',
-    compose:
-      '**Las reescrituras de Compose verifican el repositorio en ejecución antes de escribir**',
-    sessions: '**Las solicitudes autenticadas por cabecera ya no persisten sesiones**',
-    roadmap: '**La comparación de competidores y la hoja de ruta se actualizaron para 2026**',
+    singleFlight:
+      '**`watchFromCron()` ahora es de ejecución única, de modo que los escaneos superpuestos en una flota grande ya no disparan el mismo activador varias veces para la misma actualización.**',
+    deadline: 'compite contra un plazo límite',
+    onceKey:
+      '**Un activador `once=true` ya no se dispara de nuevo horas después para una actualización de etiqueta que ya había anunciado, cuando un registro limita la tasa de la consulta de digest**',
+    deprecationBanner:
+      '**Los banners de obsolescencia de la interfaz para las variables de entorno `DD_TRIGGER_*` eliminadas y la anulación del healthcheck basada en curl ahora indican que esas cosas ya desaparecieron**',
+    docsAudit:
+      '**Una auditoría de documentación corrigió el README, DEPRECATIONS.md y la documentación de configuración/activadores/registros/API/monitoreo/agentes frente al código real de este árbol**',
+    getStarted:
+      'los fragmentos de Get Started del sitio de marketing ahora despliegan una instancia que realmente queda saludable',
   },
   'README.fr.md': {
-    pagination:
-      '**La pagination des registres suit désormais le curseur propre à chaque registre**',
-    updates: '**Une mise à jour reste réussie si le nettoyage échoue après le contrôle de santé**',
-    selfUpdate:
-      'les auto-mises à jour attendent la fin des cycles actifs avant de prendre le verrou exclusif',
-    security:
-      '**La rédaction des identifiants couvre désormais les déclencheurs, registres, vidages de débogage et hôtes ressemblants**',
-    compose: '**Les réécritures Compose vérifient le dépôt d’exécution avant toute écriture**',
-    sessions: '**Les requêtes authentifiées par en-tête ne persistent plus de sessions**',
-    roadmap:
-      '**La comparaison des concurrents et la feuille de route ont été actualisées pour 2026**',
+    singleFlight:
+      '**`watchFromCron()` est désormais à exécution unique (single-flight), si bien que des scans qui se chevauchent sur une grande flotte ne déclenchent plus le même déclencheur plusieurs fois pour une seule mise à jour.**',
+    deadline: 'confronté à une échéance',
+    onceKey:
+      "**Un déclencheur `once=true` ne se redéclenche plus des heures plus tard pour une mise à jour de tag déjà annoncée, lorsqu'un registre limite le débit de la recherche de digest**",
+    deprecationBanner:
+      "**Les bannières de dépréciation de l'interface pour les variables d'environnement `DD_TRIGGER_*` supprimées et la surcharge du healthcheck basée sur curl indiquent désormais que ces éléments ont déjà disparu**",
+    docsAudit:
+      '**Un audit de la documentation a corrigé le README, DEPRECATIONS.md et la documentation de configuration/déclencheurs/registres/API/supervision/agents par rapport au code réel de cet arbre**',
+    getStarted:
+      'les extraits Get Started du site marketing déploient désormais une instance qui devient réellement saine',
   },
   'README.pl.md': {
-    pagination: '**Paginacja rejestrów korzysta teraz z kursora właściwego dla każdego rejestru**',
-    updates:
-      '**Aktualizacje pozostają pomyślne, gdy czyszczenie nie powiedzie się po kontroli stanu**',
-    selfUpdate:
-      'samoaktualizacje czekają na zakończenie aktywnych cykli przed przejęciem wyłącznej blokady',
-    security:
-      '**Redakcja poświadczeń obejmuje teraz wyzwalacze, rejestry, zrzuty debugowania i podobne hosty**',
-    compose: '**Przepisywanie Compose sprawdza repozytorium uruchomieniowe przed zapisem**',
-    sessions: '**Żądania uwierzytelnione nagłówkiem nie zapisują już sesji**',
-    roadmap: '**Porównanie konkurencji i mapa drogowa zostały odświeżone na 2026 rok**',
+    singleFlight:
+      '**`watchFromCron()` działa teraz w trybie single-flight, dzięki czemu nakładające się skany w dużej flocie nie uruchamiają już tego samego wyzwalacza wielokrotnie dla jednej aktualizacji.**',
+    deadline: 'jest teraz uruchamiany z terminem',
+    onceKey:
+      '**Wyzwalacz `once=true` nie uruchamia się już ponownie godziny później dla aktualizacji tagu, którą już zgłosił, gdy rejestr ogranicza liczbę zapytań o digest**',
+    deprecationBanner:
+      '**Banery przestarzałości w interfejsie dla usuniętych zmiennych środowiskowych `DD_TRIGGER_*` oraz nadpisania healthchecka opartego na curl teraz informują, że te rzeczy już zniknęły**',
+    docsAudit:
+      '**Audyt dokumentacji poprawił README, DEPRECATIONS.md oraz dokumentację konfiguracji/wyzwalaczy/rejestrów/API/monitoringu/agentów zgodnie z rzeczywistym kodem tego drzewa**',
+    getStarted:
+      'fragmenty Get Started na stronie marketingowej wdrażają teraz instancję, która faktycznie staje się zdrowa',
   },
   'README.pt-BR.md': {
-    pagination: '**A paginação dos registros agora segue o cursor de cada registro**',
-    updates:
-      '**As atualizações continuam bem-sucedidas quando a limpeza falha após a verificação de integridade**',
-    selfUpdate:
-      'as autoatualizações aguardam os ciclos ativos terminarem antes de assumir o bloqueio exclusivo',
-    security:
-      '**A redação de credenciais agora cobre gatilhos, registros, dumps de depuração e hosts semelhantes**',
-    compose: '**As reescritas do Compose verificam o repositório em execução antes de gravar**',
-    sessions: '**Solicitações autenticadas por cabeçalho não persistem mais sessões**',
-    roadmap: '**A comparação com concorrentes e o roadmap foram atualizados para 2026**',
+    singleFlight:
+      '**`watchFromCron()` agora é single-flight, de modo que varreduras sobrepostas em uma frota grande não disparam mais o mesmo gatilho várias vezes para a mesma atualização.**',
+    deadline: 'compete contra um prazo',
+    onceKey:
+      '**Um gatilho `once=true` não dispara mais horas depois para uma atualização de tag que já havia anunciado, quando um registro limita a taxa da consulta de digest**',
+    deprecationBanner:
+      '**Os banners de descontinuação da UI para as variáveis de ambiente `DD_TRIGGER_*` removidas e a substituição do healthcheck baseada em curl agora dizem que essas coisas já foram removidas**',
+    docsAudit:
+      '**Uma auditoria de documentação corrigiu o README, o DEPRECATIONS.md e a documentação de configuração/gatilhos/registros/API/monitoramento/agentes em relação ao código real desta árvore**',
+    getStarted:
+      'os trechos de Get Started do site de marketing agora implantam uma instância que realmente fica saudável',
   },
   'README.zh-CN.md': {
-    pagination: '**注册表分页现在遵循各注册表自己的游标**',
-    updates: '**健康检查通过后即使清理失败，更新仍会保持成功**',
-    selfUpdate: '自更新会等待活动生命周期完成后再获取独占闸门',
-    security: '**凭据脱敏现在覆盖触发器、注册表、调试转储和相似主机**',
-    compose: '**Compose 重写会在写入前验证运行时仓库**',
-    sessions: '**通过请求头认证的请求不再持久化会话**',
-    roadmap: '**竞争者对比和路线图已更新至 2026 年**',
+    singleFlight:
+      '**`watchFromCron()` 现在是单次并发（single-flight）执行，因此大规模集群中重叠的扫描不会再为同一次更新多次触发同一个触发器。**',
+    deadline: '与截止时间竞争',
+    onceKey:
+      '**当注册表对摘要查询进行限流时，`once=true` 触发器不会再在数小时后为已经通知过的标签更新重新触发**',
+    deprecationBanner:
+      '**界面中针对已移除的 `DD_TRIGGER_*` 环境变量和基于 curl 的健康检查覆盖的弃用横幅现在会说明这些内容已经移除**',
+    docsAudit:
+      '**一次文档审计根据本代码树的实际代码修正了 README、DEPRECATIONS.md 以及配置/触发器/注册表/API/监控/代理相关文档**',
+    getStarted: '营销网站的 Get Started 代码片段现在部署的实例能够真正变为健康状态',
   },
 };
 
@@ -237,6 +243,8 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc5--2026-08-27',
   './CHANGELOG.md#170-rc6--2026-08-29',
   './CHANGELOG.md#170-rc7--2026-08-29',
+  './CHANGELOG.md#170-rc8--2026-09-03',
+  './CHANGELOG.md#170-rc9--2026-09-03',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -291,30 +299,25 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
     const releaseBullets = [
-      release.pagination,
-      release.updates,
-      release.security,
-      release.compose,
-      release.sessions,
-      release.roadmap,
+      release.singleFlight,
+      release.onceKey,
+      release.deprecationBanner,
+      release.docsAudit,
     ].map((fragment) => getBullet(releaseBlock, fragment));
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
     expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[1]).toContain(release.selfUpdate);
+    expect(releaseBullets[0]).toContain(release.deadline);
+    expect(releaseBullets[3]).toContain(release.getStarted);
     expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/927',
-      'https://github.com/CodesWhat/drydock/pull/931',
-      'https://github.com/CodesWhat/drydock/pull/932',
-      'https://github.com/CodesWhat/drydock/pull/933',
-      'https://github.com/CodesWhat/drydock/pull/935',
-      'https://github.com/CodesWhat/drydock/pull/936',
-      'https://github.com/CodesWhat/drydock/pull/942',
+      'https://github.com/CodesWhat/drydock/pull/979',
+      'https://github.com/CodesWhat/drydock/pull/979',
+      'https://github.com/CodesWhat/drydock/pull/988',
+      'https://github.com/CodesWhat/drydock/pull/988',
     ]);
-    expect(getUrls(releaseBullets[1]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/931',
-      'https://github.com/CodesWhat/drydock/pull/942',
+    expect(getUrls(releaseBullets[0]).sort()).toEqual([
+      'https://github.com/CodesWhat/drydock/pull/979',
     ]);
   });
 

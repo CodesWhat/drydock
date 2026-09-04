@@ -70,7 +70,7 @@
 | 快速入门         | [快速入门](https://getdrydock.com/docs/quickstart)                                     |
 | 更新日志         | [`CHANGELOG.md`](CHANGELOG.md)                                                     |
 | 弃用           | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                               |
-| 路线图          | 请参阅上面的[路线图](#roadmap) 部分                                                           |
+| 路线图          | 请参阅下面的[路线图](#roadmap) 部分                                                           |
 | 贡献           | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                               |
 | 行为准则         | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                         |
 | 治理           | [`GOVERNANCE.md`](GOVERNANCE.md)                                                   |
@@ -85,6 +85,8 @@
 
 **推荐：使用套接字代理**来限制哪些 Docker API 端点 Drydock 可以访问。这可以避免容器完全访问 Docker 套接字。
 
+> **注意：** Compose 会将 `$` 视为变量插值语法，因此粘贴单个 `$` 的 argon2id 哈希值到达 Drydock 时会被破坏。粘贴真实哈希值时，请将每个 `$` 替换为 `$$`，例如 `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`。
+
 ```yaml
 services:
   drydock:
@@ -92,6 +94,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -118,12 +122,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>替代方案：<a href="https://github.com/CodesWhat/sockguard">sockguard</a>套接字代理</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) 是来自同一 CodesWhat 生态系统的默认拒绝 Docker 套接字过滤器，具有为 drydock 构建的预设：
+
+> **注意：** Compose 会将 `$` 视为变量插值语法，因此粘贴单个 `$` 的 argon2id 哈希值到达 Drydock 时会被破坏。粘贴真实哈希值时，请将每个 `$` 替换为 `$$`，例如 `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`。
 
 ```yaml
 services:
@@ -132,6 +141,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -154,6 +165,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 请参阅 sockguard 的 [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) 预设，了解起始 `sockguard.yaml`（相同的预设 portwing 在其自己的示例中提供）。
@@ -168,12 +182,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **警告：** 直接套接字访问授予容器对 Docker 守护进程的完全控制权。使用上面的套接字代理设置进行生产部署。请参阅 [Docker Socket 安全指南](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) 了解所有选项，包括远程 TLS 和 rootless Docker。
+>
+> 请按示例使用单引号包裹哈希值。双引号仍会让 shell 在 docker 看到之前展开 `$`，从而破坏真实的 argon2id 哈希值。
 
 </details>
 
@@ -200,6 +217,32 @@ docker run -d \
 <hr>
 
 <h2 align="center" id="recent-updates">最近更新</h2>
+
+<details open>
+<summary><strong>v1.7.0-rc.9 亮点</strong></summary>
+
+- **`watchFromCron()` 现在是单次并发（single-flight）执行，因此大规模集群中重叠的扫描不会再为同一次更新多次触发同一个触发器。** 一个永不结束的扫描现在会与截止时间竞争，以免阻塞后续的 cron 周期。([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **当注册表对摘要查询进行限流时，`once=true` 触发器不会再在数小时后为已经通知过的标签更新重新触发**，因为通知历史的键现在在该故障下保持稳定，而不是在两种哈希格式之间漂移。([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **界面中针对已移除的 `DD_TRIGGER_*` 环境变量和基于 curl 的健康检查覆盖的弃用横幅现在会说明这些内容已经移除**，而不是指向一个已经过去的移除截止日期。([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **一次文档审计根据本代码树的实际代码修正了 README、DEPRECATIONS.md 以及配置/触发器/注册表/API/监控/代理相关文档**，营销网站的 Get Started 代码片段现在部署的实例能够真正变为健康状态。([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03)。
+
+</details>
+
+<details open>
+<summary><strong>v1.7.0-rc.8 亮点</strong></summary>
+
+- **Docker 原生和 Compose 更新路径现在会在签名验证、扫描和替换之前锁定已拉取镜像的不可变摘要**，从而在两条路径上关闭注册表重新打标签的窗口。([#961](https://github.com/CodesWhat/drydock/pull/961)，[#952](https://github.com/CodesWhat/drydock/pull/952))
+- **当旧容器清理失败时，自更新不再回滚已通过健康检查的替换**，watcher 快照处理器也不再将空容器列表当作批量删除处理。([#951](https://github.com/CodesWhat/drydock/pull/951)，[#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` 现在适用于由控制器 Docker 传输代理上报的容器**，因此 Portwing 上报的容器与本地监视的容器遵循相同的注册表覆盖规则。([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` 不再创建名为 `allow` 的幽灵代理**，且在配置注册表之前被标记为 `unknown` 的容器现在会在刷新时恢复。([#954](https://github.com/CodesWhat/drydock/pull/954)，[#955](https://github.com/CodesWhat/drydock/pull/955))
+- **调试转储现在会对 Apprise 服务 URL、Rocket.Chat 用户 ID 和 Telegram 聊天 ID 进行脱敏**，从而关闭该端点中最后一个特定提供商的凭据缺口。([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **rc.6 QA 排查中的四项修复已合入**：修正后的 Trivy 公告、真正的 404 页面、准确的审计搜索计数，以及尊重自身刷新按钮的服务器面板。([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03)。
+
+</details>
 
 <details open>
 <summary><strong>v1.7.0-rc.7 亮点</strong></summary>

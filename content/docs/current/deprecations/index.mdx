@@ -155,6 +155,16 @@ Hub/DHI public instances that provide `PUBLIC_TOKEN` without the matching `PUBLI
 | **Removed since** | v1.6.0 |
 | **Migration** | Add the matching login and use `LOGIN`+`TOKEN`, use `LOGIN`+`PASSWORD`, use `AUTH`, or remove credentials for intentional anonymous access |
 
+### Agent-mode `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` fallback {#agent-wud-secret-fallback}
+
+Agent mode's secret lookup no longer falls back to `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` when `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` is unset.
+
+| | |
+| --- | --- |
+| **Deprecated since** | Never, removed directly with no deprecation period |
+| **Removed since** | v1.6.0-rc.1 |
+| **Migration** | Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE` |
+
 ## v1.7.0 removals and deferrals
 
 ### `DD_TRIGGER_*` environment variable prefix {#legacy-trigger-prefix}
@@ -218,8 +228,6 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 | **Detection** | UI deprecation banner when Drydock can inspect its own container via the local Docker socket; startup log warning naming the affected container when a curl-based override is detected |
 | **Migration** | Switch custom healthcheck overrides to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (doubled `$` defers expansion to the container shell instead of the host environment), or drop the override to use the built-in image healthcheck. See [Monitoring](/docs/monitoring) |
 
-## Removal in v1.7.0
-
 ### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
 
 `GET /api/auth/methods` was a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen could render before a session existed. It was registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 on its own separate v1.7.0 timeline. As of v1.7.0, that registration is gone: the route is no longer mounted, so requests to it now return **`410 Gone`** from the same unversioned `/api/*` tombstone.
@@ -253,6 +261,13 @@ These behaviors were removed immediately rather than going through a grace perio
 | **Removed since** | v1.5.0-rc.30 |
 | **Migration** | Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`) if you terminate TLS at a reverse proxy. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) |
 
+### Implicit reverse-proxy header trust for WebSocket origin checks {#websocket-proxy-trust}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.6.0-rc.3 |
+| **Migration** | Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`) if you terminate TLS at a reverse proxy and use the log-stream or container log-stream WebSocket endpoints. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) |
+
 ### Command trigger process-environment inheritance {#command-trigger-env-inheritance}
 
 | | |
@@ -266,6 +281,20 @@ These behaviors were removed immediately rather than going through a grace perio
 | --- | --- |
 | **Removed since** | v1.5.0-rc.35 |
 | **Migration** | A deployment that genuinely needs a link-local target sets `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true` on that trigger. See [HTTP trigger](/docs/configuration/triggers/http) |
+
+### Anonymous-auth grandfather path for upgrades {#anonymous-auth-grandfather}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.6.0-rc.3 |
+| **Migration** | Set `DD_AUTH_BASIC_{name}_USER`/`_HASH` (or configure OIDC) before upgrading, or set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly keep the instance anonymous. See [Authentication](/docs/configuration/authentications) |
+
+### Session cookie renamed `connect.sid` to `drydock.sid` {#session-cookie-rename}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.6.0-rc.3 |
+| **Migration** | None required. Existing `connect.sid` cookies are no longer recognized, so every user is signed out once on upgrade and needs to log back in |
 
 ## Detection summary
 
