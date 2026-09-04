@@ -364,7 +364,20 @@ async function runCronWatch(
     }
     return [];
   }
-  watcher.clearMaintenanceWindowQueue();
+
+  // Only a scan that can actually deliver what the queue is holding may clear it: the
+  // catch-up scan itself, or a scan that runs while the window is open. Under the scan
+  // scope this is the whole reachable set anyway, so nothing changes there. Under the
+  // install scope the arm is taken outside watch() - a digest flush, a webhook, a manual
+  // single-container scan - and clearing it on every ordinary tick threw away the only
+  // thing that was going to apply the deferred install once the window opened.
+  if (
+    ignoreMaintenanceWindow ||
+    !watcher.configuration.maintenancewindow ||
+    watcher.isMaintenanceWindowOpen()
+  ) {
+    watcher.clearMaintenanceWindowQueue();
+  }
 
   watcher.log.info(`Cron started (${watcher.configuration.cron}, reason: ${reason})`);
 

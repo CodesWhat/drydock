@@ -496,6 +496,52 @@ describe('Docker Watcher', () => {
       expect(maintenanceInc).not.toHaveBeenCalled();
     });
 
+    // #946 finding 2: the arm a digest flush takes lands hours after the scan that produced
+    // the reports, so it is only ever seen by a LATER cron tick. That tick used to clear it
+    // unconditionally, which under the install scope meant nothing was left to apply the
+    // deferred install when the window opened, every day, forever.
+    test('an ordinary tick outside the window keeps a catch-up armed by a digest flush', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      // 08:00 digest flush: Trigger.deferAutoUpdateForMaintenanceWindow arms the catch-up.
+      docker.queueMaintenanceWindowWatch();
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+
+      // 12:00 ordinary cron tick, window still closed.
+      await docker.watchFromCron();
+
+      expect(docker.watch).toHaveBeenCalledTimes(1);
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+      expect(docker.maintenanceWindowQueueTimeout).toBeDefined();
+      docker.clearMaintenanceWindowQueue();
+    });
+
+    test('a tick inside an open window clears a catch-up armed by a webhook scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      docker.queueMaintenanceWindowWatch();
+      await docker.watchFromCron();
+
+      expect(docker.maintenanceWindowWatchQueued).toBe(false);
+      expect(docker.maintenanceWindowQueueTimeout).toBeUndefined();
+    });
+
     test('should report the next cron run as nextRunAt under the install scope', async () => {
       maintenance.isInMaintenanceWindow.mockReturnValue(false);
       maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));

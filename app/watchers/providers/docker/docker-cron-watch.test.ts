@@ -110,6 +110,79 @@ describe('watchFromCronOrchestration', () => {
 
     expect(watcher.watch).toHaveBeenCalled();
     expect(watcher.queueMaintenanceWindowWatch).not.toHaveBeenCalled();
+    // The tick ran while the window was closed, so it cannot deliver a queued catch-up and
+    // must not throw one away either.
+    expect(watcher.clearMaintenanceWindowQueue).not.toHaveBeenCalled();
+  });
+
+  // #946 finding 2: under the install scope the only arming site is the trigger deferral,
+  // which fires from paths outside watch() (a digest flush, a webhook, a manual
+  // single-container scan). An ordinary tick used to clear the queue unconditionally, so a
+  // digest-mode action trigger's arm was destroyed by the next scan and the install never
+  // landed.
+  test('an ordinary tick outside the window leaves a queued catch-up armed', async () => {
+    const watcher = createWatcher({
+      configuration: {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowscope: 'install',
+      },
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
+    });
+
+    // Armed by Trigger.deferAutoUpdateForMaintenanceWindow from a digest flush at 08:00,
+    // long after the scan that produced the reports had returned.
+    watcher.queueMaintenanceWindowWatch();
+    vi.mocked(watcher.queueMaintenanceWindowWatch).mockClear();
+
+    await watchFromCronOrchestration(watcher, { reason: 'schedule' });
+
+    expect(watcher.watch).toHaveBeenCalled();
+    expect(watcher.clearMaintenanceWindowQueue).not.toHaveBeenCalled();
+  });
+
+  test('the catch-up scan clears the queue it was armed by', async () => {
+    const watcher = createWatcher({
+      configuration: {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowscope: 'install',
+      },
+      // The catch-up runs at the moment the window opens, but it passes
+      // ignoreMaintenanceWindow anyway, so a window that closes underneath it still clears.
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
+    });
+
+    await watchFromCronOrchestration(watcher, {
+      ignoreMaintenanceWindow: true,
+      reason: 'maintenance-window',
+    });
+
+    expect(watcher.clearMaintenanceWindowQueue).toHaveBeenCalled();
+  });
+
+  test('a tick inside an open window clears the queue', async () => {
+    const watcher = createWatcher({
+      configuration: {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowscope: 'install',
+      },
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(true),
+    });
+
+    await watchFromCronOrchestration(watcher, { reason: 'schedule' });
+
+    expect(watcher.clearMaintenanceWindowQueue).toHaveBeenCalled();
+  });
+
+  test('a tick on a watcher with no window configured clears the queue', async () => {
+    const watcher = createWatcher({
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(false),
+    });
+
+    await watchFromCronOrchestration(watcher, { reason: 'schedule' });
+
     expect(watcher.clearMaintenanceWindowQueue).toHaveBeenCalled();
   });
 
