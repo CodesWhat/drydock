@@ -752,21 +752,6 @@ function getImageRepositoryKey(imageReference: unknown): string {
     : repositoryWithoutHubHost.replace(HUB_LIBRARY_NAMESPACE_PREFIX, '');
 }
 
-/**
- * The manifest digest an image reference pins, or null when it names only a
- * mutable tag. What a caller that already knows which image it is deploying
- * hands the identity binder as its tie-break between several `RepoDigests`.
- * The digest is not validated here; `selectPulledRepoDigest` only uses one
- * that matches a candidate, so anything else falls through to the same
- * unresolved-tie handling as null.
- * @param imageReference
- * @returns the digest, or null when the reference pins none
- */
-function getPinnedManifestDigest(imageReference: string): string | null {
-  const separatorIndex = imageReference.lastIndexOf('@');
-  return separatorIndex >= 0 ? imageReference.slice(separatorIndex + 1) : null;
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -3900,11 +3885,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       // was undoing, while the operation reported success (DR-101).
       runtimeContext: {
         newImage,
-        // A rollback reference carries the digest its backup captured when
-        // there is one. Nothing else may break a tie between several
-        // RepoDigests here: `container.result.digest` is the candidate's
-        // manifest, which is what this recreate is moving away from (DR-64).
-        preferredDigest: getPinnedManifestDigest(newImage),
+        // No digest to hand over: a digest-pinned newImage is already
+        // matched by the pulled reference itself in selectPulledRepoDigest,
+        // so re-parsing it here would only be read back never used. Passing
+        // this key at all is still required, though, so the options bag
+        // marks the pull caller-pinned and `container.result.digest` (the
+        // candidate this recreate is moving away from) never breaks the tie
+        // by default (DR-64).
+        preferredDigest: null,
       },
       // Deliberately no `pulledImageId`, `imageIdentity` or
       // `onPulledImageIdResolved`: this path has no compose-file-once

@@ -952,7 +952,11 @@ describe('HealthMonitor', () => {
       expect.objectContaining({
         runtimeContext: {
           newImage: 'library/nginx:1.0.0@sha256:kept',
-          preferredDigest: 'sha256:kept',
+          // The rollback is caller-pinned regardless of whether the backup
+          // reference carries a digest: selectPulledRepoDigest matches a
+          // digest-pinned pull off the reference itself, so nothing here
+          // needs to re-parse and hand back the digest (DR-64).
+          preferredDigest: null,
         },
       }),
     );

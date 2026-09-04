@@ -66,10 +66,10 @@ interface HealthMonitorOptions {
  * along under the index signature.
  */
 interface MonitoredContainer {
-  watcher?: string;
+  watcher: string;
   agent?: string;
-  labels?: Record<string, string>;
-  image?: { registry?: { name?: string } };
+  labels: Record<string, string>;
+  image: { registry: { name: string }; tag: { value: string } };
   [field: string]: unknown;
 }
 
