@@ -219,6 +219,18 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.10 亮点</strong></summary>
+
+- **批量和摘要模式下的 `once=true` 发送现在会像简单路径一样先占用通知名额，因此与定时扫描重叠的手动扫描不会再把同一次更新通报两次。** 摘要刷新会跳过并清除此前刷新已经发送过的缓冲结果，批量重试缓冲区也不会再把未占位的条目送到触发器。([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **注销 watcher 现在会清除定时扫描的截止计时器**，因此已拆除的 watcher 不会再记录不再属于它的截止告警，等待该扫描的每个调用方都会得到结果，拆除之后再请求的扫描会被拒绝而不是启动。([#998](https://github.com/CodesWhat/drydock/pull/998))
+- **入门指南现在说明 hook 脚本在 Drydock 容器内运行**，因此只存在于宿主机或更新后容器中的路径会失败，代理的注册表查找修复也标注了它的贡献者。([#996](https://github.com/CodesWhat/drydock/pull/996))
+- **同一段 hooks 说明现在写明失败的 pre-hook 默认会中止更新，并指出 `dd.hook.pre.abort=false` 是退出该行为的开关**，而不是把中止描述为无条件的。([#1001](https://github.com/CodesWhat/drydock/pull/1001))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc10--2026-09-04)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.9 亮点</strong></summary>
 
 - **`watchFromCron()` 现在是单次并发（single-flight）执行，因此大规模集群中重叠的扫描不会再为同一次更新多次触发同一个触发器。** 一个永不结束的扫描现在会与截止时间竞争，以免阻塞后续的 cron 周期。([#979](https://github.com/CodesWhat/drydock/pull/979))
