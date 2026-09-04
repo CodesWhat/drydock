@@ -3816,6 +3816,161 @@ test('flushDigestBuffer sends once when a report for the same result lands mid-f
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
 });
 
+// Regression test for the flush's own revalidation substituting the CURRENT
+// store container for the buffered one. When that substitute is a result an
+// earlier flush already digested, sending it repeats the digest AND the
+// post-send delete then evicts the newer candidate the buffer was holding, so
+// the real update is lost. The reservation now decides whether it goes out.
+test('flushDigestBuffer skips and evicts an entry whose current store state was already digested', async () => {
+  await trigger.register('trigger', 'test', 'digest-trigger', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  trigger.init();
+
+  const containerA = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'test',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+  const containerB = {
+    ...containerA,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+    result: { tag: '3.0' },
+  };
+
+  await trigger.handleContainerReportDigest({ changed: true, container: containerA });
+
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  const batchSpy = vi.fn().mockReturnValueOnce(sendPromise).mockResolvedValue(undefined);
+  trigger.triggerBatch = batchSpy;
+
+  // A digests, and a newer candidate B replaces the buffer entry mid-send, so
+  // the identity-guarded post-send delete correctly leaves B buffered.
+  const flushA = trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  await trigger.handleContainerReportDigest({ changed: true, container: containerB });
+  resolveSend();
+  await flushA;
+  expect(trigger.digestBuffer.get('c1')).toBe(containerB);
+
+  // A stale scan puts A back in the store, so the next flush substitutes the
+  // already-digested A for the buffered B.
+  storeContainer.getContainersRaw.mockReturnValue([containerA]);
+  await trigger.flushDigestBuffer();
+
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+
+  // Nothing was lost: once the store catches up, B's own report re-buffers it
+  // and the next flush sends it.
+  storeContainer.getContainersRaw.mockReturnValue([containerB]);
+  await trigger.handleContainerReportDigest({ changed: true, container: containerB });
+  await trigger.flushDigestBuffer();
+  expect(batchSpy).toHaveBeenCalledTimes(2);
+});
+
+test('flushDigestBuffer leaves a concurrently replaced buffer entry in place when the reservation fails', async () => {
+  await trigger.register('trigger', 'test', 'digest-trigger', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'test',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+  await trigger.handleContainerReportDigest({ changed: true, container });
+
+  // Already digested, so the flush's reservation for the store container fails.
+  notificationHistoryStore.recordNotification(
+    trigger.getId(),
+    'c1',
+    'update-available-digest',
+    notificationHistoryStore.computeResultHash(container),
+  );
+
+  const replacement = {
+    ...container,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+    result: { tag: '3.0' },
+  };
+  // Replace the buffer entry after the flush snapshots it, the same way a
+  // concurrent report would.
+  storeContainer.getContainersRaw.mockImplementation(() => {
+    trigger.digestBuffer.set('c1', replacement);
+    return [container];
+  });
+
+  const batchSpy = vi.fn().mockResolvedValue(undefined);
+  trigger.triggerBatch = batchSpy;
+
+  await trigger.flushDigestBuffer();
+
+  expect(batchSpy).not.toHaveBeenCalled();
+  expect(trigger.digestBuffer.get('c1')).toBe(replacement);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+// Regression test for the batch retry buffer, which getBatchRetryContainers
+// pulls into every batch until a send succeeds. The reservation on the report
+// path does not cover it, so two overlapping batches after a failure both
+// carried the same retry entry to triggerBatch.
+test('handleContainerReports sends a retry-buffered container once across two overlapping batches', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', {
+    ...configurationValid,
+    mode: 'batch',
+  });
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.0' },
+    result: { tag: '2.0' },
+  };
+
+  // A failed batch parks the container in the retry buffer.
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('network timeout'));
+  await trigger.handleContainerReports([{ changed: true, container }]);
+  expect(trigger.batchRetryBuffer.size).toBe(1);
+
+  // The store keeps the container alive so getBatchRetryContainers returns it
+  // to both overlapping calls, which is what the reservation has to arbitrate.
+  storeContainer.getContainersRaw.mockReturnValue([container]);
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  const batchSpy = vi.fn().mockReturnValue(sendPromise);
+  trigger.triggerBatch = batchSpy;
+
+  const call1 = trigger.handleContainerReports([]);
+  const call2 = trigger.handleContainerReports([]);
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+
+  resolveSend();
+  await Promise.all([call1, call2]);
+
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  expect(trigger.batchRetryBuffer.size).toBe(0);
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
 test('handleContainerReportDigest still buffers a genuinely new result after a flush', async () => {
   await trigger.register('trigger', 'test', 'digest-trigger', {
     ...configurationValid,

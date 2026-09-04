@@ -2269,17 +2269,29 @@ class Trigger<
 
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
-    for (const container of this.getBatchRetryContainers(containerReports)) {
-      containersToSendByBusinessId.set(
-        getContainerNotificationKey(container) || fullName(container),
-        container,
-      );
-    }
     // Tracked apart from containersToSendByBusinessId: that map is keyed by
-    // business id, so two reports resolving to the same key leave only the
+    // business id, so two entries resolving to the same key leave only the
     // last one in the map even though both took a reservation, and releasing
     // from the map would strand the one it replaced.
     const reservedContainers: Container[] = [];
+    for (const container of this.getBatchRetryContainers(containerReports)) {
+      const businessId = getContainerNotificationKey(container) || fullName(container);
+      // Retry entries skip the eligibility check - they already passed it when
+      // they were first batched - but they take the same reservation, or two
+      // overlapping batches both pull the same entry out of the retry buffer
+      // and send it twice, which the reservation on the report path alone does
+      // not stop. A retry entry only exists because a send failed, so nothing
+      // recorded history for it: a reservation that fails means this exact
+      // result is already sent or already in flight elsewhere, and the retry is
+      // spent. Drop it from this send and clear it; a send that fails again
+      // re-buffers it from the catch below.
+      if (!this.reserveOnceNotificationSlot(container, 'update-available')) {
+        this.batchRetryBufferStore.delete(businessId);
+        continue;
+      }
+      reservedContainers.push(container);
+      containersToSendByBusinessId.set(businessId, container);
+    }
     for (const containerReport of containerReports) {
       if (this.shouldHandleBatchContainerReport(containerReport)) {
         reservedContainers.push(containerReport.container);
@@ -2558,16 +2570,41 @@ class Trigger<
       return;
     }
 
-    const containers = dispatchEntries.map(({ currentContainer }) => currentContainer);
-    this.log.info(`Digest flush: sending ${containers.length} update(s)`);
+    // One binding for the kind this flush reserves and releases on, so the two
+    // cannot drift apart.
+    const digestEventKind = 'update-available-digest';
     // Hold the once-gate reservation for exactly the results being sent, for
     // the whole span between deciding to send and recording the send, so a
     // report that lands mid-flush cannot re-buffer the same result behind it.
-    // Nothing between here and the try below can throw, so the finally always
-    // pairs with this.
-    for (const container of containers) {
-      this.reserveOnceNotificationSlot(container, 'update-available-digest');
+    // The answer has to be honoured, not just taken: this flush substitutes the
+    // CURRENT store container for the buffered one, and that substitute can be
+    // a result already digested on an earlier flush. Sending it anyway repeats
+    // that digest, and the post-send delete below then evicts the newer
+    // candidate the buffer was actually holding, so the real update is lost.
+    // Evict such an entry the same way a revalidation miss does: it describes a
+    // candidate the store no longer shows, and a genuinely pending update
+    // re-enters the buffer on the next scan's report.
+    const reservedEntries = dispatchEntries.filter((entry) => {
+      if (this.reserveOnceNotificationSlot(entry.currentContainer, digestEventKind)) {
+        return true;
+      }
+      this.log.debug(
+        `Evicting ${entry.containerName} from digest buffer at flush (its current state was already digested)`,
+      );
+      if (this.digestBuffer.get(entry.containerName) === entry.bufferedContainer) {
+        this.digestBufferStore.delete(entry.containerName);
+      }
+      return false;
+    });
+
+    // Every reservation failed, so none is held and there is nothing to release.
+    if (reservedEntries.length === 0) {
+      this.log.debug('Digest cron fired — every buffered update was already digested');
+      return;
     }
+
+    const containers = reservedEntries.map(({ currentContainer }) => currentContainer);
+    this.log.info(`Digest flush: sending ${containers.length} update(s)`);
     let status: 'success' | 'error' = 'error';
     this.isDigestFlushInProgress = true;
     try {
@@ -2583,7 +2620,7 @@ class Trigger<
       for (const container of containers) {
         this.recordNotifiedForResult(container, 'update-available-digest');
       }
-      for (const { containerName, bufferedContainer } of dispatchEntries) {
+      for (const { containerName, bufferedContainer } of reservedEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
           this.digestBufferStore.delete(containerName);
         }
@@ -2597,7 +2634,7 @@ class Trigger<
       this.isDigestFlushInProgress = false;
       this.incrementTriggerCounter(status);
       for (const container of containers) {
-        this.releaseOnceNotificationSlot(container, 'update-available-digest');
+        this.releaseOnceNotificationSlot(container, digestEventKind);
       }
     }
   }
