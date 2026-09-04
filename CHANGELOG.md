@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **The agents page didn't say registries have to be configured on every agent, not just the controller.** A traditional agent runs its own watcher and does its own registry matching and update checks, so `DD_REGISTRY_*` configured only on the controller left every agent-reported container from that registry stamped `unknown`, credentials are never pushed from controller to agent. The controller needs the same registry configured too, or the container's registry link in the UI resolves to a registry the controller was never told about. A new "Registries on agents" section spells this out with a worked Gitea example on both sides. Reported in [#945](https://github.com/CodesWhat/drydock/issues/945).
+- **The watchers page said manual updates bypass the maintenance window but didn't say the window gates the entire scheduled scan, not just installing an update.** A closed window means new containers stay invisible in the UI until the next window opens, container state shown in the UI goes stale (a container stopped during the last window still shows as stopped, and a start action on it fails because Docker refuses to start a container that's already running), and update notifications are deferred right along with the update itself. A manual scan (`POST /api/v1/containers/watch`, or the UI) bypasses the window the same way a manual update does, because it calls the watcher's `watch()` directly rather than the cron path that checks it. Discussed in [#946](https://github.com/CodesWhat/drydock/discussions/946).
+
 ## [1.7.0-rc.10] — 2026-09-04
 
 ### Fixed
