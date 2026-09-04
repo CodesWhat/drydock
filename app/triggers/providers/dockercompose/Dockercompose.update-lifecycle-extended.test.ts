@@ -1488,6 +1488,49 @@ describe('Dockercompose Trigger', () => {
     expect(rollbackSpy).toHaveBeenCalled();
   });
 
+  test('a moved tag should be refused, not thrown over, when the security gate exposes no configuration (DR-67)', async () => {
+    trigger.configuration.dryrun = false;
+    // A gate with no securityConfig at all. Reading through it unguarded would
+    // raise a TypeError inside the recreate's try, and the rollback net would
+    // report that as a failed replacement, so a wiring bug would look exactly
+    // like a tag that moved. The policy reads as unset, which is fail-closed.
+    trigger.getSecurityGate = vi.fn().mockReturnValue({});
+    const container = makeContainer({ name: 'nginx-a' });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:pulled-image',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const rollbackSpy = vi
+      .spyOn(trigger as any, 'attemptRollbackRestoreOldContainer')
+      .mockResolvedValue({ status: 'rolled-back' });
+    const removeCreated = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: removeCreated,
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:retagged-image' }),
+    } as any);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+        skipPull: true,
+        runtimeContext: { dockerApi: mockDockerApi, newImage: 'nginx:1.1.0' },
+      }),
+    ).rejects.toThrow(
+      'Recreated container nginx-a runs image sha256:retagged-image but nginx:1.1.0 was pulled as sha256:pulled-image',
+    );
+
+    expect(rollbackSpy).toHaveBeenCalled();
+  });
+
   test('a moved tag should be kept under a configured scanner whose identity binding is optional (DR-67)', async () => {
     trigger.configuration.dryrun = false;
     // The only posture that produces securityGateUnboundWarn in production:

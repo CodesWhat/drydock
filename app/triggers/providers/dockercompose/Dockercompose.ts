@@ -3386,12 +3386,28 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * cannot be bound to a digest. `warn` is the operator saying they would
    * rather an update land than have it refused for want of a certain answer;
    * `block`, the default, is the opposite.
+   *
+   * Deliberately read without gating on `security.enabled`. The policy states
+   * a preference for availability over strictness, and an install with no
+   * scanner configured has exactly the same preference to state: the moved-tag
+   * check runs there too, because it is the create-from-mutable-tag fallback
+   * that reaches it, not the scanner.
+   *
+   * Guarded the way {@link Docker.getPostPullIdentityBindingPolicy} guards the
+   * same read. Without it, a gate carrying no `securityConfig` throws a
+   * TypeError from inside the recreate's own try, which the rollback net then
+   * reports as a failed replacement, so a wiring bug would be indistinguishable
+   * from a tag that actually moved.
    */
   private isSecurityAvailabilityPolicyPermissive(): boolean {
     const securityGate = this.getSecurityGate() as {
-      securityConfig: { getSecurityConfiguration: () => { availabilityPolicy?: string } };
+      securityConfig?: {
+        getSecurityConfiguration?: () => { availabilityPolicy?: string } | undefined;
+      };
     };
-    return securityGate.securityConfig.getSecurityConfiguration().availabilityPolicy === 'warn';
+    const availabilityPolicy =
+      securityGate.securityConfig?.getSecurityConfiguration?.()?.availabilityPolicy;
+    return availabilityPolicy === 'warn';
   }
 
   /**
