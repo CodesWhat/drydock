@@ -14,10 +14,15 @@ import { expect, test } from 'vitest';
 // Bumped from 1610 for the DR-106 startup-seed fix (one import + one call
 // site in init()); the seeding logic itself lives in
 // seedControllerLocalEnumeration in controller-local-container-ids.ts.
-test('Docker watcher implementation should stay under 1614 lines', () => {
+// Bumped from 1614 for the deregistered-watcher guard on getContainers():
+// an isWatcherDeregistered check (plus explanatory comment) around the
+// recordControllerLocalEnumeration() call, so a getContainers() call that
+// settles after deregisterComponent() can't resurrect a dead watcher's
+// claim set.
+test('Docker watcher implementation should stay under 1621 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1614);
+  expect(lineCount).toBeLessThanOrEqual(1621);
 });
