@@ -1034,6 +1034,68 @@ test('init should skip local orphan pruning when no local watchers are registere
   expect(mockDeleteContainer).not.toHaveBeenCalled();
 });
 
+test('init should prune controller-owned containers when the local watcher is disabled', async () => {
+  mockGetLocalWatcherEnabled.mockReturnValue(false);
+  agents = {
+    'edge-agent': {
+      host: 'http://10.0.0.2:3000',
+      secret: 'mysecret',
+    },
+  };
+  mockGetContainersRaw.mockReturnValue([
+    {
+      // Controller-owned leftover from before DD_LOCAL_WATCHER=false; the agent
+      // that now watches it cannot report it while this record survives.
+      id: 'moved-to-agent',
+      watcher: 'local',
+    },
+    {
+      // Already owned by a registered agent
+      id: 'kept-agent',
+      watcher: 'local',
+      agent: 'edge-agent',
+    },
+  ]);
+  const warnSpy = vi.spyOn(registry.testable_log, 'warn');
+
+  await registry.init();
+
+  expect(Object.keys(registry.getState().watcher)).toEqual([]);
+  expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
+  expect(mockDeleteContainer).toHaveBeenCalledWith('moved-to-agent');
+  expect(warnSpy).toHaveBeenCalledWith('Pruned 1 container entries from missing local watcher(s)');
+
+  mockGetLocalWatcherEnabled.mockReturnValue(true);
+});
+
+test('init should keep the records of a configured watcher that failed to register while DD_LOCAL_WATCHER is false', async () => {
+  // DD_LOCAL_WATCHER only decides whether the default 'local' watcher is added
+  // when nothing else is configured, so with a watcher configured it is read by
+  // nothing. What this pins is that the prune agrees: the guard is the number of
+  // registrations attempted, not the flag. Keying it on the flag instead would
+  // delete the records of 'invalid' here, which is a watcher the operator still
+  // has configured and expects back once its configuration is fixed.
+  mockGetLocalWatcherEnabled.mockReturnValue(false);
+  watchers = {
+    invalid: {
+      fail: true,
+    },
+  };
+  mockGetContainersRaw.mockReturnValue([
+    {
+      id: 'owned-by-failed-watcher',
+      watcher: 'invalid',
+    },
+  ]);
+
+  await registry.init();
+
+  expect(Object.keys(registry.getState().watcher)).toEqual([]);
+  expect(mockDeleteContainer).not.toHaveBeenCalled();
+
+  mockGetLocalWatcherEnabled.mockReturnValue(true);
+});
+
 test('init should log and continue when orphan pruning fails', async () => {
   watchers = {
     local: {},
