@@ -52,8 +52,50 @@ fi
 # FROM [--flag=value ...] <ref>@sha256:<64 hex> [AS <stage>]
 from_pattern='^[[:space:]]*[Ff][Rr][Oo][Mm][[:space:]]+(--[^[:space:]]+[[:space:]]+)*([^[:space:]]+@sha256:[0-9a-f]{64})([[:space:]]|$)'
 
-pinned_refs=()
+# A Dockerfile instruction can span physical lines: a line ending in the
+# escape character continues on the next one, and comment lines inside the
+# continuation are dropped. Matching physical lines would let a pin written as
+# `FROM --platform=... \` + `<ref>` slip past the guard, so fold each logical
+# instruction first. The escape character defaults to backslash and can be
+# changed by a `# escape=` parser directive, which is only honoured before the
+# first instruction, comment or blank line.
+escape_char=$'\\'
+directive_pattern='^#[[:space:]]*[Ee][Ss][Cc][Aa][Pp][Ee][[:space:]]*=[[:space:]]*(.)[[:space:]]*$'
+logical_lines=()
+current=""
+directives_allowed=true
 while IFS= read -r line || [ -n "${line}" ]; do
+	line="${line%$'\r'}"
+	if [ "${directives_allowed}" = true ]; then
+		if [[ ${line} =~ ${directive_pattern} ]]; then
+			escape_char="${BASH_REMATCH[1]}"
+			continue
+		fi
+		directives_allowed=false
+	fi
+	if [[ ${line} =~ ^[[:space:]]*# ]]; then
+		continue
+	fi
+	# BuildKit warns on an empty continuation line and keeps folding, so a
+	# blank line never terminates an instruction here either.
+	if [[ ${line} =~ ^[[:space:]]*$ ]]; then
+		continue
+	fi
+	stripped="${line%"${line##*[![:space:]]}"}"
+	if [ "${stripped: -1}" = "${escape_char}" ]; then
+		current+="${stripped:0:${#stripped}-1} "
+		continue
+	fi
+	current+="${line}"
+	logical_lines+=("${current}")
+	current=""
+done <"${dockerfile}"
+if [ -n "${current}" ]; then
+	logical_lines+=("${current}")
+fi
+
+pinned_refs=()
+for line in ${logical_lines[@]+"${logical_lines[@]}"}; do
 	if [[ ${line} =~ ${from_pattern} ]]; then
 		ref="${BASH_REMATCH[2]}"
 		already_seen=false
@@ -67,7 +109,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
 			pinned_refs+=("${ref}")
 		fi
 	fi
-done <"${dockerfile}"
+done
 
 if [ "${#pinned_refs[@]}" -eq 0 ]; then
 	echo "::error::${dockerfile} has no digest-pinned FROM instructions; base images must be pinned to an image index digest."
