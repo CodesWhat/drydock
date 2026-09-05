@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **The agents page's paired Gitea registry example had the controller talking HTTPS to an agent serving plain HTTP.** The controller block set `DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem`, but the agent block above it had no `DD_SERVER_TLS_*` variables or certificate mounts, so the example copied as written could never connect. The agent block now mounts `agent.pem`/`agent-key.pem` and sets `DD_SERVER_TLS_ENABLED`, `DD_SERVER_TLS_CERT`, and `DD_SERVER_TLS_KEY`, with a comment noting the certificate must be signed by the `agent-ca.pem` the controller mounts and be valid for the host the controller dials.
+
 ## [1.7.0-rc.11] — 2026-09-05
 
 ### Fixed
