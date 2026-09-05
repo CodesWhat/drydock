@@ -505,7 +505,7 @@ test('build job checks base image pins before building, for the platforms it smo
   );
   const guard = steps[guardIndex];
   const smokeBuild = getWorkflowStep('build', 'Docker build (multi-arch smoke)');
-  const smokePlatforms = /--platform ([^\s\\]+)/u.exec(String(smokeBuild?.with?.command))?.[1];
+  const smokePlatforms = smokeBuild?.with?.platforms as string | undefined;
 
   expect(guardIndex).toBeGreaterThan(-1);
   expect(guardIndex).toBeLessThan(

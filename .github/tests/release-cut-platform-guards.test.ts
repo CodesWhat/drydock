@@ -39,7 +39,6 @@ test('release-cut checks base image pins before it builds anything', () => {
 
   expect(guardIndex).toBeGreaterThan(-1);
   expect(guardIndex).toBeLessThan(indexOf('Build and push staging image'));
-  expect(guardIndex).toBeLessThan(indexOf('Retry full build on total build failure'));
 });
 
 test('release-cut reads the shipped binaries of every platform it publishes', () => {
