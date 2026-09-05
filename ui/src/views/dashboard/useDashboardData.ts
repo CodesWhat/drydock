@@ -1,6 +1,7 @@
 import { computed, onMounted, onUnmounted, type Ref, ref, watch } from 'vue';
 import { i18n } from '../../boot/i18n';
 import { getAgents } from '../../services/agent';
+import { getApprovalSummary } from '../../services/approval';
 import { getAllContainers, getContainerRecentStatus } from '../../services/container';
 import { getAllRegistries } from '../../services/registry';
 import { getServer } from '../../services/server';
@@ -267,6 +268,20 @@ function applyDashboardOperationPatch(state: DashboardStateRefs, event: Event): 
   row.updateOperation = undefined;
 }
 
+// The approval SSE payload already carries the post-write pending count (see
+// app/approvals/events.ts), so this is a direct set rather than a refetch.
+function applyApprovalEventPayload(approvalPendingCount: Ref<number>, event: Event): void {
+  const payload = (event as CustomEvent)?.detail;
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+  const pendingCount = (payload as Record<string, unknown>).pendingCount;
+  if (typeof pendingCount !== 'number') {
+    return;
+  }
+  approvalPendingCount.value = pendingCount;
+}
+
 function applyFetchedDashboardData(state: DashboardStateRefs, response: DashboardDataResponse) {
   state.containers.value = mapApiContainers(response.containersRes, i18n.global.t);
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
@@ -362,6 +377,7 @@ export function useDashboardData() {
   const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
   const recentStatusByIdentity = ref<Record<string, RecentAuditStatus>>({});
   const maintenanceCountdownNow = ref(Date.now());
+  const approvalPendingCount = ref(0);
 
   const state: DashboardStateRefs = {
     loading,
@@ -433,6 +449,15 @@ export function useDashboardData() {
       statsSummaryController?.resume();
     }
   }) as EventListener;
+  const approvalCreatedListener = ((event: Event) => {
+    applyApprovalEventPayload(approvalPendingCount, event);
+  }) as EventListener;
+  const approvalDecidedListener = ((event: Event) => {
+    applyApprovalEventPayload(approvalPendingCount, event);
+  }) as EventListener;
+  const approvalResolvedListener = ((event: Event) => {
+    applyApprovalEventPayload(approvalPendingCount, event);
+  }) as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
@@ -442,6 +467,9 @@ export function useDashboardData() {
     globalThis.addEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.addEventListener('dd:sse-connected', reconnectRefreshListener);
     globalThis.addEventListener('dd:sse-resync-required', resyncRefreshListener);
+    globalThis.addEventListener('dd:sse-approval-created', approvalCreatedListener);
+    globalThis.addEventListener('dd:sse-approval-decided', approvalDecidedListener);
+    globalThis.addEventListener('dd:sse-approval-resolved', approvalResolvedListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch = watch(hasMaintenanceWindows, maintenanceCountdownController.sync, {
       immediate: true,
@@ -468,6 +496,15 @@ export function useDashboardData() {
       onError: () => undefined,
     });
 
+    // Initial fetch populates the stat tile immediately; the SSE listeners
+    // above keep it live afterward. Tolerate a failure here the same way as
+    // the sidebar badge does — the tile just stays at its last known value.
+    getApprovalSummary()
+      .then((s) => {
+        approvalPendingCount.value = s.pending;
+      })
+      .catch(() => undefined);
+
     await fetchDashboardData();
   });
 
@@ -478,6 +515,9 @@ export function useDashboardData() {
     globalThis.removeEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.removeEventListener('dd:sse-connected', reconnectRefreshListener);
     globalThis.removeEventListener('dd:sse-resync-required', resyncRefreshListener);
+    globalThis.removeEventListener('dd:sse-approval-created', approvalCreatedListener);
+    globalThis.removeEventListener('dd:sse-approval-decided', approvalDecidedListener);
+    globalThis.removeEventListener('dd:sse-approval-resolved', approvalResolvedListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
     statsSummaryController?.disconnect();
     stopMaintenanceWindowWatch?.();
@@ -487,6 +527,7 @@ export function useDashboardData() {
 
   return {
     agents,
+    approvalPendingCount,
     containerSummary,
     summary,
     containers,

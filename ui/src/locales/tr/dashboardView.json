@@ -97,7 +97,8 @@
       "updatesAvailable": "Mevcut Güncellemeler",
       "updateDetail": "{fresh} yeni · {mature} mevcut",
       "securityIssues": "Güvenlik Sorunları",
-      "registries": "Kayıt Defterleri"
+      "registries": "Kayıt Defterleri",
+      "approvals": "Onaylar"
     },
     "updateKind": {
       "major": "Ana",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

@@ -22,14 +22,22 @@ describe('dashboardWidgetLayout', () => {
 
     test('stat cards fill the first row as 4 equal columns', () => {
       const statCards = layout.filter((item) => item.i.startsWith('stat-'));
-      expect(statCards).toHaveLength(4);
+      expect(statCards).toHaveLength(5);
       for (const card of statCards) {
-        expect(card.y).toBe(0);
         expect(card.w).toBe(3);
         expect(card.h).toBe(3);
       }
-      const xPositions = statCards.map((c) => c.x).sort((a, b) => a - b);
+      const firstRow = statCards.filter((c) => c.y === 0);
+      const xPositions = firstRow.map((c) => c.x).sort((a, b) => a - b);
       expect(xPositions).toEqual([0, 3, 6, 9]);
+    });
+
+    test('stat-approvals wraps to its own row below the first 4 stats', () => {
+      const approvals = layout.find((item) => item.i === 'stat-approvals');
+      expect(approvals?.x).toBe(0);
+      expect(approvals?.y).toBeGreaterThan(0);
+      expect(approvals?.w).toBe(3);
+      expect(approvals?.h).toBe(3);
     });
 
     test('resource-usage and security-overview have equal height', () => {

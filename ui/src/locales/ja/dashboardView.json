@@ -97,7 +97,8 @@
       "updatesAvailable": "利用可能な更新",
       "updateDetail": "{fresh} 新規 · {mature} 成熟",
       "securityIssues": "セキュリティ問題",
-      "registries": "レジストリ"
+      "registries": "レジストリ",
+      "approvals": "承認"
     },
     "updateKind": {
       "major": "メジャー",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }
