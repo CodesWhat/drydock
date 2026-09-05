@@ -1,0 +1,56 @@
+---
+title: "Approval Queue"
+description: "Review and decide on manual-mode update candidates from a single dashboard view."
+---
+
+## Overview
+
+Under [update mode](/docs/configuration/actions/update-eligibility#global-update-mode) `manual`, an eligible update sits on the container row waiting for someone to click **Update**. The approval queue is the same candidate set surfaced as a work list instead: every container whose update the Update button would currently accept gets a row at **Approvals** in the sidebar, with the release notes and any soft blockers already loaded, and one of three actions to close it out.
+
+The queue is a durable ledger of decisions, not a second source of truth about what's updateable. Whether a candidate belongs in the queue at all — and whether it's still the one it was when the row was created — is answered live against the container on every read, the same eligibility check the container list and the Update button already use.
+
+## What produces a row
+
+A row is created for a container when, on any watch cycle:
+
+- it has a raw update candidate (a soft-gated candidate still counts — see below);
+- no **hard** blocker applies (a locked Update button never reaches the queue);
+- and it would not be auto-dispatched. Under `updateMode: auto`, a container fully resolved to automatic execution by a matching action trigger skips the queue entirely and updates on its own.
+
+| Update mode | Produces queue rows? |
+| --- | :---: |
+| `notify` | No — manual updates are refused server-wide, so nothing is admissible to queue |
+| `manual` | Yes, for every eligible candidate |
+| `auto` | Only for candidates a configured action trigger will not auto-dispatch (no matching trigger, `AUTO=oninclude` without the include label, agent mismatch, and so on) |
+
+<Callout type="info">A **soft** blocker (`snoozed`, `maturity-not-reached`, `skip-tag`, `skip-digest`, `threshold-not-reached`, `maintenance-window-closed`) does not keep a candidate out of the queue — it becomes one of the row's **hold reasons**, shown inline next to the release notes. These are exactly the conditions the manual Update button already overrides with its "Update anyway" confirmation, so approving a row with hold reasons carries the same override, spelled out before you click. A **hard** blocker (`security-scan-blocked`, `trigger-excluded`, `active-operation`, and the rest) behaves the same as everywhere else in Drydock: the row is left alone if one already exists, but nothing new queues while it's locked.</Callout>
+
+## The three actions
+
+Each action on a row is a thin wrapper over an update primitive that already exists elsewhere in Drydock — approving from the queue and clicking Update on the container panel go through the identical admission path and produce the identical rejection for the identical container state.
+
+- **Approve** dispatches the update exactly as the container panel's **Update** button does. Any reason that path would refuse — including the `notify`-mode 409 — is returned here unchanged.
+- **Reject** writes the container's `skipTags` / `skipDigests` policy, the same effect as the container row's **Skip** action. This is undoable from the **Update policy** menu, and the confirmation dialog says so before you commit to it.
+- **Defer** snoozes the container until the same instant the row is deferred to (7 days by default; see the API for a custom expiry). A deferred row returns to `pending` the moment the snooze expires — there is no sweep job, it's a live check on every read.
+
+Every decision writes one audit entry (`update-approved`, `update-rejected`, or `update-deferred`) carrying the approval id, the decided-by identity, and an optional note, and pushes a `dd:approval-decided` SSE event to any open client.
+
+## Where it appears
+
+- **Sidebar** — the **Approvals** nav item carries a count badge for pending rows, live over SSE.
+- **Dashboard** — a stat tile mirrors the same pending count and links straight to the queue.
+- **`/approvals`** — the queue itself: tabs for Pending / Deferred / Decided, inline expand for release notes and hold reasons, and keyboard shortcuts (`j`/`k` to move, `a`/`r`/`d` to act, `Enter` to expand).
+
+## Retention
+
+Rows leave the queue the moment they're decided or their candidate is superseded or withdrawn, but they aren't deleted — a decided or resolved row is pruned automatically 30 days after it left the queue. A row still `pending` or under an active deferral is never pruned. The audit entry is the permanent record either way; the row itself is a working-set convenience.
+
+## Notifications
+
+`update-pending-approval` is a registered [notification rule](/docs/configuration/triggers#notification-rules), shipped `enabled: false`. Enabling it and assigning triggers is safe today — the rule exists and can be configured — but no event dispatches to it yet in this release; treat it as reserved for an upcoming one.
+
+## Related
+
+- [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) — the hard/soft blocker distinction the queue reuses verbatim.
+- [Triggers — Notification Rules](/docs/configuration/triggers#notification-rules) — `update-pending-approval`.
+- [Approvals API](/docs/api/approvals) — list, summary, detail, and the three decision endpoints.

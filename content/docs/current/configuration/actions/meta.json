@@ -1,4 +1,4 @@
 {
   "title": "Container Actions",
-  "pages": ["index", "update-eligibility"]
+  "pages": ["index", "update-eligibility", "approvals"]
 }
