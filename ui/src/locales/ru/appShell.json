@@ -58,6 +58,7 @@
         "dashboardFallback": "Панель управления",
         "containers": "Контейнеры",
         "security": "Безопасность",
+        "approvals": "Одобрения",
         "audit": "Аудит",
         "systemLogs": "Системные журналы",
         "manageGroup": "Управление",

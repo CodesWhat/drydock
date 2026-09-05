@@ -18,7 +18,10 @@ export type SseBusEvent =
   | 'scan-started'
   | 'scan-completed'
   | 'resync-required'
-  | 'preferences-updated';
+  | 'preferences-updated'
+  | 'approval-created'
+  | 'approval-decided'
+  | 'approval-resolved';
 
 export type EventStreamConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
 
@@ -97,6 +100,14 @@ export type BatchUpdateCompletedPayload = {
 type ConnectedSsePayload = {
   clientId?: string;
   clientToken?: string;
+};
+
+export type ApprovalEventPayload = {
+  id: string;
+  containerId: string;
+  containerName: string;
+  decision: string;
+  pendingCount: number;
 };
 
 export interface EventStreamEvent {
@@ -388,6 +399,33 @@ export const useEventStreamStore = defineStore('eventStream', () => {
       );
     });
 
+    source.addEventListener('dd:approval-created', (event: MessageEvent) => {
+      emit(
+        'approval-created',
+        parseApprovalEventPayload(event?.data),
+        event?.lastEventId || undefined,
+        true,
+      );
+    });
+
+    source.addEventListener('dd:approval-decided', (event: MessageEvent) => {
+      emit(
+        'approval-decided',
+        parseApprovalEventPayload(event?.data),
+        event?.lastEventId || undefined,
+        true,
+      );
+    });
+
+    source.addEventListener('dd:approval-resolved', (event: MessageEvent) => {
+      emit(
+        'approval-resolved',
+        parseApprovalEventPayload(event?.data),
+        event?.lastEventId || undefined,
+        true,
+      );
+    });
+
     source.onerror = (): void => {
       consecutiveErrors++;
       status.value = 'error';
@@ -514,6 +552,37 @@ export const useEventStreamStore = defineStore('eventStream', () => {
       };
     } catch {
       return {};
+    }
+  }
+
+  function parseApprovalEventPayload(rawData: unknown): ApprovalEventPayload | undefined {
+    if (!rawData || typeof rawData !== 'string') {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object') {
+        return undefined;
+      }
+      const p = parsed as Record<string, unknown>;
+      if (
+        typeof p.id !== 'string' ||
+        typeof p.containerId !== 'string' ||
+        typeof p.containerName !== 'string' ||
+        typeof p.decision !== 'string' ||
+        typeof p.pendingCount !== 'number'
+      ) {
+        return undefined;
+      }
+      return {
+        id: p.id,
+        containerId: p.containerId,
+        containerName: p.containerName,
+        decision: p.decision,
+        pendingCount: p.pendingCount,
+      };
+    } catch {
+      return undefined;
     }
   }
 

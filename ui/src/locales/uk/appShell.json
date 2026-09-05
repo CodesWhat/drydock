@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "Контейнери",
         "security": "Безпека",
+        "approvals": "Схвалення",
         "audit": "Аудит",
         "systemLogs": "Системні журнали",
         "manageGroup": "Керування",

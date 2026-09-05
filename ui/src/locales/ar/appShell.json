@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "الحاويات",
         "security": "الأمان",
+        "approvals": "الموافقات",
         "audit": "التدقيق",
         "systemLogs": "سجلات النظام",
         "manageGroup": "إدارة",

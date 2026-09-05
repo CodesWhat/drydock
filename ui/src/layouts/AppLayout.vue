@@ -21,6 +21,7 @@ import { getUser, logout } from '@/services/auth';
 import { getAllAuthentications } from '@/services/authentication';
 import { getAllContainers } from '@/services/container';
 import { getEffectiveDisplayIcon } from '@/services/image-icon';
+import { getApprovalSummary } from '@/services/approval';
 import { getAllNotificationRules } from '@/services/notification';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
@@ -49,6 +50,7 @@ const isCollapsed = computed(() => sidebarCollapsed.value && !isMobile.value);
 // Dynamic badge data
 const containerCount = ref('');
 const securityIssueCount = ref('');
+const approvalCount = ref('');
 const currentUser = ref<{ username?: string; displayName?: string } | null>(null);
 const userInitials = computed(() => {
   const name = currentUser.value?.displayName || currentUser.value?.username || 'U';
@@ -128,6 +130,13 @@ const navGroups = computed<NavGroup[]>(() => [
         icon: 'security',
         route: ROUTES.SECURITY,
         badge: securityIssueCount.value || undefined,
+        badgeColor: 'red',
+      },
+      {
+        label: t('appShell.layout.nav.approvals'),
+        icon: 'updates',
+        route: ROUTES.APPROVALS,
+        badge: approvalCount.value || undefined,
         badgeColor: 'red',
       },
       { label: t('appShell.layout.nav.audit'), icon: 'audit', route: ROUTES.AUDIT },
@@ -1343,6 +1352,43 @@ function handleSseEvent(event: string, payload?: unknown) {
     connectionLost.value = true;
     startConnectivityPolling();
   }
+  if (event === 'approval-created') {
+    applyApprovalEventPayload(payload);
+    emitUiSseEvent('dd:sse-approval-created', payload);
+    return;
+  }
+  if (event === 'approval-decided') {
+    applyApprovalEventPayload(payload);
+    emitUiSseEvent('dd:sse-approval-decided', payload);
+    return;
+  }
+  if (event === 'approval-resolved') {
+    applyApprovalEventPayload(payload);
+    emitUiSseEvent('dd:sse-approval-resolved', payload);
+  }
+}
+
+// The approval SSE payload already carries the post-write pending count (see
+// app/approvals/events.ts), so the sidebar badge is a direct set rather than an
+// increment/decrement that could drift from the store.
+function applyApprovalEventPayload(payload: unknown): void {
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+  const pendingCount = (payload as Record<string, unknown>).pendingCount;
+  if (typeof pendingCount !== 'number') {
+    return;
+  }
+  approvalCount.value = pendingCount > 0 ? String(pendingCount) : '';
+}
+
+async function refreshApprovalCount() {
+  try {
+    const summary = await getApprovalSummary();
+    approvalCount.value = summary.pending > 0 ? String(summary.pending) : '';
+  } catch {
+    // Sidebar works without badge data
+  }
 }
 
 onMounted(async () => {
@@ -1352,10 +1398,11 @@ onMounted(async () => {
   });
   // Fetch sidebar badge data and user info
   try {
-    const [, , , user, appInfos] = await Promise.all([
+    const [, , , , user, appInfos] = await Promise.all([
       refreshSidebarData(),
       refreshSearchResources(),
       refreshLegacyInputSummary(),
+      refreshApprovalCount(),
       getUser().catch(() => null),
       getAppInfos().catch(() => null),
     ]);

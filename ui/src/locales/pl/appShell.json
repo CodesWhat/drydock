@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "Kontenery",
         "security": "Bezpieczeństwo",
+        "approvals": "Zatwierdzenia",
         "audit": "Audyt",
         "systemLogs": "Logi systemowe",
         "manageGroup": "Zarządzaj",

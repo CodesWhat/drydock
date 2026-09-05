@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "Container",
         "security": "Bảo mật",
+        "approvals": "Phê duyệt",
         "audit": "Kiểm tra",
         "systemLogs": "Nhật ký hệ thống",
         "manageGroup": "Quản lý",
