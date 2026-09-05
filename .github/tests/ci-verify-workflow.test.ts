@@ -136,6 +136,15 @@ test('workflow tests are wired outside the app coverage suite', () => {
   });
 });
 
+test('the pre-commit coverage hook stays retired', () => {
+  // CI-13: lefthook ran ./scripts/pre-commit-coverage.sh with no {staged_files}
+  // argument, so its `for f in "$@"` loop always saw an empty list and the
+  // hook was a silent no-op on every commit. Commit-time checks are meant to
+  // stay cheap, so the command and the script are gone rather than wired up;
+  // pre-push coverage already runs the full suite on every push.
+  expect(loadLefthook()['pre-commit']?.commands?.coverage).toBeUndefined();
+});
+
 test('demo mock contracts and production build are first-class CI gates', () => {
   expect(getTestJobStep('Install demo dependencies')).toMatchObject({
     with: {

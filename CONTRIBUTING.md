@@ -224,7 +224,7 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 12 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
 | 13 | `zizmor` | GitHub Actions security scanning when available | Fail |
 
-The `pre-commit` hook runs a scoped `vitest --changed` on staged workspaces for fast feedback. Full 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
+The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
 
 E2E Cucumber API/stream contracts and the dedicated Playwright browser tests are intentionally not part of the local pre-push hook; they run in CI on the same commit. Browser navigation and rendering assertions belong in Playwright, not Cucumber.
 

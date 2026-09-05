@@ -10,6 +10,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorMessage } from '../util/error.js';
+import { triggerManualWatch } from '../watchers/manual-watch.js';
 import { ddWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
 import { resolveWatcherIdForContainer } from './container/handlers/common.js';
@@ -237,7 +238,10 @@ async function watchAll(req: Request, res: Response) {
   const watcherEntries = Object.entries(watchers);
 
   try {
-    await Promise.all(watcherEntries.map(([, watcher]) => watcher.watch()));
+    const results = await Promise.all(
+      watcherEntries.map(([, watcher]) => triggerManualWatch(watcher, 'webhook')),
+    );
+    const coalesced = results.some((result) => result.coalesced);
 
     recordAuditEvent({
       action: 'webhook-watch',
@@ -249,7 +253,7 @@ async function watchAll(req: Request, res: Response) {
 
     res.status(200).json({
       message: 'Watch cycle triggered',
-      result: { watchers: watcherEntries.length },
+      result: { watchers: watcherEntries.length, coalesced },
     });
   } catch (e: unknown) {
     handleWatchAllError(e, res);

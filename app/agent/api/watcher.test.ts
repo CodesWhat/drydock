@@ -48,6 +48,7 @@ describe('agent API watcher', () => {
     res = {
       json: vi.fn(),
       status: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
     };
   });
 
@@ -78,7 +79,35 @@ describe('agent API watcher', () => {
       });
       await watcherApi.watchWatcher(req, res);
       expect(mockWatcher.watch).toHaveBeenCalled();
+      expect(res.set).toHaveBeenCalledWith('X-Drydock-Watch-Coalesced', 'false');
       expect(res.json).toHaveBeenCalledWith([{ container: { id: 'c1' } }]);
+    });
+
+    // DR-60: the controller polls this endpoint the same way the cron schedule does, so
+    // a poll landing while a scan is already in flight is routed through watchFromCron()
+    // and coalesced into that scan's follow-up rather than running a second, independent
+    // scan. The response body stays a bare ContainerReport[] (AgentClient.watch()'s wire
+    // contract); coalescing is surfaced as a header instead.
+    test('routes a cron-capable watcher through watchFromCron and reports coalesced via header', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const reports = [{ container: { id: 'c1' } }];
+      const watchFromCron = vi.fn().mockResolvedValue(reports);
+      const mockWatcher = {
+        watch: vi.fn(),
+        watchFromCron,
+        cronWatchInFlight: Promise.resolve(reports),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      await watcherApi.watchWatcher(req, res);
+      expect(mockWatcher.watch).not.toHaveBeenCalled();
+      expect(watchFromCron).toHaveBeenCalledWith({
+        ignoreMaintenanceWindow: true,
+        reason: 'agent-poll',
+      });
+      expect(res.set).toHaveBeenCalledWith('X-Drydock-Watch-Coalesced', 'true');
+      expect(res.json).toHaveBeenCalledWith(reports);
     });
 
     test('should return 500 when watcher throws', async () => {
