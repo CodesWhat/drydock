@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.8-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.9-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,20 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.9 highlights</strong></summary>
+
+- **The release cut now catches an arm64 image that is actually amd64 wearing an arm64 label before it ships** — a base image digest pin naming a single-platform manifest instead of a multi-arch index let buildx resolve the same digest for every `--platform`, which is how that shipped on the v1.7 line ([#1021](https://github.com/CodesWhat/drydock/issues/1021)); the 1.6 line was never affected, but the release cut now checks the Dockerfile's base image pins and each published platform's own binaries before promoting. ([#1032](https://github.com/CodesWhat/drydock/pull/1032))
+- **A manual recheck of a watcher that came back with zero containers no longer wipes out every container it owns** — `watch()` pruned unconditionally before this fix, deleting containers without staging a replacement and losing whatever update policy override they had. It now prunes before ingest and skips the prune entirely on an empty list. ([#1015](https://github.com/CodesWhat/drydock/pull/1015))
+- **A recreated agent-owned container no longer loses its update policy on reconnect** — the handshake, watcher-snapshot and edge container-sync paths had the same insert-before-prune ordering `watch()` was fixed for above, so a snooze, a maturity mode or skipped tags silently reverted to the declarative default the moment the container's next report arrived. All three now prune first. ([#1036](https://github.com/CodesWhat/drydock/pull/1036))
+- **A connected agent can no longer take over or delete a container id owned by another agent or the controller's own watcher** — bulk and incremental container ingestion had no ownership check at all. The gate is keyed on the container ids the controller's own watchers have actually enumerated, not on watcher name, since the controller's default watcher and an agent's watcher are both routinely named `local` while watching different hosts. ([#1019](https://github.com/CodesWhat/drydock/pull/1019))
+- **A rollback of a compose-managed container no longer redeploys the update it was undoing** — the compose recreate wrote the backup image into the compose file but handed the runtime refresh no image at all, so the refresh re-derived one from the container's own update candidate and ran it. An automatic rollback after a failed healthcheck also never pulled the backup image it was rolling back to, and could leave the failing update running when that image was no longer on the host; both are fixed. ([#1027](https://github.com/CodesWhat/drydock/pull/1027))
+- **A container that moved to an agent no longer stays stranded, or loses its update policy, when the controller's local watcher is off or a watcher fails to register** — `DD_LOCAL_WATCHER=false` used to leave the controller's stale record in place forever, and the same startup prune now carries a snooze, maturity mode, or skipped tags across to the agent's copy instead of clearing them. A second watcher registering fine no longer causes a broken sibling watcher's records to be pruned as though it had been renamed away. ([#1036](https://github.com/CodesWhat/drydock/pull/1036))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc9--2026-09-05).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.8 highlights</strong></summary>
 
 - **Overlapping scans no longer fire the same trigger repeatedly for one update** — a full scan can take minutes, and the cron schedule, the docker-events debounce and the startup timer could each start one while the previous was still running, so a tag first seen mid-burst passed the `once=true` history check in every overlapping scan before any of them recorded it. `watchFromCron()` is now single-flight: a request arriving during a scan records that a rescan is wanted, and exactly one follow-up runs once the current scan finishes. Reported by [@tarzan77cz](https://github.com/tarzan77cz). ([#972](https://github.com/CodesWhat/drydock/issues/972))
