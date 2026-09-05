@@ -3476,3 +3476,17 @@ test('getContainerIdentityKey returns key without agent prefix when agent is abs
     '::docker::nginx',
   );
 });
+
+test('deriveContainerIdRetentionKey keys on the Docker id so an identity change can match', () => {
+  expect(
+    container.deriveContainerIdRetentionKey({
+      id: 'abc123',
+      name: 'nginx',
+      watcher: 'local',
+    } as never),
+  ).toBe('id::abc123');
+});
+
+test('deriveContainerIdRetentionKey returns undefined when the id is missing', () => {
+  expect(container.deriveContainerIdRetentionKey({ id: '' } as never)).toBeUndefined();
+});

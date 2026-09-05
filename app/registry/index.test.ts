@@ -1010,8 +1010,12 @@ test('init should prune local containers whose watcher no longer exists', async 
   await registry.init();
 
   expect(mockDeleteContainer).toHaveBeenCalledTimes(2);
-  expect(mockDeleteContainer).toHaveBeenCalledWith('stale-local');
-  expect(mockDeleteContainer).toHaveBeenCalledWith('stale-missing-watcher');
+  expect(mockDeleteContainer).toHaveBeenCalledWith('stale-local', {
+    identityChangeExpected: true,
+  });
+  expect(mockDeleteContainer).toHaveBeenCalledWith('stale-missing-watcher', {
+    identityChangeExpected: true,
+  });
 });
 
 test('init should skip local orphan pruning when no local watchers are registered', async () => {
@@ -1062,7 +1066,9 @@ test('init should prune controller-owned containers when the local watcher is di
 
   expect(Object.keys(registry.getState().watcher)).toEqual([]);
   expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
-  expect(mockDeleteContainer).toHaveBeenCalledWith('moved-to-agent');
+  expect(mockDeleteContainer).toHaveBeenCalledWith('moved-to-agent', {
+    identityChangeExpected: true,
+  });
   expect(warnSpy).toHaveBeenCalledWith('Pruned 1 container entries from missing local watcher(s)');
 
   mockGetLocalWatcherEnabled.mockReturnValue(true);
@@ -1094,6 +1100,66 @@ test('init should keep the records of a configured watcher that failed to regist
   expect(mockDeleteContainer).not.toHaveBeenCalled();
 
   mockGetLocalWatcherEnabled.mockReturnValue(true);
+});
+
+test('init should keep the records of a configured local watcher that failed to register while another registered', async () => {
+  // DR-113: one of two configured local watchers fails (unreadable cafile, bad
+  // socket, a configuration Joi rejects). The registered set is not empty, so the
+  // all-failed guard does not fire, and keying the prune on it alone would delete
+  // the failed watcher's records as though the operator had renamed it away. A
+  // watcher that is still in DD_WATCHER_* is coming back once its configuration is
+  // fixed, so its records are kept; only a watcher that is neither registered nor
+  // configured is genuinely gone.
+  watchers = {
+    good: {},
+    invalid: {
+      fail: true,
+    },
+  };
+  mockGetContainersRaw.mockReturnValue([
+    {
+      id: 'owned-by-registered-watcher',
+      watcher: 'good',
+    },
+    {
+      id: 'owned-by-failed-watcher',
+      watcher: 'invalid',
+    },
+    {
+      id: 'owned-by-removed-watcher',
+      watcher: 'legacy',
+    },
+  ]);
+
+  await registry.init();
+
+  expect(Object.keys(registry.getState().watcher)).toEqual(['docker.good']);
+  expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
+  expect(mockDeleteContainer).toHaveBeenCalledWith('owned-by-removed-watcher', {
+    identityChangeExpected: true,
+  });
+});
+
+test('init should stash the update policy of a pruned controller-owned record for its next owner', async () => {
+  // DR-112: the prune deletes the record, but the physical container is still there
+  // and about to be reported by an agent or by the renamed watcher under the same
+  // Docker id. identityChangeExpected is what stashes its update-policy overrides
+  // under that id so the incoming record inherits them.
+  watchers = {
+    local: {},
+  };
+  mockGetContainersRaw.mockReturnValue([
+    {
+      id: 'renamed-away',
+      watcher: 'legacy',
+    },
+  ]);
+
+  await registry.init();
+
+  expect(mockDeleteContainer).toHaveBeenCalledWith('renamed-away', {
+    identityChangeExpected: true,
+  });
 });
 
 test('init should log and continue when orphan pruning fails', async () => {

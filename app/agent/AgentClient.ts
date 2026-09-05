@@ -1102,10 +1102,14 @@ export class AgentClient {
         this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
       }
 
-      // Apply inventory only after watcher registration. Controller-transport
-      // descriptors change which fields are authoritative: Portwing owns live
-      // runtime state, while Drydock's native watcher owns update enrichment.
-      await this.processAuthoritativeContainers(containers);
+      // Prune (and, for a same-identity replacement, stash the retained update
+      // policy) before applying the incoming inventory. deleteContainer(...,
+      // {replacementExpected: true}) stashes updatePolicy keyed by identity
+      // (agent::watcher::name); insertContainer() consumes that stash as its
+      // first action. Running the insert first — as this used to — leaves
+      // nothing to consume, so a recreated agent-owned container silently
+      // lost its maturity policy on every restart-driven replacement.
+      //
       // A zero-container handshake is ambiguous: it could mean the agent has
       // no running containers, or its in-memory store is fresh-empty after a
       // restart while docker still has running containers. Defer the prune
@@ -1121,6 +1125,10 @@ export class AgentClient {
           'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
         );
       }
+      // Apply inventory only after watcher registration. Controller-transport
+      // descriptors change which fields are authoritative: Portwing owns live
+      // runtime state, while Drydock's native watcher owns update enrichment.
+      await this.processAuthoritativeContainers(containers);
 
       // Fetch and register triggers
       try {
@@ -1454,6 +1462,24 @@ export class AgentClient {
       });
     }
 
+    // Prune (and stash any same-identity replacement's update policy) before
+    // the loop below inserts/updates the incoming containers — insertContainer()
+    // consumes the stash as its first action, so it must already exist. See the
+    // reorder note in _doHandshake() above for the full mechanism.
+    //
+    // A zero-container snapshot is ambiguous the same way: a reconnecting agent
+    // can legitimately report none because filterPendingDiscoveries() only
+    // bypasses the discovery-settling delay for ids already in the agent's own
+    // (just-reset) local store (#565). Skip the prune rather than wipe every
+    // container this watcher owns.
+    if (watcherName && containers.length > 0) {
+      this.pruneOldContainers(containers, watcherName);
+    } else if (watcherName && this.hasConnectedOnce) {
+      this.log.warn(
+        'Watcher snapshot returned 0 containers; preserving last-known state until the next snapshot arrives',
+      );
+    }
+
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
       try {
@@ -1477,19 +1503,6 @@ export class AgentClient {
     }
     this.clearPendingWatcherCycleReports(watcherName);
     await emitContainerReports(containerReports);
-
-    // A zero-container snapshot is ambiguous: a reconnecting agent can
-    // legitimately report none because filterPendingDiscoveries() only
-    // bypasses the discovery-settling delay for ids already in the agent's own
-    // (just-reset) local store (#565). Skip the prune rather than wipe every
-    // container this watcher owns.
-    if (watcherName && containers.length > 0) {
-      this.pruneOldContainers(containers, watcherName);
-    } else if (watcherName && this.hasConnectedOnce) {
-      this.log.warn(
-        'Watcher snapshot returned 0 containers; preserving last-known state until the next snapshot arrives',
-      );
-    }
 
     this.scheduleStatsChanged();
   }
@@ -2324,10 +2337,14 @@ export class AgentClient {
    * agent via dd:container_sync. Replaces handshake() for edge connections.
    */
   async handleContainerSync(containers: Container[]): Promise<void> {
-    const reports = await this.processAuthoritativeContainers(containers);
+    // Prune (and stash any same-identity replacement's update policy) before
+    // processAuthoritativeContainers() inserts/updates below — insertContainer()
+    // consumes the stash as its first action, so it must already exist. See the
+    // reorder note in _doHandshake() for the full mechanism.
     if (containers.length > 0) {
       this.pruneOldContainers(containers);
     }
+    const reports = await this.processAuthoritativeContainers(containers);
     this.scheduleStatsChanged();
     // Suppress unused variable warning — reports are emitted internally.
     void reports;
