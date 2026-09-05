@@ -415,9 +415,15 @@ services:
       - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Must be signed by the agent-ca.pem the controller mounts below, and valid for 192.168.1.50 (the host the controller dials)
+      - ./certs/agent.pem:/certs/agent.pem:ro
+      - ./certs/agent-key.pem:/certs/agent-key.pem:ro
     environment:
       - DD_AGENT_SECRET=pick-a-long-random-string
       - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_SERVER_TLS_ENABLED=true
+      - DD_SERVER_TLS_CERT=/certs/agent.pem
+      - DD_SERVER_TLS_KEY=/certs/agent-key.pem
       - DD_REGISTRY_GITEA_PRIVATE_URL=https://git.example.com
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=john
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe
