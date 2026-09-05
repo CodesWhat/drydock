@@ -227,8 +227,9 @@ describe('auto-rollback health monitor integration', () => {
     );
   });
 
-  test('pullRollbackImage should resolve pull credentials and pull the digest-pinned backup reference', async () => {
-    const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
+  // The backup image is not on the host unless a case says otherwise, which is
+  // the only state where the rollback still has to fetch anything.
+  function stubRollbackRegistry(getAuthPull) {
     mockGetState.mockReturnValue({
       registry: {
         hub: {
@@ -239,9 +240,24 @@ describe('auto-rollback health monitor integration', () => {
         },
       },
     });
+  }
+
+  function createImageInspectApi(inspect) {
+    return { pull: vi.fn(), getImage: vi.fn().mockReturnValue({ inspect }) };
+  }
+
+  function createNotFoundError() {
+    return Object.assign(new Error('no such image: my-registry/test/test:1.24'), {
+      statusCode: 404,
+    });
+  }
+
+  test('pullRollbackImage should resolve pull credentials and pull a backup reference that is not on the host', async () => {
+    const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
+    stubRollbackRegistry(getAuthPull);
     const pullImageSpy = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
-    const logContainer = createMockLog();
-    const dockerApi = { pull: vi.fn() };
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const dockerApi = createImageInspectApi(vi.fn().mockRejectedValue(createNotFoundError()));
 
     // Neither recreate path pulls for itself, so this is the only fetch an
     // automatic rollback gets, and it has to carry the backup's own digest
@@ -260,6 +276,82 @@ describe('auto-rollback health monitor integration', () => {
       'my-registry/test/test@sha256:kept',
       logContainer,
     );
+  });
+
+  test('pullRollbackImage should skip the pull when the backup image is already on the host', async () => {
+    const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
+    stubRollbackRegistry(getAuthPull);
+    const pullImageSpy = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const dockerApi = createImageInspectApi(
+      vi.fn().mockResolvedValue({ Id: 'sha256:already-here' }),
+    );
+
+    // Prune keeps the backup image, so an airgapped host and a Docker Hub
+    // anonymous 429 both roll back fine from what is already there. The
+    // credential lookup stays behind the check too: getAuthPull() is itself a
+    // network call on most registries (DR-110).
+    await docker.pullRollbackImage(
+      dockerApi,
+      'my-registry/test/test:1.24',
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(dockerApi.getImage).toHaveBeenCalledWith('my-registry/test/test:1.24');
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(getAuthPull).not.toHaveBeenCalled();
+    expect(logContainer.info).toHaveBeenCalledWith(
+      expect.stringContaining('is already on the host, skipping pull'),
+    );
+  });
+
+  test('pullRollbackImage should still pull when the local inspect fails for a reason other than not-found', async () => {
+    const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
+    stubRollbackRegistry(getAuthPull);
+    const pullImageSpy = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    // A daemon that is briefly unreachable must not be read as "the image is
+    // here", which would skip the only fetch this rollback gets.
+    const dockerApi = createImageInspectApi(vi.fn().mockRejectedValue(new Error('socket hang up')));
+
+    await docker.pullRollbackImage(
+      dockerApi,
+      'my-registry/test/test:1.24',
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(pullImageSpy).toHaveBeenCalledWith(
+      dockerApi,
+      { username: 'robot', password: 'secret' },
+      'my-registry/test/test:1.24',
+      logContainer,
+    );
+    expect(logContainer.info).not.toHaveBeenCalledWith(expect.stringContaining('skipping pull'));
+  });
+
+  test('pullRollbackImage should propagate a pull failure for an image that is not on the host either', async () => {
+    const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
+    stubRollbackRegistry(getAuthPull);
+    const pullError = new Error('toomanyrequests: You have reached your pull rate limit');
+    const pullImageSpy = vi.spyOn(docker, 'pullImage').mockRejectedValue(pullError);
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const dockerApi = createImageInspectApi(vi.fn().mockRejectedValue(createNotFoundError()));
+
+    // Neither local nor pullable is the one case that still has to refuse, and
+    // the caller turns that refusal into a container left running (DR-110).
+    await expect(
+      docker.pullRollbackImage(
+        dockerApi,
+        'my-registry/test/test:1.24',
+        createTriggerContainer(),
+        logContainer,
+      ),
+    ).rejects.toThrow(
+      'Backup image my-registry/test/test:1.24 is neither on the host nor pullable: toomanyrequests: You have reached your pull rate limit',
+    );
+    expect(pullImageSpy).toHaveBeenCalledTimes(1);
   });
 
   test('trigger should NOT start health monitor when dd.rollback.auto is not set', async () => {
