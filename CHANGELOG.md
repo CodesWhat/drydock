@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.9] — 2026-09-05
+
 ### Changed
 
 - **The release cut now verifies a base image pin is a multi-platform index before building, and checks the published arm64 and amd64 images' own binaries before signing and tagging them.** The v1.7 line shipped an arm64 image that was actually amd64 wearing an arm64 label, because a base image digest pin named a single-platform manifest instead of the multi-arch index, and buildx resolved that digest the same way for every `--platform` ([#1021](https://github.com/CodesWhat/drydock/issues/1021)). The 1.6 line was never affected — its `node:24-alpine` and `alpine:3.24` pins were never rolled to the bad digests — but the release cut now runs `check-dockerfile-base-indexes.sh` against the Dockerfile's `FROM` pins and `check-image-arch.sh` against each published platform's `/sbin/tini`, `/usr/local/bin/node` and `/bin/healthcheck` before promoting, so the same class of bug can't ship silently again.
@@ -2485,7 +2487,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.8...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.9...HEAD
+[1.6.1-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.8...v1.6.1-rc.9
 [1.6.1-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.7...v1.6.1-rc.8
 [1.6.1-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.6...v1.6.1-rc.7
 [1.6.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.5...v1.6.1-rc.6

@@ -5,6 +5,28 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.9 Highlights — September 5, 2026
+
+Six fixes: the release cut now catches an arm64 image that is actually amd64
+wearing an arm64 label before it ships, checking the Dockerfile's base image
+pins and each published platform's own binaries before promoting; a manual
+recheck of a watcher that came back with zero containers no longer wipes out
+every container it owns, and the same insert-before-prune ordering is fixed
+on the handshake, watcher-snapshot and edge container-sync paths so a
+recreated agent-owned container no longer loses its update policy on
+reconnect; a connected agent can no longer take over or delete a container id
+owned by another agent or the controller's own watcher, with the ownership
+gate keyed on the container ids the controller's own watchers have actually
+enumerated rather than on watcher name; a rollback of a compose-managed
+container no longer redeploys the update it was undoing, and an automatic
+rollback after a failed healthcheck now pulls the backup image it is rolling
+back to instead of leaving the failing update running; and a container that
+moved to an agent no longer stays stranded, or loses its update policy, when
+the controller's local watcher is off or a sibling watcher fails to
+register. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc9--2026-09-05)
+for the full release notes.
+
 ## v1.6.1-rc.8 Highlights — September 4, 2026
 
 Four fixes and a docs pass: overlapping scans no longer fire the same

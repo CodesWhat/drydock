@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const BASE_VERSION = '1.6.1';
-const RC_VERSION = '1.6.1-rc.8';
+const RC_VERSION = '1.6.1-rc.9';
 const DEMO_RELEASE_FIXTURES = [
   {
     path: 'apps/demo/src/mocks/data/server.ts',
