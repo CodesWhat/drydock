@@ -90,7 +90,33 @@ function enforceStorePermissions(storeDirectory: string, storePath: string): voi
   }
 }
 
+// DR-121: express-session's connect-loki store used to share this database's
+// file and wrote a `Sessions` collection straight into it. Now that the
+// session store owns its own file (see getSessionStorePath()), a `Sessions`
+// collection surfacing here can only be a leftover from that shared-file era.
+// Drop it so the main store stops re-serializing a stale copy on every save.
+const LEGACY_SESSIONS_COLLECTION_NAME = 'Sessions';
+
+function dropLegacySessionsCollection(): void {
+  // Guarded with typeof checks, not just db truthiness: several store unit
+  // tests substitute a bare { loadDatabase, saveDatabase } stand-in for the
+  // real Loki instance, and a real Loki database always exposes both methods.
+  if (
+    !db ||
+    typeof db.getCollection !== 'function' ||
+    typeof db.removeCollection !== 'function' ||
+    !db.getCollection(LEGACY_SESSIONS_COLLECTION_NAME)
+  ) {
+    return;
+  }
+  db.removeCollection(LEGACY_SESSIONS_COLLECTION_NAME);
+  log.info(
+    'Dropped legacy Sessions collection from the main store; sessions now persist in their own file',
+  );
+}
+
 function createCollections() {
+  dropLegacySessionsCollection();
   agentKeys.createCollections(db);
   app.createCollections(db);
   audit.createCollections(db);
@@ -272,6 +298,25 @@ export async function save() {
  */
 export function getConfiguration() {
   return configuration;
+}
+
+/**
+ * Path to the express-session store's own file: a sibling of the main store
+ * file, never the main store file itself.
+ *
+ * DR-121: connect-loki used to open a second LokiJS instance directly on
+ * `${configuration.path}/${configuration.file}`. LokiJS's saveDatabase()
+ * serializes the whole in-memory database, so whichever of the two instances
+ * saved last clobbered the other's writes. Deriving the session file name
+ * from configuration.file (rather than hardcoding `sessions.json`) keeps a
+ * custom DD_STORE_FILE pointed at a distinct sibling instead of colliding
+ * with another instance's store on the same volume.
+ * @returns {string}
+ */
+export function getSessionStorePath(): string {
+  const extension = path.extname(configuration.file);
+  const baseName = extension ? configuration.file.slice(0, -extension.length) : configuration.file;
+  return path.join(configuration.path, `${baseName}-sessions.json`);
 }
 
 export interface StoreDebugCollectionStats {
