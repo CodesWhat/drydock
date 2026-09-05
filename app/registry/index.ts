@@ -290,10 +290,14 @@ function applyTriggerGroupDefaults(
 
 /**
  * Register watchers.
+ *
+ * Resolves to the number of watcher registrations that were attempted, which
+ * `pruneOrphanedLocalContainers` needs to tell "the operator configured no
+ * local watcher" apart from "every local watcher failed to register".
  * @param options
- * @returns {Promise}
+ * @returns {Promise<number>}
  */
-async function registerWatchers(options: RegistrationOptions = {}) {
+async function registerWatchers(options: RegistrationOptions = {}): Promise<number> {
   const configurations = getWatcherConfigurations();
   let watchersToRegister: Promise<Component>[] = [];
   try {
@@ -335,9 +339,40 @@ async function registerWatchers(options: RegistrationOptions = {}) {
     log.warn(`Some watchers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
+  return watchersToRegister.length;
 }
 
-function pruneOrphanedLocalContainers() {
+/**
+ * Delete container records that belong to the controller itself (no `agent`
+ * field) but name a local watcher that no longer exists, e.g. after an
+ * operator renames a `DD_WATCHER_<NAME>_SOCKET` key.
+ *
+ * An empty set of registered local watchers has two causes that must not be
+ * treated alike, which is what `attemptedLocalWatcherRegistrations` decides.
+ * Nothing was attempted when the operator disabled the default local watcher
+ * (`DD_LOCAL_WATCHER=false`) and configured none of their own: the controller
+ * is a pure aggregator, so every controller-owned record is genuinely orphaned
+ * and has to go. A container that moved from the controller's local watcher to
+ * a remote agent is exactly that case, and leaving the record behind strands
+ * the container for good: the agent's report is refused by the ownership gate
+ * in `AgentClient` because the id is already owned by the controller, and the
+ * record is never rewritten to name the agent.
+ *
+ * The other cause is registrations that were attempted and all failed
+ * (unreachable socket, unreadable CA file, invalid cron), which empties the set
+ * for a reason that is usually transient and has nothing to do with what the
+ * store holds. Deleting every controller-owned record over a restart the
+ * operator did not ask anything of would be data loss, so that case keeps the
+ * records.
+ *
+ * That covers the all-failed case and only the all-failed case. A partial
+ * failure is not covered: with two configured local watchers where one
+ * registers and one does not, the set is not empty, so the failed watcher's
+ * records are still pruned as though it had been renamed away. Closing that
+ * needs the prune to keep records whose watcher is still configured, which is
+ * a separate change.
+ */
+function pruneOrphanedLocalContainers(attemptedLocalWatcherRegistrations: number) {
   const localWatcherNames = new Set(
     Object.values(getState().watcher)
       .filter((watcher) => !watcher.agent)
@@ -346,7 +381,7 @@ function pruneOrphanedLocalContainers() {
       .map((watcherName) => watcherName.toLowerCase()),
   );
 
-  if (localWatcherNames.size === 0) {
+  if (localWatcherNames.size === 0 && attemptedLocalWatcherRegistrations > 0) {
     return;
   }
 
@@ -814,9 +849,9 @@ export async function init(options: RegistrationOptions = {}) {
   await registerRegistries();
 
   // Register watchers
-  await registerWatchers(options);
+  const attemptedLocalWatcherRegistrations = await registerWatchers(options);
   try {
-    pruneOrphanedLocalContainers();
+    pruneOrphanedLocalContainers(attemptedLocalWatcherRegistrations);
   } catch (e: unknown) {
     log.warn(`Unable to prune orphaned local containers (${getErrorMessage(e)})`);
     log.debug(e);
