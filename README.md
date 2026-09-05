@@ -222,6 +222,24 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.11 highlights</strong></summary>
+
+- **OIDC login no longer bounces back to the login page after the identity provider redirects.** The service worker's navigation fallback used to answer every document navigation from the cached app shell except `/api/`, so the OIDC callback never reached Express for its code exchange; it now skips every server-owned route (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))
+- **A controller running its own `local` watcher no longer refuses every container an agent reports under a watcher of the same name.** Ownership of a container with no store row is now decided by what the controller's own watchers have actually enumerated, not by a watcher-name collision. ([#1018](https://github.com/CodesWhat/drydock/pull/1018))
+- **A rollback of a compose-managed container no longer redeploys the update it was undoing.** The compose recreate now passes the caller's image through to the runtime refresh instead of re-deriving one from the container's own update candidate, automatic rollback hands the health monitor the whole container instead of just its id and name, and the backup image is pulled, digest-pinned when the record carries one, before anything is stopped or removed. ([#1023](https://github.com/CodesWhat/drydock/pull/1023), [#1029](https://github.com/CodesWhat/drydock/pull/1029))
+- **The published arm64 image is an actual arm64 build again**, instead of an x86-64 image wearing an arm64 label. Both base-image pins are back on multi-arch image index digests, and the release now refuses to sign, tag, or promote an image whose binaries don't match the platform they're published under. ([#1024](https://github.com/CodesWhat/drydock/pull/1024))
+- **A container moved to an agent no longer stays stranded when the controller's local watcher is turned off.** The startup prune that clears stale controller-owned records now also runs when no local watcher was ever configured, so the agent's report is no longer refused as controller-owned. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **A container handed from the controller to an agent no longer comes up with its snooze, maturity mode, and skipped tags reset to defaults.** The startup prune now stashes the update policy under the container's Docker id, which the move leaves alone, instead of a key the incoming record could never look up. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **One local watcher failing to register no longer deletes its containers' records when a second watcher registers fine.** The prune now keeps any record whose watcher is still configured, whether or not it registered this run, and waits for every registration to settle before reading the registry. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **The agents page now says registries have to be configured on every agent, not just the controller**, with a worked Gitea example on both sides. ([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+- **The agents page's registries example now mounts the CA file it references**, instead of pointing `DD_AGENT_REMOTE1_CAFILE` at a path the compose service never volumed in. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **The watchers page now says the maintenance window gates the entire scheduled scan, not just installing an update.** A closed window leaves new containers invisible, container state stale, and update notifications deferred until it reopens; a manual scan still bypasses it, same as a manual update. ([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc11--2026-09-05).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.10 highlights</strong></summary>
 
 - **Batch and digest `once=true` sends now take the same notification-slot reservation the simple path takes, so a manual scan overlapping a cron scan can no longer announce the same update twice.** The digest flush skips and evicts a buffered result an earlier flush already sent, and the batch retry buffer no longer carries an unreserved entry to the trigger. ([#998](https://github.com/CodesWhat/drydock/pull/998))

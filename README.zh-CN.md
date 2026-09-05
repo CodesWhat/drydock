@@ -219,6 +219,24 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.11 亮点</strong></summary>
+
+- **OIDC 登录在身份提供方重定向后不会再跳回登录页面。** Service worker 的导航回退此前除 `/api/` 外都会把每次文档导航从缓存的应用外壳中响应，导致 OIDC 回调始终到不了 Express 完成授权码交换；现在它会跳过每个服务器专属路由（`/api`、`/auth/`、`/health`、`/metrics`）。([#1016](https://github.com/CodesWhat/drydock/pull/1016))
+- **拥有自己 `local` watcher 的控制器不再拒绝代理在同名 watcher 下上报的所有容器。** 没有存储记录的容器现在依据控制器自身 watcher 实际枚举到的内容来判定归属，而不是依据名称是否巧合相同。([#1018](https://github.com/CodesWhat/drydock/pull/1018))
+- **对 Compose 管理容器的回滚不会再重新部署它本应撤销的更新。** Compose 重建现在会把收到的镜像直接传给运行时刷新，而不是从容器自身的更新候选重新推导；自动回滚现在把整个容器交给健康监视器，而不只是它的 id 和名称，备份镜像会在停止或删除任何东西之前拉取，若记录里有摘要则按摘要固定。([#1023](https://github.com/CodesWhat/drydock/pull/1023)、[#1029](https://github.com/CodesWhat/drydock/pull/1029))
+- **发布的 arm64 镜像重新变回真正的 arm64 镜像**，而不是贴着 arm64 标签的 x86-64 镜像。两个基础镜像固定值都重新指向多架构镜像索引摘要，发布流程现在会拒绝为二进制文件与发布平台不匹配的镜像签名、打标签或推广。([#1024](https://github.com/CodesWhat/drydock/pull/1024))
+- **迁移到代理的容器在控制器本地 watcher 被关闭时不会再滞留。** 清理控制器过期记录的启动清理现在即使从未配置本地 watcher 也会运行，因此代理的上报不会再被当作控制器所有而拒绝。([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **从控制器移交给代理的容器不再带着被重置为默认值的暂停、成熟度模式和跳过标签。** 启动清理现在把更新策略保存在容器的 Docker id 下——迁移不会改变这个 id——而不是保存在新记录永远查不到的键下。([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **某个本地 watcher 注册失败时，不会再因为另一个 watcher 注册成功而删除它自己容器的记录。** 清理现在会保留任何 watcher 仍处于配置状态的记录，无论它本次是否注册成功，并会等待每个注册都完成后再读取注册表。([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **代理页面现在说明每个代理都要配置 registry，而不只是控制器**，并给出了双侧的完整 Gitea 示例。([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+- **代理页面的 registry 示例现在挂载了它引用的 CA 文件**，而不是让 `DD_AGENT_REMOTE1_CAFILE` 指向 Compose 服务从未挂载过的路径。([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **watcher 页面现在说明维护窗口会阻塞整个计划扫描，而不仅仅是安装更新。** 窗口关闭期间新容器保持不可见，容器状态显示过期（上一个窗口内停止的容器仍显示为已停止，对它执行启动操作会因为 Docker 拒绝启动已运行的容器而失败），更新通知也会一并推迟；手动扫描仍会像手动更新一样绕开窗口。([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc11--2026-09-05)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.10 亮点</strong></summary>
 
 - **批量和摘要模式下的 `once=true` 发送现在会像简单路径一样先占用通知名额，因此与定时扫描重叠的手动扫描不会再把同一次更新通报两次。** 摘要刷新会跳过并清除此前刷新已经发送过的缓冲结果，批量重试缓冲区也不会再把未占位的条目送到触发器。([#998](https://github.com/CodesWhat/drydock/pull/998))

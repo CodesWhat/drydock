@@ -219,6 +219,24 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.11</strong></summary>
+
+- **Logowanie OIDC nie wraca już do strony logowania po przekierowaniu przez dostawcę tożsamości.** Nawigacyjny fallback service workera odpowiadał wcześniej na każdą nawigację dokumentu z buforowanej powłoki aplikacji, z wyjątkiem `/api/`, więc callback OIDC nigdy nie docierał do Expressa po wymianę kodu; teraz pomija każdą trasę należącą do serwera (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))
+- **Kontroler z własnym watcherem `local` nie odrzuca już każdego kontenera zgłaszanego przez agenta pod watcherem o tej samej nazwie.** Własność kontenera bez wpisu w magazynie jest teraz ustalana na podstawie tego, co faktycznie wyliczyły własne watchery kontrolera, a nie na podstawie zbieżności nazw. ([#1018](https://github.com/CodesWhat/drydock/pull/1018))
+- **Wycofanie kontenera zarządzanego przez Compose nie wdraża już ponownie aktualizacji, którą miało cofnąć.** Odtworzenie Compose przekazuje teraz otrzymany obraz do odświeżenia w czasie działania, zamiast wyprowadzać go z kandydata aktualizacji kontenera; automatyczne wycofanie przekazuje monitorowi zdrowia cały kontener zamiast samego id i nazwy, a obraz kopii zapasowej jest pobierany, przypięty do digestu jeśli wpis go zawiera, zanim cokolwiek zostanie zatrzymane lub usunięte. ([#1023](https://github.com/CodesWhat/drydock/pull/1023), [#1029](https://github.com/CodesWhat/drydock/pull/1029))
+- **Publikowany obraz arm64 jest znowu prawdziwym obrazem arm64**, a nie obrazem x86-64 z etykietą arm64. Oba przypięcia obrazu bazowego znowu wskazują na digesty indeksu obrazu wieloarchitekturowego, a wydanie odmawia teraz podpisania, otagowania lub promowania obrazu, którego pliki binarne nie pasują do platformy, pod którą jest publikowany. ([#1024](https://github.com/CodesWhat/drydock/pull/1024))
+- **Kontener przeniesiony do agenta nie utyka już, gdy lokalny watcher kontrolera jest wyłączony.** Przycinanie przy starcie, które usuwa przestarzałe wpisy należące do kontrolera, działa teraz także wtedy, gdy nigdy nie skonfigurowano lokalnego watchera, dzięki czemu zgłoszenie agenta nie jest już odrzucane jako należące do kontrolera. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **Kontener przekazany z kontrolera do agenta nie przychodzi już z drzemką, trybem dojrzałości i pominiętymi tagami zresetowanymi do domyślnych.** Przycinanie przy starcie przechowuje teraz politykę aktualizacji pod id Dockera kontenera, którego przeniesienie nie zmienia, zamiast pod kluczem, którego przychodzący wpis nigdy nie mógłby odnaleźć. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **Lokalny watcher, któremu nie uda się zarejestrować, nie usuwa już wpisów swoich kontenerów, gdy drugi watcher zarejestruje się poprawnie.** Przycinanie zachowuje teraz każdy wpis, którego watcher jest nadal skonfigurowany, niezależnie od tego, czy zarejestrował się w tym uruchomieniu, i czeka, aż każda rejestracja się zakończy, zanim odczyta rejestr. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **Strona agentów mówi teraz, że registry trzeba skonfigurować na każdym agencie, nie tylko na kontrolerze**, z przerobionym przykładem Gitea po obu stronach. ([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+- **Przykład registry na stronie agentów montuje teraz plik CA, do którego się odwołuje**, zamiast wskazywać `DD_AGENT_REMOTE1_CAFILE` na ścieżkę, której usługa Compose nigdy nie zamontowała. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **Strona watcherów mówi teraz, że okno konserwacji blokuje cały zaplanowany skan, nie tylko instalację aktualizacji.** Zamknięte okno pozostawia nowe kontenery niewidoczne, stan kontenera nieaktualny, a powiadomienia o aktualizacjach odroczone aż do jego ponownego otwarcia; ręczny skan nadal je omija, tak samo jak ręczna aktualizacja. ([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+
+Pełne informacje o wydaniu: [CHANGELOG.md](./CHANGELOG.md#170-rc11--2026-09-05).
+
+</details>
+
+<details open>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.10</strong></summary>
 
 - **Wysyłki zbiorcze i skrótowe z `once=true` biorą teraz tę samą rezerwację slotu powiadomienia co ścieżka prosta, dzięki czemu ręczny skan nakładający się na skan crona nie może już zgłosić tej samej aktualizacji dwukrotnie.** Opróżnianie bufora skrótów pomija i usuwa wynik z bufora, który wcześniejsze opróżnianie już wysłało, a bufor ponowień wsadowych nie przekazuje już do wyzwalacza wpisu bez rezerwacji. ([#998](https://github.com/CodesWhat/drydock/pull/998))
