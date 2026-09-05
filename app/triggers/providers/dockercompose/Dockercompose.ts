@@ -2385,11 +2385,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * Skipped when dockerApi does not expose getImage/info (older mocks / proxies) —
    * in that case we fall through to the existing stop/create sequence and let
    * Docker surface its own error.
+   *
+   * `requireLocalImage` turns a failed inspect from "let create report it" into
+   * the refusal it has to be when nothing pulled on this path. Letting create
+   * report a missing image is only harmless behind a pull, which would have
+   * failed first; behind `skipPull` the create is reached with the running
+   * container already removed, and the rollback net then restores the old
+   * `Config.Image`, which on an automatic rollback is the failing update the
+   * rollback was undoing (DR-110).
    */
   async verifyPulledImageCompatibility(
     dockerApi: DockerApiLike,
     newImage: string,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options: { requireLocalImage?: boolean } = {},
   ): Promise<void> {
     if (typeof dockerApi.getImage !== 'function') {
       return;
@@ -2397,7 +2406,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     let imageInspect: { Architecture?: string; Os?: string } | undefined;
     try {
       imageInspect = await dockerApi.getImage(newImage).inspect();
-    } catch {
+    } catch (error: unknown) {
+      if (options.requireLocalImage === true) {
+        throw new Error(
+          `Cannot recreate from ${newImage}: the image is not available locally and this operation does not pull it (${getErrorMessage(error)}). ` +
+            `The running container has been left untouched.`,
+        );
+      }
       // Image inspect failed — not a hard error; Docker will surface the real
       // problem during container creation.
       return;
@@ -2654,6 +2669,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       dockerApi as DockerApiLike,
       pinnedImage,
       logContainer,
+      // Nothing pulled on this refresh, so a missing image has to stop it here
+      // rather than at create, which is past the stop/remove below (DR-110).
+      { requireLocalImage: skipPull },
     );
     const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
       dockerApi,
@@ -2771,6 +2789,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       shouldStart: currentContainerSpec?.State?.Running === true,
       skipPull: true,
       forceRecreate: true,
+      // The caller names the image this recreates from, and the compose file
+      // was just rewritten to it above. Without handing it to the runtime
+      // refresh, that refresh re-derives its own target from the container's
+      // update candidate, so a rollback wrote the backup image into the
+      // compose file and then created the container from the very update it
+      // was undoing, while the operation reported success (DR-101).
+      runtimeContext: { newImage },
+      // Deliberately no `imageIdentity`: this path has no compose-file-once
+      // preflight behind it, so the refresh has to bind the pulled image for
+      // itself rather than reuse an identity nothing resolved.
     } as ComposeRuntimeRefreshOptions;
     if (composeFiles.length > 1) {
       composeUpdateOptions.composeFiles = composeFiles;
