@@ -185,6 +185,83 @@ test('reads through FROM flags and skips stage-name FROM lines', async () => {
   assert.match(result.output, /Checking 1 digest-pinned base image/u);
 });
 
+test('folds a backslash-continued FROM before matching', async () => {
+  // A pin written as `FROM --platform=... \` + `<ref>` is one logical
+  // instruction. Matching physical lines skipped it, so a single-platform pin
+  // on the continued line passed as long as some other FROM was an index.
+  const result = await runGuard({
+    dockerfile: [
+      'FROM --platform=$TARGETPLATFORM \\',
+      `  ${NODE_REF} AS base`,
+      'FROM --platform=$TARGETPLATFORM \\',
+      '  # a comment inside the continuation is dropped, not a terminator',
+      '',
+      `  ${ALPINE_REF} AS healthcheck-build`,
+      'FROM base AS app-build',
+      '',
+    ].join('\n'),
+    manifests: {
+      [NODE_REF]: index(['linux/amd64', 'linux/arm64']),
+      [ALPINE_REF]: singlePlatformManifest(),
+    },
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(result.output, /Checking 2 digest-pinned base image/u);
+  assert.match(
+    result.output,
+    /alpine:3\.24@sha256:[0-9a-f]+: pinned to a single-platform manifest/u,
+  );
+});
+
+test('honours the escape parser directive and CRLF line endings', async () => {
+  const result = await runGuard({
+    dockerfile: [
+      '# escape=`',
+      'FROM --platform=$TARGETPLATFORM `',
+      `  ${NODE_REF} AS base`,
+      'FROM --platform=$TARGETPLATFORM \\',
+      `  ${ALPINE_REF} AS healthcheck-build`,
+      '',
+    ].join('\r\n'),
+    manifests: { [NODE_REF]: index(['linux/amd64', 'linux/arm64']) },
+  });
+
+  // With backtick as the escape, the backslash line is a complete instruction
+  // whose ref is `\`, so only the folded node pin is checked.
+  assert.equal(result.code, 0);
+  assert.match(result.output, /Checking 1 digest-pinned base image/u);
+});
+
+test('ignores an escape directive that comes after the first instruction', async () => {
+  const result = await runGuard({
+    dockerfile: [
+      `FROM ${NODE_REF} AS base`,
+      '# escape=`',
+      'FROM --platform=$TARGETPLATFORM \\',
+      `  ${ALPINE_REF} AS healthcheck-build`,
+      '',
+    ].join('\n'),
+    manifests: {
+      [NODE_REF]: index(['linux/amd64', 'linux/arm64']),
+      [ALPINE_REF]: index(['linux/amd64', 'linux/arm64']),
+    },
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.output, /Checking 2 digest-pinned base image/u);
+});
+
+test('keeps a continuation that ends the file', async () => {
+  const result = await runGuard({
+    dockerfile: `FROM --platform=$TARGETPLATFORM \\\n  ${NODE_REF}`,
+    manifests: { [NODE_REF]: index(['linux/amd64', 'linux/arm64']) },
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.output, /Checking 1 digest-pinned base image/u);
+});
+
 test('inspects each distinct ref once', async () => {
   const result = await runGuard({
     dockerfile: `FROM ${NODE_REF} AS base\nFROM ${NODE_REF} AS second\n`,
