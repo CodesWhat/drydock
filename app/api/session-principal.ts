@@ -18,9 +18,10 @@ import { deserializeSessionUser } from './session-user.js';
  *
  * It is literally `passport` because that is the key Passport wrote for every
  * release up to and including v1.7. Renaming it would invalidate every session
- * already persisted in /store/dd.json and log every user out on upgrade, so the
- * name stays: it is an on-disk format, not a dependency. `util/session-limit.ts`
- * and `api/ws-upgrade-utils.ts` read the same key.
+ * already persisted in the session store's file (`/store/dd-sessions.json` by
+ * default, see store.getSessionStorePath()) and log every user out on
+ * upgrade, so the name stays: it is an on-disk format, not a dependency.
+ * `util/session-limit.ts` and `api/ws-upgrade-utils.ts` read the same key.
  */
 export const SESSION_USER_KEY = 'passport';
 
