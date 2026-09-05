@@ -5,6 +5,7 @@ import DockerWatcher, {
 } from '../../watchers/providers/docker/Docker.js';
 import Watcher from '../../watchers/Watcher.js';
 import { usesControllerDockerTransport } from '../controller-docker-transport.js';
+import { getAgent } from '../manager.js';
 import { PortwingDockerBridge } from '../PortwingDockerBridge.js';
 import { getRequiredAgentClient } from './getRequiredAgentClient.js';
 
@@ -81,6 +82,46 @@ class AgentWatcher extends Watcher {
     }
     const client = getRequiredAgentClient(this.agent, 'AgentWatcher');
     return client.watchContainer(this.type, this.name, container);
+  }
+
+  /**
+   * Whether this watcher's maintenance window is currently open.
+   *
+   * Mirrors `DockerWatcher.isMaintenanceWindowOpen()` so that
+   * `Trigger.deferAutoUpdateForMaintenanceWindow` gates an agent-owned container's auto-install
+   * exactly like a local one (DR-96): before this method existed, `AgentWatcher` exposed no
+   * `isMaintenanceWindowOpen`, so that gate always treated the watcher as unresolvable and
+   * failed open, letting agent-owned auto-updates install regardless of the configured window
+   * while the UI (reading the same watcher's masked `maintenancewindowopen` field) still
+   * reported the update as deferred.
+   *
+   * With controller Docker transport the delegate IS a live `DockerWatcher`, so its own state
+   * is authoritative and this just proxies to it. Otherwise the real watcher runs on the
+   * remote agent process; the freshest state the controller has is the masked
+   * `maintenancewindowopen` boolean from that agent's most recent watcher-snapshot report
+   * (`AgentClient.getWatcherSnapshot`), refreshed on every one of the agent's own scan cycles —
+   * so once a closed window opens, the agent's next scheduled report (not a controller-side
+   * poll) is what lets a previously deferred install through.
+   *
+   * Before a snapshot has arrived (or the field is simply absent — an older agent that
+   * predates this field, or a watcher with no window configured), fall back to the
+   * handshake-time `configuration` and, failing that, fail open: same "unconfigured window
+   * lets updates through" default `DockerWatcher.isMaintenanceWindowOpen()` itself applies, and
+   * what keeps a pre-fix (or old-agent) container's updates ungated rather than newly and
+   * silently blocked.
+   */
+  isMaintenanceWindowOpen(): boolean {
+    if (this.controllerWatcher) {
+      return this.controllerWatcher.isMaintenanceWindowOpen();
+    }
+
+    const client = this.agent ? getAgent(this.agent) : undefined;
+    const snapshotConfiguration = client?.getWatcherSnapshot(this.type, this.name)?.configuration;
+    const configuration = (snapshotConfiguration ?? this.configuration) as
+      | { maintenancewindowopen?: unknown }
+      | undefined;
+    const maskedOpen = configuration?.maintenancewindowopen;
+    return typeof maskedOpen === 'boolean' ? maskedOpen : true;
   }
 
   /**

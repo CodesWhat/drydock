@@ -301,7 +301,7 @@ environment:
   - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=America/New_York
 ```
 
-Updates detected outside the window are queued and applied when it opens, for containers on local watchers; containers watched by a remote agent are not deferred by the controller yet, even though the update dialog shows the window as closed for them. Drydock keeps scanning on its ordinary schedule meanwhile, so new containers, container state and update notifications are not held back; set `DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE=scan` if you want the window to stop the scan too. The window only gates what drydock does on its own. You can still update any container manually at any time, and the confirm dialog will note the window is closed and offer **Update anyway**.
+Updates detected outside the window are queued and applied when it opens, for containers on local watchers and containers watched by a remote agent alike — the agent case catches up once the agent's next report shows the window open. Drydock keeps scanning on its ordinary schedule meanwhile, so new containers, container state and update notifications are not held back; set `DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE=scan` if you want the window to stop the scan too. The window only gates what drydock does on its own. You can still update any container manually at any time, and the confirm dialog will note the window is closed and offer **Update anyway**.
 
 The expression is matched minute by minute rather than as a start/end range, so keep `*` in the minute field: `0 2-6 * * *` would open the window for one minute at the top of each of those hours. See [Watchers — Maintenance window](/docs/configuration/watchers#maintenance-window).
 

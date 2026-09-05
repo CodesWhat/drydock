@@ -699,7 +699,7 @@ By default the window has no effect on looking. Scheduled scans keep running on 
 
 Set `MAINTENANCE_WINDOW_SCOPE=scan` to restore the behaviour of releases before v1.8.0.
 
-The hold applies to containers on the controller's own watchers. A container watched by a remote agent is not deferred yet: the container list and the update dialog show the window state the agent reports, but the controller does not hold its automatic updates back.
+The hold applies to a container watched by a remote agent the same way it applies to one on the controller's own watchers: the controller reads the window state the agent reports and holds the automatic install back until the agent's next report shows the window open.
 
 The window never applies to you. **Manual updates from the UI or API are not gated by it** — the container's Update action stays available at any hour. When you use it outside the window, the confirm dialog notes that the update is currently policy-blocked with _"Outside maintenance window — auto update deferred until the window opens"_ and the button reads **Update anyway**. That is a heads-up, not a refusal. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility#maintenance-window-closed-in-the-update-dialog).
 
