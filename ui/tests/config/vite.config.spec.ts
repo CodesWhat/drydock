@@ -140,6 +140,11 @@ describe('service-worker navigation-fallback allowlist (DR-102)', () => {
     expect(pattern.test('/containers/abc123/logs?tail=200')).toBe(true);
     expect(pattern.test('/containers/logs')).toBe(false);
     expect(pattern.test('/containers/abc123/def456/logs')).toBe(false);
+    // The param wildcard must not swallow a `?`: a plain `[^/]+` would consume
+    // "abc?x" whole and still find the literal "/logs" that follows, matching a
+    // request whose actual pathname is only /containers/abc with "?x/logs" as
+    // query text tacked on.
+    expect(pattern.test('/containers/abc?x/logs')).toBe(false);
   });
 
   it('matches the dashboard root exactly, not every path', () => {

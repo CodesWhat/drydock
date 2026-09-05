@@ -24,8 +24,12 @@ export const isApiRequest = ({ url }: { url: URL }): boolean => url.pathname.sta
 // new *server* route needs no change here at all, and a new *SPA* route is covered
 // automatically because this is generated from ROUTES rather than a separate list
 // someone has to remember to update in step. A route path segment starting with `:`
-// (e.g. `:id` in CONTAINER_LOGS) becomes a `[^/]+` wildcard; every other segment is
-// escaped and matched literally. Matched against `pathname + search` (see
+// (e.g. `:id` in CONTAINER_LOGS) becomes a `[^/?]+` wildcard; every other segment is
+// escaped and matched literally. The wildcard excludes `?` as well as `/`: a plain
+// `[^/]+` would happily consume a literal `?` and everything before the next `/`,
+// so a request like /containers/abc?x/logs (pathname /containers/abc, the rest is
+// query text) would satisfy a `/containers/:id/logs` pattern even though the actual
+// path segment is just "abc". Matched against `pathname + search` (see
 // NavigationRoute's own doc comment), so the trailing slash and any query string used
 // by the views (see the query param conventions documented in routes.ts) are both
 // optional.
@@ -33,7 +37,7 @@ export function buildSpaNavigateFallbackPattern(routePath: string): RegExp {
   const segments = routePath.split('/').filter((segment) => segment.length > 0);
   const body = segments
     .map((segment) =>
-      segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      segment.startsWith(':') ? '[^/?]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
     )
     .join('\\/');
   const pathPattern = segments.length > 0 ? `\\/${body}\\/?` : '\\/';
