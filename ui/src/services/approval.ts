@@ -3,15 +3,15 @@ import { readJsonResponse } from '../utils/api';
 
 const APPROVALS_API_BASE = '/api/v1/approvals';
 
-export type ApprovalDecision = 'pending' | 'approved' | 'rejected' | 'deferred';
-export type ApprovalResolution =
+type ApprovalDecision = 'pending' | 'approved' | 'rejected' | 'deferred';
+type ApprovalResolution =
   | 'superseded'
   | 'container-removed'
   | 'candidate-withdrawn'
   | 'auto-applied';
-export type ApprovalOutcome = 'applied' | 'rolled-back' | 'failed';
-export type ApprovalUpdateKind = 'tag' | 'digest' | 'unknown';
-export type ApprovalSemverDiff = 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
+type ApprovalOutcome = 'applied' | 'rolled-back' | 'failed';
+type ApprovalUpdateKind = 'tag' | 'digest' | 'unknown';
+type ApprovalSemverDiff = 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
 export type ApprovalStatusFilter = 'pending' | 'deferred' | 'decided' | 'all';
 
 export interface ApprovalRecord {
@@ -48,7 +48,7 @@ export interface ApprovalRecord {
   resolution?: ApprovalResolution;
 }
 
-export interface ApprovalListQuery {
+interface ApprovalListQuery {
   status?: ApprovalStatusFilter;
   containerId?: string;
   agent?: string;
@@ -58,7 +58,7 @@ export interface ApprovalListQuery {
   offset?: number;
 }
 
-export interface ApprovalListResponse {
+interface ApprovalListResponse {
   data: ApprovalRecord[];
   total: number;
   limit: number;
@@ -88,11 +88,11 @@ export interface ApprovalDetailResponse {
   holdReasons: ApprovalHoldReason[];
 }
 
-export interface ApprovalDecisionResponse {
+interface ApprovalDecisionResponse {
   approval: ApprovalRecord;
 }
 
-export interface ApprovalUpdateAcceptedResponse {
+interface ApprovalUpdateAcceptedResponse {
   operationId?: string;
   message?: string;
 }
