@@ -19,6 +19,7 @@ import {
 } from '../event/index.js';
 import {
   deriveContainerIdentityKey,
+  deriveContainerIdRetentionKey,
   getCandidateIdentityFields,
   hasCandidateIdentityChanged,
   hasRawUpdate,
@@ -982,10 +983,12 @@ function normalizeContainerTriggerLabelFields<T extends Partial<container.Contai
 }
 
 /**
- * #496: stash a soon-to-be-replaced container's updatePolicy so the replacement (which
- * arrives under a fresh Docker id, hence via insertContainer) can inherit it.
+ * #496: stash a soon-to-be-deleted container's updatePolicy under `cacheKey` so the
+ * record that takes its place (which arrives via insertContainer, the one write path
+ * that cannot merge from a predecessor) can inherit it. Which key that is depends on
+ * what the caller expects to change — see the two wrappers below.
  */
-function stashUpdatePolicyForReplacement(containerRaw) {
+function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
   const updatePolicyOverrides = getUpdatePolicyOverrides(containerRaw);
   if (Object.keys(updatePolicyOverrides).length === 0) {
     return;
@@ -993,9 +996,8 @@ function stashUpdatePolicyForReplacement(containerRaw) {
   if (isRollbackContainerName(containerRaw?.name)) {
     return;
   }
-  const cacheKey = deriveContainerIdentityKey(containerRaw);
   /* istanbul ignore next -- unreachable: deleteContainer validates the stored document before
-     calling this, and the schema rejects an empty watcher or name, so a key always derives. */
+     calling this, and the schema rejects an empty id, watcher or name, so a key always derives. */
   if (cacheKey === undefined) {
     return;
   }
@@ -1031,6 +1033,25 @@ function stashUpdatePolicyForReplacement(containerRaw) {
 }
 
 /**
+ * #496: a recreate. The replacement keeps agent, watcher and name and arrives under a
+ * fresh Docker id, so the identity key is what carries the policy across.
+ */
+function stashUpdatePolicyForReplacement(containerRaw) {
+  stashUpdatePolicyUnderKey(containerRaw, deriveContainerIdentityKey(containerRaw));
+}
+
+/**
+ * DR-112: an identity change. The physical container is untouched, so it comes back
+ * under the same Docker id but a different identity: the controller's local watcher
+ * hands it to an agent that now watches the same daemon, or the watcher under it is
+ * renamed. The identity key changes with the container and can never match, so the
+ * Docker id is what carries the policy across.
+ */
+function stashUpdatePolicyForIdentityChange(containerRaw) {
+  stashUpdatePolicyUnderKey(containerRaw, deriveContainerIdRetentionKey(containerRaw));
+}
+
+/**
  * #565: a present-but-empty updatePolicyOverrides layer is watcher/agent normalization, not
  * controller intent, and must never replace stored overrides. Only a non-empty layer — or an
  * empty one from an explicitly authoritative caller (the update-policy PATCH handler clearing
@@ -1041,20 +1062,38 @@ function isAuthoritativeOverrideLayer(overrides, authoritativeEmptyOverrides = f
 }
 
 /**
- * #496: restore a retained updatePolicy onto a replacement container. The entry is consumed
+ * Take the retained entry stashed under `cacheKey`, if any. The entry is consumed
  * either way, so a stale policy can never attach to a later, unrelated container.
  */
-function restoreRetainedUpdatePolicy(container) {
-  const cacheKey = deriveContainerIdentityKey(container);
+function takeRetainedUpdatePolicyEntry(cacheKey: string | undefined) {
   if (cacheKey === undefined) {
-    return;
+    return undefined;
   }
   const entry = updatePolicyRetentionCache.get(cacheKey);
   if (!entry) {
-    return;
+    return undefined;
   }
   updatePolicyRetentionCache.delete(cacheKey);
   updatePolicyRetentionCacheStore.deleteRecord(cacheKey);
+  return entry;
+}
+
+/**
+ * #496: restore a retained updatePolicy onto the record replacing a deleted one.
+ *
+ * The identity key comes first because it is the narrower match: it names one
+ * container under one watcher on one agent, and a recreate is the common case. The
+ * Docker id is the DR-112 fallback for the hand-off the identity key cannot see, where
+ * the id survives and the identity does not. Only one of the two is ever stashed per
+ * delete, so the order is a preference, not a conflict.
+ */
+function restoreRetainedUpdatePolicy(container) {
+  const entry =
+    takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(container)) ??
+    takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(container));
+  if (!entry) {
+    return;
+  }
   if (entry.expiresAt <= Date.now()) {
     return;
   }
@@ -1501,7 +1540,16 @@ export function clearMaturityGatePendingSince(id: string): boolean {
 }
 
 interface DeleteContainerOptions {
+  /** A recreate: same identity, new Docker id. */
   replacementExpected?: boolean;
+  /**
+   * DR-112: an identity change. Same Docker id, new identity — the record is being
+   * deleted because another watcher or an agent is about to report the very same
+   * container. Stashes the update policy under the id so the incoming record inherits
+   * it, and nothing else: the lifecycle stash and the `replacementExpected` flag on
+   * the removal event both key on identity and would not be read back.
+   */
+  identityChangeExpected?: boolean;
 }
 
 /**
@@ -1523,6 +1571,9 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     containerSecurityStateHashCache.delete(id);
     if (options.replacementExpected === true) {
       stashUpdatePolicyForReplacement(containerRaw);
+    }
+    if (options.identityChangeExpected === true) {
+      stashUpdatePolicyForIdentityChange(containerRaw);
     }
     if (
       options.replacementExpected === true &&

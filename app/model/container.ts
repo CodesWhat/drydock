@@ -1166,6 +1166,30 @@ export function deriveContainerIdentityKey(container: Container): string | undef
   return `${agent}::${container.watcher}::${container.name}`;
 }
 
+const CONTAINER_ID_RETENTION_KEY_PREFIX = 'id::';
+
+/**
+ * Build the update-policy retention key for the mirror image of a recreate.
+ *
+ * `deriveContainerIdentityKey` above survives a recreate, which mints a new
+ * Docker id while agent, watcher and name stay put. This one survives the
+ * opposite move, where the Docker id stays put and the identity changes: a
+ * container handed from the controller's local watcher to an agent that now
+ * watches the same daemon, or a watcher renamed under it. The identity key
+ * changes with the container, so it cannot match across that hand-off; the
+ * Docker id can, because it is the same physical container on both sides.
+ *
+ * The two key spaces cannot collide. An identity key always carries two `::`
+ * separators and a Docker id carries none, so no container's identity key can
+ * ever read as another's id key.
+ */
+export function deriveContainerIdRetentionKey(container: Container): string | undefined {
+  if (typeof container.id !== 'string' || container.id.length === 0) {
+    return undefined;
+  }
+  return `${CONTAINER_ID_RETENTION_KEY_PREFIX}${container.id}`;
+}
+
 /**
  * Build the business id of the container.
  * @param container
