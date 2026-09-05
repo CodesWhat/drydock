@@ -927,7 +927,9 @@ describe('AgentClient', () => {
           { id: 'foreign-1', name: 'web', watcher: 'local' } as never,
         ]);
 
-        expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1');
+        expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1', {
+          identityChangeExpected: true,
+        });
         expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('stale-1', {
           replacementExpected: true,
         });
@@ -1475,7 +1477,9 @@ describe('AgentClient', () => {
 
       await client.handshake();
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
+        identityChangeExpected: true,
+      });
     });
 
     test('should prune with watcher filter when watcher is specified', async () => {
@@ -1490,7 +1494,9 @@ describe('AgentClient', () => {
       ]);
 
       await client.watch('docker', 'local');
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
+        identityChangeExpected: true,
+      });
     });
 
     test('should use near-linear id lookups when pruning old containers', () => {
@@ -1602,7 +1608,9 @@ describe('AgentClient', () => {
 
       await client.handshake();
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone', {
+        identityChangeExpected: true,
+      });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
     });
 
@@ -3948,7 +3956,9 @@ describe('AgentClient', () => {
       });
 
       expect(processSpy).toHaveBeenCalledWith({ id: 'c1', name: 'current', watcher: 'local' });
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
+        identityChangeExpected: true,
+      });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
     });
 
@@ -3999,7 +4009,9 @@ describe('AgentClient', () => {
         containers: [{ id: 'kept', name: 'kept', watcher: 'local' }],
       });
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone', {
+        identityChangeExpected: true,
+      });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
     });
 
@@ -8003,7 +8015,9 @@ describe('AgentClient', () => {
         },
       ]);
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
+        identityChangeExpected: true,
+      });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('old-id', {
         replacementExpected: true,
       });
@@ -8016,13 +8030,17 @@ describe('AgentClient', () => {
         { id: 'c2', name: 'old-nginx', agent: 'test-agent' },
       ]);
       (client as any).pruneOldContainers([{ id: 'other-id', name: 'something-else' }]);
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
+        identityChangeExpected: true,
+      });
     });
 
     test('does not flag replacementExpected for an unnamed stale entry', () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'c3', agent: 'test-agent' }]);
       (client as any).pruneOldContainers([{ id: 'new-id', name: 'nginx' }]);
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c3');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c3', {
+        identityChangeExpected: true,
+      });
     });
 
     test('ignores unnamed containers in the authoritative list when matching names', () => {
@@ -8030,7 +8048,9 @@ describe('AgentClient', () => {
         { id: 'old-id', name: 'nginx', agent: 'test-agent' },
       ]);
       (client as any).pruneOldContainers([{ id: 'new-id' }, { id: 'n2', name: '' }]);
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
+        identityChangeExpected: true,
+      });
     });
   });
 
@@ -8593,7 +8613,9 @@ describe('AgentClient', () => {
       });
 
       // c2 must have been pruned; c1 must remain.
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
+        identityChangeExpected: true,
+      });
       expect(containerStore.map((c) => c.id)).toEqual(['c1']);
     });
   });
