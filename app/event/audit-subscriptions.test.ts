@@ -1106,6 +1106,41 @@ describe('audit-subscriptions dedupe windows', () => {
     expect(mockInc).not.toHaveBeenCalled();
   });
 
+  // DR-103: AgentClient's container-reconcile paths now prune (emit container-removed
+  // for the outgoing id) before they ingest the replacement (emit container-added for
+  // the incoming id) — the reverse of the order this subscriber used to see. The two
+  // events share an identity key for a same-identity replacement, and the removed
+  // handler unconditionally deletes whatever state is stored under that key. Emitting
+  // container-added first (the old order) meant the removed handler deleted the state
+  // container-added had just written, so the next unchanged update for the surviving
+  // container found no baseline, failed open, and recorded a spurious duplicate row.
+  test('a same-identity replacement leaves lifecycle state describing the surviving container', () => {
+    const { containerAddedHandler, containerRemovedHandler, containerUpdatedHandler } =
+      setupAuditSubscriptions();
+    const outgoing = makeLifecyclePayload({
+      id: 'old-id',
+      result: { tag: '1.0.0', digest: 'sha256:old' },
+    });
+    const incoming = makeLifecyclePayload({
+      id: 'new-id',
+      result: { tag: '2.0.0', digest: 'sha256:new' },
+    });
+
+    containerAddedHandler(outgoing);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerRemovedHandler(outgoing);
+    containerAddedHandler(incoming);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerUpdatedHandler(incoming);
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
   test('does not churn a stable fleet when lifecycle state exceeds ten thousand containers', () => {
     const { containerUpdatedHandler } = setupAuditSubscriptions();
     const updateFor = (index: number) =>
