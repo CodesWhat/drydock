@@ -3796,6 +3796,85 @@ test('handleContainerReport reserves a key in inFlightOnceNotificationKeys while
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
 });
 
+// DR-61: releaseOnceNotificationSlot only runs once the handler's promise settles, but
+// runHandlerWithTimeout detaches a handler that never settles instead of waiting on it
+// forever, so a hung send would otherwise hold its reservation for the process lifetime
+// and every later scan would see it as still in flight and skip the send. The
+// reservation now carries its own expiry, a multiple of the event handler timeout, that
+// releases it with a warn log if nothing ever released it first.
+test('reserveOnceNotificationSlot releases its reservation on a timer if the handler never settles', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+    await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+    trigger.init();
+
+    const container = {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+      result: { tag: '2.29.2-pg17' },
+    };
+    const expectedKey = `${trigger.getId()}::${container.id}::update-available::${notificationHistoryStore.computeResultHash(container)}`;
+
+    // A send that never resolves and never rejects — the same shape a hung
+    // notification provider takes once runHandlerWithTimeout has detached it.
+    trigger.trigger = vi.fn().mockReturnValue(new Promise(() => undefined));
+    const warnSpy = vi.spyOn(log, 'warn');
+
+    void trigger.handleContainerReport({ changed: true, container });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+    expect(trigger.inFlightOnceNotificationKeys.has(expectedKey)).toBe(true);
+
+    // Just short of the expiry (4x the 1000ms handler timeout): still held.
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining(expectedKey));
+
+    // At the expiry: released, with a warning naming the key.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(expectedKey));
+
+    // A later evaluation of the exact same result is no longer turned away.
+    trigger.trigger = vi.fn().mockResolvedValue(undefined);
+    await trigger.handleContainerReport({ changed: true, container });
+    expect(trigger.trigger).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// DR-61: once a reservation has expired (or was never taken -- once=false, no stable
+// container id), releasing it again must be a no-op rather than throwing or clearing a
+// timer that belongs to a different, newer reservation that happens to reuse the same
+// key. This is exactly the shape a hung handler's `.then()` takes once its reservation
+// has already expired out from under it: the release call still arrives eventually, just
+// long after the map entry (and its timer) are gone.
+test('releaseOnceNotificationSlot is a no-op when the key holds no reservation', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+  expect(() =>
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available'),
+  ).not.toThrow();
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
 // Regression test for #972 on the batch path: shouldHandleBatchContainerReport
 // only read the once=true history, and the batch send records it after
 // triggerBatch() resolves, so a manual single-container scan overlapping a
@@ -13631,6 +13710,46 @@ describe('recentlyAppliedContainerKeys cleared on deregisterComponent', () => {
     expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(2);
     await trigger.deregisterComponent();
     expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+  });
+});
+
+// DR-61: deregisterComponent must clear the expiry timer on every held reservation, not
+// just the map entry, or a trigger torn down mid-reservation (config reload, agent
+// disconnect) leaves a timer firing later against an inFlightOnceNotificationKeys map
+// that may since belong to a brand-new Trigger instance reusing the same id.
+describe('inFlightOnceNotificationKeys reservation timers cleared on deregisterComponent', () => {
+  test('deregisterComponent clears the reservation and its expiry timer never fires', async () => {
+    vi.useFakeTimers();
+    try {
+      trigger.type = 'slack';
+      trigger.name = 'notify-deregister';
+      trigger.configuration = { ...configurationValid, once: true };
+      vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+
+      const container = {
+        id: 'c1',
+        watcher: 'local',
+        name: 'container1',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+        result: { tag: '2.29.2-pg17' },
+      };
+      trigger.trigger = vi.fn().mockReturnValue(new Promise(() => undefined));
+
+      void trigger.handleContainerReport({ changed: true, container });
+      await vi.advanceTimersByTimeAsync(0);
+      expect((trigger as any).inFlightOnceNotificationKeys.size).toBe(1);
+
+      const warnSpy = vi.spyOn(log, 'warn');
+      await trigger.deregisterComponent();
+      expect((trigger as any).inFlightOnceNotificationKeys.size).toBe(0);
+
+      // Past the 4000ms expiry: the timer was cleared on deregister, so it never fires.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('never released'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

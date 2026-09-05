@@ -743,8 +743,24 @@ class Trigger<
    * Reservations for a `once=true` history key currently being evaluated for
    * send, keyed by triggerId::containerId::eventKind::resultHash. See
    * `reserveOnceNotificationSlot` / `releaseOnceNotificationSlot` (#972).
+   *
+   * DR-61: each reservation carries the timer that expires it. `releaseOnceNotificationSlot`
+   * runs only when the handler's promise settles, but `runHandlerWithTimeout` (30s by
+   * default) detaches a handler that misses its deadline instead of waiting on it, so a
+   * send that never settles would otherwise hold its key for the process lifetime and
+   * every later scan would see it as still in flight and skip the send. The expiry timer
+   * releases it instead, with a warn log, after a deadline generous enough that it never
+   * fires ahead of an ordinary settle.
    */
-  private readonly inFlightOnceNotificationKeys: Set<string> = new Set();
+  private readonly inFlightOnceNotificationKeys: Map<string, ReturnType<typeof setTimeout>> =
+    new Map();
+  /**
+   * DR-61: the once-notification reservation's expiry, a multiple of the event handler
+   * timeout so it never races an ordinary settle: `runHandlerWithTimeout` already detaches
+   * a handler at that timeout, and the reservation only needs to outlive that by enough
+   * margin to never be the thing that fires first under normal, non-hung sends.
+   */
+  private static readonly ONCE_NOTIFICATION_RESERVATION_TTL_MULTIPLIER = 4;
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
   private readonly autoTriggerErrorSuppressor = new RecentSignatureSuppressor({
     seenAt: this.autoTriggerErrorSeenAt,
@@ -1608,7 +1624,16 @@ class Trigger<
     if (this.inFlightOnceNotificationKeys.has(key)) {
       return false;
     }
-    this.inFlightOnceNotificationKeys.add(key);
+    const reservationTtlMs =
+      event.getHandlerTimeoutMs() * Trigger.ONCE_NOTIFICATION_RESERVATION_TTL_MULTIPLIER;
+    const expiryTimer = setTimeout(() => {
+      this.inFlightOnceNotificationKeys.delete(key);
+      this.log.warn(
+        `Once-notification reservation for ${key} was never released after ${reservationTtlMs}ms; releasing it. The handler that reserved it may be hung.`,
+      );
+    }, reservationTtlMs);
+    expiryTimer.unref();
+    this.inFlightOnceNotificationKeys.set(key, expiryTimer);
     return true;
   }
 
@@ -1633,7 +1658,11 @@ class Trigger<
       return;
     }
     const key = `${this.getId()}::${containerId}::${eventKind}::${notificationHistoryStore.computeResultHash(container)}`;
-    this.inFlightOnceNotificationKeys.delete(key);
+    const expiryTimer = this.inFlightOnceNotificationKeys.get(key);
+    if (expiryTimer) {
+      clearTimeout(expiryTimer);
+      this.inFlightOnceNotificationKeys.delete(key);
+    }
   }
 
   /**
@@ -3264,6 +3293,9 @@ class Trigger<
     this.autoUpdateBlockedTracker.clear();
     this.notificationRuleWarningsSeen.clear();
     this.recentlyAppliedContainerKeys.clear();
+    for (const expiryTimer of this.inFlightOnceNotificationKeys.values()) {
+      clearTimeout(expiryTimer);
+    }
     this.inFlightOnceNotificationKeys.clear();
   }
 
