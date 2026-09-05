@@ -3870,9 +3870,110 @@ test('releaseOnceNotificationSlot is a no-op when the key holds no reservation',
 
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
   expect(() =>
-    (trigger as any).releaseOnceNotificationSlot(container, 'update-available'),
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available', true),
   ).not.toThrow();
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+// DR-62 regression: reservation A expires (its timer fires and deletes the key), then a
+// fresh reservation B takes the same key. Before DR-62, A's late release — arriving after
+// its own send finally settles, whether it succeeds or fails — cleared the map entry purely
+// by key, so it tore down B's still-active reservation and let a third evaluation dispatch
+// while B was meant to be held. Ownership is now proven by token: A's release must be a
+// no-op against B's entry, and only B's own release (with B's own token) frees it.
+test('a stale reservation release cannot clear a newer reservation that reused its key', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+    await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+    trigger.init();
+
+    const container = {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+      result: { tag: '2.29.2-pg17' },
+    };
+
+    // Reservation A.
+    const tokenA = (trigger as any).reserveOnceNotificationSlot(container, 'update-available');
+    expect(tokenA).not.toBe(false);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // Let A expire (4x the 1000ms handler timeout) — its timer deletes the key.
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+
+    // Reservation B takes the exact same key.
+    const tokenB = (trigger as any).reserveOnceNotificationSlot(container, 'update-available');
+    expect(tokenB).not.toBe(false);
+    expect(tokenB).not.toBe(tokenA);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // A's own evaluation finally settles (failure) and releases with A's stale token. This
+    // must not touch B's reservation.
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available', tokenA);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // A third evaluation of the exact same result is still turned away — B is still held.
+    expect((trigger as any).reserveOnceNotificationSlot(container, 'update-available')).toBe(false);
+
+    // B's own release, with B's own token, frees it.
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available', tokenB);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+
+    // The slot is now free for a genuinely later evaluation.
+    expect((trigger as any).reserveOnceNotificationSlot(container, 'update-available')).not.toBe(
+      false,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// DR-62 counterpart: the expiry timer's own token check, not just releaseOnceNotificationSlot's.
+// reserveOnceNotificationSlot's `has(key)` guard means no legitimate call sequence through the
+// public reserve/release API can leave a stale timer armed against an entry it does not own —
+// this exercises that guard directly by replacing the map entry out from under an armed timer,
+// the same defense-in-depth the timer's own token comparison provides against any future change
+// to that invariant.
+test("a reservation's expiry timer does not clear an entry it no longer owns", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+    await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+    trigger.init();
+
+    const container = {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+      result: { tag: '2.29.2-pg17' },
+    };
+    const key = `${trigger.getId()}::${container.id}::update-available::${notificationHistoryStore.computeResultHash(container)}`;
+
+    (trigger as any).reserveOnceNotificationSlot(container, 'update-available');
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // Replace the entry the first reservation's timer armed against, without going through
+    // its release — standing in for the invariant above being violated some other way.
+    const replacementEntry = {
+      token: Symbol('other-reservation'),
+      timer: trigger.inFlightOnceNotificationKeys.get(key).timer,
+    };
+    trigger.inFlightOnceNotificationKeys.set(key, replacementEntry);
+
+    await vi.advanceTimersByTimeAsync(4000);
+
+    // The original reservation's expiry fires but must not clear the entry it no longer owns.
+    expect(trigger.inFlightOnceNotificationKeys.get(key)).toBe(replacementEntry);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // Regression test for #972 on the batch path: shouldHandleBatchContainerReport
