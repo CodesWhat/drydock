@@ -146,6 +146,72 @@ describe('AgentWatcher', () => {
     });
   });
 
+  describe('isMaintenanceWindowOpen', () => {
+    test('delegates to the controller watcher when controller Docker transport is active', async () => {
+      manager.getAgent.mockReturnValue({ requestDockerApi: vi.fn(), watch: vi.fn() });
+      controllerMocks.dockerDelegate.isMaintenanceWindowOpen = vi.fn().mockReturnValue(false);
+
+      await watcher.register(
+        'watcher',
+        'docker',
+        'docker',
+        { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+        'remote-agent',
+      );
+
+      expect(watcher.isMaintenanceWindowOpen()).toBe(false);
+      expect(controllerMocks.dockerDelegate.isMaintenanceWindowOpen).toHaveBeenCalledOnce();
+
+      await watcher.deregister();
+    });
+
+    test('returns the freshest agent-reported window state from the watcher snapshot cache', () => {
+      watcher.agent = 'remote-agent';
+      manager.getAgent.mockReturnValue({
+        getWatcherSnapshot: vi.fn().mockReturnValue({
+          type: 'docker',
+          name: 'local',
+          configuration: { maintenancewindowopen: false },
+        }),
+      });
+
+      expect(watcher.isMaintenanceWindowOpen()).toBe(false);
+    });
+
+    test('falls back to the handshake-time configuration when no snapshot has arrived yet', () => {
+      watcher.agent = 'remote-agent';
+      watcher.configuration = { maintenancewindowopen: false };
+      manager.getAgent.mockReturnValue({
+        getWatcherSnapshot: vi.fn().mockReturnValue(undefined),
+      });
+
+      expect(watcher.isMaintenanceWindowOpen()).toBe(false);
+    });
+
+    test('fails open when the agent reports no maintenancewindowopen field at all (older agent)', () => {
+      watcher.agent = 'remote-agent';
+      watcher.configuration = { maintenancewindow: '0 2 * * *' };
+      manager.getAgent.mockReturnValue({
+        getWatcherSnapshot: vi.fn().mockReturnValue(undefined),
+      });
+
+      expect(watcher.isMaintenanceWindowOpen()).toBe(true);
+    });
+
+    test('fails open when the agent is not found', () => {
+      watcher.agent = 'remote-agent';
+      manager.getAgent.mockReturnValue(undefined);
+
+      expect(watcher.isMaintenanceWindowOpen()).toBe(true);
+    });
+
+    test('fails open when the watcher has no agent assigned', () => {
+      watcher.agent = undefined;
+
+      expect(watcher.isMaintenanceWindowOpen()).toBe(true);
+    });
+  });
+
   describe('getConfigurationSchema', () => {
     test('should return a schema that allows unknown keys', () => {
       const schema = watcher.getConfigurationSchema();
