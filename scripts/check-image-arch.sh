@@ -65,6 +65,78 @@ is_expected_binary() {
 
 echo "Checking ${image_ref} (${platform}) for ${expected_arch} binaries, e_machine ${expected}"
 
+# The release workflow hands us the same *index* digest for every platform
+# ("...@sha256:<index>"), and running docker against that one reference twice
+# fails the second time: docker's classic image store cannot hold two
+# platform variants under one digest, and aborts with "cannot overwrite
+# digest sha256:<index>". Resolve the platform's own manifest digest first so
+# each docker run pulls a distinct reference. A reference that is not an
+# index at all (no digest, or already a single-platform manifest) has
+# nothing to resolve, so it runs unchanged.
+repository="${image_ref%@*}"
+last_segment="${repository##*/}"
+if [[ ${last_segment} == *:* ]]; then
+	repository="${repository%:*}"
+fi
+
+raw_manifest=""
+if ! raw_manifest="$(docker buildx imagetools inspect --raw "${image_ref}" 2>&1)"; then
+	echo "::error::Could not inspect ${image_ref}: ${raw_manifest}"
+	exit 1
+fi
+
+is_index="$(printf '%s' "${raw_manifest}" | jq -r 'if (.manifests | type) == "array" then "true" else "false" end')"
+
+run_ref="${image_ref}"
+if [ "${is_index}" = "true" ]; then
+	requested_os="${platform%%/*}"
+	requested_rest="${platform#*/}"
+	requested_arch="${requested_rest%%/*}"
+	requested_variant=""
+	if [[ ${requested_rest} == */* ]]; then
+		requested_variant="${requested_rest#*/}"
+	fi
+
+	# unknown/unknown platforms and vnd.docker.reference.type annotations mark
+	# attestation manifests, not platform images; exclude them explicitly
+	# rather than trust that they never collide with a real request.
+	matches="$(printf '%s' "${raw_manifest}" | jq -r --arg os "${requested_os}" --arg arch "${requested_arch}" --arg variant "${requested_variant}" '
+        [ .manifests[]?
+          | select(.platform != null)
+          | select(.platform.os != "unknown")
+          | select((.annotations["vnd.docker.reference.type"] // "") == "")
+          | select(.platform.os == $os and .platform.architecture == $arch)
+          | select($variant == "" or .platform.variant == $variant)
+          | .digest
+        ] | .[]
+    ')"
+
+	manifest_digests=()
+	while IFS= read -r digest; do
+		[ -n "${digest}" ] && manifest_digests+=("${digest}")
+	done <<<"${matches}"
+
+	if [ "${#manifest_digests[@]}" -eq 0 ]; then
+		available="$(printf '%s' "${raw_manifest}" | jq -r '
+            [ .manifests[]?
+              | select(.platform != null)
+              | select(.platform.os != "unknown")
+              | select((.annotations["vnd.docker.reference.type"] // "") == "")
+              | "\(.platform.os)/\(.platform.architecture)\(if .platform.variant then "/" + .platform.variant else "" end)"
+            ] | unique | .[]
+        ')"
+		echo "::error::${image_ref} has no manifest for ${platform}. Index contains: $(echo "${available}" | tr '\n' ' ')"
+		exit 1
+	fi
+
+	if [ "${#manifest_digests[@]}" -gt 1 ]; then
+		echo "::error::${image_ref} has ${#manifest_digests[@]} manifests matching ${platform}, expected exactly one: ${manifest_digests[*]}"
+		exit 1
+	fi
+
+	run_ref="${repository}@${manifest_digests[0]}"
+fi
+
 # stderr has to stay out of the parsed output: docker writes pull progress
 # there, and on a runner that has never seen the image that is 30 lines of
 # "Pulling fs layer" ahead of the probe's three.
@@ -74,8 +146,8 @@ trap 'rm -f "${docker_stderr}"' EXIT
 # A pull failure or a missing emulator is a legitimate non-zero here, so keep
 # the output instead of letting set -e abort with nothing to read.
 output=""
-if ! output="$(docker run --rm --pull always --platform "${platform}" --entrypoint sh "${image_ref}" -c "${probe}" 2>"${docker_stderr}")"; then
-	echo "::error::Could not read ${image_ref} as ${platform}: $(cat "${docker_stderr}")"
+if ! output="$(docker run --rm --pull always --platform "${platform}" --entrypoint sh "${run_ref}" -c "${probe}" 2>"${docker_stderr}")"; then
+	echo "::error::Could not read ${run_ref} as ${platform}: $(cat "${docker_stderr}")"
 	exit 1
 fi
 

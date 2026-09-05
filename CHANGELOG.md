@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The arm64 pass of the image arch check failed on every multi-platform cut with `docker: cannot overwrite digest sha256:<index>`.** `scripts/check-image-arch.sh` ran once per platform against the same index-digest reference (`ghcr.io/codeswhat/drydock:release-staging-N@sha256:<index>`), and docker's classic image store cannot hold two platform variants under one digest, so the amd64 pass succeeded and the arm64 pass that followed it always failed. This killed the v1.6.1-rc.9 cut. The script now resolves each platform's own manifest digest out of the index via `docker buildx imagetools inspect --raw` and jq before it runs docker, skipping attestation entries, and falls back to running the reference unchanged when it isn't an index at all.
+
 ## [1.6.1-rc.9] — 2026-09-05
 
 ### Changed
