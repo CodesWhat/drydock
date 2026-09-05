@@ -82,6 +82,14 @@ interface UpdateOperationBase {
   container?: Container;
   finalizeSecretHash?: string;
   helperLifecycleOwner?: 'exiting-process' | 'surviving-process';
+  /**
+   * Portainer-specific recovery descriptor persisted so a controller restart
+   * can reconcile an in-flight stack redeploy instead of expiring it. Opaque
+   * to the store: the Portainer trigger owns the shape and validates it
+   * before use. Never exposed via `toApiUpdateOperation` (may echo stack
+   * env values) and always cleared by `markOperationTerminal`.
+   */
+  portainerRecovery?: unknown;
   [key: string]: unknown;
 }
 

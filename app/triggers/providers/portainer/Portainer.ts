@@ -99,7 +99,12 @@ interface PortainerRecoveryDescriptor {
   service: string;
   mode: 'env' | 'compose';
   field: string;
-  originalValue: string;
+  /**
+   * `null` means the env variable was absent at capture time (env mode
+   * only; compose mode always captures a concrete image reference). Restore
+   * must remove the variable rather than write it back as `""`.
+   */
+  originalValue: string | null;
   targetValue: string;
   originalImage: string;
   originalImageId: string;
@@ -629,6 +634,74 @@ function upsertStackEnv(
   const nextEnv = (env || []).filter((entry) => entry.name !== name);
   nextEnv.push({ name, value });
   return nextEnv;
+}
+
+/**
+ * Drop a stack env variable entirely rather than writing it back with an
+ * empty value. Used to restore an env-mode recovery capture where the
+ * variable was absent at capture time: absent-at-capture must mean absent on
+ * restore, not `NAME=""` (see `PortainerRecoveryDescriptor.originalValue`).
+ */
+function removeStackEnv(env: PortainerStackEnv[] | undefined, name: string): PortainerStackEnv[] {
+  return (env || []).filter((entry) => entry.name !== name);
+}
+
+/**
+ * Validate a persisted Portainer recovery descriptor before it is trusted for
+ * any remote call. Returns the names of missing/malformed fields so the
+ * caller can report exactly what is wrong instead of dereferencing a field
+ * that may not exist (e.g. `recovery.field.slice(...)` when `field` is
+ * missing).
+ */
+function describePortainerRecoveryDescriptorProblems(
+  recovery: Partial<PortainerRecoveryDescriptor>,
+): string[] {
+  const problems: string[] = [];
+  if (typeof recovery.stackId !== 'number') {
+    problems.push('stackId');
+  }
+  const validMode = recovery.mode === 'compose' || recovery.mode === 'env';
+  if (!validMode) {
+    problems.push('mode');
+  }
+  if (typeof recovery.service !== 'string' || recovery.service === '') {
+    problems.push('service');
+  }
+  if (typeof recovery.field !== 'string' || recovery.field === '') {
+    problems.push('field');
+  } else if (validMode && recovery.mode === 'env' && !recovery.field.startsWith('env:')) {
+    problems.push('field');
+  } else if (validMode && recovery.mode === 'env' && recovery.field.slice('env:'.length) === '') {
+    problems.push('field');
+  } else if (validMode && recovery.mode === 'compose' && !recovery.field.startsWith('compose:')) {
+    problems.push('field');
+  }
+  if (recovery.originalValue !== null && typeof recovery.originalValue !== 'string') {
+    problems.push('originalValue');
+  }
+  if (typeof recovery.targetValue !== 'string') {
+    problems.push('targetValue');
+  }
+  if (typeof recovery.originalImage !== 'string' || recovery.originalImage === '') {
+    problems.push('originalImage');
+  }
+  if (typeof recovery.originalImageId !== 'string' || recovery.originalImageId === '') {
+    problems.push('originalImageId');
+  }
+  if (typeof recovery.targetImage !== 'string' || recovery.targetImage === '') {
+    problems.push('targetImage');
+  }
+  if (typeof recovery.targetImageId !== 'string' || recovery.targetImageId === '') {
+    problems.push('targetImageId');
+  }
+  if (
+    typeof recovery.runningReplicas !== 'number' ||
+    !Number.isInteger(recovery.runningReplicas) ||
+    recovery.runningReplicas < 1
+  ) {
+    problems.push('runningReplicas');
+  }
+  return problems;
 }
 
 /**
@@ -1341,7 +1414,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
           : `compose:${resolved.service}.image`,
       originalValue:
         resolved.mode === 'env'
-          ? resolved.stack.Env?.find((item) => item.name === resolved.versionVar)?.value || ''
+          ? (resolved.stack.Env?.find((item) => item.name === resolved.versionVar)?.value ?? null)
           : resolved.serviceImage || resolved.originalImage,
       targetValue: resolved.mode === 'env' ? resolved.targetTag || '' : resolved.targetImage,
       originalImage: resolved.originalImage,
@@ -1437,7 +1510,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       return;
     }
     const recovery = pending.portainerRecovery as Partial<PortainerRecoveryDescriptor> | undefined;
-    if (!recovery || typeof recovery.stackId !== 'number') {
+    if (!recovery) {
       throw new PortainerRecoveryUnavailableError(
         `Portainer recovery descriptor is missing for operation ${pending.id}`,
       );
@@ -1447,19 +1520,10 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         `Portainer update operation ${pending.id} is agent-owned and cannot be recovered`,
       );
     }
-    if (
-      (recovery.mode !== 'compose' && recovery.mode !== 'env') ||
-      typeof recovery.service !== 'string' ||
-      typeof recovery.originalImage !== 'string' ||
-      typeof recovery.originalImageId !== 'string' ||
-      typeof recovery.targetImage !== 'string' ||
-      typeof recovery.targetImageId !== 'string' ||
-      typeof recovery.runningReplicas !== 'number' ||
-      !Number.isInteger(recovery.runningReplicas) ||
-      recovery.runningReplicas < 1
-    ) {
+    const descriptorProblems = describePortainerRecoveryDescriptorProblems(recovery);
+    if (descriptorProblems.length > 0) {
       throw new PortainerRecoveryUnavailableError(
-        `Portainer recovery descriptor is invalid for operation ${pending.id}`,
+        `Portainer recovery descriptor is invalid for operation ${pending.id}: missing or malformed ${descriptorProblems.join(', ')}`,
       );
     }
     if (!dockerApi || typeof dockerApi.listContainers !== 'function') {
@@ -1468,28 +1532,62 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       );
     }
 
-    const stack = await this.getPortainerStack(recovery.stackId);
+    // A boot-time failure to even read the Portainer API is not evidence the
+    // update failed -- the controller never inspected the stack, so it can't
+    // report `update-failed` for it. Surface it the same way an unresolvable
+    // operation is surfaced (`PortainerRecoveryUnavailableError` -> `expired`
+    // in `recovery.ts`) instead of letting a bare `Error` fall through to a
+    // `failed` classification.
+    let stack: PortainerStackDetails;
+    try {
+      stack = await this.getPortainerStack(recovery.stackId);
+    } catch (error: unknown) {
+      throw new PortainerRecoveryUnavailableError(
+        `Portainer API is unavailable for operation ${pending.id}: ${getErrorMessage(error)}`,
+      );
+    }
     if (recovery.endpointId !== undefined && stack.EndpointId !== recovery.endpointId) {
       throw new Error(
         `Refusing Portainer recovery for operation ${pending.id}: stack endpoint changed`,
       );
     }
-    const stackFileContent = await this.getPortainerStackFile(recovery.stackId);
+    let stackFileContent: string;
+    try {
+      stackFileContent = await this.getPortainerStackFile(recovery.stackId);
+    } catch (error: unknown) {
+      throw new PortainerRecoveryUnavailableError(
+        `Portainer API is unavailable for operation ${pending.id}: ${getErrorMessage(error)}`,
+      );
+    }
+
+    const envVariable = recovery.mode === 'env' ? recovery.field.slice('env:'.length) : undefined;
     let definition: 'original' | 'target' | undefined;
     if (recovery.mode === 'env') {
-      const variable = recovery.field?.startsWith('env:')
-        ? recovery.field.slice('env:'.length)
-        : undefined;
-      const value = stack.Env?.find((entry) => entry.name === variable)?.value;
-      if (value === recovery.originalValue) definition = 'original';
-      if (value === recovery.targetValue) definition = 'target';
+      const value = stack.Env?.find((entry) => entry.name === envVariable)?.value;
+      if (
+        value === undefined ? recovery.originalValue === null : value === recovery.originalValue
+      ) {
+        definition = 'original';
+      }
+      if (value === recovery.targetValue) {
+        definition = 'target';
+      }
     } else {
       const compose = yaml.parse(stackFileContent, {
         maxAliasCount: YAML_MAX_ALIAS_COUNT,
       }) as ComposeFile;
       const serviceImage = getServiceImage(compose, recovery.service);
       const normalizedServiceImage = normalizeImageReference(serviceImage);
-      if (normalizedServiceImage === normalizeImageReference(recovery.originalValue)) {
+      if (normalizedServiceImage === undefined) {
+        // An unresolvable/interpolated reference must never compare equal to
+        // anything (including another unresolvable reference): treat it as
+        // "cannot verify" and refuse rather than silently matching whatever
+        // the descriptor happens to also fail to normalize to.
+        throw new Error(
+          `Refusing Portainer recovery for operation ${pending.id}: stack service image cannot be resolved to a concrete reference`,
+        );
+      }
+      if (normalizedServiceImage === normalizeImageReference(recovery.originalValue ?? undefined)) {
         definition = 'original';
       }
       if (normalizedServiceImage === normalizeImageReference(recovery.targetValue)) {
@@ -1561,35 +1659,109 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     const desiredValue = restore ? recovery.originalValue : recovery.targetValue;
     const updatedStackFileContent =
       recovery.mode === 'compose'
-        ? updateComposeServiceImageInText(stackFileContent, recovery.service, desiredValue)
+        ? updateComposeServiceImageInText(
+            stackFileContent,
+            recovery.service,
+            // Compose mode never captures a null originalValue (the service
+            // image is always a concrete reference at capture time); the
+            // fallback only guards the shared string | null descriptor type.
+            desiredValue ?? recovery.originalImage,
+          )
         : stackFileContent;
     const updatedEnv =
       recovery.mode === 'env'
-        ? upsertStackEnv(stack.Env, recovery.field.slice('env:'.length), desiredValue)
+        ? desiredValue === null
+          ? removeStackEnv(stack.Env, envVariable as string)
+          : upsertStackEnv(stack.Env, envVariable as string, desiredValue)
         : stack.Env || [];
     updateOperationStore.updateOperation(pending.id, {
       phase: restore ? 'portainer-restore' : 'portainer-target',
       portainerRecovery: recovery,
     });
     await saveStore();
-    await this.redeployPortainerStack(stack, updatedStackFileContent, updatedEnv);
-    await this.waitForPortainerRedeploy(
-      dockerApi,
-      container,
-      {
-        mode: recovery.mode,
-        stack,
-        stackFileContent,
-        service: recovery.service,
-        targetImage: restore ? recovery.originalImage : recovery.targetImage,
-        targetImageId: restore ? recovery.originalImageId : recovery.targetImageId,
-        originalImage: recovery.originalImage,
-        prePutRunningReplicas: recovery.runningReplicas,
-        updatedStackFileContent,
-        updatedEnv,
-      },
-      logContainer,
-    );
+
+    // Keep the descriptor available until a terminal state is actually
+    // recorded: attempt to restore the pre-reissue stack definition if the
+    // reissued redeploy fails, the same way `performContainerUpdate` restores
+    // on failure, instead of letting the error propagate straight to the
+    // caller's generic `failed` classification with nothing attempted.
+    const preReissueImage = definition === 'target' ? recovery.targetImage : recovery.originalImage;
+    const preReissueImageId =
+      definition === 'target' ? recovery.targetImageId : recovery.originalImageId;
+    let reissueError: unknown;
+    try {
+      await this.redeployPortainerStack(stack, updatedStackFileContent, updatedEnv);
+    } catch (error: unknown) {
+      reissueError = error;
+    }
+    if (!reissueError) {
+      try {
+        await this.waitForPortainerRedeploy(
+          dockerApi,
+          container,
+          {
+            mode: recovery.mode,
+            stack,
+            stackFileContent,
+            service: recovery.service,
+            targetImage: restore ? recovery.originalImage : recovery.targetImage,
+            targetImageId: restore ? recovery.originalImageId : recovery.targetImageId,
+            originalImage: recovery.originalImage,
+            prePutRunningReplicas: recovery.runningReplicas,
+            updatedStackFileContent,
+            updatedEnv,
+          },
+          logContainer,
+        );
+      } catch (waitError: unknown) {
+        reissueError = waitError;
+      }
+    }
+
+    if (reissueError) {
+      let restorePutError: unknown;
+      let restoreWaitError: unknown;
+      try {
+        await this.redeployPortainerStack(stack, stackFileContent, stack.Env || []);
+      } catch (error: unknown) {
+        restorePutError = error;
+      }
+      if (!restorePutError) {
+        try {
+          await this.waitForPortainerRedeploy(
+            dockerApi,
+            container,
+            {
+              mode: recovery.mode,
+              stack,
+              stackFileContent,
+              service: recovery.service,
+              targetImage: preReissueImage,
+              targetImageId: preReissueImageId,
+              originalImage: recovery.originalImage,
+              prePutRunningReplicas: recovery.runningReplicas,
+              updatedStackFileContent: stackFileContent,
+              updatedEnv: stack.Env || [],
+            },
+            logContainer,
+          );
+        } catch (error: unknown) {
+          restoreWaitError = error;
+        }
+      }
+      const restoreError = restorePutError || restoreWaitError;
+      if (restoreError) {
+        const restoreMessage = getErrorMessage(restoreError);
+        logContainer.warn(`Portainer recovery restore failed: ${restoreMessage}`);
+        throw new Error(
+          `Portainer recovery reissue failed for operation ${pending.id}: ${getErrorMessage(reissueError)} (Portainer recovery restore failed: ${restoreMessage})`,
+        );
+      }
+      throw new Error(
+        `Portainer recovery reissue failed for operation ${pending.id}: ${getErrorMessage(reissueError)}`,
+      );
+    }
+
     if (restore) {
       updateOperationStore.markOperationTerminal(pending.id, {
         status: 'rolled-back',

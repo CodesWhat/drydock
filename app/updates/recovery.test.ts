@@ -462,6 +462,41 @@ describe('recoverQueuedOperationsOnStartup', () => {
     );
   });
 
+  test('expires an agent-owned Portainer in-progress operation instead of recovering it', async () => {
+    const container = { id: 'c-portainer-agent', name: 'web', watcher: 'local', agent: 'edge-1' };
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+    const portainerTrigger = {
+      type: 'portainer',
+      getId: () => 'portainer.update',
+      getWatcher: vi.fn(() => ({ dockerApi: {} })),
+      reconcileInProgressContainerUpdateOperation: reconcile,
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer-agent',
+        status: 'in-progress',
+        phase: 'portainer-target',
+        containerName: 'web',
+        container,
+        triggerName: 'portainer.update',
+        portainerRecovery: { stackId: 12 },
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockGetState.mockReturnValue({ trigger: { 'portainer.update': portainerTrigger } });
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-portainer-agent',
+      expect.objectContaining({ status: 'expired', phase: 'expired' }),
+    );
+  });
+
   test('legacy in-progress recovery skips a Portainer trigger instead of invoking Docker recovery', async () => {
     const container = { id: 'c-portainer-legacy', name: 'web', watcher: 'local' };
     const reconcile = vi.fn().mockResolvedValue(undefined);
