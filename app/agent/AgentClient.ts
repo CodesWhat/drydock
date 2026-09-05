@@ -673,7 +673,12 @@ export class AgentClient {
         storeContainer.deleteContainer(c.id, { replacementExpected: true });
         return;
       }
-      storeContainer.deleteContainer(c.id);
+      // DR-115: a container missing from this report can also be moving to another
+      // agent (or back to the controller's own watcher) rather than genuinely gone.
+      // The Docker id survives that move even though the identity does not, so stash
+      // the update policy under the id the same way DR-112's controller-side prune
+      // does, and let the record that reappears under this id inherit it.
+      storeContainer.deleteContainer(c.id, { identityChangeExpected: true });
     });
   }
 

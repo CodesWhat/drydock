@@ -1743,7 +1743,7 @@ test('pruneOrphanedAgentContainers should delete containers whose agent is no lo
   registry.testable_pruneOrphanedAgentContainers();
 
   expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
-  expect(mockDeleteContainer).toHaveBeenCalledWith('ghost-1');
+  expect(mockDeleteContainer).toHaveBeenCalledWith('ghost-1', { identityChangeExpected: true });
 });
 
 test('pruneOrphanedAgentContainers should preserve containers of registered-but-disconnected agents', async () => {
@@ -1790,7 +1790,9 @@ test('init should prune containers from removed agents after registerAgents', as
   await registry.init();
 
   expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
-  expect(mockDeleteContainer).toHaveBeenCalledWith('ghost-container');
+  expect(mockDeleteContainer).toHaveBeenCalledWith('ghost-container', {
+    identityChangeExpected: true,
+  });
 });
 
 test('init should log and continue when pruneOrphanedAgentContainers throws', async () => {

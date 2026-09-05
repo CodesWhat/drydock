@@ -150,8 +150,9 @@ describe('OpenAPI document', () => {
           type: 'object',
           properties: {
             watchers: { type: 'integer', minimum: 0 },
+            coalesced: { type: 'boolean' },
           },
-          required: ['watchers'],
+          required: ['watchers', 'coalesced'],
           additionalProperties: false,
         },
       },

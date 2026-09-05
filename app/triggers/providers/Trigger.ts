@@ -68,6 +68,15 @@ import {
 
 type TriggerAutoMode = 'all' | 'oninclude' | 'onauto' | 'none';
 type DigestEventKind = 'update-available-digest' | 'security-alert-digest';
+/**
+ * Proof of ownership for a slot reserved by `reserveOnceNotificationSlot`.
+ * `true` means the gate is a permissive no-op (once=false, or no stable
+ * container id) — there is nothing in `inFlightOnceNotificationKeys` to own.
+ * A `symbol` means a real reservation was taken and stored under that
+ * identity; only the call holding the matching symbol may release it. See
+ * `reserveOnceNotificationSlot` / `releaseOnceNotificationSlot` (DR-62).
+ */
+type OnceReservationToken = symbol | true;
 
 /**
  * Context forwarded by the framework to a provider's `triggerBatch` when the
@@ -743,8 +752,33 @@ class Trigger<
    * Reservations for a `once=true` history key currently being evaluated for
    * send, keyed by triggerId::containerId::eventKind::resultHash. See
    * `reserveOnceNotificationSlot` / `releaseOnceNotificationSlot` (#972).
+   *
+   * DR-61: each reservation carries the timer that expires it. `releaseOnceNotificationSlot`
+   * runs only when the handler's promise settles, but `runHandlerWithTimeout` (30s by
+   * default) detaches a handler that misses its deadline instead of waiting on it, so a
+   * send that never settles would otherwise hold its key for the process lifetime and
+   * every later scan would see it as still in flight and skip the send. The expiry timer
+   * releases it instead, with a warn log, after a deadline generous enough that it never
+   * fires ahead of an ordinary settle.
+   *
+   * DR-62: the entry also carries the `token` its own reservation returned, so a release
+   * (from either the expiry timer or a settling caller) only ever clears the entry it
+   * actually owns. Without that check, an expired reservation A whose timer already deleted
+   * the key, followed by a fresh reservation B for the same key, left B exposed to A's late
+   * `releaseOnceNotificationSlot` call: the lookup by key alone found B's timer and cleared
+   * it, so a third evaluation could dispatch while B was still meant to be held.
    */
-  private readonly inFlightOnceNotificationKeys: Set<string> = new Set();
+  private readonly inFlightOnceNotificationKeys: Map<
+    string,
+    { token: OnceReservationToken; timer: ReturnType<typeof setTimeout> }
+  > = new Map();
+  /**
+   * DR-61: the once-notification reservation's expiry, a multiple of the event handler
+   * timeout so it never races an ordinary settle: `runHandlerWithTimeout` already detaches
+   * a handler at that timeout, and the reservation only needs to outlive that by enough
+   * margin to never be the thing that fires first under normal, non-hung sends.
+   */
+  private static readonly ONCE_NOTIFICATION_RESERVATION_TTL_MULTIPLIER = 4;
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
   private readonly autoTriggerErrorSuppressor = new RecentSignatureSuppressor({
     seenAt: this.autoTriggerErrorSeenAt,
@@ -802,6 +836,14 @@ class Trigger<
       warn: (message) => this.log.warn(message),
     },
   });
+  /**
+   * DR-62: reservation tokens for containers queued via `queueEventBatchDispatch`, keyed the
+   * same way `eventBatchDispatcher` keys its own entries. `BatchDispatcher` is generic over
+   * plain entries with no room to carry a token alongside them, so this is the side channel
+   * `flushEventBatchDispatch` reads from (via `takeEventBatchReservationToken`) once its own
+   * `triggerBatch()` settles. Only `maturity-cleared` ever stashes an entry here.
+   */
+  private readonly eventBatchReservationTokens: Map<string, OnceReservationToken> = new Map();
   private readonly eventBatchDispatcher = new BatchDispatcher<NotificationRuleId, Container>({
     flushDelayMs: AUTO_EVENT_BATCH_FLUSH_DELAY_MS,
     getKey: (container) => this.buildEventBatchDispatchKey(container),
@@ -1000,10 +1042,20 @@ class Trigger<
       return;
     }
 
+    // DR-62: fetch (and consume) the reservation token `queueEventBatchDispatch` stashed for
+    // each container up front — recordEventDeliverySuccess / releaseEventDeliveryReservation
+    // only touch the once-notification map at all when ruleId === 'maturity-cleared', but they
+    // still need the exact token this flush's own settlement owns, not just the key.
+    const reservationTokens = new Map(
+      containers.map(
+        (container) => [container, this.takeEventBatchReservationToken(ruleId, container)] as const,
+      ),
+    );
+
     try {
       await this.triggerBatch(containers);
       for (const container of containers) {
-        this.recordEventDeliverySuccess(ruleId, container);
+        this.recordEventDeliverySuccess(ruleId, container, reservationTokens.get(container));
       }
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
@@ -1014,15 +1066,52 @@ class Trigger<
         this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
       }
       this.log.debug(e);
+      for (const container of containers) {
+        this.releaseEventDeliveryReservation(ruleId, container, reservationTokens.get(container));
+      }
     }
   }
 
-  private queueEventBatchDispatch(ruleId: NotificationRuleId, container: Container) {
+  private queueEventBatchDispatch(
+    ruleId: NotificationRuleId,
+    container: Container,
+    reservationToken?: OnceReservationToken,
+  ) {
+    // DR-62: only `maturity-cleared` ever passes a token here (see
+    // handleMaturityGateClearedEvent) — the BatchDispatcher's queue is generic over plain
+    // Container entries with no room to carry it, so it is stashed in a side map keyed the
+    // same way flushEventBatchDispatch/buildEventBatchDispatchKey identifies the entry, and
+    // consumed exactly once when that flush settles.
+    if (reservationToken !== undefined) {
+      this.eventBatchReservationTokens.set(
+        this.buildEventBatchDispatchKey(container),
+        reservationToken,
+      );
+    }
     this.eventBatchDispatcher.queue(ruleId, container);
+  }
+
+  /**
+   * Consume (get-and-delete) the reservation token stashed by `queueEventBatchDispatch` for
+   * this container, if any. Only `maturity-cleared` ever stashes one. Deleting on read keeps
+   * the side map from accumulating entries for containers whose batch already flushed.
+   */
+  private takeEventBatchReservationToken(
+    ruleId: NotificationRuleId,
+    container: Container,
+  ): OnceReservationToken | undefined {
+    if (ruleId !== 'maturity-cleared') {
+      return undefined;
+    }
+    const key = this.buildEventBatchDispatchKey(container);
+    const token = this.eventBatchReservationTokens.get(key);
+    this.eventBatchReservationTokens.delete(key);
+    return token;
   }
 
   private clearEventBatchDispatches() {
     this.eventBatchDispatcher.clear();
+    this.eventBatchReservationTokens.clear();
   }
 
   private pruneDigestBuffer(now = Date.now()) {
@@ -1080,19 +1169,62 @@ class Trigger<
    * dispatch. `maturity-cleared`'s symmetric dedup recording must wait for
    * this signal so a failed delivery does not suppress the generic
    * `update-available` retry on the next scan.
+   *
+   * Also releases the `maturity-cleared` reservation `handleMaturityGateClearedEvent`
+   * took before this delivery was even queued: the reservation has to outlive the
+   * synchronous dispatch decision because the actual send can be optimistic
+   * (`dispatchToTriggerOptimistically`'s detached `.then()`) or deferred to a later
+   * batch flush, and this is the one signal common to both that means "the send this
+   * reservation was guarding is done."
    */
-  private recordEventDeliverySuccess(ruleId: NotificationRuleId, container: Container) {
+  private recordEventDeliverySuccess(
+    ruleId: NotificationRuleId,
+    container: Container,
+    reservationToken: OnceReservationToken | undefined,
+  ) {
     if (ruleId !== 'maturity-cleared') {
       return;
     }
     this.recordNotifiedForResult(container, 'maturity-cleared');
     this.recordNotifiedForResult(container, 'update-available');
+    // DR-62: reservationToken is only ever undefined here if some future caller starts
+    // passing 'maturity-cleared' through this path without reserving first — every current
+    // caller (handleMaturityGateClearedEvent, via dispatchContainerForEvent) always reserves
+    // before dispatching, so this guard is unreachable today but kept as a safety net.
+    // c8 ignore next: unreachable given current callers, see comment above
+    /* c8 ignore next */
+    if (reservationToken !== undefined) {
+      this.releaseOnceNotificationSlot(container, 'maturity-cleared', reservationToken);
+    }
+  }
+
+  /**
+   * The failure counterpart of `recordEventDeliverySuccess`: releases the
+   * `maturity-cleared` reservation on a delivery that settled but did not succeed, so a
+   * later, genuinely new maturity-cleared event for the same container is never blocked
+   * by a reservation its own failed predecessor left behind.
+   */
+  private releaseEventDeliveryReservation(
+    ruleId: NotificationRuleId,
+    container: Container,
+    reservationToken: OnceReservationToken | undefined,
+  ) {
+    if (ruleId !== 'maturity-cleared') {
+      return;
+    }
+    // DR-62: see the identical guard (and its rationale) in recordEventDeliverySuccess above.
+    // c8 ignore next: unreachable given current callers, see recordEventDeliverySuccess above
+    /* c8 ignore next */
+    if (reservationToken !== undefined) {
+      this.releaseOnceNotificationSlot(container, 'maturity-cleared', reservationToken);
+    }
   }
 
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
     container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
+    reservationToken?: OnceReservationToken,
   ): Promise<boolean> {
     // Update-action triggers (docker, dockercompose, portainer) implement `trigger()` as
     // the full pull-scan-recreate update lifecycle. Lifecycle handlers route
@@ -1162,10 +1294,10 @@ class Trigger<
       Trigger.isBatchCapableMode(this.configuration.mode) &&
       this.shouldDispatchNotificationEventInBatch(notificationEvent);
     if (shouldUseBatchMode) {
-      this.queueEventBatchDispatch(ruleId, container);
+      this.queueEventBatchDispatch(ruleId, container, reservationToken);
       return true;
     }
-    this.dispatchToTriggerOptimistically(ruleId, container);
+    this.dispatchToTriggerOptimistically(ruleId, container, reservationToken);
     return true;
   }
 
@@ -1177,13 +1309,17 @@ class Trigger<
    *
    * The lifecycle (and watcher cron) is never blocked on the provider call.
    */
-  private dispatchToTriggerOptimistically(ruleId: NotificationRuleId, container: Container): void {
+  private dispatchToTriggerOptimistically(
+    ruleId: NotificationRuleId,
+    container: Container,
+    reservationToken?: OnceReservationToken,
+  ): void {
     const triggerId = this.getId();
     void Promise.resolve()
       .then(() => this.trigger(container))
       .then(
         () => {
-          this.recordEventDeliverySuccess(ruleId, container);
+          this.recordEventDeliverySuccess(ruleId, container, reservationToken);
         },
         (err: unknown) => {
           const errorMessage = Trigger.getErrorMessage(err);
@@ -1193,6 +1329,7 @@ class Trigger<
             this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
           }
           this.log.debug(err);
+          this.releaseEventDeliveryReservation(ruleId, container, reservationToken);
           enqueueOutboxEntry({
             eventName: ruleId,
             payload: { container },
@@ -1459,6 +1596,24 @@ class Trigger<
    * either kind was already recorded for the same result hash — covers the
    * race where the generic notification beat us (e.g. an agent-container
    * scan landing before the sweep).
+   *
+   * DR-60: the `maturity-cleared` half of that check used to be a bare
+   * `hasAlreadyNotifiedForResult` read, with the matching write landing an
+   * `await` later once delivery confirms — the same window
+   * `reserveOnceNotificationSlot` exists to close for the `update-available`
+   * simple path. Two overlapping evaluations of the same maturity-cleared
+   * event (a cron scan and a manual recheck landing together, say) could both
+   * read "not notified" and both dispatch. This now takes the same
+   * reservation before dispatching. It cannot release it in a local
+   * try/finally the way the simple path does, though: a dispatch can be
+   * optimistic-and-detached (`dispatchToTriggerOptimistically`) or deferred to
+   * a later batch flush, so this method's own call stack returns long before
+   * the send actually settles. The reservation is released from wherever that
+   * settlement is observed instead — `recordEventDeliverySuccess` on success,
+   * `releaseEventDeliveryReservation` on failure — and released right here
+   * only when nothing async is ever going to settle at all, i.e.
+   * `dispatchContainerForEvent` returned false without queuing or sending
+   * anything.
    */
   async handleMaturityGateClearedEvent(payload: event.MaturityGateClearedEventPayload) {
     const { container } = payload;
@@ -1466,13 +1621,24 @@ class Trigger<
     if (
       container &&
       this.configuration.once &&
-      (this.hasAlreadyNotifiedForResult(container, 'maturity-cleared') ||
-        this.hasAlreadyNotifiedForResult(container, 'update-available'))
+      this.hasAlreadyNotifiedForResult(container, 'update-available')
     ) {
       this.log.debug(
-        `Skipping maturity-cleared notification for ${fullName(container)} (already notified)`,
+        `Skipping maturity-cleared notification for ${fullName(container)} (already notified for update-available)`,
       );
       return;
+    }
+
+    let reservationToken: OnceReservationToken | undefined;
+    if (container) {
+      const token = this.reserveOnceNotificationSlot(container, 'maturity-cleared');
+      if (!token) {
+        this.log.debug(
+          `Skipping maturity-cleared notification for ${fullName(container)} (already notified or in flight)`,
+        );
+        return;
+      }
+      reservationToken = token;
     }
 
     const notificationContainer = container
@@ -1484,10 +1650,22 @@ class Trigger<
         })
       : undefined;
 
-    await this.dispatchContainerForEvent('maturity-cleared', notificationContainer, {
-      allowAllWhenNoTriggers: true,
-      defaultWhenRuleMissing: true,
-    });
+    let dispatched = false;
+    try {
+      dispatched = await this.dispatchContainerForEvent(
+        'maturity-cleared',
+        notificationContainer,
+        {
+          allowAllWhenNoTriggers: true,
+          defaultWhenRuleMissing: true,
+        },
+        reservationToken,
+      );
+    } finally {
+      if (!dispatched && container && reservationToken) {
+        this.releaseOnceNotificationSlot(container, 'maturity-cleared', reservationToken);
+      }
+    }
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
@@ -1584,12 +1762,22 @@ class Trigger<
    * reserving anything, so every caller may call this unconditionally
    * instead of repeating an `if (!this.configuration.once) return true;`
    * guard first.
-   * @returns {boolean} true if this evaluation may proceed to send.
+   *
+   * DR-62: the truthy result is the reservation's token — either the literal
+   * `true` for a permissive no-op (`once=false`, or no stable container id,
+   * nothing was actually stored) or a unique `symbol` identifying the entry
+   * this call stored in `inFlightOnceNotificationKeys`. The caller must pass
+   * that exact token back to `releaseOnceNotificationSlot`; passing the key
+   * alone is not enough to prove ownership, because this reservation's timer
+   * can expire and a later, unrelated reservation can take the same key
+   * before this one's caller gets around to releasing it.
+   * @returns {OnceReservationToken | false} the reservation token if this
+   * evaluation may proceed to send, `false` otherwise.
    */
   private reserveOnceNotificationSlot(
     container: Container,
     eventKind: notificationHistoryStore.NotificationEventKind,
-  ): boolean {
+  ): OnceReservationToken | false {
     // once=false never dedups, so there is nothing to reserve.
     if (!this.configuration.once) {
       return true;
@@ -1608,8 +1796,26 @@ class Trigger<
     if (this.inFlightOnceNotificationKeys.has(key)) {
       return false;
     }
-    this.inFlightOnceNotificationKeys.add(key);
-    return true;
+    const token: OnceReservationToken = Symbol(key);
+    const reservationTtlMs =
+      event.getHandlerTimeoutMs() * Trigger.ONCE_NOTIFICATION_RESERVATION_TTL_MULTIPLIER;
+    const expiryTimer = setTimeout(() => {
+      // DR-62: only delete the entry this timer itself armed. If the entry's
+      // token no longer matches, this reservation was already released (and
+      // possibly replaced by a newer reservation for the same key) — deleting
+      // unconditionally here would drop that newer reservation instead.
+      const entry = this.inFlightOnceNotificationKeys.get(key);
+      if (entry?.token !== token) {
+        return;
+      }
+      this.inFlightOnceNotificationKeys.delete(key);
+      this.log.warn(
+        `Once-notification reservation for ${key} was never released after ${reservationTtlMs}ms; releasing it. The handler that reserved it may be hung.`,
+      );
+    }, reservationTtlMs);
+    expiryTimer.unref();
+    this.inFlightOnceNotificationKeys.set(key, { token, timer: expiryTimer });
+    return token;
   }
 
   /**
@@ -1617,10 +1823,17 @@ class Trigger<
    * call even when no reservation was taken (e.g. `once=false`, or no stable
    * container id) -- it returns before hashing under `once=false`, and
    * deleting an absent key is otherwise a no-op.
+   *
+   * DR-62: `reservationToken` must be the exact value `reserveOnceNotificationSlot`
+   * returned to this caller. The entry is only cleared when its stored token
+   * matches — if the original reservation already expired and a different
+   * evaluation has since reserved the same key, this call leaves that other
+   * reservation alone instead of clearing it out from under its owner.
    */
   private releaseOnceNotificationSlot(
     container: Container,
     eventKind: notificationHistoryStore.NotificationEventKind,
+    reservationToken: OnceReservationToken,
   ): void {
     // once=false never reserves, so there is nothing to release and no
     // reason to hash the container.
@@ -1633,6 +1846,11 @@ class Trigger<
       return;
     }
     const key = `${this.getId()}::${containerId}::${eventKind}::${notificationHistoryStore.computeResultHash(container)}`;
+    const entry = this.inFlightOnceNotificationKeys.get(key);
+    if (!entry || entry.token !== reservationToken) {
+      return;
+    }
+    clearTimeout(entry.timer);
     this.inFlightOnceNotificationKeys.delete(key);
   }
 
@@ -1873,7 +2091,9 @@ class Trigger<
     }
   }
 
-  private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
+  private shouldHandleSimpleContainerReport(
+    containerReport: ContainerReport,
+  ): OnceReservationToken | false {
     const { container } = containerReport;
 
     if (!container.updateAvailable) {
@@ -1903,7 +2123,7 @@ class Trigger<
   private shouldHandleDigestContainerReport(
     containerReport: ContainerReport,
     eventKind: DigestEventKind = 'update-available-digest',
-  ) {
+  ): OnceReservationToken | false {
     if (!containerReport.container.updateAvailable) {
       // The caller (handleContainerReportDigest) handles the lift before
       // invoking this method — no lift here so the concerns stay separated.
@@ -2031,7 +2251,9 @@ class Trigger<
     );
   }
 
-  private shouldHandleBatchContainerReport(containerReport: ContainerReport) {
+  private shouldHandleBatchContainerReport(
+    containerReport: ContainerReport,
+  ): OnceReservationToken | false {
     if (!this.shouldDispatchUpdateAvailableContainer(containerReport.container)) {
       return false;
     }
@@ -2287,7 +2509,8 @@ class Trigger<
     }
 
     // Filter on containers with update available that we haven't already notified for this exact result
-    if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+    const reservationToken = this.shouldHandleSimpleContainerReport(containerReport);
+    if (!reservationToken) {
       const alreadyNotified =
         containerReport.container.updateAvailable &&
         this.configuration.once === true &&
@@ -2312,7 +2535,7 @@ class Trigger<
       // regardless of how this evaluation ended (sent, threshold/gate
       // declined without sending, or errored) so a later genuinely-new
       // result for this container is never blocked by it.
-      this.releaseOnceNotificationSlot(container, 'update-available');
+      this.releaseOnceNotificationSlot(container, 'update-available', reservationToken);
     }
   }
 
@@ -2352,8 +2575,10 @@ class Trigger<
     // Tracked apart from containersToSendByBusinessId: that map is keyed by
     // business id, so two entries resolving to the same key leave only the
     // last one in the map even though both took a reservation, and releasing
-    // from the map would strand the one it replaced.
-    const reservedContainers: Container[] = [];
+    // from the map would strand the one it replaced. Each entry carries the
+    // exact token its own reserve call returned, so the release loop below
+    // frees only the reservation it actually holds (DR-62).
+    const reservedContainers: Array<{ container: Container; token: OnceReservationToken }> = [];
     for (const container of this.getBatchRetryContainers(containerReports)) {
       const businessId = getContainerNotificationKey(container) || fullName(container);
       // Retry entries skip the eligibility check - they already passed it when
@@ -2367,16 +2592,18 @@ class Trigger<
       // reserveOnceNotificationSlot() returns true without reserving, so a
       // container that legitimately re-sends a result it already delivered
       // is never read as "already sent" and dropped here.
-      if (!this.reserveOnceNotificationSlot(container, 'update-available')) {
+      const token = this.reserveOnceNotificationSlot(container, 'update-available');
+      if (!token) {
         this.batchRetryBufferStore.delete(businessId);
         continue;
       }
-      reservedContainers.push(container);
+      reservedContainers.push({ container, token });
       containersToSendByBusinessId.set(businessId, container);
     }
     for (const containerReport of containerReports) {
-      if (this.shouldHandleBatchContainerReport(containerReport)) {
-        reservedContainers.push(containerReport.container);
+      const token = this.shouldHandleBatchContainerReport(containerReport);
+      if (token) {
+        reservedContainers.push({ container: containerReport.container, token });
         containersToSendByBusinessId.set(
           getContainerNotificationKey(containerReport.container) ||
             fullName(containerReport.container),
@@ -2460,8 +2687,8 @@ class Trigger<
       // so a later genuinely-new result for any of these containers is never
       // blocked by it. Under once=false neither source actually reserved
       // anything, so this loop is a no-op.
-      for (const container of reservedContainers) {
-        this.releaseOnceNotificationSlot(container, 'update-available');
+      for (const { container, token } of reservedContainers) {
+        this.releaseOnceNotificationSlot(container, 'update-available', token);
       }
     }
   }
@@ -2509,7 +2736,11 @@ class Trigger<
     // below cannot drift apart: passing a different kind to the eligibility
     // check would otherwise leak the reservation it took.
     const digestEventKind = 'update-available-digest';
-    if (!this.shouldHandleDigestContainerReport(containerReport, digestEventKind)) {
+    const reservationToken = this.shouldHandleDigestContainerReport(
+      containerReport,
+      digestEventKind,
+    );
+    if (!reservationToken) {
       const alreadyBuffered = this.hasAlreadyNotifiedForResult(container, digestEventKind);
       this.log.debug(
         `Skipping update-available digest buffer for ${containerName} (once=${this.configuration.once === true}, updateAvailable=${container.updateAvailable}, alreadyBuffered=${alreadyBuffered})`,
@@ -2529,7 +2760,7 @@ class Trigger<
       // above, whether or not this report was buffered, so the next flush can
       // take its own. A report turned away by that check returns before this
       // block and never touches the reservation the flush is holding.
-      this.releaseOnceNotificationSlot(container, digestEventKind);
+      this.releaseOnceNotificationSlot(container, digestEventKind, reservationToken);
     }
   }
 
@@ -2689,15 +2920,21 @@ class Trigger<
     // Evict such an entry the same way a revalidation miss does: it describes a
     // candidate the store no longer shows, and a genuinely pending update
     // re-enters the buffer on the next scan's report.
-    const reservedEntries = dispatchEntries.filter((entry) => {
+    const reservedEntries = dispatchEntries.flatMap((entry) => {
       // Reserve, not just check: closes the same race as the eligibility
       // checks, a report landing mid-flush pulling the same result out from
       // under this send. Under once=false reserveOnceNotificationSlot()
       // returns true without reserving, so the next scan can still re-buffer
       // the same unchanged result by design; nothing is reserved on that
-      // path, so the release in the finally is a no-op.
-      if (this.reserveOnceNotificationSlot(entry.currentContainer, digestEventKind)) {
-        return true;
+      // path, so the release in the finally is a no-op. The token is carried
+      // alongside the entry (DR-62) so the release below frees exactly the
+      // reservation this call took, not whatever a key lookup happens to find.
+      const reservationToken = this.reserveOnceNotificationSlot(
+        entry.currentContainer,
+        digestEventKind,
+      );
+      if (reservationToken) {
+        return [{ ...entry, reservationToken }];
       }
       this.log.debug(
         `Evicting ${entry.containerName} from digest buffer at flush (its current state was already digested)`,
@@ -2705,7 +2942,7 @@ class Trigger<
       if (this.digestBuffer.get(entry.containerName) === entry.bufferedContainer) {
         this.digestBufferStore.delete(entry.containerName);
       }
-      return false;
+      return [];
     });
 
     // Every reservation failed, so none is held and there is nothing to release.
@@ -2762,8 +2999,8 @@ class Trigger<
     } finally {
       this.isDigestFlushInProgress = false;
       this.incrementTriggerCounter(status);
-      for (const container of containers) {
-        this.releaseOnceNotificationSlot(container, digestEventKind);
+      for (const { currentContainer, reservationToken } of reservedEntries) {
+        this.releaseOnceNotificationSlot(currentContainer, digestEventKind, reservationToken);
       }
     }
   }
@@ -3264,6 +3501,9 @@ class Trigger<
     this.autoUpdateBlockedTracker.clear();
     this.notificationRuleWarningsSeen.clear();
     this.recentlyAppliedContainerKeys.clear();
+    for (const entry of this.inFlightOnceNotificationKeys.values()) {
+      clearTimeout(entry.timer);
+    }
     this.inFlightOnceNotificationKeys.clear();
   }
 

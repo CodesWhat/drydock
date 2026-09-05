@@ -3796,6 +3796,186 @@ test('handleContainerReport reserves a key in inFlightOnceNotificationKeys while
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
 });
 
+// DR-61: releaseOnceNotificationSlot only runs once the handler's promise settles, but
+// runHandlerWithTimeout detaches a handler that never settles instead of waiting on it
+// forever, so a hung send would otherwise hold its reservation for the process lifetime
+// and every later scan would see it as still in flight and skip the send. The
+// reservation now carries its own expiry, a multiple of the event handler timeout, that
+// releases it with a warn log if nothing ever released it first.
+test('reserveOnceNotificationSlot releases its reservation on a timer if the handler never settles', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+    await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+    trigger.init();
+
+    const container = {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+      result: { tag: '2.29.2-pg17' },
+    };
+    const expectedKey = `${trigger.getId()}::${container.id}::update-available::${notificationHistoryStore.computeResultHash(container)}`;
+
+    // A send that never resolves and never rejects — the same shape a hung
+    // notification provider takes once runHandlerWithTimeout has detached it.
+    trigger.trigger = vi.fn().mockReturnValue(new Promise(() => undefined));
+    const warnSpy = vi.spyOn(log, 'warn');
+
+    void trigger.handleContainerReport({ changed: true, container });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+    expect(trigger.inFlightOnceNotificationKeys.has(expectedKey)).toBe(true);
+
+    // Just short of the expiry (4x the 1000ms handler timeout): still held.
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining(expectedKey));
+
+    // At the expiry: released, with a warning naming the key.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(expectedKey));
+
+    // A later evaluation of the exact same result is no longer turned away.
+    trigger.trigger = vi.fn().mockResolvedValue(undefined);
+    await trigger.handleContainerReport({ changed: true, container });
+    expect(trigger.trigger).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// DR-61: once a reservation has expired (or was never taken -- once=false, no stable
+// container id), releasing it again must be a no-op rather than throwing or clearing a
+// timer that belongs to a different, newer reservation that happens to reuse the same
+// key. This is exactly the shape a hung handler's `.then()` takes once its reservation
+// has already expired out from under it: the release call still arrives eventually, just
+// long after the map entry (and its timer) are gone.
+test('releaseOnceNotificationSlot is a no-op when the key holds no reservation', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+  expect(() =>
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available', true),
+  ).not.toThrow();
+  expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+});
+
+// DR-62 regression: reservation A expires (its timer fires and deletes the key), then a
+// fresh reservation B takes the same key. Before DR-62, A's late release — arriving after
+// its own send finally settles, whether it succeeds or fails — cleared the map entry purely
+// by key, so it tore down B's still-active reservation and let a third evaluation dispatch
+// while B was meant to be held. Ownership is now proven by token: A's release must be a
+// no-op against B's entry, and only B's own release (with B's own token) frees it.
+test('a stale reservation release cannot clear a newer reservation that reused its key', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+    await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+    trigger.init();
+
+    const container = {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+      result: { tag: '2.29.2-pg17' },
+    };
+
+    // Reservation A.
+    const tokenA = (trigger as any).reserveOnceNotificationSlot(container, 'update-available');
+    expect(tokenA).not.toBe(false);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // Let A expire (4x the 1000ms handler timeout) — its timer deletes the key.
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+
+    // Reservation B takes the exact same key.
+    const tokenB = (trigger as any).reserveOnceNotificationSlot(container, 'update-available');
+    expect(tokenB).not.toBe(false);
+    expect(tokenB).not.toBe(tokenA);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // A's own evaluation finally settles (failure) and releases with A's stale token. This
+    // must not touch B's reservation.
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available', tokenA);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // A third evaluation of the exact same result is still turned away — B is still held.
+    expect((trigger as any).reserveOnceNotificationSlot(container, 'update-available')).toBe(false);
+
+    // B's own release, with B's own token, frees it.
+    (trigger as any).releaseOnceNotificationSlot(container, 'update-available', tokenB);
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
+
+    // The slot is now free for a genuinely later evaluation.
+    expect((trigger as any).reserveOnceNotificationSlot(container, 'update-available')).not.toBe(
+      false,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// DR-62 counterpart: the expiry timer's own token check, not just releaseOnceNotificationSlot's.
+// reserveOnceNotificationSlot's `has(key)` guard means no legitimate call sequence through the
+// public reserve/release API can leave a stale timer armed against an entry it does not own —
+// this exercises that guard directly by replacing the map entry out from under an armed timer,
+// the same defense-in-depth the timer's own token comparison provides against any future change
+// to that invariant.
+test("a reservation's expiry timer does not clear an entry it no longer owns", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+    await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+    trigger.init();
+
+    const container = {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+      result: { tag: '2.29.2-pg17' },
+    };
+    const key = `${trigger.getId()}::${container.id}::update-available::${notificationHistoryStore.computeResultHash(container)}`;
+
+    (trigger as any).reserveOnceNotificationSlot(container, 'update-available');
+    expect(trigger.inFlightOnceNotificationKeys.size).toBe(1);
+
+    // Replace the entry the first reservation's timer armed against, without going through
+    // its release — standing in for the invariant above being violated some other way.
+    const replacementEntry = {
+      token: Symbol('other-reservation'),
+      timer: trigger.inFlightOnceNotificationKeys.get(key).timer,
+    };
+    trigger.inFlightOnceNotificationKeys.set(key, replacementEntry);
+
+    await vi.advanceTimersByTimeAsync(4000);
+
+    // The original reservation's expiry fires but must not clear the entry it no longer owns.
+    expect(trigger.inFlightOnceNotificationKeys.get(key)).toBe(replacementEntry);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 // Regression test for #972 on the batch path: shouldHandleBatchContainerReport
 // only read the once=true history, and the batch send records it after
 // triggerBatch() resolves, so a manual single-container scan overlapping a
@@ -5345,6 +5525,35 @@ describe('handleMaturityGateClearedEvent', () => {
     await Promise.resolve();
     await Promise.resolve();
     await trigger.handleMaturityGateClearedEvent(payload);
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
+  // DR-60: two overlapping deliveries of the exact same maturity-cleared event (a cron
+  // scan and a manual recheck landing together, say) must not both dispatch. The first
+  // call's reservation is still held (its optimistic `.trigger()` send never resolved
+  // during this test), so the second call's reserveOnceNotificationSlot() turns it away
+  // before ever reaching dispatchContainerForEvent — distinct from the "already
+  // recorded in history" dedup the test above covers, which only applies once delivery
+  // has actually settled.
+  test('once=true dedup turns away a second concurrent evaluation while the first is still in flight', async () => {
+    let resolveSend: () => void = () => undefined;
+    const sendPromise = new Promise<void>((resolve) => {
+      resolveSend = resolve;
+    });
+    const provider = vi.spyOn(trigger, 'trigger').mockReturnValue(sendPromise);
+    const payload = {
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    };
+
+    const call1 = trigger.handleMaturityGateClearedEvent(payload);
+    const call2 = trigger.handleMaturityGateClearedEvent(payload);
+
+    await call2;
+    expect(provider).toHaveBeenCalledTimes(1);
+
+    resolveSend();
+    await call1;
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
@@ -13631,6 +13840,46 @@ describe('recentlyAppliedContainerKeys cleared on deregisterComponent', () => {
     expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(2);
     await trigger.deregisterComponent();
     expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+  });
+});
+
+// DR-61: deregisterComponent must clear the expiry timer on every held reservation, not
+// just the map entry, or a trigger torn down mid-reservation (config reload, agent
+// disconnect) leaves a timer firing later against an inFlightOnceNotificationKeys map
+// that may since belong to a brand-new Trigger instance reusing the same id.
+describe('inFlightOnceNotificationKeys reservation timers cleared on deregisterComponent', () => {
+  test('deregisterComponent clears the reservation and its expiry timer never fires', async () => {
+    vi.useFakeTimers();
+    try {
+      trigger.type = 'slack';
+      trigger.name = 'notify-deregister';
+      trigger.configuration = { ...configurationValid, once: true };
+      vi.mocked(event.getHandlerTimeoutMs).mockReturnValue(1000);
+
+      const container = {
+        id: 'c1',
+        watcher: 'local',
+        name: 'container1',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+        result: { tag: '2.29.2-pg17' },
+      };
+      trigger.trigger = vi.fn().mockReturnValue(new Promise(() => undefined));
+
+      void trigger.handleContainerReport({ changed: true, container });
+      await vi.advanceTimersByTimeAsync(0);
+      expect((trigger as any).inFlightOnceNotificationKeys.size).toBe(1);
+
+      const warnSpy = vi.spyOn(log, 'warn');
+      await trigger.deregisterComponent();
+      expect((trigger as any).inFlightOnceNotificationKeys.size).toBe(0);
+
+      // Past the 4000ms expiry: the timer was cleared on deregister, so it never fires.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('never released'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
