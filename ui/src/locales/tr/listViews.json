@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Olgunluk Temizlendi",
         "description": "Olgunluk politikası tarafından tutulan bir güncelleme uygulanabilir hale geldiğinde"
+      },
+      "update-pending-approval": {
+        "name": "Güncelleme onay bekliyor",
+        "description": "Manuel modda bir güncelleme onay kuyruğuna girdiğinde"
       }
     },
     "columns": {

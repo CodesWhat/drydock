@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Maturité effacée",
         "description": "Quand une mise à jour retenue par la politique de maturité devient applicable"
+      },
+      "update-pending-approval": {
+        "name": "Mise à jour en attente d'approbation",
+        "description": "Quand une mise à jour en mode manuel entre dans la file d'approbation"
       }
     },
     "columns": {

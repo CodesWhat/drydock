@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Dojrzałość wyczyszczona",
         "description": "Gdy aktualizacja wstrzymana przez politykę dojrzałości staje się dostępna"
+      },
+      "update-pending-approval": {
+        "name": "Aktualizacja oczekuje na zatwierdzenie",
+        "description": "Gdy aktualizacja w trybie ręcznym trafia do kolejki zatwierdzeń"
       }
     },
     "columns": {
