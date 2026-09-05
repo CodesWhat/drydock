@@ -12,6 +12,7 @@ const {
   mockGetAllAuthentications,
   mockGetAllContainers,
   mockGetEffectiveDisplayIcon,
+  mockGetApprovalSummary,
   mockGetAllNotificationRules,
   mockGetAllRegistries,
   mockGetServer,
@@ -30,6 +31,7 @@ const {
   mockGetAllAuthentications: vi.fn(),
   mockGetAllContainers: vi.fn(),
   mockGetEffectiveDisplayIcon: vi.fn(),
+  mockGetApprovalSummary: vi.fn(),
   mockGetAllNotificationRules: vi.fn(),
   mockGetAllRegistries: vi.fn(),
   mockGetServer: vi.fn(),
@@ -89,6 +91,10 @@ vi.mock('@/services/container', () => ({
 
 vi.mock('@/services/image-icon', () => ({
   getEffectiveDisplayIcon: (...args: unknown[]) => mockGetEffectiveDisplayIcon(...args),
+}));
+
+vi.mock('@/services/approval', () => ({
+  getApprovalSummary: (...args: unknown[]) => mockGetApprovalSummary(...args),
 }));
 
 vi.mock('@/services/notification', () => ({
@@ -163,6 +169,7 @@ describe('AppLayout', () => {
       },
     });
     mockGetAllAuthentications.mockResolvedValue([]);
+    mockGetApprovalSummary.mockResolvedValue({ pending: 0, deferred: 0, decidedToday: 0 });
     mockGetAllNotificationRules.mockResolvedValue([]);
     mockGetEffectiveDisplayIcon.mockReturnValue('docker');
     mockGetUser.mockResolvedValue(null);
@@ -273,6 +280,96 @@ describe('AppLayout', () => {
       setIntervalSpy.mockRestore();
       vi.useRealTimers();
     }
+  });
+
+  describe('approvals sidebar badge', () => {
+    it('renders the pending count fetched on mount', async () => {
+      mockGetApprovalSummary.mockResolvedValue({ pending: 4, deferred: 1, decidedToday: 0 });
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      expect(wrapper.text()).toContain('4');
+    });
+
+    it('shows no badge when there are no pending approvals', async () => {
+      mockGetApprovalSummary.mockResolvedValue({ pending: 0, deferred: 0, decidedToday: 0 });
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      expect(wrapper.vm).toBeTruthy();
+    });
+
+    it('stays empty when the summary fetch fails', async () => {
+      mockGetApprovalSummary.mockRejectedValue(new Error('network error'));
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      expect(wrapper.vm).toBeTruthy();
+    });
+
+    it.each([
+      ['approval-created', 'dd:sse-approval-created'],
+      ['approval-decided', 'dd:sse-approval-decided'],
+      ['approval-resolved', 'dd:sse-approval-resolved'],
+    ])(
+      'forwards %s bus events to %s and updates the badge count',
+      async (busEvent, windowEvent) => {
+        const listener = vi.fn();
+        window.addEventListener(windowEvent, listener);
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as (
+          event: string,
+          payload?: unknown,
+        ) => void;
+        emit(busEvent, {
+          id: 'approval-1',
+          containerId: 'container-1',
+          containerName: 'app',
+          decision: 'pending',
+          pendingCount: 7,
+        });
+        await flushPromises();
+        expect(listener).toHaveBeenCalledOnce();
+        expect(wrapper.text()).toContain('7');
+        window.removeEventListener(windowEvent, listener);
+      },
+    );
+
+    it('clears the badge when a resolved event carries a zero pending count', async () => {
+      mockGetApprovalSummary.mockResolvedValue({ pending: 2, deferred: 0, decidedToday: 0 });
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      expect(wrapper.text()).toContain('2');
+      const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as (
+        event: string,
+        payload?: unknown,
+      ) => void;
+      emit('approval-resolved', {
+        id: 'approval-1',
+        containerId: 'container-1',
+        containerName: 'app',
+        decision: 'pending',
+        pendingCount: 0,
+      });
+      await flushPromises();
+      expect(wrapper.text()).not.toContain('2');
+    });
+
+    it('ignores a malformed approval payload', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as (
+        event: string,
+        payload?: unknown,
+      ) => void;
+      expect(() => emit('approval-created', undefined)).not.toThrow();
+      expect(() => emit('approval-created', 'not-an-object')).not.toThrow();
+      expect(() => emit('approval-created', { pendingCount: 'nope' })).not.toThrow();
+    });
   });
 
   it('forwards preference update bus events to a window CustomEvent', async () => {

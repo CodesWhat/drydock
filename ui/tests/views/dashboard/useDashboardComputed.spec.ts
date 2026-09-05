@@ -91,6 +91,7 @@ function makeAgents(count: number): DashboardAgent[] {
 
 interface DashboardComputedOverrides {
   agents?: DashboardAgent[];
+  approvalPendingCount?: number;
   containerSummary?: DashboardContainerSummary | null;
   containers?: Container[];
   hidePinned?: boolean;
@@ -105,6 +106,7 @@ interface DashboardComputedOverrides {
 function createState(overrides: DashboardComputedOverrides = {}) {
   return useDashboardComputed({
     agents: ref(overrides.agents ?? []),
+    approvalPendingCount: ref(overrides.approvalPendingCount ?? 0),
     containerSummary: ref(overrides.containerSummary ?? null),
     containers: ref(overrides.containers ?? []),
     hidePinned: ref(overrides.hidePinned ?? false),
@@ -405,6 +407,30 @@ describe('useDashboardComputed update summary', () => {
       route: '/registries',
       color: 'var(--dd-primary)',
       colorMuted: 'var(--dd-primary-muted)',
+    });
+  });
+
+  it('reports a neutral color for the approvals stat when nothing is pending', () => {
+    const state = createState({ approvalPendingCount: 0 });
+    const approvalsStat = state.stats.value.find((card) => card.id === 'stat-approvals');
+
+    expect(approvalsStat).toMatchObject({
+      value: '0',
+      route: '/approvals',
+      color: 'var(--dd-neutral)',
+      colorMuted: 'var(--dd-neutral-muted)',
+    });
+  });
+
+  it('reports a warning color for the approvals stat when approvals are pending', () => {
+    const state = createState({ approvalPendingCount: 4 });
+    const approvalsStat = state.stats.value.find((card) => card.id === 'stat-approvals');
+
+    expect(approvalsStat).toMatchObject({
+      value: '4',
+      route: '/approvals',
+      color: 'var(--dd-warning)',
+      colorMuted: 'var(--dd-warning-muted)',
     });
   });
 
@@ -1485,6 +1511,7 @@ describe('useDashboardComputed recent updates', () => {
 
     const state = useDashboardComputed({
       agents: ref([]),
+      approvalPendingCount: ref(0),
       containerSummary: ref(null),
       containers: containersRef,
       hidePinned: ref(false),
@@ -1520,6 +1547,7 @@ describe('useDashboardComputed recent updates', () => {
 
     const state = useDashboardComputed({
       agents: ref([]),
+      approvalPendingCount: ref(0),
       containerSummary: ref(null),
       containers: containersRef,
       hidePinned: ref(false),

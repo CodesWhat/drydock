@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Đã đạt độ chín",
         "description": "Khi cập nhật bị chính sách độ chín giữ lại trở nên khả dụng"
+      },
+      "update-pending-approval": {
+        "name": "Cập nhật đang chờ phê duyệt",
+        "description": "Khi một bản cập nhật ở chế độ thủ công vào hàng đợi phê duyệt"
       }
     },
     "columns": {

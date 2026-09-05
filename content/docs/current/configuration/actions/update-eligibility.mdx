@@ -15,15 +15,17 @@ A container is **eligible** when an update exists *and* no blocker applies. What
 
 Choose the mode under **Settings → General → Update mode**. The setting applies to the whole Drydock server, not just the current browser or user.
 
-| Mode | Detection and notifications | Manual UI/API updates | Automatic action triggers |
-| --- | --- | --- | --- |
-| `notify` | Enabled | Refused | Suppressed |
-| `manual` | Enabled | Enabled, subject to eligibility | Suppressed |
-| `auto` | Enabled | Enabled, subject to eligibility | Enabled, subject to trigger configuration and eligibility |
+| Mode | Detection and notifications | Manual UI/API updates | Automatic action triggers | [Approval queue](/docs/configuration/actions/approvals) |
+| --- | --- | --- | --- | --- |
+| `notify` | Enabled | Refused | Suppressed | No rows — nothing is admissible to queue |
+| `manual` | Enabled | Enabled, subject to eligibility | Suppressed | Every eligible candidate queues |
+| `auto` | Enabled | Enabled, subject to eligibility | Enabled, subject to trigger configuration and eligibility | Only candidates a configured trigger will not auto-dispatch |
 
 Fresh installations default to `manual`. When an existing installation upgrades from a version with no `updateMode` setting, Drydock migrates it to `auto` so configured automatic updates do not silently stop. Changing the mode later takes effect server-wide.
 
 In `notify` mode the Update Status panel leads with **Notifications only — Drydock won't apply updates** and keeps diagnostic conditions behind **Show details**. Attempts to update through Drydock are rejected; continue to use your external update tooling.
+
+<Callout type="info">A soft blocker never hides a candidate from the [approval queue](/docs/configuration/actions/approvals) — it becomes one of the row's hold reasons instead, shown next to the release notes. Only a hard blocker keeps a candidate out (an existing row is left alone, since the blocker may still lift).</Callout>
 
 ## Where blockers appear
 
@@ -189,3 +191,4 @@ A trigger's `AUTO` mode doesn't only decide whether `actionPolicy.state` can bec
 - [Triggers](/docs/configuration/triggers) — `THRESHOLD`, `AUTO`, and per-trigger `INCLUDE` / `EXCLUDE` env vars.
 - [Triggers — Maturity Gate Sweep](/docs/configuration/triggers#maturity-gate-sweep) — `DD_MATURITY_SWEEP_CRON` and the `maturity-cleared` notification fired when this gate lifts.
 - [Watchers — Labels](/docs/configuration/watchers#labels) — `dd.action.include` / `dd.action.exclude`.
+- [Approval Queue](/docs/configuration/actions/approvals) — the manual-mode candidate set as a work list, with the same hard/soft blocker split.

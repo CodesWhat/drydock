@@ -193,6 +193,7 @@ const {
   registries,
   serverInfo,
   watchers,
+  approvalPendingCount,
 } = useDashboardData();
 
 const {
@@ -217,6 +218,7 @@ const {
   vulnerabilities,
 } = useDashboardComputed({
   agents,
+  approvalPendingCount,
   containerSummary,
   containers,
   hidePinned: computed(() => preferences.containers.filters.hidePinned),

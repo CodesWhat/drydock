@@ -1,0 +1,131 @@
+---
+title: "Approvals API"
+description: "List, inspect, and decide on manual-mode update candidates in the approval queue."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="info">See [Approval Queue](/docs/configuration/actions/approvals) for what produces a row and what each decision does.</Callout>
+
+The ledger stores the decision; the candidate set stays derived. The list endpoint returns stored rows verbatim, and the detail endpoint recomputes eligibility and hold reasons live from the container on every request — a soft blocker that lifted a moment ago is already gone from the response.
+
+## List approvals
+
+```bash
+curl "http://drydock:3000/api/v1/approvals?status=pending&limit=25&offset=0"
+
+{
+  "data": [
+    {
+      "schemaVersion": 1,
+      "id": "6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c",
+      "containerId": "31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
+      "containerIdentityKey": "::local::homeassistant",
+      "containerName": "homeassistant",
+      "watcher": "local",
+      "image": "ghcr.io/home-assistant/home-assistant",
+      "fromRef": "2026.8.0",
+      "toRef": "2026.9.0",
+      "candidateRef": "2026.9.0",
+      "updateKind": "minor",
+      "semverDiff": "minor",
+      "createdAt": "2026-09-01T12:00:00.000Z",
+      "createdAtMs": 1756728000000,
+      "decision": "pending"
+    }
+  ],
+  "total": 1,
+  "limit": 25,
+  "offset": 0,
+  "hasMore": false
+}
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `status` | string | `pending` | `pending`, `deferred`, `decided`, or `all` |
+| `containerId` | string | | Filter by container id |
+| `agent` | string | | Filter by agent name |
+| `semverDiff` | string | | `major`, `minor`, `patch`, `prerelease`, or `unknown` |
+| `q` | string | | Free-text substring match against container name and image |
+| `limit` | integer | `0` | Maximum rows to return (`0` means unbounded; max `200`) |
+| `offset` | integer | `0` | Number of matching rows to skip |
+
+## Get approval summary
+
+Counts for the sidebar nav badge and the dashboard tile — deliberately separate from the list so the badge never pays for a page of rows it doesn't render.
+
+```bash
+curl http://drydock:3000/api/v1/approvals/summary
+
+{
+  "pending": 3,
+  "deferred": 1,
+  "decidedToday": 2
+}
+```
+
+## Get one approval
+
+Returns the row plus everything live about it: recomputed eligibility and the soft blockers currently holding it back (`holdReasons`). A row whose container no longer exists (the `container-removed` resolution, ordinarily already applied by the reconciler) returns an empty `holdReasons` list with no `eligibility`.
+
+```bash
+curl http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c
+
+{
+  "approval": { "...": "as above" },
+  "eligibility": { "eligible": true, "blockers": ["..."] },
+  "holdReasons": [
+    { "reason": "maturity-not-reached", "message": "...", "actionable": true }
+  ]
+}
+```
+
+## Decide an approval
+
+All three decision endpoints reserve the row with a compare-and-set before doing any work, so two operators deciding the same row at once produce exactly one accepted decision and one `409`. A decision is also bound to the exact candidate the row named when it was created — if the container's candidate has moved on since (a newer tag, say), the decision is refused with `409` rather than silently acting on a different version than the row and its audit entry describe.
+
+Every decision accepts an optional `note` (string, max 500 characters) recorded on the audit entry.
+
+### Approve
+
+Dispatches the update through the identical admission path `POST /containers/:id/update` uses, and returns the identical status code and message for the identical rejection. Requires the `containers:update` scope — the same scope that could already run this update directly.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c/approve \
+  -H "Content-Type: application/json" \
+  -d '{"note": "cleared with the platform team"}'
+```
+
+### Reject
+
+Writes the container's `skipTags` / `skipDigests` policy — the same effect as the container panel's **Skip** action, and undoable from the same **Update policy** menu.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c/reject
+```
+
+### Defer
+
+Snoozes the container until the resolved expiry, and mirrors that same instant onto the row's `deferredUntil` so the queue and the `snoozed` soft blocker can never disagree about when the hold ends. Accepts either an absolute `until` (RFC 3339, must be in the future and at most 365 days out) or a relative `days` count (integer, 1-365, defaults to 7).
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c/defer \
+  -H "Content-Type: application/json" \
+  -d '{"days": 14}'
+```
+
+## Errors
+
+| Status | Meaning |
+| --- | --- |
+| `404` | No approval with that id, or its container no longer exists |
+| `409` | Already decided, or the row's candidate has been superseded since it was created |
+| `400` | Invalid query parameter or request body |
+| `403` | Container actions are disabled server-wide (approve only) |
+
+## Events
+
+Every reconciler and decision writes an SSE event: `dd:approval-created` when a row is minted, `dd:approval-decided` on approve/reject/defer, and `dd:approval-resolved` when a row leaves the queue by any other path (candidate withdrawn or superseded, container removed). All three carry `{ id, containerId, containerName, decision, pendingCount }` — `pendingCount` is the post-write count, so a client can update a badge directly without a follow-up request. See the [SSE event list](/docs/api#server-sent-events).

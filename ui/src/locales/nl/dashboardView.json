@@ -97,7 +97,8 @@
       "updatesAvailable": "Updates beschikbaar",
       "updateDetail": "{fresh} nieuw · {mature} volwassen",
       "securityIssues": "Beveiligingsproblemen",
-      "registries": "Registers"
+      "registries": "Registers",
+      "approvals": "Goedkeuringen"
     },
     "updateKind": {
       "major": "Major",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

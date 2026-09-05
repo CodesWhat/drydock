@@ -68,6 +68,7 @@ If the header is missing or does not match the expected token, the API responds 
 | [Authentications](/docs/api/authentication) | `GET /api/v1/authentications` | Authentication provider configurations |
 | [API Keys](/docs/api/api-keys) | `GET /api/v1/api-keys`, `POST`, `DELETE /:keyId` | Scoped API key management (`api-keys:manage`) |
 | [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
+| [Approvals](/docs/api/approvals) | `GET /api/v1/approvals`, `GET /summary`, `GET /:id`, `POST /:id/approve`, `POST /:id/reject`, `POST /:id/defer` | Pending-approval queue: list, count, detail, and decide |
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
 | [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
 | [Watchers](/docs/api/watcher) | `GET /api/v1/watchers` | Watcher configurations |
@@ -81,7 +82,6 @@ If the header is missing or does not match the expected token, the API responds 
 | `/metrics` | `GET` | Prometheus metrics (bearer token via `DD_SERVER_METRICS_TOKEN`, session auth fallback, or no auth via `DD_SERVER_METRICS_AUTH=false`) |
 | `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
-| `/api/v1/approvals` | `GET`, `GET /summary`, `GET /:id`, `POST /:id/approve`, `POST /:id/reject`, `POST /:id/defer` | [Approvals](#approvals) (pending-approval queue: list, count, detail, and decide) |
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
 | `/api/v1/notifications/outbox` | `GET`, `POST /:id/retry`, `DELETE /:id` | [Notification outbox](#notification-outbox) (admin retry/discard for failed deliveries) |
 | `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
@@ -329,64 +329,6 @@ curl -X DELETE http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id
 ```
 
 Returns 204 on success, 404 if the entry does not exist, or 500 on an internal error.
-
-## Approvals
-
-The pending-approval queue holds container updates waiting on an operator decision. Approve dispatches the update through the same admission path as the container panel's Update button, reject writes the container's `skipTags`/`skipDigests` policy, and defer writes a snooze; all three record an audit entry (`update-approved`, `update-rejected`, `update-deferred`) and emit an SSE event (see [Event types](#event-types)).
-
-### List approvals
-
-```bash
-curl "http://drydock:3000/api/v1/approvals?status=pending&limit=25"
-```
-
-Scope: `read`. Defaults to `status=pending`. Supports `status` (`pending`, `deferred`, `decided`, or `all`), `containerId`, `agent`, `semverDiff` (`major`, `minor`, `patch`, `prerelease`, or `unknown`), a free-text `q` filter (max 200 characters), and `limit`/`offset` pagination. Returns 200 with `{ data, total, limit, offset, hasMore }`, or 400 if a filter value is invalid.
-
-### Get approvals summary
-
-```bash
-curl http://drydock:3000/api/v1/approvals/summary
-```
-
-Scope: `read`. Returns 200 with `{ pending, deferred, decidedToday }` — `decidedToday` counts decisions since UTC midnight, not the running total of decided approvals — used for the nav badge and dashboard tile.
-
-### Get a single approval
-
-```bash
-curl http://drydock:3000/api/v1/approvals/approval-id
-```
-
-Scope: `read`. Returns 200 with `{ approval, eligibility, holdReasons }` (`eligibility` is omitted and `holdReasons` is empty when the approval's container no longer exists), or 404 if the approval does not exist.
-
-### Approve a queued update
-
-```bash
-curl -X POST http://drydock:3000/api/v1/approvals/approval-id/approve \
-  -H 'Content-Type: application/json' \
-  -d '{"note": "cleared with the on-call team"}'
-```
-
-Scope: `containers:update`. Body accepts an optional `note` (string, max 500 characters); no other properties are allowed. Dispatches the update exactly as `POST /containers/:id/update` would, so it returns the same outcomes that endpoint returns, including the `updateMode: notify` 409. Also returns 403 if container actions are disabled, 404 if the approval or its container no longer exists, or 409 if the approval was already decided or its candidate was superseded by a newer sighting.
-
-### Reject a queued update
-
-```bash
-curl -X POST http://drydock:3000/api/v1/approvals/approval-id/reject \
-  -H 'Content-Type: application/json' \
-  -d '{"note": "holding for the next patch release"}'
-```
-
-Scope: `containers:update`. Body accepts an optional `note`, same rules as approve. Writes the container's skip policy and returns 200 with `{ approval }`. Same 404/409 conditions as approve.
-
-### Defer a queued update
-
-```bash
-curl -X POST http://drydock:3000/api/v1/approvals/approval-id/defer \
-  -H 'Content-Type: application/json' \
-  -d '{"days": 14, "note": "checking with the vendor first"}'
-```
-
-Scope: `containers:update`. Body accepts `until` (an RFC 3339 date-time in the future, at most 365 days out) or `days` (integer, 1 to 365, defaults to 7), plus an optional `note`. You don't need to send both; if both are present, `until` takes precedence. Writes the container's snooze to the same instant and returns 200 with `{ approval }`. Returns 400 if `until`/`days` is invalid, plus the same 404/409 conditions as approve.
 
 ## Audit trail
 

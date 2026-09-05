@@ -97,7 +97,8 @@
       "updatesAvailable": "Mises à jour disponibles",
       "updateDetail": "{fresh} nouvelles · {mature} matures",
       "securityIssues": "Problèmes de sécurité",
-      "registries": "Registries"
+      "registries": "Registries",
+      "approvals": "Approbations"
     },
     "updateKind": {
       "major": "Majeure",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

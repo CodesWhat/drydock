@@ -6,6 +6,7 @@ export const DASHBOARD_WIDGET_IDS = [
   'stat-updates',
   'stat-security',
   'stat-registries',
+  'stat-approvals',
   'recent-updates',
   'security-overview',
   'resource-usage',
@@ -48,6 +49,13 @@ export const DASHBOARD_WIDGET_META: DashboardWidgetMeta[] = [
   {
     id: 'stat-registries',
     labelKey: 'dashboardView.widgets.statRegistries',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-approvals',
+    labelKey: 'dashboardView.widgets.statApprovals',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
