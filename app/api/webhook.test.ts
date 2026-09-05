@@ -500,7 +500,7 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Watch cycle triggered',
-        result: { watchers: 2 },
+        result: { watchers: 2, coalesced: false },
       });
       const contractValidation = validateOpenApiJsonResponse({
         path: '/api/v1/webhook/watch',
@@ -523,7 +523,7 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Watch cycle triggered',
-        result: { watchers: 0 },
+        result: { watchers: 0, coalesced: false },
       });
       const contractValidation = validateOpenApiJsonResponse({
         path: '/api/v1/webhook/watch',
@@ -533,6 +533,39 @@ describe('Webhook Router', () => {
       });
       expect(contractValidation.valid).toBe(true);
       expect(contractValidation.errors).toStrictEqual([]);
+    });
+
+    // DR-60: a watcher that exposes the single-flight cron orchestration is routed
+    // through it rather than watch() directly, and a scan already in flight when this
+    // call lands is reported as coalesced rather than as an independent second scan.
+    test('routes a cron-capable watcher through watchFromCron and reports coalesced', async () => {
+      const watchFromCron = vi.fn().mockResolvedValue([]);
+      const plainWatch = vi.fn();
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            watch: plainWatch,
+            watchFromCron,
+            cronWatchInFlight: Promise.resolve([]),
+          },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(plainWatch).not.toHaveBeenCalled();
+      expect(watchFromCron).toHaveBeenCalledWith({
+        ignoreMaintenanceWindow: true,
+        reason: 'webhook',
+      });
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Watch cycle triggered',
+        result: { watchers: 1, coalesced: true },
+      });
     });
 
     test('should return 500 on watcher error without leaking internal details', async () => {

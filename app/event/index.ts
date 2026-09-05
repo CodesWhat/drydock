@@ -72,6 +72,17 @@ export function getHandlerTimeoutMsForTests(): number {
   return handlerTimeoutMs;
 }
 
+/**
+ * DR-61: the per-handler timeout above, exposed for callers that need to size their own
+ * deadline off it. `runHandlerWithTimeout` detaches a handler that misses this deadline
+ * rather than waiting on it forever, and `reserveOnceNotificationSlot` in Trigger.ts
+ * gives its own reservation an expiry that is a multiple of it, so a detached send can
+ * never hold that reservation for the process lifetime.
+ */
+export function getHandlerTimeoutMs(): number {
+  return handlerTimeoutMs;
+}
+
 interface EventHandlerRegistrationOptions {
   order?: number;
   id?: string;
