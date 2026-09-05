@@ -30,6 +30,7 @@ const viewLoaders = {
   audit: () => import('../views/AuditView.vue'),
   logs: () => import('../views/LogsView.vue'),
   containerLogs: () => import('../views/ContainerLogsView.vue'),
+  approvals: () => import('../views/ApprovalsView.vue'),
 };
 
 function createLazyRoute(
@@ -61,6 +62,7 @@ const routes: RouteRecordRaw[] = [
       createLazyRoute(ROUTES.NOTIFICATION_OUTBOX, 'notificationOutbox', 'notification-outbox'),
       createLazyRoute(ROUTES.AUDIT, 'audit'),
       createLazyRoute(ROUTES.LOGS, 'logs'),
+      createLazyRoute(ROUTES.APPROVALS, 'approvals'),
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: ROUTES.DASHBOARD },
