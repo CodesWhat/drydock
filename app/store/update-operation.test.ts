@@ -3378,4 +3378,61 @@ describe('toApiUpdateOperation', () => {
     expect(result).not.toHaveProperty('finalizeSecretHash');
     expect(result).toHaveProperty('id', 'op-1');
   });
+
+  test('toApiUpdateOperation strips the Portainer recovery descriptor', () => {
+    const result = updateOperation.toApiUpdateOperation({
+      id: 'op-portainer',
+      containerName: 'web',
+      status: 'in-progress' as const,
+      phase: 'prepare' as const,
+      portainerRecovery: { originalImageId: 'sha256:old' },
+    });
+    expect(result).not.toHaveProperty('portainerRecovery');
+  });
+
+  test('markOperationTerminal clears the Portainer recovery descriptor', () => {
+    const inserted = updateOperation.insertOperation({
+      id: 'op-portainer-terminal',
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'portainer-target',
+      portainerRecovery: { originalImageId: 'sha256:old' },
+    });
+
+    updateOperation.markOperationTerminal(inserted.id, { status: 'succeeded' });
+
+    expect(updateOperation.getOperationById(inserted.id)).not.toHaveProperty('portainerRecovery');
+  });
+
+  test('updateOperation preserves Portainer recovery when the patch omits it', () => {
+    const recovery = { originalImageId: 'sha256:old' };
+    const inserted = updateOperation.insertOperation({
+      id: 'op-portainer-preserve',
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'portainer-target',
+      portainerRecovery: recovery,
+    });
+    updateOperation.updateOperation(inserted.id, { phase: 'portainer-restore' });
+    expect(updateOperation.getOperationById(inserted.id)).toMatchObject({
+      phase: 'portainer-restore',
+      portainerRecovery: recovery,
+    });
+  });
+
+  test('requestOperationCancellation preserves Portainer recovery while flagging cancellation', () => {
+    const recovery = { originalImageId: 'sha256:old' };
+    const inserted = updateOperation.insertOperation({
+      id: 'op-portainer-cancel-preserve',
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'portainer-target',
+      portainerRecovery: recovery,
+    });
+    updateOperation.requestOperationCancellation(inserted.id);
+    expect(updateOperation.getOperationById(inserted.id)).toMatchObject({
+      cancelRequested: true,
+      portainerRecovery: recovery,
+    });
+  });
 });

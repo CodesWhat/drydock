@@ -82,6 +82,14 @@ interface UpdateOperationBase {
   container?: Container;
   finalizeSecretHash?: string;
   helperLifecycleOwner?: 'exiting-process' | 'surviving-process';
+  /**
+   * Portainer-specific recovery descriptor persisted so a controller restart
+   * can reconcile an in-flight stack redeploy instead of expiring it. Opaque
+   * to the store: the Portainer trigger owns the shape and validates it
+   * before use. Never exposed via `toApiUpdateOperation` (may echo stack
+   * env values) and always cleared by `markOperationTerminal`.
+   */
+  portainerRecovery?: unknown;
   [key: string]: unknown;
 }
 
@@ -201,6 +209,7 @@ type MutableUpdateOperationFields = Pick<
   | 'skippedDependencyReason'
   | 'blockingContainerId'
   | 'blockingOperationId'
+  | 'portainerRecovery'
 >;
 
 interface InsertUpdateOperationInput
@@ -833,6 +842,9 @@ function persistOperationPatch(
     id: existingDoc.data.id,
     updatedAt: new Date().toISOString(),
   } as UpdateOperation;
+  if (Object.hasOwn(patch, 'portainerRecovery') && patch.portainerRecovery === undefined) {
+    delete (updated as Record<string, unknown>).portainerRecovery;
+  }
 
   updateOperationCollection.remove(existingDoc);
   updateOperationCollection.insert({ data: updated });
@@ -974,6 +986,7 @@ export function markOperationTerminal(
 
   const updated = persistOperationPatch(id, {
     ...patch,
+    portainerRecovery: undefined,
     phase: resolveTerminalContainerUpdateOperationPhase(patch.status, patch.phase),
     completedAt,
   });
@@ -1519,7 +1532,8 @@ export function isOperationCancelRequested(id: string | undefined): boolean {
 }
 
 /**
- * Strip internal-only fields (`container` snapshot, `finalizeSecretHash`) from
+ * Strip internal-only fields (`container` snapshot, `finalizeSecretHash`, and
+ * the Portainer recovery descriptor) from
  * an operation row before returning it from the REST API. The container snapshot
  * is persisted so terminal lifecycle events can carry the container even after a
  * recreate; it MUST NOT be exposed to API consumers (it may contain secrets in
@@ -1527,8 +1541,13 @@ export function isOperationCancelRequested(id: string | undefined): boolean {
  * used by the finalize endpoint and must never be exposed.
  */
 export function toApiUpdateOperation<
-  T extends { container?: unknown; finalizeSecretHash?: unknown },
->(op: T): Omit<T, 'container' | 'finalizeSecretHash'> {
-  const { container: _container, finalizeSecretHash: _finalizeSecretHash, ...rest } = op;
+  T extends { container?: unknown; finalizeSecretHash?: unknown; portainerRecovery?: unknown },
+>(op: T): Omit<T, 'container' | 'finalizeSecretHash' | 'portainerRecovery'> {
+  const {
+    container: _container,
+    finalizeSecretHash: _finalizeSecretHash,
+    portainerRecovery: _portainerRecovery,
+    ...rest
+  } = op;
   return rest;
 }
