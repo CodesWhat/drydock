@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The release cut now verifies a base image pin is a multi-platform index before building, and checks the published arm64 and amd64 images' own binaries before signing and tagging them.** The v1.7 line shipped an arm64 image that was actually amd64 wearing an arm64 label, because a base image digest pin named a single-platform manifest instead of the multi-arch index, and buildx resolved that digest the same way for every `--platform` ([#1021](https://github.com/CodesWhat/drydock/issues/1021)). The 1.6 line was never affected — its `node:24-alpine` and `alpine:3.24` pins were never rolled to the bad digests — but the release cut now runs `check-dockerfile-base-indexes.sh` against the Dockerfile's `FROM` pins and `check-image-arch.sh` against each published platform's `/sbin/tini`, `/usr/local/bin/node` and `/bin/healthcheck` before promoting, so the same class of bug can't ship silently again.
+
 ### Fixed
 
 - **`watch()` still pruned on an empty container list, the same gap the rc.7 fix closed for `handleWatcherSnapshotEvent()` but never actually closed here.** The rc.7 CHANGELOG entry claimed `watch()` was already among the guarded entry points; it wasn't. It ran `processAuthoritativeContainers()` first and then `pruneOldContainers()` unconditionally, so a manual recheck of a watcher that came back with zero containers — the same ambiguous-empty-list case as the other three entry points — pruned every container that watcher owns, deleting them without `replacementExpected` and losing whatever update policy override they had with nothing left to restore it from. `watch()` now builds the container list first, prunes it before ingest (so a same-identity replacement's stashed update policy exists for `insertContainer()` to restore), and skips the prune entirely on an empty list, warning instead once the agent has connected before. Ported from the v1.7 line ([#922](https://github.com/CodesWhat/drydock/pull/922)). ([#565](https://github.com/CodesWhat/drydock/issues/565))
