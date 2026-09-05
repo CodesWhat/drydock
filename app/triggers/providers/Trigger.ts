@@ -1030,6 +1030,9 @@ class Trigger<
         this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
       }
       this.log.debug(e);
+      for (const container of containers) {
+        this.releaseEventDeliveryReservation(ruleId, container);
+      }
     }
   }
 
@@ -1096,6 +1099,13 @@ class Trigger<
    * dispatch. `maturity-cleared`'s symmetric dedup recording must wait for
    * this signal so a failed delivery does not suppress the generic
    * `update-available` retry on the next scan.
+   *
+   * Also releases the `maturity-cleared` reservation `handleMaturityGateClearedEvent`
+   * took before this delivery was even queued: the reservation has to outlive the
+   * synchronous dispatch decision because the actual send can be optimistic
+   * (`dispatchToTriggerOptimistically`'s detached `.then()`) or deferred to a later
+   * batch flush, and this is the one signal common to both that means "the send this
+   * reservation was guarding is done."
    */
   private recordEventDeliverySuccess(ruleId: NotificationRuleId, container: Container) {
     if (ruleId !== 'maturity-cleared') {
@@ -1103,6 +1113,20 @@ class Trigger<
     }
     this.recordNotifiedForResult(container, 'maturity-cleared');
     this.recordNotifiedForResult(container, 'update-available');
+    this.releaseOnceNotificationSlot(container, 'maturity-cleared');
+  }
+
+  /**
+   * The failure counterpart of `recordEventDeliverySuccess`: releases the
+   * `maturity-cleared` reservation on a delivery that settled but did not succeed, so a
+   * later, genuinely new maturity-cleared event for the same container is never blocked
+   * by a reservation its own failed predecessor left behind.
+   */
+  private releaseEventDeliveryReservation(ruleId: NotificationRuleId, container: Container) {
+    if (ruleId !== 'maturity-cleared') {
+      return;
+    }
+    this.releaseOnceNotificationSlot(container, 'maturity-cleared');
   }
 
   private async dispatchContainerForEvent(
@@ -1209,6 +1233,7 @@ class Trigger<
             this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
           }
           this.log.debug(err);
+          this.releaseEventDeliveryReservation(ruleId, container);
           enqueueOutboxEntry({
             eventName: ruleId,
             payload: { container },
@@ -1475,6 +1500,24 @@ class Trigger<
    * either kind was already recorded for the same result hash — covers the
    * race where the generic notification beat us (e.g. an agent-container
    * scan landing before the sweep).
+   *
+   * DR-60: the `maturity-cleared` half of that check used to be a bare
+   * `hasAlreadyNotifiedForResult` read, with the matching write landing an
+   * `await` later once delivery confirms — the same window
+   * `reserveOnceNotificationSlot` exists to close for the `update-available`
+   * simple path. Two overlapping evaluations of the same maturity-cleared
+   * event (a cron scan and a manual recheck landing together, say) could both
+   * read "not notified" and both dispatch. This now takes the same
+   * reservation before dispatching. It cannot release it in a local
+   * try/finally the way the simple path does, though: a dispatch can be
+   * optimistic-and-detached (`dispatchToTriggerOptimistically`) or deferred to
+   * a later batch flush, so this method's own call stack returns long before
+   * the send actually settles. The reservation is released from wherever that
+   * settlement is observed instead — `recordEventDeliverySuccess` on success,
+   * `releaseEventDeliveryReservation` on failure — and released right here
+   * only when nothing async is ever going to settle at all, i.e.
+   * `dispatchContainerForEvent` returned false without queuing or sending
+   * anything.
    */
   async handleMaturityGateClearedEvent(payload: event.MaturityGateClearedEventPayload) {
     const { container } = payload;
@@ -1482,11 +1525,17 @@ class Trigger<
     if (
       container &&
       this.configuration.once &&
-      (this.hasAlreadyNotifiedForResult(container, 'maturity-cleared') ||
-        this.hasAlreadyNotifiedForResult(container, 'update-available'))
+      this.hasAlreadyNotifiedForResult(container, 'update-available')
     ) {
       this.log.debug(
-        `Skipping maturity-cleared notification for ${fullName(container)} (already notified)`,
+        `Skipping maturity-cleared notification for ${fullName(container)} (already notified for update-available)`,
+      );
+      return;
+    }
+
+    if (container && !this.reserveOnceNotificationSlot(container, 'maturity-cleared')) {
+      this.log.debug(
+        `Skipping maturity-cleared notification for ${fullName(container)} (already notified or in flight)`,
       );
       return;
     }
@@ -1500,10 +1549,17 @@ class Trigger<
         })
       : undefined;
 
-    await this.dispatchContainerForEvent('maturity-cleared', notificationContainer, {
-      allowAllWhenNoTriggers: true,
-      defaultWhenRuleMissing: true,
-    });
+    let dispatched = false;
+    try {
+      dispatched = await this.dispatchContainerForEvent('maturity-cleared', notificationContainer, {
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      });
+    } finally {
+      if (!dispatched && container) {
+        this.releaseOnceNotificationSlot(container, 'maturity-cleared');
+      }
+    }
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {

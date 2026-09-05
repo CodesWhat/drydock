@@ -32,6 +32,8 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | `POST` | `/api/v1/webhook/update/:containerName` | Trigger an update on a specific container |
 | `POST` | `/api/v1/webhooks/registry` | Receive signed registry push events and trigger targeted checks |
 
+`POST /api/v1/webhook/watch` runs through the same single-flight scan orchestration as the scheduled cron scan, rather than starting an independent scan of its own: a call that lands while a scan is already running for a watcher is folded into that scan's follow-up instead, and the JSON response's `result.coalesced` field is `true` when that happened for at least one watcher.
+
 ## Duplicate container names
 
 The per-container webhook endpoints resolve `:containerName` by name. In multi-agent deployments, the same container name can exist on multiple agents or watchers. When a name is ambiguous, drydock returns **409 Conflict** and includes the matching `agent`/`watcher` pairs in the error message.

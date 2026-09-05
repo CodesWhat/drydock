@@ -5427,6 +5427,35 @@ describe('handleMaturityGateClearedEvent', () => {
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
+  // DR-60: two overlapping deliveries of the exact same maturity-cleared event (a cron
+  // scan and a manual recheck landing together, say) must not both dispatch. The first
+  // call's reservation is still held (its optimistic `.trigger()` send never resolved
+  // during this test), so the second call's reserveOnceNotificationSlot() turns it away
+  // before ever reaching dispatchContainerForEvent — distinct from the "already
+  // recorded in history" dedup the test above covers, which only applies once delivery
+  // has actually settled.
+  test('once=true dedup turns away a second concurrent evaluation while the first is still in flight', async () => {
+    let resolveSend: () => void = () => undefined;
+    const sendPromise = new Promise<void>((resolve) => {
+      resolveSend = resolve;
+    });
+    const provider = vi.spyOn(trigger, 'trigger').mockReturnValue(sendPromise);
+    const payload = {
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    };
+
+    const call1 = trigger.handleMaturityGateClearedEvent(payload);
+    const call2 = trigger.handleMaturityGateClearedEvent(payload);
+
+    await call2;
+    expect(provider).toHaveBeenCalledTimes(1);
+
+    resolveSend();
+    await call1;
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
   test('once=true dedup skips when update-available was already recorded for the same result', async () => {
     const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
     notificationHistoryStore.recordNotification(
