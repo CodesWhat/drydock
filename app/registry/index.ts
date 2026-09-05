@@ -290,11 +290,17 @@ function applyTriggerGroupDefaults(
 
 /**
  * Register watchers.
+ *
+ * Resolves to the names of the local watchers registration was attempted for,
+ * which `pruneOrphanedLocalContainers` needs: a watcher the operator still has
+ * configured is coming back once whatever broke it is fixed, whether or not it
+ * registered this time, so its container records are not orphans.
  * @param options
- * @returns {Promise}
+ * @returns {Promise<Set<string>>}
  */
-async function registerWatchers(options: RegistrationOptions = {}) {
+async function registerWatchers(options: RegistrationOptions = {}): Promise<Set<string>> {
   const configurations = getWatcherConfigurations();
+  const configuredLocalWatcherNames = new Set<string>();
   let watchersToRegister: Promise<Component>[] = [];
   try {
     if (Object.keys(configurations).length === 0) {
@@ -306,6 +312,7 @@ async function registerWatchers(options: RegistrationOptions = {}) {
         log.info('Default local watcher disabled (DD_LOCAL_WATCHER=false)');
       } else {
         log.info('No Watcher configured => Init a default one (Docker with default options)');
+        configuredLocalWatcherNames.add('local');
         watchersToRegister.push(
           registerComponent({
             kind: 'watcher',
@@ -320,6 +327,7 @@ async function registerWatchers(options: RegistrationOptions = {}) {
       watchersToRegister = watchersToRegister.concat(
         Object.keys(configurations).map((watcherKey) => {
           const watcherKeyNormalize = watcherKey.toLowerCase();
+          configuredLocalWatcherNames.add(watcherKeyNormalize);
           return registerComponent({
             kind: 'watcher',
             provider: 'docker',
@@ -330,15 +338,63 @@ async function registerWatchers(options: RegistrationOptions = {}) {
         }),
       );
     }
-    await Promise.all(watchersToRegister);
+    // allSettled rather than all: Promise.all settles the await on the first
+    // rejection while the other registrations are still in flight, so a watcher
+    // that registers perfectly well can land in the registry after init has
+    // already run the orphan prune and read an emptier registry than the one it
+    // is deciding about.
+    const registrations = await Promise.allSettled(watchersToRegister);
+    const failedRegistration = registrations.find(
+      (registration): registration is PromiseRejectedResult => registration.status === 'rejected',
+    );
+    if (failedRegistration) {
+      throw failedRegistration.reason;
+    }
   } catch (e: unknown) {
     log.warn(`Some watchers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
+  return configuredLocalWatcherNames;
 }
 
-function pruneOrphanedLocalContainers() {
-  const localWatcherNames = new Set(
+/**
+ * Delete container records that belong to the controller itself (no `agent`
+ * field) but name a local watcher that is neither registered nor configured,
+ * e.g. after an operator renames a `DD_WATCHER_<NAME>_SOCKET` key.
+ *
+ * A record is kept when its watcher is registered, and also when its watcher is
+ * only still configured. Registration fails for reasons that are usually
+ * transient and have nothing to do with what the store holds (unreachable
+ * socket, unreadable CA file, invalid cron), and the operator who still has
+ * that watcher in `DD_WATCHER_*` expects it back once the configuration is
+ * fixed. Pruning on registration alone would delete the records of one failed
+ * watcher out of two configured, since the surviving one keeps the registered
+ * set non-empty (DR-113).
+ *
+ * `configuredLocalWatcherNames` being empty is a different thing again and does
+ * mean prune. Nothing was even attempted when the operator disabled the default
+ * local watcher (`DD_LOCAL_WATCHER=false`) and configured none of their own: the
+ * controller is a pure aggregator, so every controller-owned record it still
+ * holds is genuinely orphaned. A container that moved from the controller's
+ * local watcher to a remote agent is exactly that case, and leaving the record
+ * behind strands the container for good: the agent's report is refused by the
+ * ownership gate in `AgentClient` because the id is already owned by the
+ * controller, and the record is never rewritten to name the agent.
+ *
+ * The remaining case is configured watchers where every one of them failed. The
+ * union below already keeps those records, and the early return keeps every
+ * other controller-owned record with them, on the same reasoning as a single
+ * failure: a restart where the whole watcher subsystem is down is not the
+ * moment to decide anything in the store is stale.
+ *
+ * Every delete passes `identityChangeExpected` so the record's update-policy
+ * overrides (snooze, maturity mode and minimum age, skipped tags and digests)
+ * are stashed under the container's Docker id. Whatever reports that container
+ * next — the renamed watcher, or the agent that took it over — arrives under the
+ * same id and inherits them (DR-112).
+ */
+function pruneOrphanedLocalContainers(configuredLocalWatcherNames: Set<string>) {
+  const registeredLocalWatcherNames = new Set(
     Object.values(getState().watcher)
       .filter((watcher) => !watcher.agent)
       .map((watcher) => watcher.name)
@@ -346,9 +402,14 @@ function pruneOrphanedLocalContainers() {
       .map((watcherName) => watcherName.toLowerCase()),
   );
 
-  if (localWatcherNames.size === 0) {
+  if (registeredLocalWatcherNames.size === 0 && configuredLocalWatcherNames.size > 0) {
     return;
   }
+
+  const knownLocalWatcherNames = new Set([
+    ...registeredLocalWatcherNames,
+    ...configuredLocalWatcherNames,
+  ]);
 
   const orphanedLocalContainers = storeContainer.getContainersRaw().filter((container) => {
     if (container.agent) {
@@ -357,11 +418,11 @@ function pruneOrphanedLocalContainers() {
     if (typeof container.watcher !== 'string') {
       return true;
     }
-    return !localWatcherNames.has(container.watcher.toLowerCase());
+    return !knownLocalWatcherNames.has(container.watcher.toLowerCase());
   });
 
   orphanedLocalContainers.forEach((container) => {
-    storeContainer.deleteContainer(container.id);
+    storeContainer.deleteContainer(container.id, { identityChangeExpected: true });
   });
 
   if (orphanedLocalContainers.length > 0) {
@@ -814,9 +875,9 @@ export async function init(options: RegistrationOptions = {}) {
   await registerRegistries();
 
   // Register watchers
-  await registerWatchers(options);
+  const configuredLocalWatcherNames = await registerWatchers(options);
   try {
-    pruneOrphanedLocalContainers();
+    pruneOrphanedLocalContainers(configuredLocalWatcherNames);
   } catch (e: unknown) {
     log.warn(`Unable to prune orphaned local containers (${getErrorMessage(e)})`);
     log.debug(e);

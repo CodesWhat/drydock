@@ -19,6 +19,13 @@ type RollbackContainer = {
   identityKey?: string;
   labels?: Record<string, string>;
   image: {
+    // Not read here, and required rather than optional because the rollback
+    // the health monitor performs is a trigger lifecycle call against this
+    // container, and the compose action reads the registry name off it
+    // (DR-101). Requiring it keeps this type assignable to the health
+    // monitor's own, so neither end can go back to an `{ id, name }` stub
+    // without failing the build.
+    registry: { name: string };
     tag: { value: string };
     digest?: { repo?: string };
   };
@@ -47,6 +54,7 @@ type RollbackMonitorDependencies = {
   ) => Promise<{ Id: string; State?: { Health?: unknown } } | undefined>;
   startHealthMonitor: (options: {
     dockerApi: unknown;
+    container: RollbackContainer;
     containerId: string;
     containerName: string;
     backupImageTag: string;
@@ -186,6 +194,11 @@ class RollbackMonitor {
     const failingImageTag = container.updateKind?.remoteValue ?? container.image.tag.value;
     this.startHealthMonitor({
       dockerApi,
+      // The whole container, not just its name and the replacement's id: a
+      // rollback runs through the trigger's own recreate, which for compose
+      // resolves the service from this container's registry, watcher and
+      // labels (DR-101).
+      container,
       containerId: newContainerId,
       containerName: container.name,
       backupImageTag: failingImageTag,

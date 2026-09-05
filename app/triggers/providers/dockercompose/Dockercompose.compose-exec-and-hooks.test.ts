@@ -227,6 +227,8 @@ describe('Dockercompose Trigger', () => {
       mockDockerApi,
       pinnedIdentity,
       expect.anything(),
+      // This path pulled, so a failed inspect is still Docker's to report.
+      { requireLocalImage: false },
     );
     expect(cloneRuntimeConfigSpy).toHaveBeenCalledWith(
       mockDockerApi,
@@ -1787,6 +1789,7 @@ describe('Dockercompose Trigger', () => {
     const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
       start: vi.fn().mockResolvedValue(undefined),
     } as any);
+    const verifyCompatibilitySpy = vi.spyOn(trigger, 'verifyPulledImageCompatibility');
 
     await trigger.recreateContainer(
       mockDockerApi,
@@ -1805,6 +1808,124 @@ describe('Dockercompose Trigger', () => {
     );
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(createContainerSpy).toHaveBeenCalledTimes(1);
+    // The container this recreates has an update candidate of 1.1.0, so
+    // anything that re-derives its own target lands on the update instead of
+    // the 1.0.0 the caller asked for and the compose file now carries.
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
+    expect(verifyCompatibilitySpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      'nginx:1.0.0',
+      expect.anything(),
+      // skipPull, so the compatibility pre-flight is also the missing-image
+      // guard that keeps the running container out of harm's way (DR-110).
+      { requireLocalImage: true },
+    );
+  });
+
+  test('recreateContainer refuses before removing the running container when the image is absent locally', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    // Security is off in this suite, so the identity binding policy is
+    // `disabled`: capturePulledImageIdentity swallows the failed inspect
+    // instead of throwing, which is what used to carry an absent image all the
+    // way past the stop/remove and into a failing create (DR-110).
+    mockDockerApi.getImage = vi.fn().mockReturnValue({
+      inspect: vi.fn().mockRejectedValue(new Error('(HTTP code 404) no such image')),
+    });
+
+    await expect(
+      trigger.recreateContainer(
+        mockDockerApi,
+        {
+          State: { Running: true },
+          Config: { Image: 'nginx:1.1.0' },
+        },
+        'nginx:1.0.0',
+        container,
+        mockLog,
+      ),
+    ).rejects.toThrow(/Cannot recreate from nginx:1\.0\.0: the image is not available locally/);
+
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(stopContainerSpy).not.toHaveBeenCalled();
+    expect(removeContainerSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).not.toHaveBeenCalled();
+    // The compose file goes back to what it said before, so the failed
+    // rollback leaves neither the runtime nor the file half-moved.
+    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('image: nginx:1.1.0'),
+    );
+  });
+
+  test('recreateContainer integration should recreate from the requested image after a resync moved the tag to the candidate', async () => {
+    trigger.configuration.dryrun = false;
+    // What the store holds once maybeFastResyncAfterUpdate has run: the tag
+    // value is already the candidate and there is no scan result left to read,
+    // so the container itself no longer says anything about 1.0.0.
+    const container = makeContainer({
+      name: 'nginx',
+      tagValue: '1.1.0',
+      remoteValue: null,
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0',
+      container,
+      mockLog,
+    );
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('nginx:1.0.0'),
+    );
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
   });
 
   test('recreateContainer should restore original compose text when runtime refresh fails and rollback succeeds', async () => {
