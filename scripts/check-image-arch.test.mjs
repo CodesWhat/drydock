@@ -24,25 +24,86 @@ function allBinaries(bytes) {
   return probeLines(Object.fromEntries(BINARIES.map((path) => [path, bytes])));
 }
 
+const AMD64_DIGEST = 'sha256:1111111111111111111111111111111111111111111111111111111111aaaa';
+const ARM64_DIGEST = 'sha256:2222222222222222222222222222222222222222222222222222222222bbbb';
+const ATTESTATION_DIGEST = 'sha256:3333333333333333333333333333333333333333333333333333333333cccc';
+
+// A raw `docker buildx imagetools inspect --raw` document for a two-platform
+// index, plus an attestation entry (os "unknown" with a
+// vnd.docker.reference.type annotation) that must never be mistaken for a
+// requested platform's manifest.
+function twoPlatformIndex({ includeAmd64 = true, includeArm64 = true } = {}) {
+  const manifests = [];
+  if (includeAmd64) {
+    manifests.push({
+      mediaType: 'application/vnd.oci.image.manifest.v1+json',
+      digest: AMD64_DIGEST,
+      size: 1234,
+      platform: { architecture: 'amd64', os: 'linux' },
+    });
+  }
+  if (includeArm64) {
+    manifests.push({
+      mediaType: 'application/vnd.oci.image.manifest.v1+json',
+      digest: ARM64_DIGEST,
+      size: 1234,
+      platform: { architecture: 'arm64', os: 'linux' },
+    });
+  }
+  manifests.push({
+    mediaType: 'application/vnd.oci.image.manifest.v1+json',
+    digest: ATTESTATION_DIGEST,
+    size: 567,
+    platform: { architecture: 'unknown', os: 'unknown' },
+    annotations: {
+      'vnd.docker.reference.type': 'attestation-manifest',
+      'vnd.docker.reference.digest': AMD64_DIGEST,
+    },
+  });
+  return JSON.stringify({
+    schemaVersion: 2,
+    mediaType: 'application/vnd.oci.image.index.v1+json',
+    manifests,
+  });
+}
+
+// A single-platform manifest: no `manifests` array, so the script's is-index
+// check is false and it has to run the reference unchanged.
+const SINGLE_PLATFORM_MANIFEST = JSON.stringify({
+  schemaVersion: 2,
+  mediaType: 'application/vnd.oci.image.manifest.v1+json',
+  config: { mediaType: 'application/vnd.oci.image.config.v1+json', digest: AMD64_DIGEST },
+  layers: [],
+});
+
 /**
  * Runs the guard with a fake `docker` first on PATH that replays canned probe
  * output, so the ELF byte comparison is exercised without building an image.
+ * `buildx imagetools inspect --raw` is answered separately from `docker run`
+ * so the two calls the script now makes don't collide.
  */
 async function runGuard({
   probeOutput = allBinaries(ARM64),
   dockerExit = 0,
   dockerStderr = '',
+  rawManifest = SINGLE_PLATFORM_MANIFEST,
   args = ['drydock:test', 'linux/arm64'],
 } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'drydock-image-arch-'));
   const probeFile = join(dir, 'probe-output');
+  const manifestFile = join(dir, 'raw-manifest');
   const argsLog = join(dir, 'docker-args.log');
   await writeFile(probeFile, probeOutput === '' ? '' : `${probeOutput}\n`);
+  await writeFile(manifestFile, rawManifest);
 
   const fakeDocker = join(dir, 'docker');
   await writeFile(
     fakeDocker,
     `#!/bin/sh
+if [ "$1" = "buildx" ] && [ "$2" = "imagetools" ] && [ "$3" = "inspect" ]; then
+  cat "$RAW_MANIFEST_FILE"
+  exit 0
+fi
 printf '%s\\n' "$*" > "$DOCKER_ARGS_LOG"
 if [ -n "$DOCKER_STDERR" ]; then
   printf '%s\\n' "$DOCKER_STDERR" >&2
@@ -61,6 +122,7 @@ cat "$PROBE_OUTPUT_FILE"
     DOCKER_EXIT: String(dockerExit),
     DOCKER_STDERR: dockerStderr,
     PROBE_OUTPUT_FILE: probeFile,
+    RAW_MANIFEST_FILE: manifestFile,
     PATH: `${dir}:${process.env.PATH}`,
   };
 
@@ -233,4 +295,83 @@ test('reports a probe line that carries no e_machine bytes', async () => {
 
   assert.equal(result.code, 1);
   assert.match(result.output, /Unreadable probe output/u);
+});
+
+test('resolves the linux/amd64 manifest digest from an index and runs that, not the index digest', async () => {
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock:release-staging-1@sha256:indexdigest0000', 'linux/amd64'],
+    probeOutput: allBinaries(AMD64),
+    rawManifest: twoPlatformIndex(),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.dockerArgs, new RegExp(`ghcr.io/codeswhat/drydock@${AMD64_DIGEST}`, 'u'));
+  assert.ok(!result.dockerArgs.includes('sha256:indexdigest0000'));
+});
+
+test('resolves the linux/arm64 manifest digest from the same index', async () => {
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock:release-staging-1@sha256:indexdigest0000', 'linux/arm64'],
+    probeOutput: allBinaries(ARM64),
+    rawManifest: twoPlatformIndex(),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.dockerArgs, new RegExp(`ghcr.io/codeswhat/drydock@${ARM64_DIGEST}`, 'u'));
+  assert.ok(!result.dockerArgs.includes('sha256:indexdigest0000'));
+});
+
+test('fails before any docker run when a platform is missing from the index', async () => {
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock:release-staging-1@sha256:indexdigest0000', 'linux/arm64'],
+    rawManifest: twoPlatformIndex({ includeArm64: false }),
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(result.output, /has no manifest for linux\/arm64/u);
+  assert.match(result.output, /linux\/amd64/u);
+  assert.equal(result.dockerArgs, '');
+});
+
+test('fails when an index carries more than one manifest for the requested platform', async () => {
+  const duplicateIndex = JSON.stringify({
+    schemaVersion: 2,
+    mediaType: 'application/vnd.oci.image.index.v1+json',
+    manifests: [
+      {
+        mediaType: 'application/vnd.oci.image.manifest.v1+json',
+        digest: AMD64_DIGEST,
+        size: 1234,
+        platform: { architecture: 'amd64', os: 'linux' },
+      },
+      {
+        mediaType: 'application/vnd.oci.image.manifest.v1+json',
+        digest: ARM64_DIGEST,
+        size: 1234,
+        platform: { architecture: 'amd64', os: 'linux' },
+      },
+    ],
+  });
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock:release-staging-1@sha256:indexdigest0000', 'linux/amd64'],
+    rawManifest: duplicateIndex,
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(result.output, /2 manifests matching linux\/amd64/u);
+  assert.equal(result.dockerArgs, '');
+});
+
+test('runs a non-index reference unchanged', async () => {
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock:release-staging-1@sha256:indexdigest0000', 'linux/amd64'],
+    probeOutput: allBinaries(AMD64),
+    rawManifest: SINGLE_PLATFORM_MANIFEST,
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(
+    result.dockerArgs,
+    /ghcr\.io\/codeswhat\/drydock:release-staging-1@sha256:indexdigest0000/u,
+  );
 });
