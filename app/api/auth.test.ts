@@ -84,6 +84,9 @@ vi.mock('../store', () => ({
     path: '/test/store',
     file: 'db.json',
   })),
+  // DR-121: the session store's file is a sibling of the main store file,
+  // derived from getConfiguration() above, not the main store file itself.
+  getSessionStorePath: vi.fn(() => '/test/store/db-sessions.json'),
 }));
 
 vi.mock('../store/secrets.js', () => ({
@@ -3440,14 +3443,17 @@ describe('Auth Router', () => {
   });
 
   describe('LokiStore path configuration', () => {
-    test('LokiStore path is built from store config (not empty string)', () => {
+    test('LokiStore path is built from the session store path, not the main store file (not empty string)', () => {
       // Line 336: StringLiteral `` mutant — empty path would cause session store issues
+      // DR-121: this must be store.getSessionStorePath(), a sibling of the main
+      // store file, never `${getConfiguration().path}/${getConfiguration().file}`
+      // itself — two LokiJS instances autosaving that file clobber each other.
       const app = createApp();
       auth.init(app);
 
       expect(mockLokiStore).toHaveBeenCalledWith(
         expect.objectContaining({
-          path: '/test/store/db.json',
+          path: '/test/store/db-sessions.json',
         }),
       );
     });
