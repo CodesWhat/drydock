@@ -4,6 +4,7 @@ import { emitContainerUpdateApplied } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import Dockercompose, { testable_updateComposeServiceImageInText } from './Dockercompose.js';
 import {
+  invokeComposeRefreshPostPullHook,
   makeCompose,
   makeContainer,
   setupDockercomposeTestContext,
@@ -445,7 +446,11 @@ describe('Dockercompose Trigger', () => {
     const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
     const updateContainerWithComposeSpy = vi
       .spyOn(trigger, 'updateContainerWithCompose')
-      .mockResolvedValue();
+      .mockImplementation(async (_composeFile, _service, container, options = {}) => {
+        // The real refresh calls the post-pull hook, which now carries the
+        // deferred pre-update hook and prune/backup step on this path too.
+        await invokeComposeRefreshPostPullHook(container, options);
+      });
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
     vi.spyOn(trigger, 'maybeScanAndGateUpdate').mockResolvedValue();
     vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
