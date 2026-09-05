@@ -6253,6 +6253,154 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     );
     expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
   });
+
+  // DR-112: the mirror image of the recreate case above. Here the Docker id is
+  // untouched and the *identity* changes: a container handed from the controller's
+  // local watcher to an agent that now watches the same daemon, or a watcher renamed
+  // under it. The identity key changes with it, so the stash above can never match.
+  // deleteContainer's identityChangeExpected keys the stash on the Docker id instead.
+  describe('identity change hand-off (DR-112)', () => {
+    test('carries the update policy from a controller-owned record to the agent that takes the container over', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'moved-to-agent',
+            watcher: 'local',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('moved-to-agent', { identityChangeExpected: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'moved-to-agent', agent: 'edge-agent', watcher: 'remote' }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('carries the update policy across a watcher rename', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'renamed-watcher',
+            watcher: 'local',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('renamed-watcher', { identityChangeExpected: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'renamed-watcher', watcher: 'home' }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('restores retained overrides when the agent stamps an empty override layer', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'moved-layered',
+            watcher: 'local',
+            updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7, skipTags: ['ui-tag'] },
+            updatePolicyDeclarative: {
+              env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+              label: { skipTags: ['old-label'] },
+            },
+            updatePolicyOverrides: { maturityMode: 'all', skipTags: ['ui-tag'] },
+            updatePolicySources: {
+              maturityMode: 'override',
+              maturityMinAgeDays: 'env',
+              skipTags: 'override',
+            },
+          }),
+        },
+      ]);
+
+      container.deleteContainer('moved-layered', { identityChangeExpected: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({
+          id: 'moved-layered',
+          agent: 'edge-agent',
+          watcher: 'remote',
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          updatePolicyDeclarative: {
+            env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+            label: {},
+          },
+          // applyDeclarativeUpdatePolicy() materializes this empty object on fresh agent data.
+          updatePolicyOverrides: {},
+          updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'env' },
+        }),
+      );
+
+      expect(inserted.updatePolicyOverrides).toEqual({ maturityMode: 'all', skipTags: ['ui-tag'] });
+      expect(inserted.updatePolicy).toEqual({
+        maturityMode: 'all',
+        maturityMinAgeDays: 7,
+        skipTags: ['ui-tag'],
+      });
+    });
+
+    test('hands nothing to a new identity when the delete expects no replacement at all', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'plain-delete',
+            watcher: 'local',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('plain-delete');
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'plain-delete', agent: 'edge-agent', watcher: 'remote' }),
+      );
+
+      expect(inserted.updatePolicy).toBeUndefined();
+    });
+
+    test('leaves the identity-keyed stash alone, so a recreate under the same identity still inherits', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'recreate-old',
+            watcher: 'local',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('recreate-old', { replacementExpected: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'recreate-new', watcher: 'local' }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('writes the id-keyed stash through to the durable store', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'moved-persist',
+            watcher: 'local',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('moved-persist', { identityChangeExpected: true });
+
+      expect(
+        updatePolicyRetentionCacheStore.listRecords().map((record) => record.cacheKey),
+      ).toEqual(['id::moved-persist']);
+    });
+  });
 });
 
 describe('rollback rename policy retention regression (#535)', () => {
