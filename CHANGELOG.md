@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.11] — 2026-09-05
+
 ### Fixed
 
 - **OIDC login on v1.7.0-rc.1 through rc.10 bounced straight back to the login page.** The service worker's navigation fallback denied `/api/` and nothing else, so every other top-level navigation was answered from the precached app shell. The identity provider redirects the browser to `/auth/oidc/<name>/cb?code=...`, which is a document navigation, so the callback was served `index.html` and never reached Express: no code exchange, no session, and the SPA booted and bounced to `/login`. Basic auth was unaffected because it authenticates over `fetch`, which the navigation fallback never touches. `skipWaiting` and `clientsClaim` re-register the worker on the next load, so clearing site data only helped until the page reloaded. The navigation fallback now skips every server-owned route (`/api`, `/auth/`, `/health`, `/metrics`) and serves the shell only for the SPA's own paths; the `/auth` settings view still loads from the shell, because Express matches that mount path too but has no handler for it, so the shell answers instead. v1.6 was never affected, it shipped no service worker. ([#939](https://github.com/CodesWhat/drydock/issues/939))
@@ -2707,7 +2709,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.11...HEAD
+[1.7.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...v1.7.0-rc.11
 [1.7.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...v1.7.0-rc.10
 [1.7.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.8...v1.7.0-rc.9
 [1.7.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.7...v1.7.0-rc.8

@@ -66,125 +66,114 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.10</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.11</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.10</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.11</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.10</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.11</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.10</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.11</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.10</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.11</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.10 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.11 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    onceReservation: string;
-    retryBuffer: string;
-    deadlineTimer: string;
-    hookLocation: string;
-    contributorCredit: string;
-    hookAbort: string;
+    oidcBounce: string;
+    routeScope: string;
+    composeRollback: string;
+    armImage: string;
+    indexDigest: string;
+    agentRegistryDocs: string;
   }
 > = {
   'README.de.md': {
-    onceReservation:
-      '**Batch- und Digest-Sends mit `once=true` nehmen jetzt dieselbe Reservierung des Benachrichtigungs-Slots vor wie der einfache Pfad, sodass ein manueller Scan, der einen Cron-Scan überlappt, dasselbe Update nicht mehr zweimal melden kann.**',
-    retryBuffer: 'der Batch-Retry-Puffer trägt keinen unreservierten Eintrag mehr an den Trigger',
-    deadlineTimer:
-      '**Das Deregistrieren eines Watchers löscht jetzt den Fristen-Timer des Cron-Scans**',
-    hookLocation:
-      '**Der Getting-Started-Leitfaden sagt jetzt, dass Hook-Skripte innerhalb des Drydock-Containers laufen**',
-    contributorCredit: 'der Agent-Registry-Lookup-Fix nennt jetzt den Beitragenden',
-    hookAbort:
-      '**Derselbe Hooks-Absatz sagt jetzt, dass ein fehlgeschlagener Pre-Hook das Update standardmäßig abbricht, und nennt `dd.hook.pre.abort=false` als Opt-out**',
+    oidcBounce:
+      '**OIDC-Login springt nach der Weiterleitung durch den Identity Provider nicht mehr zur Login-Seite zurück.**',
+    routeScope: 'überspringt jetzt jede serverseitige Route',
+    composeRollback:
+      '**Ein Rollback eines Compose-verwalteten Containers stellt nicht mehr das Update wieder her, das es eigentlich rückgängig machen sollte.**',
+    armImage: '**Das veröffentlichte arm64-Image ist wieder ein echtes arm64-Image**',
+    indexDigest: 'Multi-Arch-Image-Index-Digests',
+    agentRegistryDocs:
+      '**Die Agents-Seite sagt jetzt, dass Registries auf jedem Agent konfiguriert werden müssen, nicht nur auf dem Controller**',
   },
   'README.es.md': {
-    onceReservation:
-      '**Los envíos por lotes y por resumen con `once=true` ahora toman la misma reserva de la ranura de notificación que toma la ruta simple, de modo que un escaneo manual superpuesto a un escaneo de cron ya no puede anunciar la misma actualización dos veces.**',
-    retryBuffer:
-      'el búfer de reintentos por lotes ya no lleva al activador una entrada sin reservar',
-    deadlineTimer:
-      '**Dar de baja un watcher ahora borra el temporizador de plazo del escaneo de cron**',
-    hookLocation:
-      '**La guía de inicio ahora indica que los scripts de hook se ejecutan dentro del contenedor de Drydock**',
-    contributorCredit:
-      'la corrección de búsqueda de registro del agente ahora acredita a quien la escribió',
-    hookAbort:
-      '**El mismo párrafo de hooks ahora indica que un pre-hook fallido aborta la actualización de forma predeterminada y nombra `dd.hook.pre.abort=false` como la opción para desactivarlo**',
+    oidcBounce:
+      '**El inicio de sesión OIDC ya no vuelve a la página de login después de la redirección del proveedor de identidad.**',
+    routeScope: 'omite cada ruta propiedad del servidor',
+    composeRollback:
+      '**Una reversión de un contenedor gestionado por Compose ya no vuelve a desplegar la actualización que se suponía debía deshacer.**',
+    armImage: '**La imagen arm64 publicada vuelve a ser una imagen arm64 real**',
+    indexDigest: 'digests del índice de imagen multiarquitectura',
+    agentRegistryDocs:
+      '**La página de agentes ahora dice que los registries deben configurarse en cada agente, no solo en el controlador**',
   },
   'README.fr.md': {
-    onceReservation:
-      "**Les envois par lot et par condensé avec `once=true` prennent désormais la même réservation de créneau de notification que le chemin simple, si bien qu'un scan manuel qui chevauche un scan cron ne peut plus annoncer deux fois la même mise à jour.**",
-    retryBuffer:
-      'le tampon de réessai par lot ne porte plus au déclencheur une entrée sans réservation',
-    deadlineTimer:
-      "**Le désenregistrement d'un watcher efface désormais le minuteur d'échéance du scan cron**",
-    hookLocation:
-      "**Le guide de démarrage précise désormais que les scripts de hook s'exécutent à l'intérieur du conteneur Drydock**",
-    contributorCredit:
-      "le correctif de recherche de registre de l'agent crédite désormais la personne qui l'a écrit",
-    hookAbort:
-      "**Le même paragraphe sur les hooks précise désormais qu'un pre-hook en échec interrompt la mise à jour par défaut et nomme `dd.hook.pre.abort=false` comme option de désactivation**",
+    oidcBounce:
+      "**La connexion OIDC ne revient plus à la page de connexion après la redirection du fournisseur d'identité.**",
+    routeScope: 'ignore désormais chaque route appartenant au serveur',
+    composeRollback:
+      "**Une restauration d'un conteneur géré par Compose ne redéploie plus la mise à jour qu'elle était censée annuler.**",
+    armImage: "**L'image arm64 publiée est de nouveau une véritable image arm64**",
+    indexDigest: "digests d'index d'image multi-architecture",
+    agentRegistryDocs:
+      '**La page des agents indique désormais que les registres doivent être configurés sur chaque agent, pas seulement sur le contrôleur**',
   },
   'README.pl.md': {
-    onceReservation:
-      '**Wysyłki zbiorcze i skrótowe z `once=true` biorą teraz tę samą rezerwację slotu powiadomienia co ścieżka prosta, dzięki czemu ręczny skan nakładający się na skan crona nie może już zgłosić tej samej aktualizacji dwukrotnie.**',
-    retryBuffer: 'bufor ponowień wsadowych nie przekazuje już do wyzwalacza wpisu bez rezerwacji',
-    deadlineTimer: '**Wyrejestrowanie watchera czyści teraz licznik terminu skanu crona**',
-    hookLocation:
-      '**Przewodnik pierwszych kroków mówi teraz, że skrypty hooków działają wewnątrz kontenera Drydock**',
-    contributorCredit: 'poprawka wyszukiwania rejestru dla agenta wskazuje teraz jej autora',
-    hookAbort:
-      '**Ten sam akapit o hookach mówi teraz, że nieudany pre-hook domyślnie przerywa aktualizację, i wskazuje `dd.hook.pre.abort=false` jako sposób rezygnacji**',
+    oidcBounce:
+      '**Logowanie OIDC nie wraca już do strony logowania po przekierowaniu przez dostawcę tożsamości.**',
+    routeScope: 'pomija każdą trasę należącą do serwera',
+    composeRollback:
+      '**Wycofanie kontenera zarządzanego przez Compose nie wdraża już ponownie aktualizacji, którą miało cofnąć.**',
+    armImage: '**Publikowany obraz arm64 jest znowu prawdziwym obrazem arm64**',
+    indexDigest: 'digesty indeksu obrazu wieloarchitekturowego',
+    agentRegistryDocs:
+      '**Strona agentów mówi teraz, że registry trzeba skonfigurować na każdym agencie, nie tylko na kontrolerze**',
   },
   'README.pt-BR.md': {
-    onceReservation:
-      '**Os envios em lote e por digest com `once=true` agora fazem a mesma reserva de vaga de notificação que o caminho simples faz, de modo que uma varredura manual sobreposta a uma varredura do cron não pode mais anunciar a mesma atualização duas vezes.**',
-    retryBuffer:
-      'o buffer de retentativas em lote não leva mais ao gatilho uma entrada sem reserva',
-    deadlineTimer:
-      '**Cancelar o registro de um watcher agora limpa o temporizador de prazo da varredura do cron**',
-    hookLocation:
-      '**O guia de primeiros passos agora diz que os scripts de hook rodam dentro do contêiner do Drydock**',
-    contributorCredit: 'a correção de busca de registro do agente agora credita quem a escreveu',
-    hookAbort:
-      '**O mesmo parágrafo sobre hooks agora diz que um pre-hook com falha aborta a atualização por padrão e nomeia `dd.hook.pre.abort=false` como a forma de desativar isso**',
+    oidcBounce:
+      '**O login OIDC não volta mais para a página de login depois do redirecionamento do provedor de identidade.**',
+    routeScope: 'ignora toda rota pertencente ao servidor',
+    composeRollback:
+      '**Um rollback de um contêiner gerenciado pelo Compose não reimplanta mais a atualização que deveria desfazer.**',
+    armImage: '**A imagem arm64 publicada volta a ser uma imagem arm64 de verdade**',
+    indexDigest: 'digests do índice de imagem multiarquitetura',
+    agentRegistryDocs:
+      '**A página de agentes agora diz que os registries precisam ser configurados em cada agente, não só no controlador**',
   },
   'README.zh-CN.md': {
-    onceReservation:
-      '**批量和摘要模式下的 `once=true` 发送现在会像简单路径一样先占用通知名额，因此与定时扫描重叠的手动扫描不会再把同一次更新通报两次。**',
-    retryBuffer: '批量重试缓冲区也不会再把未占位的条目送到触发器',
-    deadlineTimer: '**注销 watcher 现在会清除定时扫描的截止计时器**',
-    hookLocation: '**入门指南现在说明 hook 脚本在 Drydock 容器内运行**',
-    contributorCredit: '代理的注册表查找修复也标注了它的贡献者',
-    hookAbort:
-      '**同一段 hooks 说明现在写明失败的 pre-hook 默认会中止更新，并指出 `dd.hook.pre.abort=false` 是退出该行为的开关**',
+    oidcBounce: '**OIDC 登录在身份提供方重定向后不会再跳回登录页面。**',
+    routeScope: '跳过每个服务器专属路由',
+    composeRollback: '**对 Compose 管理容器的回滚不会再重新部署它本应撤销的更新。**',
+    armImage: '**发布的 arm64 镜像重新变回真正的 arm64 镜像**',
+    indexDigest: '多架构镜像索引摘要',
+    agentRegistryDocs: '**代理页面现在说明每个代理都要配置 registry，而不只是控制器**',
   },
 };
 
@@ -243,6 +232,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc8--2026-09-03',
   './CHANGELOG.md#170-rc9--2026-09-03',
   './CHANGELOG.md#170-rc10--2026-09-04',
+  './CHANGELOG.md#170-rc11--2026-09-05',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -297,25 +287,26 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
     const releaseBullets = [
-      release.onceReservation,
-      release.deadlineTimer,
-      release.hookLocation,
-      release.hookAbort,
+      release.oidcBounce,
+      release.composeRollback,
+      release.armImage,
+      release.agentRegistryDocs,
     ].map((fragment) => getBullet(releaseBlock, fragment));
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
     expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[0]).toContain(release.retryBuffer);
-    expect(releaseBullets[2]).toContain(release.contributorCredit);
+    expect(releaseBullets[0]).toContain(release.routeScope);
+    expect(releaseBullets[2]).toContain(release.indexDigest);
     expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/1001',
-      'https://github.com/CodesWhat/drydock/pull/996',
-      'https://github.com/CodesWhat/drydock/pull/998',
-      'https://github.com/CodesWhat/drydock/pull/998',
+      'https://github.com/CodesWhat/drydock/pull/1010',
+      'https://github.com/CodesWhat/drydock/pull/1016',
+      'https://github.com/CodesWhat/drydock/pull/1023',
+      'https://github.com/CodesWhat/drydock/pull/1024',
+      'https://github.com/CodesWhat/drydock/pull/1029',
     ]);
     expect(getUrls(releaseBullets[0]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/998',
+      'https://github.com/CodesWhat/drydock/pull/1016',
     ]);
   });
 

@@ -219,6 +219,24 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.11</strong></summary>
+
+- **O login OIDC não volta mais para a página de login depois do redirecionamento do provedor de identidade.** O fallback de navegação do service worker antes respondia a toda navegação de documento a partir do app shell em cache, exceto `/api/`, então o callback do OIDC nunca chegava ao Express para a troca de código; agora ele ignora toda rota pertencente ao servidor (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))
+- **Um controlador com seu próprio watcher `local` não recusa mais todo contêiner que um agente reporta sob um watcher de mesmo nome.** A propriedade de um contêiner sem linha no armazenamento agora é decidida pelo que os próprios watchers do controlador realmente enumeraram, não por uma coincidência de nome. ([#1018](https://github.com/CodesWhat/drydock/pull/1018))
+- **Um rollback de um contêiner gerenciado pelo Compose não reimplanta mais a atualização que deveria desfazer.** A recriação do Compose agora repassa a imagem recebida para a atualização em tempo de execução, em vez de derivar uma do próprio candidato de atualização do contêiner; o rollback automático agora entrega ao monitor de saúde o contêiner inteiro em vez de apenas seu id e nome, e a imagem de backup é baixada, fixada por digest quando o registro tem um, antes de qualquer coisa ser parada ou removida. ([#1023](https://github.com/CodesWhat/drydock/pull/1023), [#1029](https://github.com/CodesWhat/drydock/pull/1029))
+- **A imagem arm64 publicada volta a ser uma imagem arm64 de verdade**, em vez de uma imagem x86-64 com rótulo arm64. Ambas as fixações de imagem base voltam a apontar para digests do índice de imagem multiarquitetura, e o release agora recusa assinar, marcar ou promover uma imagem cujos binários não correspondam à plataforma sob a qual é publicada. ([#1024](https://github.com/CodesWhat/drydock/pull/1024))
+- **Um contêiner movido para um agente não fica mais parado quando o watcher local do controlador é desligado.** A poda de inicialização que limpa registros obsoletos pertencentes ao controlador agora também roda quando nunca foi configurado um watcher local, de modo que o relatório do agente não é mais recusado como pertencente ao controlador. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **Um contêiner entregue do controlador a um agente não chega mais com seu snooze, modo de maturidade e tags ignoradas voltados ao padrão.** A poda de inicialização agora guarda a política de atualização sob o id do Docker do contêiner, que a mudança deixa intacto, em vez de uma chave que o registro recebido nunca poderia consultar. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **Um watcher local que falha ao se registrar não apaga mais os registros de seus contêineres quando um segundo watcher se registra normalmente.** A poda agora mantém qualquer registro cujo watcher ainda esteja configurado, tenha ele se registrado ou não nesta execução, e espera cada registro terminar antes de ler o registro central. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **A página de agentes agora diz que os registries precisam ser configurados em cada agente, não só no controlador**, com um exemplo completo do Gitea nos dois lados. ([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+- **O exemplo de registries da página de agentes agora monta o arquivo CA que ele referencia**, em vez de apontar `DD_AGENT_REMOTE1_CAFILE` para um caminho que o serviço Compose nunca montou. ([#1037](https://github.com/CodesWhat/drydock/pull/1037))
+- **A página de watchers agora diz que a janela de manutenção bloqueia toda a varredura agendada, não só a instalação de uma atualização.** Uma janela fechada deixa contêineres novos invisíveis, o estado do contêiner desatualizado e as notificações de atualização adiadas até reabrir; uma varredura manual continua contornando-a, assim como uma atualização manual. ([#1010](https://github.com/CodesWhat/drydock/pull/1010))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc11--2026-09-05).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.10</strong></summary>
 
 - **Os envios em lote e por digest com `once=true` agora fazem a mesma reserva de vaga de notificação que o caminho simples faz, de modo que uma varredura manual sobreposta a uma varredura do cron não pode mais anunciar a mesma atualização duas vezes.** A descarga do digest ignora e descarta um resultado em buffer que uma descarga anterior já enviou, e o buffer de retentativas em lote não leva mais ao gatilho uma entrada sem reserva. ([#998](https://github.com/CodesWhat/drydock/pull/998))
