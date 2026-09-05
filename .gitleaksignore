@@ -340,6 +340,10 @@ content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:115
 content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:122
 content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:129
 content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:46
+content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:117
+content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:124
+content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:131
+content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:48
 content/docs/v1.3/api/registry.mdx:generic-api-key:36
 content/docs/v1.3/api/registry.mdx:generic-api-key:56
 content/docs/v1.3/configuration/authentications/oidc/index.mdx:private-key:39
