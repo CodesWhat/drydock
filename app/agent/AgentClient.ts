@@ -1140,6 +1140,14 @@ export class AgentClient {
       this.buildRequestConfig('GET', '/api/containers'),
     );
     const containers = response.data;
+    if (!Array.isArray(containers)) {
+      this.log.warn(
+        `Handshake for agent ${sanitizeLogParam(this.name)} received a non-array /api/containers body (${typeof containers}); aborting before deregistering triggers`,
+      );
+      throw new Error(
+        `Handshake failed for agent ${this.name}: /api/containers returned ${typeof containers}, expected an array`,
+      );
+    }
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
     // isRegisteringComponents is true for the entire deregister → re-register
