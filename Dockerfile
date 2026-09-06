@@ -33,7 +33,7 @@ RUN apk add --no-cache \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026c-r0 \
-    && apk add --no-cache cosign=3.0.6-r1 \
+    && apk add --no-cache cosign=3.0.6-r2 \
     && apk upgrade --no-cache zlib libcrypto3 libssl3 libexpat \
     && mkdir -m 0700 /store && chown node:node /store
 
