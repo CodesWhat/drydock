@@ -7,7 +7,9 @@ import {
 } from '../../test/sqlite-db.js';
 import { StoreError } from './driver.js';
 import {
+  LEGACY_SESSIONS_COLLECTION,
   LEGACY_SESSIONS_FILE,
+  LEGACY_STORE_UNREADABLE_CODE,
   parseLokiDatabase,
   readLokiDatabase,
   resolveLegacySessionDocuments,
@@ -103,7 +105,7 @@ describe('store/db/loki-json', () => {
         thrown = error;
       }
       expect(thrown).toBeInstanceOf(StoreError);
-      expect((thrown as StoreError).code).toBe('STORE_LEGACY_STORE_UNREADABLE');
+      expect((thrown as StoreError).code).toBe(LEGACY_STORE_UNREADABLE_CODE);
       expect((thrown as Error).message).toContain(reason);
       expect((thrown as Error).message).toContain('/store/dd.json');
     });
@@ -126,9 +128,11 @@ describe('store/db/loki-json', () => {
   describe('resolveLegacySessionDocuments', () => {
     test('prefers the dedicated sessions file when DR-121 has already split it out', () => {
       const storePath = path.join(storeDirectory, 'dd.json');
-      writeLokiStoreFile(storePath, [{ name: 'Sessions', data: [{ sid: 'stale' }] }]);
+      writeLokiStoreFile(storePath, [
+        { name: LEGACY_SESSIONS_COLLECTION, data: [{ sid: 'stale' }] },
+      ]);
       writeLokiStoreFile(path.join(storeDirectory, LEGACY_SESSIONS_FILE), [
-        { name: 'Sessions', data: [{ sid: 'current' }] },
+        { name: LEGACY_SESSIONS_COLLECTION, data: [{ sid: 'current' }] },
       ]);
 
       expect(resolveLegacySessionDocuments(storeDirectory, readLokiDatabase(storePath))).toEqual([
@@ -138,7 +142,9 @@ describe('store/db/loki-json', () => {
 
     test('falls back to the Sessions collection inside the shared store file', () => {
       const storePath = path.join(storeDirectory, 'dd.json');
-      writeLokiStoreFile(storePath, [{ name: 'Sessions', data: [{ sid: 'shared' }] }]);
+      writeLokiStoreFile(storePath, [
+        { name: LEGACY_SESSIONS_COLLECTION, data: [{ sid: 'shared' }] },
+      ]);
       expect(resolveLegacySessionDocuments(storeDirectory, readLokiDatabase(storePath))).toEqual([
         { sid: 'shared' },
       ]);

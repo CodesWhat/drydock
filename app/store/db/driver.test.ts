@@ -12,8 +12,14 @@ import {
   MEMORY_DATABASE_LOCATION,
   normalizeSqliteError,
   openDatabase,
+  type Row,
+  type SqlBinding,
+  type SqlValue,
+  type Statement,
+  type StatementRunResult,
   StoreConstraintError,
   StoreError,
+  type TransactionMode,
 } from './driver.js';
 
 const { logMock } = vi.hoisted(() => ({
@@ -284,6 +290,23 @@ describe('store/db/driver', () => {
         'deferred',
       );
       expect(db.prepare('SELECT COUNT(*) AS n FROM t').get()).toEqual({ n: 1 });
+    });
+
+    test('exposes the surface the driver contract promises', () => {
+      const db = open(databasePath);
+      db.exec(CREATE_TABLE);
+      const insert: Statement = db.prepare('INSERT INTO t (id, v) VALUES (?, ?)');
+      const bindings: SqlBinding[] = ['a', 1];
+      const inserted: StatementRunResult = insert.run(...bindings);
+      expect(inserted.changes).toBe(1);
+
+      const mode: TransactionMode = 'exclusive';
+      db.transaction(() => insert.run('b', 2), mode);
+
+      const rows: Row[] = db.prepare('SELECT id, v FROM t ORDER BY id').all();
+      const firstId: SqlValue = rows[0].id;
+      expect(firstId).toBe('a');
+      expect(rows).toHaveLength(2);
     });
 
     test('nests through savepoints, so an inner failure does not lose the outer work', () => {

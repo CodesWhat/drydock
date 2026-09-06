@@ -82,7 +82,7 @@ export interface ImportReport {
   rowsByTable: Record<string, number>;
 }
 
-export type FirstStartImportStatus = 'imported' | 'database-exists' | 'no-legacy-store';
+type FirstStartImportStatus = 'imported' | 'database-exists' | 'no-legacy-store';
 
 export interface FirstStartImportResult {
   status: FirstStartImportStatus;
