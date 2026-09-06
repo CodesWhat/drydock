@@ -149,6 +149,16 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     templates: {},
     description: 'When an update held back by the maturity policy becomes applicable',
   },
+  {
+    id: 'update-pending-approval',
+    name: 'Update Pending Approval',
+    enabled: false,
+    triggers: [],
+    bellEnabled: false,
+    bellThreshold: 'all',
+    templates: {},
+    description: 'When a manual-mode update enters the approval queue',
+  },
 ];
 
 const notificationTemplateOverrideSchema = joi

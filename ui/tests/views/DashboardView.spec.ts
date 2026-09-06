@@ -1511,6 +1511,7 @@ describe('DashboardView', () => {
         'security-overview',
         'resource-usage',
         'host-status',
+        'stat-approvals',
       ]);
     });
 

@@ -97,7 +97,8 @@
       "updatesAvailable": "Доступные обновления",
       "updateDetail": "{fresh} новых · {mature} зрелых",
       "securityIssues": "Проблемы безопасности",
-      "registries": "Реестры"
+      "registries": "Реестры",
+      "approvals": "Одобрения"
     },
     "updateKind": {
       "major": "Мажорное",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

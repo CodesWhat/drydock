@@ -58,6 +58,7 @@
         "dashboardFallback": "Panel",
         "containers": "Contenedores",
         "security": "Seguridad",
+        "approvals": "Aprobaciones",
         "audit": "Auditoría",
         "systemLogs": "Registros del sistema",
         "manageGroup": "Gestionar",

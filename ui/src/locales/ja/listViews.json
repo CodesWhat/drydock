@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "成熟度クリア",
         "description": "成熟度ポリシーにより保留されていた更新が適用可能になった場合"
+      },
+      "update-pending-approval": {
+        "name": "更新が承認待ち",
+        "description": "手動モードの更新が承認キューに入ったとき"
       }
     },
     "columns": {

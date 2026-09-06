@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "성숙도 해제됨",
         "description": "성숙도 정책으로 보류된 업데이트가 적용 가능해질 때"
+      },
+      "update-pending-approval": {
+        "name": "업데이트 승인 대기 중",
+        "description": "수동 모드 업데이트가 승인 대기열에 들어갈 때"
       }
     },
     "columns": {

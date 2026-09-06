@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "コンテナ",
         "security": "セキュリティ",
+        "approvals": "承認",
         "audit": "監査",
         "systemLogs": "システムログ",
         "manageGroup": "管理",

@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Reife aufgehoben",
         "description": "Wenn ein durch die Reife-Policy zurückgehaltenes Update anwendbar wird"
+      },
+      "update-pending-approval": {
+        "name": "Update wartet auf Genehmigung",
+        "description": "Wenn ein Update im manuellen Modus in die Genehmigungswarteschlange aufgenommen wird"
       }
     },
     "columns": {
