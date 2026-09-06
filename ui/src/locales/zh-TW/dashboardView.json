@@ -97,7 +97,8 @@
       "updatesAvailable": "可用更新",
       "updateDetail": "{fresh} 新 · {mature} 穩定",
       "securityIssues": "安全風險",
-      "registries": "倉庫"
+      "registries": "倉庫",
+      "approvals": "審批"
     },
     "updateKind": {
       "major": "主要",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

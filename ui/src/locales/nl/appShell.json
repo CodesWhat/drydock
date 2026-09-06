@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "Containers",
         "security": "Beveiliging",
+        "approvals": "Goedkeuringen",
         "audit": "Audit",
         "systemLogs": "Systeemlogs",
         "manageGroup": "Beheren",

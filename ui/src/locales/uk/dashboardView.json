@@ -97,7 +97,8 @@
       "updatesAvailable": "Доступні оновлення",
       "updateDetail": "{fresh} нових · {mature} зрілих",
       "securityIssues": "Проблеми безпеки",
-      "registries": "Реєстри"
+      "registries": "Реєстри",
+      "approvals": "Схвалення"
     },
     "updateKind": {
       "major": "Мажорне",
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

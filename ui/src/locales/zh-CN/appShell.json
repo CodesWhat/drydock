@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "容器",
         "security": "安全",
+        "approvals": "审批",
         "audit": "审计",
         "systemLogs": "系统日志",
         "manageGroup": "管理",

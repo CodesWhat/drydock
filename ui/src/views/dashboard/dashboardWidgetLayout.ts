@@ -62,6 +62,7 @@ export const WIDGET_CONSTRAINTS: Record<DashboardWidgetId, WidgetLayoutConstrain
   'stat-updates': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
   'stat-security': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
   'stat-registries': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
+  'stat-approvals': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
   'recent-updates': { minW: 4, minH: 3, maxW: 12, maxH: 16, defaultW: 8, defaultH: 10 },
   'security-overview': { minW: 3, minH: 3, maxW: 6, maxH: 16, defaultW: 4, defaultH: 10 },
   // minH: 7 → 46*7-16 = 306px, keeping the per-container CPU/Memory lists visible (threshold: 180px)
@@ -75,11 +76,16 @@ const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { i: 'stat-security', x: 3, y: 0, w: 3, h: 3 },
   { i: 'stat-registries', x: 6, y: 0, w: 3, h: 3 },
   { i: 'stat-updates', x: 9, y: 0, w: 3, h: 3 },
-  { i: 'resource-usage', x: 0, y: 3, w: 4, h: 12 },
-  { i: 'security-overview', x: 4, y: 3, w: 4, h: 12 },
-  { i: 'host-status', x: 8, y: 3, w: 4, h: 6 },
-  { i: 'update-breakdown', x: 8, y: 9, w: 4, h: 6 },
-  { i: 'recent-updates', x: 0, y: 15, w: 12, h: 10 },
+  // stat-approvals wraps to its own row: the first 4 stats already fill all
+  // 12 columns of row 0 (4*3=12), so a 5th stat card can't share it. Every
+  // other row shifts down by 3 to make room, keeping recent-updates the
+  // bottommost item.
+  { i: 'stat-approvals', x: 0, y: 3, w: 3, h: 3 },
+  { i: 'resource-usage', x: 0, y: 6, w: 4, h: 12 },
+  { i: 'security-overview', x: 4, y: 6, w: 4, h: 12 },
+  { i: 'host-status', x: 8, y: 6, w: 4, h: 6 },
+  { i: 'update-breakdown', x: 8, y: 12, w: 4, h: 6 },
+  { i: 'recent-updates', x: 0, y: 18, w: 12, h: 10 },
 ];
 
 const DEFAULT_LAYOUT_BY_ID = new Map(DEFAULT_LAYOUT.map((item) => [item.i, item] as const));

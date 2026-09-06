@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Maturità sbloccata",
         "description": "Quando un aggiornamento trattenuto dalla policy di maturità diventa applicabile"
+      },
+      "update-pending-approval": {
+        "name": "Aggiornamento in attesa di approvazione",
+        "description": "Quando un aggiornamento in modalità manuale entra nella coda di approvazione"
       }
     },
     "columns": {

@@ -1,0 +1,77 @@
+{
+  "approvalsView": {
+    "ofCount": "{count} shown",
+    "refresh": "Refresh",
+    "loading": "Loading approvals…",
+    "loadError": "Failed to load approvals",
+    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "tabs": {
+      "pending": "Pending",
+      "deferred": "Deferred",
+      "decided": "Decided"
+    },
+    "columns": {
+      "container": "Container",
+      "image": "Image",
+      "version": "Version",
+      "scan": "Scan",
+      "age": "Age"
+    },
+    "semver": {
+      "major": "Major",
+      "minor": "Minor",
+      "patch": "Patch",
+      "prerelease": "Prerelease",
+      "unknown": "Unknown"
+    },
+    "actions": {
+      "notesAriaLabel": "Show release notes and hold reasons",
+      "approve": "Approve",
+      "approveAriaLabel": "Approve update",
+      "approveDisabledNotify": "Update mode is notify; approve is disabled",
+      "reject": "Reject",
+      "rejectAriaLabel": "Reject update",
+      "defer": "Defer",
+      "deferAriaLabel": "Defer update"
+    },
+    "detail": {
+      "loading": "Loading details…",
+      "holdReasons": "Hold reasons",
+      "viewFullNotes": "View full notes",
+      "empty": "No release notes or hold reasons for this update"
+    },
+    "empty": {
+      "pending": "No pending approvals",
+      "deferred": "No deferred approvals",
+      "decided": "No decided approvals yet",
+      "all": "No approvals"
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "approve": {
+        "header": "Approve update",
+        "message": "Approve updating {name} to {toRef}?",
+        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
+        "acceptLabel": "Approve"
+      },
+      "reject": {
+        "header": "Reject update",
+        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
+        "acceptLabel": "Reject"
+      },
+      "defer": {
+        "header": "Defer update",
+        "message": "Defer the update for {name} for {days} days?",
+        "acceptLabel": "Defer"
+      }
+    },
+    "toast": {
+      "approved": "Approve requested for {name}",
+      "approveFailed": "Failed to approve {name}",
+      "rejected": "Rejected update for {name}",
+      "rejectFailed": "Failed to reject {name}",
+      "deferred": "Deferred update for {name}",
+      "deferFailed": "Failed to defer {name}"
+    }
+  }
+}

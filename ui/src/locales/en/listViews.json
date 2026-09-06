@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Maturity Cleared",
         "description": "When an update held back by the maturity policy becomes applicable"
+      },
+      "update-pending-approval": {
+        "name": "Update Pending Approval",
+        "description": "When a manual-mode update enters the approval queue"
       }
     },
     "columns": {

@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Maturidade liberada",
         "description": "Quando uma atualização retida pela policy de maturidade se torna aplicável"
+      },
+      "update-pending-approval": {
+        "name": "Atualização pendente de aprovação",
+        "description": "Quando uma atualização no modo manual entra na fila de aprovação"
       }
     },
     "columns": {

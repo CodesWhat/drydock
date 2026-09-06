@@ -58,6 +58,7 @@
         "dashboardFallback": "Dashboard",
         "containers": "Konteynerler",
         "security": "Güvenlik",
+        "approvals": "Onaylar",
         "audit": "Denetim",
         "systemLogs": "Sistem günlükleri",
         "manageGroup": "Yönet",

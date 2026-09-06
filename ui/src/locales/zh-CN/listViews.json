@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "成熟度已清除",
         "description": "当被成熟度策略搁置的更新变为可用时"
+      },
+      "update-pending-approval": {
+        "name": "更新待审批",
+        "description": "当手动模式的更新进入审批队列时"
       }
     },
     "columns": {

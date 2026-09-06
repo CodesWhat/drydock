@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Madurez liberada",
         "description": "Cuando una actualización retenida por la política de madurez se vuelve aplicable"
+      },
+      "update-pending-approval": {
+        "name": "Actualización pendiente de aprobación",
+        "description": "Cuando una actualización en modo manual entra en la cola de aprobación"
       }
     },
     "columns": {

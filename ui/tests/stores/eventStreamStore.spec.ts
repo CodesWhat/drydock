@@ -320,6 +320,110 @@ describe('SSE event listener: dd:preferences-updated', () => {
   });
 });
 
+describe('SSE event listener: approval events', () => {
+  let originalEventSource: typeof EventSource;
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    MockEventSource.instances = [];
+    originalEventSource = globalThis.EventSource;
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+  afterEach(() => {
+    globalThis.EventSource = originalEventSource;
+  });
+
+  const validPayload = JSON.stringify({
+    id: 'approval-1',
+    containerId: 'container-1',
+    containerName: 'app',
+    decision: 'pending',
+    pendingCount: 3,
+  });
+
+  it.each([
+    ['dd:approval-created', 'approval-created'],
+    ['dd:approval-decided', 'approval-decided'],
+    ['dd:approval-resolved', 'approval-resolved'],
+  ])('maps %s to the %s bus event with the parsed payload', (wireName, busName) => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === wireName,
+    );
+    expect(call).toBeDefined();
+    call![1]({ data: validPayload, lastEventId: 'boot:9' });
+    expect(bus.emit).toHaveBeenCalledWith(busName, {
+      id: 'approval-1',
+      containerId: 'container-1',
+      containerName: 'app',
+      decision: 'pending',
+      pendingCount: 3,
+    });
+    expect(store.recentEvents.at(-1)).toMatchObject({ id: 'boot:9', event: busName });
+  });
+
+  it.each([
+    ['dd:approval-created', 'approval-created'],
+    ['dd:approval-decided', 'approval-decided'],
+    ['dd:approval-resolved', 'approval-resolved'],
+  ])('drops a malformed %s payload to undefined', (wireName, busName) => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === wireName,
+    );
+    call![1]({ data: '{"id":"only-id"}', lastEventId: '' });
+    expect(bus.emit).toHaveBeenCalledWith(busName, undefined);
+  });
+
+  it.each([
+    ['dd:approval-created', 'approval-created'],
+    ['dd:approval-decided', 'approval-decided'],
+    ['dd:approval-resolved', 'approval-resolved'],
+  ])('drops a non-object %s payload', (wireName, busName) => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === wireName,
+    );
+    call![1]({ data: 'null', lastEventId: '' });
+    expect(bus.emit).toHaveBeenCalledWith(busName, undefined);
+  });
+
+  it.each([
+    ['dd:approval-created', 'approval-created'],
+    ['dd:approval-decided', 'approval-decided'],
+    ['dd:approval-resolved', 'approval-resolved'],
+  ])('drops an unparsable %s payload', (wireName, busName) => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === wireName,
+    );
+    call![1]({ data: 'not json', lastEventId: '' });
+    expect(bus.emit).toHaveBeenCalledWith(busName, undefined);
+  });
+
+  it.each([
+    ['dd:approval-created', 'approval-created'],
+    ['dd:approval-decided', 'approval-decided'],
+    ['dd:approval-resolved', 'approval-resolved'],
+  ])('drops a %s payload with no data', (wireName, busName) => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === wireName,
+    );
+    call![1]({ data: undefined, lastEventId: '' });
+    expect(bus.emit).toHaveBeenCalledWith(busName, undefined);
+  });
+});
+
 describe('SSE reconnect backoff', () => {
   let originalEventSource: typeof EventSource;
   let setTimeoutSpy: ReturnType<typeof vi.spyOn>;

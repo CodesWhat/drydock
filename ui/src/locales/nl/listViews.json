@@ -118,6 +118,10 @@
       "maturity-cleared": {
         "name": "Volwassenheid gewist",
         "description": "Wanneer een update die is tegengehouden door het volwassenheidsbeleid van toepassing wordt"
+      },
+      "update-pending-approval": {
+        "name": "Update wacht op goedkeuring",
+        "description": "Wanneer een update in handmatige modus de goedkeuringswachtrij binnenkomt"
       }
     },
     "columns": {
