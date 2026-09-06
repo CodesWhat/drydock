@@ -448,7 +448,12 @@ function pruneOrphanedAgentContainers() {
   });
 
   orphanedAgentContainers.forEach((container) => {
-    storeContainer.deleteContainer(container.id);
+    // DR-115: the agent that owned this record was removed from config or renamed,
+    // not shut down, so the same physical container is likely to reappear under a
+    // different agent name or back on the controller's own watcher. The Docker id
+    // is what survives that hand-off, so stash the update policy under it the same
+    // way DR-112's identity-change path does.
+    storeContainer.deleteContainer(container.id, { identityChangeExpected: true });
   });
 
   if (orphanedAgentContainers.length > 0) {

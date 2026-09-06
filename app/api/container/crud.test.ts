@@ -3319,7 +3319,38 @@ describe('api/container/crud', () => {
         limit: 0,
         offset: 0,
         hasMore: false,
+        coalesced: false,
       });
+    });
+
+    // DR-60: the bulk watch-all branch routes through watchFromCron() for a
+    // cron-capable watcher instead of calling watch() directly, and reports whether
+    // any of them coalesced into an already-running scan.
+    test('watchContainers routes a cron-capable watcher through watchFromCron and reports coalesced', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const plainWatch = vi.fn();
+      const watchFromCron = vi.fn().mockResolvedValue(undefined);
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': {
+          watch: plainWatch,
+          watchContainer: vi.fn(),
+          watchFromCron,
+          cronWatchInFlight: Promise.resolve([]),
+        },
+      });
+
+      const res = await callWatchContainers(harness.handlers, { query: { watcher: 'local' } });
+
+      expect(plainWatch).not.toHaveBeenCalled();
+      expect(watchFromCron).toHaveBeenCalledWith({ ignoreMaintenanceWindow: true, reason: 'api' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coalesced: true,
+        }),
+      );
     });
 
     test('watchContainers returns 500 when any watcher fails', async () => {
@@ -3493,6 +3524,7 @@ describe('api/container/crud', () => {
         limit: 0,
         offset: 0,
         hasMore: false,
+        coalesced: false,
       });
     });
 

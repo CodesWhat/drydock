@@ -128,8 +128,13 @@ export const openApiSchemas = {
         type: 'object',
         properties: {
           watchers: { type: 'integer', minimum: 0 },
+          coalesced: {
+            type: 'boolean',
+            description:
+              "True when at least one watcher scan landed while a scan was already in flight (cron, another manual request, ...) and was coalesced into that scan's single follow-up rather than starting an independent one.",
+          },
         },
-        required: ['watchers'],
+        required: ['watchers', 'coalesced'],
         additionalProperties: false,
       },
     },

@@ -28,8 +28,9 @@ afterEach(() => {
 });
 
 test('authenticate should return user from session if so', async () => {
-  oidcStrategy.authenticate({ isAuthenticated: () => true });
-  expect(oidcStrategy.success).toHaveBeenCalled();
+  const user = { username: 'alice' };
+  oidcStrategy.authenticate({ isAuthenticated: () => true, user });
+  expect(oidcStrategy.success).toHaveBeenCalledWith(user);
 });
 
 test('authenticate should debug and fail when no authorization header is provided', async () => {
