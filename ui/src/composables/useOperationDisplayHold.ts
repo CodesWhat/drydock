@@ -409,10 +409,11 @@ function reconcileHoldsAgainstContainers(
 
   const currentNow = now ?? Date.now();
 
-  // Hoisted out of the container-matching work below: a hold still deep in its
-  // active window (more than OPERATION_DISPLAY_HOLD_MS from displayUntil) can't
-  // be reconciled this pass regardless of what the containers say, so an
-  // all-ineligible set returns before the containers array is even touched.
+  // Hoisted out of the container-matching work below: only a hold still deep in
+  // its active window (more than OPERATION_DISPLAY_HOLD_MS from displayUntil) is
+  // reconciled this pass. A hold already inside its settle window needs no work
+  // regardless of what the containers say, so an all-ineligible set returns
+  // before the containers array is even touched.
   const eligibleHolds: [string, OperationDisplayHoldRecord][] = [];
   for (const entry of heldOperations.value.entries()) {
     const [, hold] = entry;
