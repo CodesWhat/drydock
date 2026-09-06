@@ -287,14 +287,31 @@ describe('DR-121 session store owns its own file', () => {
     stopSessionStore(legacySessionStore);
     expect(readPersistedCollections(mainStoreFile).Sessions).toBeDefined();
 
-    // A restart on the fixed code drops the stale collection from the main store.
+    // A restart on the fixed code drops the stale collection from the main
+    // store and persists the removal during init() itself — no explicit
+    // save() call here, so this is durable even on a store that never
+    // writes again.
     vi.resetModules();
     const restartedStore = await import('./index.js');
     const restartedContainer = await import('./container.js');
     await restartedStore.init();
     expect(restartedContainer.getContainerRaw('seed')).toBeDefined();
-    await restartedStore.save();
 
     expect(readPersistedCollections(mainStoreFile).Sessions).toBeUndefined();
+  });
+
+  test('init() does not persist a save when there is no legacy Sessions collection to drop', async () => {
+    setStoreEnv(tempDir);
+    vi.resetModules();
+    const store = await import('./index.js');
+
+    // LokiFsAdapter.saveDatabase() (lokijs.js:2435-2445) writes through
+    // fs.writeFile before renaming into place, so a call here is the
+    // observable signature of a save actually happening.
+    const writeFileSpy = vi.spyOn(fs, 'writeFile');
+    await store.init();
+
+    expect(writeFileSpy).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 });
