@@ -31,3 +31,29 @@ export function createTemporaryStoreDirectory(): string {
 export function removeTemporaryStoreDirectory(directoryPath: string): void {
   fs.rmSync(directoryPath, { recursive: true, force: true });
 }
+
+/** Serialise a LokiJS database file the way LokiJS itself would. */
+export function writeLokiStoreFile(
+  filePath: string,
+  collections: { name: string; data: Record<string, unknown>[] }[],
+): void {
+  const serialized = {
+    filename: filePath,
+    collections: collections.map((collection, collectionIndex) => ({
+      name: collection.name,
+      data: collection.data.map((document, documentIndex) => ({
+        ...document,
+        meta: { revision: 0, created: 0, version: 0 },
+        $loki: collectionIndex * 1000 + documentIndex + 1,
+      })),
+      idIndex: null,
+      binaryIndices: {},
+      transactional: false,
+      cloneObjects: false,
+      disableChangesApi: true,
+    })),
+    databaseVersion: 1.5,
+    engineVersion: 1.5,
+  };
+  fs.writeFileSync(filePath, JSON.stringify(serialized), 'utf8');
+}
