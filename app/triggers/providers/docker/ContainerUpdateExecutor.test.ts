@@ -745,6 +745,46 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('reconcile still marks recovered-active when the active image is the recorded target pinned to a digest', async () => {
+    // `bindPulledImageIdentity` pins the replacement container to
+    // `repo:tag@sha256:...`, but the operation's `targetImage` stays
+    // unpinned (it is a documented API field). Without `newContainerId` to
+    // identify the replacement by id, the comparison must still treat the
+    // pinned form as a match rather than a foreign recreate.
+    const pending = {
+      id: 'op-pinned-match',
+      oldContainerId: 'old-container-id',
+      newContainerId: undefined,
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'app:2.0',
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({
+        container: {},
+        inspection: {
+          Id: 'some-container-id',
+          Config: { Image: `app:2.0@sha256:${'a'.repeat(64)}` },
+        },
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-pinned-match',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-active',
+      }),
+    );
+  });
+
   test('reconcile still marks recovered-active when no target image was recorded to check against', async () => {
     const pending = {
       id: 'op-no-target-image',

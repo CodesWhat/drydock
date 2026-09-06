@@ -79,6 +79,21 @@ type ContainerForUpdate = {
   [key: string]: unknown;
 };
 
+/**
+ * Drop a `@sha256:...` digest suffix so a pinned reference
+ * (`app:2.0@sha256:...`) and its unpinned form (`app:2.0`) compare equal.
+ * The operation's `targetImage` is deliberately recorded unpinned — it is a
+ * documented API field (`content/docs/current/api/container.mdx`) whose
+ * example shows a plain `repo:tag` — but `bindPulledImageIdentity` pins the
+ * replacement container's actual image to a digest, so the container found
+ * running under the original name reports the pinned form. Comparing the raw
+ * strings would treat the executor's own replacement as foreign whenever
+ * `getContainerIdBestEffort()` failed to capture `newContainerId`.
+ */
+function withoutImageDigest(imageReference: string): string {
+  return imageReference.split('@')[0];
+}
+
 function getContainerIdentityFilter(
   container: ContainerForUpdate,
 ): ContainerIdentityFilter | undefined {
@@ -595,7 +610,8 @@ class ContainerUpdateExecutor {
       !isPersistedReplacement &&
       pending.targetImage !== undefined &&
       activeContainerImage !== undefined &&
-      activeContainerImage !== pending.targetImage;
+      activeContainerImage !== pending.targetImage &&
+      withoutImageDigest(activeContainerImage) !== withoutImageDigest(pending.targetImage);
 
     if (imageMismatch) {
       updateOperationStore.markOperationTerminal(pending.id, {
