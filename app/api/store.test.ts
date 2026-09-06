@@ -14,6 +14,7 @@ vi.mock('../store', () => ({
   getConfiguration: vi.fn(() => ({
     path: '/test/store',
     file: 'db.json',
+    dbFile: 'db.sqlite',
   })),
 }));
 
@@ -48,7 +49,26 @@ describe('Store Router', () => {
       configuration: {
         path: '/test/store',
         file: 'db.json',
+        dbFile: 'db.sqlite',
       },
+    });
+  });
+
+  // `dbFile` (roadmap 7-STORE, slice 2) is additive: `file` and `path` keep
+  // meaning exactly what they mean today, and the frozen `/api/v1` response
+  // shape gains a field rather than changing one (spec section 6, slice 2).
+  test('should surface dbFile alongside the unchanged path and file fields', () => {
+    storeRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    const res = createResponse();
+    handler({}, res);
+
+    const [responseBody] = res.json.mock.calls[0];
+    expect(responseBody.configuration).toMatchObject({
+      path: '/test/store',
+      file: 'db.json',
+      dbFile: 'db.sqlite',
     });
   });
 });

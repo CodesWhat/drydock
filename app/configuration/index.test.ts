@@ -24,6 +24,9 @@ afterEach(() => {
   delete configuration.ddEnvVars.DD_AGENT_ALLOW_INSECURE_SECRET;
   delete configuration.ddEnvVars.DD_AGENT_SWARM01_HOST;
   delete configuration.ddEnvVars.DD_AGENT_SWARM01_SECRET;
+  delete configuration.ddEnvVars.DD_STORE_X;
+  delete configuration.ddEnvVars.DD_STORE_Y;
+  delete configuration.ddEnvVars.DD_STORE_DB_FILE;
 });
 
 test('getVersion should return dd version', async () => {
@@ -511,6 +514,23 @@ test('getStoreConfiguration should return configured store', async () => {
     x: 'x',
     y: 'y',
   });
+});
+
+test('getStoreConfiguration should map DD_STORE_DB_FILE to a flat dbFile field', async () => {
+  configuration.ddEnvVars.DD_STORE_DB_FILE = 'custom.sqlite';
+  expect(configuration.getStoreConfiguration()).toStrictEqual({
+    dbFile: 'custom.sqlite',
+  });
+});
+
+test('getStoreConfiguration should trim DD_STORE_DB_FILE and omit it when blank', async () => {
+  configuration.ddEnvVars.DD_STORE_DB_FILE = '  padded.sqlite  ';
+  expect(configuration.getStoreConfiguration()).toStrictEqual({
+    dbFile: 'padded.sqlite',
+  });
+
+  configuration.ddEnvVars.DD_STORE_DB_FILE = '   ';
+  expect(configuration.getStoreConfiguration()).toStrictEqual({});
 });
 
 test('getServerConfiguration should return configured api (new vars)', async () => {

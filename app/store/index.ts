@@ -6,6 +6,8 @@ import logger from '../log/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runtime/paths.js';
 import { migrateInlineSboms } from '../security/sbom-migration.js';
 import { createSbomStorage } from '../security/sbom-storage.js';
+import { type Database, MEMORY_DATABASE_LOCATION, openDatabase } from './db/driver.js';
+import { migrate } from './db/migrations.js';
 
 const log = logger.child({ component: 'store' });
 
@@ -33,6 +35,7 @@ import * as updatePolicyRetentionCacheStore from './update-policy-retention-cach
 const configurationSchema = joi.object().keys({
   path: joi.string().default('/store'),
   file: joi.string().default('dd.json'),
+  dbFile: joi.string().default('dd.sqlite'),
 });
 
 // Validate Configuration
@@ -45,11 +48,18 @@ const configuration = configurationToValidate.value;
 // Loki DB
 type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
+// The SQLite database opened alongside Loki (roadmap 7-STORE, slice 2).
+// Nothing reads from it yet: it exists so its schema is present from the
+// first start a later slice moves a collection onto it.
+let sqliteDb: Database | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
+let dbPathResolved: string | undefined;
 let storeDirectoryResolved: string | undefined;
 const STORE_DIRECTORY_MODE = 0o700;
 const STORE_FILE_MODE = 0o600;
+/** WAL adds these two sidecars alongside the database file itself. */
+const SQLITE_SIDECAR_SUFFIXES = ['', '-wal', '-shm'] as const;
 
 // Permission tightening is hardening, not a functional requirement: some
 // volume mounts (NFS/CIFS, non-root containers, certain volume drivers)
@@ -91,6 +101,43 @@ function enforceStorePermissions(storeDirectory: string, storePath: string): voi
       `Could not tighten permissions on store file (${storePath}): ${code}; continuing without enforced permissions`,
     );
   }
+}
+
+/**
+ * Apply the same 0600 contract `enforceStorePermissions` applies to `dd.json`
+ * to `dd.sqlite` and its `-wal`/`-shm` sidecars. The sidecars come and go
+ * with the journal mode — a rollback-journal fallback never creates them,
+ * and a WAL checkpoint truncates but does not delete `-wal` — so a missing
+ * one is tolerated exactly like a not-yet-written `dd.json`.
+ */
+function enforceSqliteFilePermissions(databasePath: string): void {
+  for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
+    const target = `${databasePath}${suffix}`;
+    try {
+      fs.chmodSync(target, STORE_FILE_MODE);
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        continue;
+      }
+      if (!code || !RECOVERABLE_CHMOD_ERROR_CODES.has(code)) {
+        throw error;
+      }
+      log.warn(
+        `Could not tighten permissions on store database file (${target}): ${code}; continuing without enforced permissions`,
+      );
+    }
+  }
+}
+
+/**
+ * Flush the SQLite WAL into `dd.sqlite` itself. Under `synchronous = NORMAL`
+ * a committed transaction lives in the WAL without being guaranteed fsynced,
+ * so this runs everywhere Loki's `saveDatabase` already runs, preserving the
+ * same durability contract Loki's autosave gave `dd.json`.
+ */
+function checkpointSqliteDatabase(): void {
+  sqliteDb?.pragma('wal_checkpoint', 'TRUNCATE');
 }
 
 // DR-121: express-session's connect-loki store used to share this database's
@@ -235,7 +282,11 @@ export async function init(options: { memory?: boolean } = {}) {
   const storePath = resolveConfiguredPathWithinBase(storeDirectory, configuration.file, {
     label: 'DD_STORE_FILE',
   });
+  const dbPath = resolveConfiguredPathWithinBase(storeDirectory, configuration.dbFile, {
+    label: 'DD_STORE_DB_FILE',
+  });
   storePathResolved = storePath;
+  dbPathResolved = dbPath;
   storeDirectoryResolved = storeDirectory;
   if (storePath === storeDirectory) {
     throw new Error('DD_STORE_FILE must reference a file path, not a directory');
@@ -244,6 +295,7 @@ export async function init(options: { memory?: boolean } = {}) {
   if (!isMemoryMode) {
     // Loki saves through temporary files during both explicit and background autosaves.
     // A restrictive process umask keeps every replacement file owner-readable only.
+    // SQLite creates its `-wal` and `-shm` sidecars under the same umask.
     process.umask(0o077);
   }
 
@@ -254,6 +306,8 @@ export async function init(options: { memory?: boolean } = {}) {
 
   if (isMemoryMode) {
     log.info('Init store in memory mode');
+    sqliteDb = openDatabase(MEMORY_DATABASE_LOCATION);
+    migrate(sqliteDb);
     createCollections();
     loadAuthorizedKeysIfConfigured();
     return;
@@ -271,7 +325,14 @@ export async function init(options: { memory?: boolean } = {}) {
     log.info(`Create folder ${storeDirectory}`);
     fs.mkdirSync(storeDirectory, { mode: STORE_DIRECTORY_MODE });
   }
+
+  // Nothing reads from this yet (roadmap 7-STORE, slice 2): opening it here
+  // and running the slice 1 migrations only brings the schema into
+  // existence, so it is present from a fresh install onward.
+  sqliteDb = openDatabase(dbPath);
+  migrate(sqliteDb);
   enforceStorePermissions(storeDirectory, storePath);
+  enforceSqliteFilePermissions(dbPath);
   return new Promise<void>((resolve, reject) => {
     db.loadDatabase({}, (err) => {
       void loadDb(err, resolve, reject).catch(reject);
@@ -280,7 +341,7 @@ export async function init(options: { memory?: boolean } = {}) {
 }
 
 export function isMemoryStore(): boolean {
-  return isMemoryMode || !db;
+  return isMemoryMode || !db || !sqliteDb;
 }
 
 /**
@@ -298,9 +359,12 @@ export async function save() {
         reject(err);
       } else {
         try {
+          checkpointSqliteDatabase();
           // A persistent db and its resolved path/directory are initialized together in init().
           const persistentStorePath = storePathResolved as string;
           const persistentStoreDirectory = storeDirectoryResolved as string;
+          const persistentDbPath = dbPathResolved as string;
+          enforceSqliteFilePermissions(persistentDbPath);
           enforceStorePermissions(persistentStoreDirectory, persistentStorePath);
           resolve();
         } catch (permissionError) {
@@ -347,6 +411,8 @@ export interface StoreDebugCollectionStats {
 export interface StoreDebugSnapshot {
   memoryMode: boolean;
   path?: string;
+  /** The SQLite database opened alongside `path` (roadmap 7-STORE, slice 2). Nothing reads from it yet. */
+  sqlitePath?: string;
   collectionCount: number;
   documentCount: number;
   serializedBytes: number;
@@ -409,6 +475,7 @@ export function getDebugSnapshot(): StoreDebugSnapshot {
   return {
     memoryMode: isMemoryMode,
     path: storePathResolved,
+    sqlitePath: dbPathResolved,
     collectionCount: collectionStats.length,
     documentCount,
     serializedBytes,

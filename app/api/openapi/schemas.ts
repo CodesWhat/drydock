@@ -284,6 +284,7 @@ export const openApiSchemas = {
         properties: {
           path: { type: 'string' },
           file: { type: 'string' },
+          dbFile: { type: 'string' },
         },
         required: ['path', 'file'],
         additionalProperties: true,
