@@ -331,20 +331,6 @@ function isComposeRollbackRecordFor(
   );
 }
 
-function collectComposeOperationIds(
-  mappings: ComposeRuntimeUpdateMapping[],
-  runtimeContext: Record<string, unknown> | undefined,
-): Set<string> {
-  const operationIds = new Set<string>();
-  for (const { container } of mappings) {
-    const operationId = getRequestedOperationId(container, runtimeContext);
-    if (operationId) {
-      operationIds.add(operationId);
-    }
-  }
-  return operationIds;
-}
-
 /**
  * Re-order `mappingsNeedingRuntimeUpdate` into dependency-graph topological
  * order before `runRuntimeUpdatesForComposeMappings`'s sequential loop
@@ -2368,20 +2354,44 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return false;
   }
 
+  /**
+   * Terminalize every operation caught up in a compose-file-once preflight
+   * failure. An API-requested update already has an operation row —
+   * request-update.ts pre-creates it, with an id this can look up via
+   * `getRequestedOperationId` — but a scheduled (cron-driven) auto-update
+   * never went through that path, so it has neither a row nor an id to find
+   * one with. Without inserting a row for it here, `markOperationTerminal`
+   * has nothing to terminalize and the failed lifecycle event never fires
+   * for it, leaving only the audit record the preflight itself wrote (DR-36).
+   */
   private terminalizeComposeFileOncePreflightOperations(
     mappings: ComposeRuntimeUpdateMapping[],
     runtimeContext: Record<string, unknown> | undefined,
     error: unknown,
   ): void {
-    for (const operationId of collectComposeOperationIds(mappings, runtimeContext)) {
-      const operation = updateOperationStore.getOperationById(operationId);
-      if (operation?.status === 'queued' || operation?.status === 'in-progress') {
-        updateOperationStore.markOperationTerminal(operationId, {
-          status: 'failed',
-          phase: 'failed',
-          lastError: getErrorMessage(error),
-        });
+    const lastError = getErrorMessage(error);
+    for (const { container, service } of mappings) {
+      const requestedOperationId = getRequestedOperationId(container, runtimeContext);
+
+      if (requestedOperationId) {
+        const operation = updateOperationStore.getOperationById(requestedOperationId);
+        if (operation?.status !== 'queued' && operation?.status !== 'in-progress') {
+          continue;
+        }
       }
+
+      const operationId =
+        requestedOperationId ??
+        updateOperationStore.insertOperation({
+          containerName: container.name ?? service,
+          containerId: typeof container.id === 'string' ? container.id : undefined,
+        }).id;
+
+      updateOperationStore.markOperationTerminal(operationId, {
+        status: 'failed',
+        phase: 'failed',
+        lastError,
+      });
     }
   }
 

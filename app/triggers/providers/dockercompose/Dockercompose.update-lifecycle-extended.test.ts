@@ -2342,6 +2342,117 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('a scheduled compose-file-once preflight block inserts and terminalizes an operation so the failed lifecycle event fires (DR-36)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const insertedOperation = { id: 'scheduled-op-1', status: 'in-progress' } as any;
+    const getOperationByIdSpy = vi
+      .spyOn(updateOperationStore, 'getOperationById')
+      .mockReturnValue(undefined);
+    const insertOperationSpy = vi
+      .spyOn(updateOperationStore, 'insertOperation')
+      .mockReturnValue(insertedOperation);
+    const markOperationTerminalSpy = vi
+      .spyOn(updateOperationStore, 'markOperationTerminal')
+      .mockReturnValue(undefined);
+    const scheduledContainer = makeContainer({
+      id: 'container-scheduled',
+      name: 'nginx-scheduled',
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue(new Error('scan blocked'));
+
+    // No requested-operation-id runtime context at all: a scheduled (cron-driven)
+    // auto-update never went through request-update.ts, so it has no pre-created
+    // operation row and no operationIds map to look one up in.
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {} }),
+        [],
+        [{ service: 'nginx', container: scheduledContainer }],
+        undefined,
+      ),
+    ).rejects.toThrow('scan blocked');
+
+    // getOperationById is never consulted for a container with no requested
+    // operation id — there is nothing pre-existing to look up.
+    expect(getOperationByIdSpy).not.toHaveBeenCalled();
+    expect(insertOperationSpy).toHaveBeenCalledTimes(1);
+    expect(insertOperationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: 'nginx-scheduled',
+        containerId: 'container-scheduled',
+      }),
+    );
+    expect(markOperationTerminalSpy).toHaveBeenCalledTimes(1);
+    expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+      'scheduled-op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'scan blocked',
+      }),
+    );
+  });
+
+  test('an API-requested compose-file-once preflight block still terminalizes exactly once, not twice (DR-36)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    // Stateful, like the real store: `runComposeFileOncePostPullGate`'s own
+    // catch terminalizes the operation first (it always had the requested id
+    // to hand), so by the time `terminalizeComposeFileOncePreflightOperations`
+    // reaches it the status guard must see it as already terminal and skip it
+    // — otherwise the same failure fires the lifecycle event twice.
+    const operationStatuses = new Map([['op-requested', 'in-progress']]);
+    const insertOperationSpy = vi.spyOn(updateOperationStore, 'insertOperation');
+    vi.spyOn(updateOperationStore, 'getOperationById').mockImplementation((id) => {
+      const status = operationStatuses.get(id);
+      return status ? ({ id, status } as any) : undefined;
+    });
+    const markOperationTerminalSpy = vi
+      .spyOn(updateOperationStore, 'markOperationTerminal')
+      .mockImplementation((id) => {
+        operationStatuses.set(id, 'failed');
+        return { id, status: 'failed' } as any;
+      });
+    const requestedContainer = makeContainer({
+      id: 'container-requested',
+      name: 'nginx-requested',
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue(new Error('scan blocked'));
+
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {} }),
+        [],
+        [{ service: 'nginx', container: requestedContainer }],
+        { operationIds: new Map([['container-requested', 'op-requested']]) },
+      ),
+    ).rejects.toThrow('scan blocked');
+
+    // A pre-created operation row already exists for the requested id, so no
+    // new one is inserted, and the existing row terminalizes exactly once.
+    expect(insertOperationSpy).not.toHaveBeenCalled();
+    expect(markOperationTerminalSpy).toHaveBeenCalledTimes(1);
+    expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+      'op-requested',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'scan blocked',
+      }),
+    );
+  });
+
   test('processComposeFile should leave the compose file and its backup untouched when a post-pull hook rejects', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
