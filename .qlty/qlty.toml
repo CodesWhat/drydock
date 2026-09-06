@@ -123,6 +123,15 @@ name = "yamllint"
 file_patterns = ["ui/src/locales/**"]
 plugins = ["checkov"]
 
+# checkov CKV_SECRET_6 also fires on the "sessionSecret" key in the v1.7 store
+# snapshot under app/store/fixtures/, which the first-start import tests read.
+# The value is a plain placeholder string, not a credential; the fixture exists
+# so the importer is exercised against a real dd.json shape. Same reasoning as
+# the locale exclusion above; gitleaks and trufflehog still scan the fixtures.
+[[exclude]]
+file_patterns = ["app/store/fixtures/**"]
+plugins = ["checkov"]
+
 # markdownlint table style is low-signal for this repository's docs format
 [[triage]]
 match.rules = ["markdownlint:MD060"]
