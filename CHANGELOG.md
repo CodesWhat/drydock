@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.12] — 2026-09-06
+
 ### Fixed
 
 - **The demo site did not send `Cross-Origin-Opener-Policy`, so the weekly DAST scan failed on ZAP rule 90004 every run.** `apps/demo/vercel.json` now sends `same-origin` next to the existing `Cross-Origin-Embedder-Policy` header.
@@ -2722,7 +2724,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.11...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...HEAD
+[1.7.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.11...v1.7.0-rc.12
 [1.7.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...v1.7.0-rc.11
 [1.7.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...v1.7.0-rc.10
 [1.7.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.8...v1.7.0-rc.9

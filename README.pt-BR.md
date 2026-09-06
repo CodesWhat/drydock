@@ -219,6 +219,21 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.12</strong></summary>
+
+- **O site de demonstração não enviava `Cross-Origin-Opener-Policy`, então a varredura DAST semanal falhava na regra 90004 do ZAP em toda execução.** `apps/demo/vercel.json` agora envia `same-origin` ao lado do cabeçalho `Cross-Origin-Embedder-Policy` já existente. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **A etapa arm64 da verificação de arquitetura de imagem do release falhava em todo corte multiplataforma com `docker: cannot overwrite digest`.** `scripts/check-image-arch.sh` agora resolve o digest de manifesto próprio de cada plataforma a partir do índice multiarquitetura antes de sondá-lo, em vez de reutilizar a mesma referência de digest de índice sob a qual o armazenamento de imagens clássico do docker não consegue manter duas variantes de plataforma. ([#1046](https://github.com/CodesWhat/drydock/pull/1046))
+- **Mover um contêiner para outro agente, ou remover um agente da configuração, não reseta mais seu snooze, modo de maturidade e tags ignoradas.** A poda ao remover um agente e a própria poda de contêineres obsoletos do agente agora também passam `identityChangeExpected: true` e guardam a política de atualização do registro que está saindo sob seu id do Docker, do mesmo jeito que a poda de inicialização já fazia. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Um "verificar agora" manual que chegava enquanto uma varredura já estava em execução podia disparar a mesma notificação duas vezes.** O painel, a API, um webhook e o controlador consultando um agente agora passam todos pela mesma orquestração de varredura single-flight que o agendamento cron usa, de modo que uma chamada sobreposta é incorporada ao único acompanhamento da varredura em andamento (`result.coalesced` no corpo JSON, um cabeçalho `X-Drydock-Watch-Coalesced` no endpoint do agente) em vez de iniciar uma varredura independente própria. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Uma reserva `once=true` cujo gatilho nunca respondeu manteve sua chave de deduplicação pelo tempo de vida do processo.** Um handler que ultrapassava seu limite de 30 segundos mantinha sua reserva além da varredura que a havia tomado, ignorando silenciosamente todo envio posterior para aquele resultado; cada reserva agora expira em seu próprio temporizador e registra um aviso nomeando a chave se ninguém a liberou antes. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **DR-121: o armazenamento de sessões e o armazenamento principal escreviam no mesmo `/store/dd.json`, e quem salvasse por último apagava os dados do outro.** O armazenamento de sessões agora escreve em seu próprio arquivo irmão, `dd-sessions.json` por padrão, e o armazenamento principal descarta uma coleção `Sessions` obsoleta deixada por uma build antiga em vez de continuar salvando-a. ([#1063](https://github.com/CodesWhat/drydock/pull/1063))
+- **O exemplo pareado de registry do Gitea na página de agentes fazia o controlador falar HTTPS com um agente servindo HTTP simples.** O bloco do agente agora monta seu próprio certificado e define `DD_SERVER_TLS_ENABLED`, de modo que o exemplo conecta como está escrito. ([#1042](https://github.com/CodesWhat/drydock/pull/1042))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc12--2026-09-06).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.11</strong></summary>
 
 - **O login OIDC não volta mais para a página de login depois do redirecionamento do provedor de identidade.** O fallback de navegação do service worker antes respondia a toda navegação de documento a partir do app shell em cache, exceto `/api/`, então o callback do OIDC nunca chegava ao Express para a troca de código; agora ele ignora toda rota pertencente ao servidor (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))

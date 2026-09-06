@@ -219,6 +219,21 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.12</strong></summary>
+
+- **El sitio de demostración no enviaba `Cross-Origin-Opener-Policy`, por lo que el escaneo DAST semanal fallaba en la regla 90004 de ZAP en cada ejecución.** `apps/demo/vercel.json` ahora envía `same-origin` junto a la cabecera `Cross-Origin-Embedder-Policy` ya existente. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **El paso arm64 de la comprobación de arquitectura de imagen del release fallaba en cada corte multiplataforma con `docker: cannot overwrite digest`.** `scripts/check-image-arch.sh` ahora resuelve el digest de manifiesto propio de cada plataforma a partir del índice multiarquitectura antes de comprobarlo, en lugar de reutilizar la misma referencia de digest de índice bajo la que el almacén de imágenes clásico de docker no puede mantener dos variantes de plataforma. ([#1046](https://github.com/CodesWhat/drydock/pull/1046))
+- **Mover un contenedor a otro agente, o eliminar un agente de la configuración, ya no restablece su snooze, modo de madurez y etiquetas omitidas.** La poda al eliminar un agente y la propia poda de contenedores obsoletos del agente ahora también pasan `identityChangeExpected: true` y guardan la política de actualización del registro saliente bajo su id de Docker, tal como ya hacía la poda de inicio. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Un "comprobar ahora" manual que llegaba mientras ya se ejecutaba un escaneo podía disparar la misma notificación dos veces.** El panel, la API, un webhook y el controlador al consultar a un agente ahora pasan todos por la misma orquestación de escaneo single-flight que usa la programación cron, de modo que una llamada superpuesta se pliega en el único seguimiento del escaneo en curso (`result.coalesced` en el cuerpo JSON, una cabecera `X-Drydock-Watch-Coalesced` en el endpoint del agente) en lugar de iniciar un escaneo independiente propio. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Una reserva `once=true` cuyo disparador nunca respondió mantenía su clave de deduplicación durante toda la vida del proceso.** Un manejador que superaba su límite de 30 segundos conservaba su reserva más allá del escaneo que la había tomado, omitiendo silenciosamente cada envío posterior para ese resultado; cada reserva ahora expira con su propio temporizador y registra una advertencia con el nombre de la clave si nadie la liberó antes. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **DR-121: el almacén de sesiones y el almacén principal escribían el mismo `/store/dd.json`, y el que guardaba último borraba los datos del otro.** El almacén de sesiones ahora escribe en su propio archivo hermano, `dd-sessions.json` por defecto, y el almacén principal descarta una colección `Sessions` obsoleta dejada por una versión anterior en lugar de seguir guardándola. ([#1063](https://github.com/CodesWhat/drydock/pull/1063))
+- **El ejemplo emparejado de registry de Gitea de la página de agentes hacía que el controlador hablara HTTPS con un agente que servía HTTP simple.** El bloque del agente ahora monta su propio certificado y establece `DD_SERVER_TLS_ENABLED`, de modo que el ejemplo conecta tal como está escrito. ([#1042](https://github.com/CodesWhat/drydock/pull/1042))
+
+Notas completas de la versión en [CHANGELOG.md](./CHANGELOG.md#170-rc12--2026-09-06).
+
+</details>
+
+<details open>
 <summary><strong>Aspectos destacados de v1.7.0-rc.11</strong></summary>
 
 - **El inicio de sesión OIDC ya no vuelve a la página de login después de la redirección del proveedor de identidad.** El fallback de navegación del service worker respondía antes cada navegación de documento desde la app shell en caché, excepto `/api/`, de modo que el callback de OIDC nunca llegaba a Express para el intercambio de código; ahora omite cada ruta propiedad del servidor (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))

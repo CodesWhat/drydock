@@ -222,6 +222,21 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.12 highlights</strong></summary>
+
+- **The demo site was missing `Cross-Origin-Opener-Policy`, so the weekly DAST scan failed on ZAP rule 90004 every run.** `apps/demo/vercel.json` now sends `same-origin` next to the existing `Cross-Origin-Embedder-Policy` header. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **The arm64 pass of the release image-arch check failed on every multi-platform cut with `docker: cannot overwrite digest`.** `scripts/check-image-arch.sh` now resolves each platform's own manifest digest out of the multi-arch index before probing it, instead of reusing the single index-digest reference docker's classic image store can't hold two platform variants under. ([#1046](https://github.com/CodesWhat/drydock/pull/1046))
+- **Moving a container to another agent, or removing an agent from config, no longer resets its snooze, maturity mode, and skipped tags.** The agent-removal prune and the agent's own stale-container prune now pass `identityChangeExpected: true` and stash the departing record's update policy under its Docker id, the same way the startup prune already did. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **A manual "check now" landing while a scan was already running could fire the same notification twice.** The dashboard, the API, a webhook, and the controller polling an agent all route through the same single-flight scan orchestration the cron schedule uses, so an overlapping call is folded into the running scan's one follow-up (`result.coalesced` in the JSON body, an `X-Drydock-Watch-Coalesced` header on the agent endpoint) instead of starting an independent scan of its own. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **A `once=true` notification whose trigger never replied held its dedup key for the process lifetime.** A handler that outlived its 30-second timeout kept its reservation past the scan that took it, silently skipping every later send for that result; each reservation now expires on its own timer and logs a warning naming the key if nothing released it first. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **DR-121: the session store and the main store wrote the same `/store/dd.json`, and whichever saved last erased the other's data.** The session store now writes to its own sibling file, `dd-sessions.json` by default, and the main store drops a stale `Sessions` collection left behind by an older build instead of continuing to resave it. ([#1063](https://github.com/CodesWhat/drydock/pull/1063))
+- **The agents page's paired Gitea registry example had the controller talking HTTPS to an agent serving plain HTTP.** The agent block now mounts its own certificate and sets `DD_SERVER_TLS_ENABLED`, so the example connects as written. ([#1042](https://github.com/CodesWhat/drydock/pull/1042))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc12--2026-09-06).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.11 highlights</strong></summary>
 
 - **OIDC login no longer bounces back to the login page after the identity provider redirects.** The service worker's navigation fallback used to answer every document navigation from the cached app shell except `/api/`, so the OIDC callback never reached Express for its code exchange; it now skips every server-owned route (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))
