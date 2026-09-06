@@ -2269,7 +2269,7 @@ describe('Dockercompose Trigger', () => {
     ]);
   });
 
-  test('compose-file-once preflight failure terminalizes every active mapped operation', async () => {
+  test('compose-file-once preflight failure fails the blocking service and skips the untouched ones (DR-37)', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.composeFileOnce = true;
     const operationStatuses = new Map([
@@ -2322,6 +2322,9 @@ describe('Dockercompose Trigger', () => {
     expect(getOperationByIdSpy).toHaveBeenCalledWith('op-b');
     expect(getOperationByIdSpy).toHaveBeenCalledWith('op-terminal');
     expect(markOperationTerminalSpy).toHaveBeenCalledTimes(2);
+    // nginx (container-a) is the first mapping the loop reaches, so its own
+    // gate call is the one that actually threw: it terminalizes failed with
+    // the real error.
     expect(markOperationTerminalSpy).toHaveBeenNthCalledWith(
       1,
       'op-a',
@@ -2331,13 +2334,18 @@ describe('Dockercompose Trigger', () => {
         lastError: 'preflight blocked',
       }),
     );
+    // redis (container-b) was never attempted — the loop never got past
+    // nginx — so it terminalizes as skipped-dependency naming nginx's
+    // container and operation as the blocker, not failed with nginx's error.
     expect(markOperationTerminalSpy).toHaveBeenNthCalledWith(
       2,
       'op-b',
       expect.objectContaining({
-        status: 'failed',
-        phase: 'failed',
-        lastError: 'preflight blocked',
+        status: 'skipped-dependency',
+        phase: 'skipped-dependency',
+        skippedDependencyReason: 'upstream-failed',
+        blockingContainerId: 'container-a',
+        blockingOperationId: 'op-a',
       }),
     );
   });

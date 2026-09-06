@@ -331,6 +331,39 @@ function isComposeRollbackRecordFor(
   );
 }
 
+type ComposeFileOncePreflightBlockingContext = {
+  service: string;
+  containerId?: string;
+};
+
+// Carries which service/container was actually being processed when a
+// compose-file-once preflight step threw, so `terminalizeComposeFileOncePreflightOperations`
+// can tell the service that failed from the services it never attempted
+// (DR-37). A Symbol key keeps this off the error's own enumerable shape.
+const COMPOSE_FILE_ONCE_BLOCKING_CONTEXT = Symbol('composeFileOnceBlockingContext');
+
+function tagComposeFileOncePreflightError<TError>(
+  error: TError,
+  context: ComposeFileOncePreflightBlockingContext,
+): TError {
+  if (error && typeof error === 'object' && !(COMPOSE_FILE_ONCE_BLOCKING_CONTEXT in error)) {
+    (error as Record<PropertyKey, unknown>)[COMPOSE_FILE_ONCE_BLOCKING_CONTEXT] = context;
+  }
+  return error;
+}
+
+function getComposeFileOncePreflightBlockingContext(
+  error: unknown,
+): ComposeFileOncePreflightBlockingContext | undefined {
+  if (!error || typeof error !== 'object' || !(COMPOSE_FILE_ONCE_BLOCKING_CONTEXT in error)) {
+    return undefined;
+  }
+  const context = (error as Record<PropertyKey, unknown>)[COMPOSE_FILE_ONCE_BLOCKING_CONTEXT];
+  return context && typeof (context as { service?: unknown }).service === 'string'
+    ? (context as ComposeFileOncePreflightBlockingContext)
+    : undefined;
+}
+
 /**
  * Re-order `mappingsNeedingRuntimeUpdate` into dependency-graph topological
  * order before `runRuntimeUpdatesForComposeMappings`'s sequential loop
@@ -2208,10 +2241,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         continue;
       }
       if (containerTarget !== serviceTarget) {
-        throw new Error(
-          `Compose service ${service} resolves to different update targets for its containers ` +
-            `(${serviceTargetContainerName} wants ${serviceTarget}, ${container.name} wants ${containerTarget}); ` +
-            'align their tag filters or disable compose-file-once mode',
+        throw tagComposeFileOncePreflightError(
+          new Error(
+            `Compose service ${service} resolves to different update targets for its containers ` +
+              `(${serviceTargetContainerName} wants ${serviceTarget}, ${container.name} wants ${containerTarget}); ` +
+              'align their tag filters or disable compose-file-once mode',
+          ),
+          { service, containerId: typeof container.id === 'string' ? container.id : undefined },
         );
       }
     }
@@ -2267,38 +2303,45 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const logContainer = this.log.child({
         container: runtimeContainer.name,
       });
-      const watcher = this.getWatcher(runtimeContainer);
-      const { dockerApi } = watcher;
-      const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
-        allowAnonymousFallback: true,
-      });
-      const auth = await registry.getAuthPull();
-      await this.pullImage(dockerApi, auth, newImage, logContainer);
-      const identityOutcome = await this.capturePulledImageIdentity(
-        dockerApi as DockerApiLike,
-        newImage,
-        runtimeContainer,
-        logContainer,
-      );
-      composeFileOnceRuntimeContextByService.set(service, {
-        dockerApi,
-        registry,
-        auth,
-        newImage,
-        // A bound digest is the reference every replica is created from. When
-        // there is none, the local image ID the pull resolved to takes its
-        // place, so the replicas still share one image rather than each
-        // re-resolving a tag that can move under them (DR-54).
-        ...(identityOutcome.imageIdentity
-          ? { imageIdentity: identityOutcome.imageIdentity }
-          : { pulledImageId: identityOutcome.localImageId }),
-        ...(identityOutcome.unboundWarn
-          ? {
-              securityGateUnboundWarn: true,
-              securityGateUnboundReason: identityOutcome.reason,
-            }
-          : {}),
-      });
+      try {
+        const watcher = this.getWatcher(runtimeContainer);
+        const { dockerApi } = watcher;
+        const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
+          allowAnonymousFallback: true,
+        });
+        const auth = await registry.getAuthPull();
+        await this.pullImage(dockerApi, auth, newImage, logContainer);
+        const identityOutcome = await this.capturePulledImageIdentity(
+          dockerApi as DockerApiLike,
+          newImage,
+          runtimeContainer,
+          logContainer,
+        );
+        composeFileOnceRuntimeContextByService.set(service, {
+          dockerApi,
+          registry,
+          auth,
+          newImage,
+          // A bound digest is the reference every replica is created from. When
+          // there is none, the local image ID the pull resolved to takes its
+          // place, so the replicas still share one image rather than each
+          // re-resolving a tag that can move under them (DR-54).
+          ...(identityOutcome.imageIdentity
+            ? { imageIdentity: identityOutcome.imageIdentity }
+            : { pulledImageId: identityOutcome.localImageId }),
+          ...(identityOutcome.unboundWarn
+            ? {
+                securityGateUnboundWarn: true,
+                securityGateUnboundReason: identityOutcome.reason,
+              }
+            : {}),
+        });
+      } catch (error: unknown) {
+        throw tagComposeFileOncePreflightError(error, {
+          service,
+          containerId: typeof runtimeContainer.id === 'string' ? runtimeContainer.id : undefined,
+        });
+      }
     }
     return composeFileOnceRuntimeContextByService;
   }
@@ -2363,6 +2406,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * one with. Without inserting a row for it here, `markOperationTerminal`
    * has nothing to terminalize and the failed lifecycle event never fires
    * for it, leaving only the audit record the preflight itself wrote (DR-36).
+   *
+   * Only the service whose preflight step actually threw (tagged via
+   * `tagComposeFileOncePreflightError`) is genuinely at fault, so it alone
+   * terminalizes `failed` with the real error; every other mapping was never
+   * attempted and terminalizes `skipped-dependency` naming the blocker
+   * instead, reusing the shape the dependency-wave dispatch already writes
+   * for the same "never attempted" story (DR-37). When the error carries no
+   * attribution (nothing above tagged it), every mapping falls back to
+   * `failed`, as before.
    */
   private terminalizeComposeFileOncePreflightOperations(
     mappings: ComposeRuntimeUpdateMapping[],
@@ -2370,7 +2422,21 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     error: unknown,
   ): void {
     const lastError = getErrorMessage(error);
+    const blockingContext = getComposeFileOncePreflightBlockingContext(error);
+    const blockingMapping = blockingContext
+      ? mappings.find(
+          (mapping) =>
+            mapping.service === blockingContext.service &&
+            (blockingContext.containerId === undefined ||
+              mapping.container.id === blockingContext.containerId),
+        )
+      : undefined;
+    const blockingOperationId = blockingMapping
+      ? getRequestedOperationId(blockingMapping.container, runtimeContext)
+      : undefined;
+
     for (const { container, service } of mappings) {
+      const isBlocking = !blockingContext || service === blockingContext.service;
       const requestedOperationId = getRequestedOperationId(container, runtimeContext);
 
       if (requestedOperationId) {
@@ -2387,11 +2453,21 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           containerId: typeof container.id === 'string' ? container.id : undefined,
         }).id;
 
-      updateOperationStore.markOperationTerminal(operationId, {
-        status: 'failed',
-        phase: 'failed',
-        lastError,
-      });
+      if (isBlocking) {
+        updateOperationStore.markOperationTerminal(operationId, {
+          status: 'failed',
+          phase: 'failed',
+          lastError,
+        });
+      } else {
+        updateOperationStore.markOperationTerminal(operationId, {
+          status: 'skipped-dependency',
+          phase: 'skipped-dependency',
+          skippedDependencyReason: 'upstream-failed',
+          blockingContainerId: blockingContext?.containerId,
+          blockingOperationId,
+        });
+      }
     }
   }
 
@@ -2730,10 +2806,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
             composeFileOnceRuntimeContext,
           ),
         };
-        const recordedUnboundWarning = await this.runComposeFileOncePostPullGate(
-          container,
-          composeContext,
-        );
+        let recordedUnboundWarning: boolean;
+        try {
+          recordedUnboundWarning = await this.runComposeFileOncePostPullGate(
+            container,
+            composeContext,
+          );
+        } catch (gateError: unknown) {
+          throw tagComposeFileOncePreflightError(gateError, {
+            service,
+            containerId: typeof container.id === 'string' ? container.id : undefined,
+          });
+        }
         if (recordedUnboundWarning) {
           composeFileOnceRuntimeContextByService.set(service, {
             ...composeFileOnceRuntimeContext,
