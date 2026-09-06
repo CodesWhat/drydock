@@ -1,0 +1,72 @@
+{
+  "filename": "dd.json",
+  "collections": [
+    {
+      "name": "app",
+      "data": [
+        {
+          "name": "drydock",
+          "version": "1.7.0",
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "secrets",
+      "data": [
+        {
+          "sessionSecret": "v17-session-secret-fixture",
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "settings",
+      "data": [
+        {
+          "internetlessMode": false,
+          "updateMode": "notify",
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "ui-preferences",
+      "data": [
+        {
+          "username": "alice",
+          "schemaVersion": 11,
+          "preferences": { "theme": "dark" },
+          "updatedAt": "2026-01-15T09:00:00.000Z",
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    }
+  ],
+  "databaseVersion": 1.5,
+  "engineVersion": 1.5
+}

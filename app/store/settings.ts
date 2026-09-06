@@ -1,8 +1,17 @@
 /**
  * Settings store.
+ *
+ * Backed by the `settings` singleton table (roadmap 7-STORE, slice 3). The
+ * "existing installations get updateMode: auto" migration this module used to
+ * run against every LokiJS document now runs once, at import time, against a
+ * NOT NULL column: a legacy document with no `updateMode` field lands with a
+ * NULL `update_mode` (see `app/store/db/schema.ts`), and this module's own
+ * boot-time normalise-and-rewrite treats that exactly like the missing field
+ * it is. A row can only ever be NULL there once, right after import — this
+ * function rewrites the column on every boot, so it is never NULL again.
  */
 import joi from 'joi';
-import { initCollection } from './util.js';
+import type { Database } from './db/driver.js';
 
 export const UPDATE_MODES = ['notify', 'manual', 'auto'] as const;
 export type UpdateMode = (typeof UPDATE_MODES)[number];
@@ -12,20 +21,12 @@ interface Settings {
   updateMode: UpdateMode;
 }
 
-type SettingsCollectionDocument = Settings;
-
-interface SettingsCollection {
-  findOne(query: Record<string, unknown>): SettingsCollectionDocument | null;
-  insert(document: SettingsCollectionDocument): void;
-  remove(document: SettingsCollectionDocument): void;
+interface SettingsRow {
+  internetlessMode: boolean;
+  updateMode: string | undefined;
 }
 
-interface SettingsStoreDb {
-  getCollection(name: string): SettingsCollection | null;
-  addCollection(name: string): SettingsCollection;
-}
-
-let settingsCollection: SettingsCollection | undefined;
+let db: Database | undefined;
 let settingsCache: Settings | null = null;
 
 const settingsSchema = joi.object({
@@ -57,25 +58,38 @@ function invalidateSettingsCache() {
   settingsCache = null;
 }
 
+function readSettingsRow(): SettingsRow | undefined {
+  if (!db) {
+    return undefined;
+  }
+  const row = db.prepare('SELECT internetless_mode, update_mode FROM settings WHERE id = 1').get();
+  if (!row) {
+    return undefined;
+  }
+  return {
+    internetlessMode: Number(row.internetless_mode) === 1,
+    updateMode: row.update_mode === null ? undefined : String(row.update_mode),
+  };
+}
+
 function replaceSettings(settingsToSave: Settings): void {
-  if (!settingsCollection) {
+  if (!db) {
     return;
   }
-  const settingsSaved = settingsCollection.findOne({});
-  if (settingsSaved) {
-    settingsCollection.remove(settingsSaved);
-  }
-  settingsCollection.insert(settingsToSave);
+  db.prepare(
+    `INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET internetless_mode = excluded.internetless_mode, update_mode = excluded.update_mode`,
+  ).run(settingsToSave.internetlessMode ? 1 : 0, settingsToSave.updateMode);
   invalidateSettingsCache();
 }
 
 /**
  * Create settings collection.
- * @param db
+ * @param database
  */
-export function createCollections(db: SettingsStoreDb): void {
-  settingsCollection = initCollection(db, 'settings') as SettingsCollection;
-  const settingsSaved = settingsCollection.findOne({});
+export function createCollections(database: Database): void {
+  db = database;
+  const settingsSaved = readSettingsRow();
   // Existing installations predate the global update-mode setting and may
   // already rely on automatic action triggers. Preserve that behavior during
   // migration, while brand-new installations use the safer manual default.
@@ -96,7 +110,7 @@ export function getSettings(): Settings {
   if (settingsCache) {
     return cloneSettings(settingsCache);
   }
-  const settingsSaved = settingsCollection?.findOne({});
+  const settingsSaved = readSettingsRow();
   const settingsNormalized = normalizeSettings(settingsSaved || {});
   settingsCache = settingsNormalized;
   return cloneSettings(settingsNormalized);

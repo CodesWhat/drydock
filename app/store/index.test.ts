@@ -14,6 +14,7 @@ const {
   createLogMock,
   createDriverMock,
   createMigrationsMock,
+  createImportMock,
   registerCommonMocks,
 } = vi.hoisted(() => {
   const STORE_CONFIG = { path: '/test/store', file: 'test.json' };
@@ -44,6 +45,22 @@ const {
 
   function createMigrationsMock() {
     return { migrate: vi.fn(() => []) };
+  }
+
+  // `runFirstStartImport` (app/store/db/import.ts) is a seam like the driver
+  // and the migration runner above: real behaviour is covered against real
+  // files in db/import.test.ts and store/index.first-start-import.test.ts, so
+  // here it is a controllable no-op that defaults to "nothing to import",
+  // which keeps every existing fs mock in this file free to stay ignorant of
+  // the import framework's own filesystem calls.
+  function createImportMock(
+    runFirstStartImportImpl = vi.fn(() => ({
+      status: 'no-legacy-store' as const,
+      databasePath: '',
+      rowsByTable: {},
+    })),
+  ) {
+    return { runFirstStartImport: runFirstStartImportImpl };
   }
 
   function createLokiMock(
@@ -135,6 +152,7 @@ const {
       migrateInlineSboms?: (options: Record<string, any>) => Promise<Record<string, number>>;
       portwingAuthorizedKeysPath?: string | undefined;
       sqliteOpenDatabase?: Parameters<typeof createDriverMock>[0];
+      runFirstStartImport?: Parameters<typeof createImportMock>[0];
     } = {},
   ) {
     vi.doMock('lokijs', () =>
@@ -143,6 +161,7 @@ const {
     resetFsMock(overrides.fs);
     vi.doMock('./db/driver.js', () => createDriverMock(overrides.sqliteOpenDatabase));
     vi.doMock('./db/migrations.js', createMigrationsMock);
+    vi.doMock('./db/import.js', () => createImportMock(overrides.runFirstStartImport));
     vi.doMock('../configuration', () => ({
       ...createConfigMock(overrides.config ?? STORE_CONFIG),
       getPortwingAuthorizedKeysPath: vi.fn(() => overrides.portwingAuthorizedKeysPath),
@@ -186,6 +205,7 @@ const {
     createLogMock,
     createDriverMock,
     createMigrationsMock,
+    createImportMock,
     registerCommonMocks,
   };
 });
@@ -196,6 +216,7 @@ vi.mock('lokijs', () => createLokiMock());
 vi.mock('node:fs', () => ({ default: fsMock }));
 vi.mock('./db/driver.js', () => createDriverMock());
 vi.mock('./db/migrations.js', createMigrationsMock);
+vi.mock('./db/import.js', () => createImportMock());
 vi.mock('../configuration', () => ({
   ...createConfigMock(),
   getPortwingAuthorizedKeysPath: vi.fn(() => undefined),
@@ -293,6 +314,64 @@ describe('Store Module', () => {
     expect(
       container.rehydrateUpdatePolicyRetentionCacheFromStore.mock.invocationCallOrder[0],
     ).toBeLessThan(app.completeStartupInitialization.mock.invocationCallOrder[0]);
+  });
+
+  test('should run the first-start import before opening the SQLite database', async () => {
+    vi.resetModules();
+    const runFirstStartImportMock = vi.fn(() => ({
+      status: 'no-legacy-store' as const,
+      databasePath: '/test/store/dd.sqlite',
+      rowsByTable: {},
+    }));
+    const openDatabaseMock = vi.fn(() => ({
+      isOpen: true,
+      isTransaction: false,
+      exec: vi.fn(),
+      prepare: vi.fn(),
+      pragma: vi.fn(),
+      transaction: vi.fn((run: () => unknown) => run()),
+      backup: vi.fn(async () => 0),
+      close: vi.fn(),
+    }));
+
+    registerCommonMocks({
+      fs: { existsSync: vi.fn(() => false), mkdirSync: vi.fn(), renameSync: vi.fn() },
+      runFirstStartImport: runFirstStartImportMock,
+      sqliteOpenDatabase: openDatabaseMock,
+    });
+
+    const storeWithImport = await import('./index.js');
+    await storeWithImport.init();
+
+    expect(runFirstStartImportMock).toHaveBeenCalledWith({
+      storeDirectory: '/test/store',
+      legacyStorePath: '/test/store/test.json',
+      databasePath: '/test/store/dd.sqlite',
+      importers: expect.any(Array),
+    });
+    expect(runFirstStartImportMock.mock.invocationCallOrder[0]).toBeLessThan(
+      openDatabaseMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  test('should not run the first-start import in memory mode', async () => {
+    vi.resetModules();
+    const runFirstStartImportMock = vi.fn(() => ({
+      status: 'no-legacy-store' as const,
+      databasePath: '',
+      rowsByTable: {},
+    }));
+
+    registerCommonMocks({
+      loki: vi.fn(),
+      fs: { renameSync: vi.fn() },
+      runFirstStartImport: runFirstStartImportMock,
+    });
+
+    const storeMemory = await import('./index.js');
+    await storeMemory.init({ memory: true });
+
+    expect(runFirstStartImportMock).not.toHaveBeenCalled();
   });
 
   test('should create directory if it does not exist', async () => {

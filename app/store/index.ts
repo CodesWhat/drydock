@@ -7,6 +7,8 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runti
 import { migrateInlineSboms } from '../security/sbom-migration.js';
 import { createSbomStorage } from '../security/sbom-storage.js';
 import { type Database, MEMORY_DATABASE_LOCATION, openDatabase } from './db/driver.js';
+import { runFirstStartImport } from './db/import.js';
+import { COLLECTION_IMPORTERS } from './db/importers/index.js';
 import { migrate } from './db/migrations.js';
 
 const log = logger.child({ component: 'store' });
@@ -49,8 +51,8 @@ const configuration = configurationToValidate.value;
 type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
 // The SQLite database opened alongside Loki (roadmap 7-STORE, slice 2).
-// Nothing reads from it yet: it exists so its schema is present from the
-// first start a later slice moves a collection onto it.
+// `app`, `secrets`, `settings` and `ui-preferences` read and write it
+// directly as of slice 3; every other collection still lives in Loki.
 let sqliteDb: Database | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
@@ -170,7 +172,10 @@ function createCollections(): boolean {
   const droppedLegacySessionsCollection = dropLegacySessionsCollection();
   agentKeys.createCollections(db);
   apiKey.createCollections(db);
-  app.createCollections(db);
+  // app, secrets, settings and ui-preferences moved onto SQLite (roadmap
+  // 7-STORE, slice 3): they read and write sqliteDb directly rather than a
+  // LokiJS collection.
+  app.createCollections(sqliteDb as Database);
   approval.createCollections(db);
   audit.createCollections(db);
   backup.createCollections(db);
@@ -188,9 +193,9 @@ function createCollections(): boolean {
   notification.createCollections(db);
   notificationHistory.createCollections(db);
   notificationOutbox.createCollections(db);
-  secrets.createCollections(db);
-  uiPreferences.createCollections(db);
-  settings.createCollections(db);
+  secrets.createCollections(sqliteDb as Database);
+  uiPreferences.createCollections(sqliteDb as Database);
+  settings.createCollections(sqliteDb as Database);
   updateOperation.createCollections(db);
   app.completeStartupInitialization();
   return droppedLegacySessionsCollection;
@@ -326,9 +331,17 @@ export async function init(options: { memory?: boolean } = {}) {
     fs.mkdirSync(storeDirectory, { mode: STORE_DIRECTORY_MODE });
   }
 
-  // Nothing reads from this yet (roadmap 7-STORE, slice 2): opening it here
-  // and running the slice 1 migrations only brings the schema into
-  // existence, so it is present from a fresh install onward.
+  // First-start import (roadmap 7-STORE, slice 3): a database that already
+  // exists is opened as-is and never re-imported, a fresh install with no
+  // legacy dd.json creates an empty one, and an existing dd.json is imported
+  // into the database before it is ever opened for real. Either way the
+  // database is then opened and migrated exactly as before.
+  runFirstStartImport({
+    storeDirectory,
+    legacyStorePath: storePath,
+    databasePath: dbPath,
+    importers: COLLECTION_IMPORTERS,
+  });
   sqliteDb = openDatabase(dbPath);
   migrate(sqliteDb);
   enforceStorePermissions(storeDirectory, storePath);
@@ -411,7 +424,7 @@ export interface StoreDebugCollectionStats {
 export interface StoreDebugSnapshot {
   memoryMode: boolean;
   path?: string;
-  /** The SQLite database opened alongside `path` (roadmap 7-STORE, slice 2). Nothing reads from it yet. */
+  /** The SQLite database opened alongside `path` (roadmap 7-STORE, slice 2), holding `app`/`secrets`/`settings`/`ui-preferences` as of slice 3. */
   sqlitePath?: string;
   collectionCount: number;
   documentCount: number;
