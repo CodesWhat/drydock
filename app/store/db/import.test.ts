@@ -194,6 +194,34 @@ describe('store/db/import', () => {
       db.close();
     });
 
+    test('fsyncs the store directory after each rename, not before', () => {
+      writeLegacyStore();
+      const order: string[] = [];
+      const originalFsyncSync = fs.fsyncSync;
+      const originalRenameSync = fs.renameSync;
+      const fsyncSpy = vi.spyOn(fs, 'fsyncSync').mockImplementation((fd) => {
+        order.push('fsync');
+        return originalFsyncSync(fd);
+      });
+      const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((oldPath, newPath) => {
+        order.push(`rename:${path.basename(String(oldPath))}`);
+        return originalRenameSync(oldPath, newPath);
+      });
+
+      try {
+        expect(importOnce().status).toBe('imported');
+        expect(order).toEqual([
+          `rename:${path.basename(databasePath)}.importing`,
+          'fsync',
+          'rename:dd.json',
+          'fsync',
+        ]);
+      } finally {
+        fsyncSpy.mockRestore();
+        renameSpy.mockRestore();
+      }
+    });
+
     test('never re-imports once the database exists', () => {
       writeLegacyStore();
       importOnce();

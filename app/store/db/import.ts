@@ -20,8 +20,11 @@
  *   4. Every importer runs inside one BEGIN IMMEDIATE, with the marker row
  *      written in the same transaction, so the database is either fully
  *      imported and marked or not there at all.
- *   5. The directory is flushed, then the temporary file is renamed into place,
- *      then `dd.json` is renamed to `dd.json.pre-1.8.bak`.
+ *   5. The temporary file is renamed into place and the directory is flushed,
+ *      then `dd.json` is renamed to `dd.json.pre-1.8.bak` and the directory is
+ *      flushed again. The flush runs after each rename, not before: what has
+ *      to survive a crash is the directory entry the rename just changed, and
+ *      an fsync before the rename does not make that entry durable.
  *
  * Failure fails the boot. The caller must not start on an empty store: a
  * process that looks healthy and silently persists nothing is worse than one
@@ -236,8 +239,9 @@ export function runFirstStartImport(options: FirstStartImportOptions): FirstStar
   const importingPath = `${databasePath}${IMPORTING_SUFFIX}`;
   removeDatabaseFiles(importingPath);
   const report = importIntoTemporaryDatabase(importingPath, options);
-  syncDirectory(storeDirectory);
   fs.renameSync(importingPath, databasePath);
+  syncDirectory(storeDirectory);
   const backupPath = backupLegacyStore(legacyStorePath);
+  syncDirectory(storeDirectory);
   return { status: 'imported', databasePath, backupPath, rowsByTable: report.rowsByTable };
 }
