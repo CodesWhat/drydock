@@ -227,6 +227,31 @@ function buildPragmaSql(name: string, value?: string | number): string {
   return `PRAGMA ${name} = ${literal}`;
 }
 
+/**
+ * `node:sqlite` evaluates a prepared statement's rows lazily: `iterate()`
+ * itself never touches the database, only each `next()` call does. Wrapping
+ * just the call that produces the iterator, as the other methods do, leaves
+ * every subsequent step error unguarded, so a constraint or I/O failure mid
+ * scan would surface as the raw `ERR_SQLITE_ERROR` instead of a `StoreError`.
+ * This wraps `next()` (and `return()`, so an early `break` out of a `for..of`
+ * still closes the underlying statement cleanly) through the same guard.
+ */
+function wrapIterator(rawIterator: IterableIterator<Row>): IterableIterator<Row> {
+  const wrapped: IterableIterator<Row> = {
+    next(): IteratorResult<Row> {
+      return guard(() => rawIterator.next());
+    },
+    [Symbol.iterator](): IterableIterator<Row> {
+      return wrapped;
+    },
+  };
+  if (typeof rawIterator.return === 'function') {
+    const rawReturn = rawIterator.return.bind(rawIterator);
+    wrapped.return = (value?: Row): IteratorResult<Row> => guard(() => rawReturn(value));
+  }
+  return wrapped;
+}
+
 function wrapStatement(statement: StatementSync): Statement {
   return {
     get sql(): string {
@@ -246,9 +271,10 @@ function wrapStatement(statement: StatementSync): Statement {
       return guard(() => statement.all(...(parameters as never[]))) as Row[];
     },
     iterate(...parameters: SqlBinding[]): IterableIterator<Row> {
-      return guard(
+      const rawIterator = guard(
         () => statement.iterate(...(parameters as never[])) as unknown as IterableIterator<Row>,
       );
+      return wrapIterator(rawIterator);
     },
   };
 }

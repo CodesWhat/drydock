@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { StatementSync } from 'node:sqlite';
 import {
   createTemporaryStoreDirectory,
   removeTemporaryStoreDirectory,
@@ -252,6 +253,81 @@ describe('store/db/driver', () => {
         expect.objectContaining({ code: 'SQLITE_ERROR' }),
       );
       expect(() => db.prepare('NOT SQL')).toThrow(StoreError);
+    });
+
+    test('normalises an error thrown while stepping the iterator, not just from starting it', () => {
+      const db = open(databasePath);
+      db.exec(CREATE_TABLE);
+      db.prepare('INSERT INTO t (id, v) VALUES (?, ?)').run('a', 1);
+      db.prepare('INSERT INTO t (id, v) VALUES (?, ?)').run('b', 2);
+      const select = db.prepare('SELECT id, v FROM t ORDER BY id');
+
+      // node:sqlite evaluates iterate() lazily: the call that produces the
+      // iterator never touches the database, only next() does. Replace the
+      // underlying statement's iterate() with a fake that yields one real
+      // row and then throws mid-scan, the way a constraint or I/O failure
+      // would on a real connection.
+      const iterateSpy = vi
+        .spyOn(StatementSync.prototype, 'iterate')
+        .mockImplementation(function* iterate() {
+          yield { id: 'a', v: 1 };
+          throw {
+            code: 'ERR_SQLITE_ERROR',
+            errcode: 787,
+            message: 'FOREIGN KEY constraint failed',
+          };
+        } as unknown as typeof StatementSync.prototype.iterate);
+
+      try {
+        const seen: unknown[] = [];
+        let thrown: unknown;
+        try {
+          for (const row of select.iterate()) {
+            seen.push(row);
+          }
+        } catch (error: unknown) {
+          thrown = error;
+        }
+        expect(seen).toEqual([{ id: 'a', v: 1 }]);
+        expect(thrown).toBeInstanceOf(StoreConstraintError);
+        expect((thrown as StoreError).code).toBe('SQLITE_CONSTRAINT_FOREIGNKEY');
+      } finally {
+        iterateSpy.mockRestore();
+      }
+    });
+
+    test('closes the underlying iterator cleanly when a for..of loop breaks early', () => {
+      const db = open(databasePath);
+      db.exec(CREATE_TABLE);
+      db.prepare('INSERT INTO t (id, v) VALUES (?, ?)').run('a', 1);
+      db.prepare('INSERT INTO t (id, v) VALUES (?, ?)').run('b', 2);
+      db.prepare('INSERT INTO t (id, v) VALUES (?, ?)').run('c', 3);
+      const select = db.prepare('SELECT id, v FROM t ORDER BY id');
+
+      let closedCleanly = false;
+      const iterateSpy = vi
+        .spyOn(StatementSync.prototype, 'iterate')
+        .mockImplementation(function* iterate() {
+          try {
+            yield { id: 'a', v: 1 };
+            yield { id: 'b', v: 2 };
+            yield { id: 'c', v: 3 };
+          } finally {
+            closedCleanly = true;
+          }
+        } as unknown as typeof StatementSync.prototype.iterate);
+
+      try {
+        const seen: unknown[] = [];
+        for (const row of select.iterate()) {
+          seen.push(row);
+          break;
+        }
+        expect(seen).toEqual([{ id: 'a', v: 1 }]);
+        expect(closedCleanly).toBe(true);
+      } finally {
+        iterateSpy.mockRestore();
+      }
     });
   });
 
