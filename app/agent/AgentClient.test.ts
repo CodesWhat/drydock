@@ -9320,6 +9320,61 @@ describe('AgentClient', () => {
       );
     });
 
+    test('marker-mode inventory skips the digest.watch restore when the incoming report has no image', async () => {
+      // A malformed dd:container_sync frame (EdgeAgentAdapter casts
+      // `data.containers` straight to `Container[]` with no schema
+      // validation before this reaches preserveControllerDockerEnrichment)
+      // can omit `image` entirely. The restore must not throw trying to
+      // spread a nonexistent `merged.image`, and it must not fabricate one.
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: true, repo: 'sha256:current' },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+      const [savedContainer] = vi.mocked(storeContainer.updateContainer).mock.calls[0];
+      expect(savedContainer.id).toBe('c1');
+      expect(savedContainer.image).toBeUndefined();
+    });
+
     test('marker-mode inventory leaves digest.watch false for a container that never carried the label', async () => {
       await registerAnonymousHub();
       const existing = {
