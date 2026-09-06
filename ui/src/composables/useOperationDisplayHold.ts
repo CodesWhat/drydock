@@ -1,4 +1,4 @@
-import { shallowRef, triggerRef } from 'vue';
+import { shallowRef, toRaw, triggerRef } from 'vue';
 import type { Container, ContainerUpdateOperation } from '../types/container';
 import {
   type ActiveContainerUpdateOperationPhase,
@@ -392,18 +392,91 @@ export interface TerminalResolvedArgs {
  * release so callers can perform local cleanup. Toasts intentionally remain on
  * the replayable dd:update-applied / dd:update-failed path.
  */
+/** Container shape reconcileHoldsAgainstContainers matches holds against. */
+type ReconcileContainerCandidate = Pick<
+  Container,
+  'id' | 'identityKey' | 'name' | 'updateOperation'
+>;
+
 function reconcileHoldsAgainstContainers(
-  containers: readonly Pick<Container, 'id' | 'identityKey' | 'name' | 'updateOperation'>[],
+  containers: readonly ReconcileContainerCandidate[],
   now?: number,
   onTerminalResolved?: (args: TerminalResolvedArgs) => void | Promise<void>,
 ) {
+  if (heldOperations.value.size === 0) {
+    return;
+  }
+
   const currentNow = now ?? Date.now();
-  for (const [operationId, hold] of heldOperations.value.entries()) {
-    const remainingActiveWindow = hold.displayUntil - currentNow;
-    if (remainingActiveWindow <= OPERATION_DISPLAY_HOLD_MS) {
-      continue;
+
+  // Hoisted out of the container-matching work below: a hold still deep in its
+  // active window (more than OPERATION_DISPLAY_HOLD_MS from displayUntil) can't
+  // be reconciled this pass regardless of what the containers say, so an
+  // all-ineligible set returns before the containers array is even touched.
+  const eligibleHolds: [string, OperationDisplayHoldRecord][] = [];
+  for (const entry of heldOperations.value.entries()) {
+    const [, hold] = entry;
+    if (hold.displayUntil - currentNow > OPERATION_DISPLAY_HOLD_MS) {
+      eligibleHolds.push(entry);
     }
-    const match = containers.find((container) => holdMatchesTarget(hold, container));
+  }
+  if (eligibleHolds.length === 0) {
+    return;
+  }
+
+  // toRaw once, up front: containers is a deep-reactive proxy, and every property
+  // read below (building the maps, then reading match.updateOperation?.status)
+  // would otherwise cross the proxy trap per field per container.
+  const rawContainers = toRaw(containers);
+
+  // Replaces the old per-hold `containers.find(...)` (O(H*N)) with two maps built
+  // once per call (O(N)), keyed by id and by identityKey. Each keeps the FIRST
+  // occurrence on a duplicate key, matching what Array#find would have returned
+  // (the lowest-index container wins).
+  const containerIndexById = new Map<string, number>();
+  const containerIndexByIdentityKey = new Map<string, number>();
+  for (let i = 0; i < rawContainers.length; i++) {
+    const container = rawContainers[i];
+    if (!containerIndexById.has(container.id)) {
+      containerIndexById.set(container.id, i);
+    }
+    if (
+      container.identityKey.length > 0 &&
+      !containerIndexByIdentityKey.has(container.identityKey)
+    ) {
+      containerIndexByIdentityKey.set(container.identityKey, i);
+    }
+  }
+
+  for (const [operationId, hold] of eligibleHolds) {
+    // holdMatchesTarget only allows a name-only match when the hold has neither
+    // a tracked container id nor an identityKey — everything else is decided by
+    // id/identityKey alone (see holdMatchesTarget's block condition). Holds that
+    // match by name only keep the existing linear scan.
+    const canMatchByKey =
+      hold.containerIds.length > 0 ||
+      (typeof hold.identityKey === 'string' && hold.identityKey.length > 0);
+
+    let match: ReconcileContainerCandidate | undefined;
+    if (canMatchByKey) {
+      let bestIndex: number | undefined;
+      for (const id of hold.containerIds) {
+        const idx = containerIndexById.get(id);
+        if (idx !== undefined && (bestIndex === undefined || idx < bestIndex)) {
+          bestIndex = idx;
+        }
+      }
+      if (typeof hold.identityKey === 'string' && hold.identityKey.length > 0) {
+        const idx = containerIndexByIdentityKey.get(hold.identityKey);
+        if (idx !== undefined && (bestIndex === undefined || idx < bestIndex)) {
+          bestIndex = idx;
+        }
+      }
+      match = bestIndex === undefined ? undefined : rawContainers[bestIndex];
+    } else {
+      match = rawContainers.find((container) => holdMatchesTarget(hold, container));
+    }
+
     if (!match) {
       continue;
     }
