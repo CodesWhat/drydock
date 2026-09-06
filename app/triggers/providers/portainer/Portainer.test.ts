@@ -2640,7 +2640,7 @@ test('performContainerUpdate captures the local image identity for convergence',
   );
 });
 
-function makeRunningReplica() {
+function makeRunningReplica(overrides: Record<string, unknown> = {}) {
   return {
     State: 'running',
     ImageID: 'sha256:old',
@@ -2649,6 +2649,7 @@ function makeRunningReplica() {
       'com.docker.compose.project': 'pihole',
       'com.docker.compose.service': 'pihole',
     },
+    ...overrides,
   };
 }
 
@@ -2778,6 +2779,100 @@ test('performContainerUpdate pins the stack content under an optional policy whe
   // Unset so the pin log message falls back to the stack id, covering both
   // halves of that fallback.
   resolved.stack.Name = undefined;
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  const pinnedReference = `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`;
+  expect(result).toBe(true);
+  expect(redeploy).toHaveBeenCalledWith(
+    resolved.stack,
+    `services:\n  pihole:\n    image: ${pinnedReference}\n`,
+    resolved.updatedEnv,
+  );
+});
+
+// applyPortainerDigestPin used to rewrite the stack file's image using the
+// identity binder's normalised repository, which drops an explicit `docker.io/`
+// prefix the operator wrote literally: `docker.io/library/nginx:1.27` came
+// back as `library/nginx:1.27@sha256:...`. It now reuses the same
+// preserveExplicitDockerIoPrefix helper the Docker/Dockercompose path uses, so
+// the two cases below — an explicit `docker.io/` reference and a bare one —
+// both come out matching what the stack file already named (DR-65).
+test('performContainerUpdate preserves an explicit docker.io/ prefix when pinning the stack content', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.digestPinning = true;
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedUpdate();
+  resolved.serviceImage = 'docker.io/library/nginx:1.27';
+  resolved.stackFileContent = 'services:\n  pihole:\n    image: docker.io/library/nginx:1.27\n';
+  resolved.originalImage = 'docker.io/library/nginx:1.27';
+  resolved.targetImage = 'docker.io/library/nginx:1.28';
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        // The daemon records the pulled Hub image's RepoDigests under the
+        // path it was pulled with, `library/nginx`, without the `docker.io/`
+        // host that only the stack file spells out.
+        RepoDigests: [`library/nginx@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi
+      .fn()
+      .mockResolvedValue([makeRunningReplica({ Image: 'docker.io/library/nginx:1.27' })]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  expect(redeploy).toHaveBeenCalledWith(
+    resolved.stack,
+    `services:\n  pihole:\n    image: docker.io/library/nginx:1.28@${IMAGE_A_DIGEST}\n`,
+    resolved.updatedEnv,
+  );
+});
+
+test('performContainerUpdate pins a bare reference without inventing a docker.io/ prefix', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.digestPinning = true;
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedUpdate();
+  resolved.serviceImage = 'pihole/pihole:2026.05.0';
   vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
   vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
   const dockerApi = {

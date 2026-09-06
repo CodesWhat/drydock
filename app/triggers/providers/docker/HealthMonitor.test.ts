@@ -392,6 +392,175 @@ describe('HealthMonitor', () => {
     abortController.abort();
   });
 
+  // Auto-rollback used to fall back to the mutable tag on any legacy backup
+  // regardless of policy. It now resolves through resolveRollbackImageReference,
+  // the same helper the manual rollback API uses, so it inherits the
+  // required/optional/disabled identity-binding policy (DR-59).
+  test('should refuse auto-rollback under a required identity policy when no digest can be established', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.bindPulledImageIdentity = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Unable to bind security gate to the pulled image for test-container: no matching digest',
+        ),
+      );
+    triggerInstance.getRollbackIdentityBindingPolicy = vi.fn().mockReturnValue('required');
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'v3.1.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'v3.3.0',
+      backupScope: { containerName: 'test-container', includeLegacy: true },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    // A required policy that cannot establish a digest refuses the rollback
+    // rather than deploying the mutable tag; nothing destructive runs.
+    expect(triggerInstance.pullRollbackImage).not.toHaveBeenCalled();
+    expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+    expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+    expect(log.error).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-rollback failed for container test-container'),
+    );
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auto-rollback',
+        status: 'error',
+        details: expect.stringContaining('Cannot roll back'),
+      }),
+    );
+
+    abortController.abort();
+  });
+
+  test('should pin auto-rollback to the digest the identity binder resolves', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.bindPulledImageIdentity = vi
+      .fn()
+      .mockResolvedValue({ imageIdentity: 'myregistry/myapp:v3.1.0@sha256:resolved' });
+    triggerInstance.getRollbackIdentityBindingPolicy = vi.fn().mockReturnValue('required');
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'v3.1.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'v3.3.0',
+      backupScope: { containerName: 'test-container', includeLegacy: true },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
+      dockerApi,
+      expect.anything(),
+      'myregistry/myapp:v3.1.0@sha256:resolved',
+      expect.anything(),
+      log,
+    );
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auto-rollback', status: 'success' }),
+    );
+
+    abortController.abort();
+  });
+
+  test('should fall back to the mutable tag when the identity binder cannot bind under a non-required policy', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.bindPulledImageIdentity = vi.fn().mockResolvedValue({ skipSecurityGate: true });
+    triggerInstance.getRollbackIdentityBindingPolicy = vi.fn().mockReturnValue('optional');
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'v3.1.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'v3.3.0',
+      backupScope: { containerName: 'test-container', includeLegacy: true },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
+      dockerApi,
+      expect.anything(),
+      'myregistry/myapp:v3.1.0',
+      expect.anything(),
+      log,
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'No digest could be established for the rollback of myregistry/myapp:v3.1.0',
+      ),
+    );
+
+    abortController.abort();
+  });
+
   test('should respect custom window and interval', async () => {
     var log = createMockLog();
     var dockerApi = createMockDockerApi({

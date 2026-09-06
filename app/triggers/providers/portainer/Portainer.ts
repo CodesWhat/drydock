@@ -12,6 +12,7 @@ import {
   updateComposeServiceImageInText,
   YAML_MAX_ALIAS_COUNT,
 } from '../dockercompose/ComposeFileParser.js';
+import { preserveExplicitDockerIoPrefix } from '../dockercompose/Dockercompose.js';
 
 const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_files';
@@ -1197,9 +1198,19 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       return;
     }
 
+    // The identity binder normalises the repository it binds to, which drops
+    // an explicit `docker.io/` prefix the stack file wrote literally. The
+    // Docker/Dockercompose path already restores that prefix when it matches
+    // what the compose service names; reuse the same helper here so the
+    // rewritten stack file still matches what the operator wrote (DR-65).
+    const pinnedImageIdentity = preserveExplicitDockerIoPrefix(
+      resolved.serviceImage,
+      imageIdentity,
+    );
+
     if (resolved.mode === 'env') {
       const { versionVar } = resolved;
-      const pinnedTagValue = extractPinnedTagValue(imageIdentity);
+      const pinnedTagValue = extractPinnedTagValue(pinnedImageIdentity);
       if (
         !versionVar ||
         extractTagVariable(resolved.serviceImage) !== versionVar ||
@@ -1222,9 +1233,9 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     resolved.updatedStackFileContent = updateComposeServiceImageInText(
       resolved.stackFileContent,
       resolved.service,
-      imageIdentity,
+      pinnedImageIdentity,
     );
-    logContainer.info(`Pin Portainer stack ${stackLabel} image to ${imageIdentity}`);
+    logContainer.info(`Pin Portainer stack ${stackLabel} image to ${pinnedImageIdentity}`);
   }
 
   refusePortainerDigestPin(

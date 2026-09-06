@@ -711,7 +711,15 @@ function hasExplicitRegistryHost(imageReference: string): boolean {
   return firstSegment.includes('.') || firstSegment.includes(':') || firstSegment === 'localhost';
 }
 
-function preserveExplicitDockerIoPrefix(
+/**
+ * Keep an explicit `docker.io/` prefix a compose service's `image:` wrote
+ * literally, which the identity binder's normalised repository otherwise
+ * drops. Exported so the Portainer trigger's stack-file digest pin
+ * (`applyPortainerDigestPin`) can reuse the same rule instead of rewriting
+ * the operator's `docker.io/library/nginx:1.27` down to `library/nginx:1.27`
+ * (DR-65).
+ */
+export function preserveExplicitDockerIoPrefix(
   currentComposeImage: string | null | undefined,
   targetImageReference: string,
 ): string {

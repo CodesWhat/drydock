@@ -110,20 +110,39 @@ function ok(req: Request, res: ExpressResponse): void {
   res.status(200).json({ username: (req as AuthRequest).principal?.username });
 }
 
-async function createTestApp(store: LokiSessionStore): Promise<Application> {
+// Registration order is the contract: the key authenticator fronts the chain,
+// so a request carrying both a cookie and a key resolves as the key. Broken
+// out so `beforeEach` can restore it after a test that swaps in its own
+// authenticators, without paying for a fresh Basic/argon2id hash every time.
+function registerStandardAuthenticators(basic: Basic): void {
+  clearAuthenticators();
+  registerAuthenticator(apiKeyAuthenticator);
+  registerAuthenticator(basic.getAuthenticator());
+  registerAuthenticator(sessionAuthenticator);
+}
+
+async function createBasicAuthenticator(): Promise<Basic> {
   const basic = new Basic();
   await basic.register('authentication', 'basic', 'default', {
     user: TEST_USER,
     hash: createArgon2Hash(TEST_PASSWORD),
   });
+  return basic;
+}
 
-  // Registration order is the contract: the key authenticator fronts the
-  // chain, so a request carrying both a cookie and a key resolves as the key.
-  clearAuthenticators();
-  registerAuthenticator(apiKeyAuthenticator);
-  registerAuthenticator(basic.getAuthenticator());
-  registerAuthenticator(sessionAuthenticator);
+function clearSessionStore(store: LokiSessionStore): Promise<void> {
+  return new Promise((resolve, reject) => {
+    store.clear((error: unknown) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
 
+function createTestApp(store: LokiSessionStore): Application {
   const app = express();
   app.set('trust proxy', 1);
   app.use(
@@ -220,23 +239,41 @@ function mintKey(name: string, scopes: string[]): string {
 }
 
 describe('API key enforcement', () => {
-  const openServers: http.Server[] = [];
+  // The app, its Basic authenticator (real argon2id hash) and its HTTP server
+  // are built once for the whole file rather than once per case. Building
+  // them per case (a fresh argon2id hash, a fresh LokiJS-backed session
+  // store, a fresh listening socket, for every one of ~30 cases) is cheap in
+  // isolation but pushed a single case past the 5000ms default under the CPU
+  // contention of the parallel app+ui coverage gate (DR-63). Only the mutable
+  // state a case can actually leave behind — the api-key collection, the
+  // session store's rows, and the registered authenticator chain a couple of
+  // cases deliberately swap out — gets reset per case below.
   let sessionStore: LokiSessionStore;
+  let server: http.Server;
+  let basic: Basic;
   let port: number;
 
-  beforeEach(async () => {
-    clearAuthenticators();
-    apiKeyStore.createCollections(new Loki('api-key-enforcement.test.db') as never);
+  beforeAll(async () => {
+    basic = await createBasicAuthenticator();
     sessionStore = createStore();
     await waitForStoreReady(sessionStore);
-    const app = await createTestApp(sessionStore);
+    const app = createTestApp(sessionStore);
     const running = await startServer(app);
-    openServers.push(running.server);
+    server = running.server;
     port = running.port;
   });
 
-  afterEach(async () => {
-    await Promise.all(openServers.splice(0).map((server) => closeServer(server)));
+  afterAll(async () => {
+    await closeServer(server);
+  });
+
+  beforeEach(async () => {
+    apiKeyStore.createCollections(new Loki('api-key-enforcement.test.db') as never);
+    await clearSessionStore(sessionStore);
+    registerStandardAuthenticators(basic);
+  });
+
+  afterEach(() => {
     clearAuthenticators();
   });
 
