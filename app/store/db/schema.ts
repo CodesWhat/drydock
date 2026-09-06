@@ -48,10 +48,17 @@ CREATE TABLE app_info (
   version TEXT NOT NULL
 ) STRICT;
 
+-- update_mode is nullable on purpose: app/store/settings.ts's boot-time
+-- normalise-and-rewrite treats a row whose update_mode was never set the same
+-- way it treated a LokiJS document with no updateMode field, so existing
+-- installations that predate the global update-mode setting still land on
+-- 'auto' rather than the newer, safer 'manual' default. Every write through
+-- settings.ts fills the column in, so NULL is only ever observed on a row a
+-- collection importer wrote straight from a legacy document that lacked it.
 CREATE TABLE settings (
   id                INTEGER PRIMARY KEY CHECK (id = 1),
   internetless_mode INTEGER NOT NULL DEFAULT 0,
-  update_mode       TEXT NOT NULL DEFAULT 'manual'
+  update_mode       TEXT
 ) STRICT;
 
 CREATE TABLE secrets (

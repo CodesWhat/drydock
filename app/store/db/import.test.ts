@@ -116,10 +116,13 @@ describe('store/db/import', () => {
         source: 'dd.json',
       });
 
-      expect(report).toEqual({ imported: true, rowsByTable: { secrets: 1 } });
+      expect(report).toEqual({
+        imported: true,
+        rowsByTable: { app_info: 0, secrets: 1, settings: 0, ui_preferences: 0 },
+      });
       expect(JSON.parse(String(readStoreMetadata(db, IMPORT_MARKER_KEY)))).toMatchObject({
         source: 'dd.json',
-        rowsByTable: { secrets: 1 },
+        rowsByTable: { app_info: 0, secrets: 1, settings: 0, ui_preferences: 0 },
       });
     });
 
@@ -181,7 +184,7 @@ describe('store/db/import', () => {
         status: 'imported',
         databasePath,
         backupPath: `${legacyStorePath}${LEGACY_STORE_BACKUP_SUFFIX}`,
-        rowsByTable: { secrets: 1 },
+        rowsByTable: { app_info: 0, secrets: 1, settings: 0, ui_preferences: 0 },
       });
       expect(fs.existsSync(legacyStorePath)).toBe(false);
       expect(fs.readFileSync(`${legacyStorePath}${LEGACY_STORE_BACKUP_SUFFIX}`)).toEqual(before);
