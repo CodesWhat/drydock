@@ -5,3 +5,4 @@ Feature: Drydock Store API Exposure
     And response body should be valid json
     And response body path $.configuration.path should be /store
     And response body path $.configuration.file should be dd.json
+    And response body path $.configuration.dbFile should be dd.sqlite

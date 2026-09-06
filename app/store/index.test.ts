@@ -12,9 +12,39 @@ const {
   createContainerMock,
   createAgentKeysMock,
   createLogMock,
+  createDriverMock,
+  createMigrationsMock,
   registerCommonMocks,
 } = vi.hoisted(() => {
   const STORE_CONFIG = { path: '/test/store', file: 'test.json' };
+
+  // A fake `Database` (app/store/db/driver.ts), so `store/index.ts` opening
+  // and migrating the SQLite side never touches a real file: the mocked
+  // paths under `/test/store` do not exist on disk.
+  function createSqliteDbMock(overrides: Record<string, unknown> = {}) {
+    return {
+      isOpen: true,
+      isTransaction: false,
+      exec: vi.fn(),
+      prepare: vi.fn(),
+      pragma: vi.fn(),
+      transaction: vi.fn((run: () => unknown) => run()),
+      backup: vi.fn(async () => 0),
+      close: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  function createDriverMock(openDatabaseImpl = vi.fn(() => createSqliteDbMock())) {
+    return {
+      MEMORY_DATABASE_LOCATION: ':memory:',
+      openDatabase: openDatabaseImpl,
+    };
+  }
+
+  function createMigrationsMock() {
+    return { migrate: vi.fn(() => []) };
+  }
 
   function createLokiMock(
     loadDbCallback = (options, callback) => callback(null),
@@ -104,12 +134,15 @@ const {
       container?: Record<string, unknown>;
       migrateInlineSboms?: (options: Record<string, any>) => Promise<Record<string, number>>;
       portwingAuthorizedKeysPath?: string | undefined;
+      sqliteOpenDatabase?: Parameters<typeof createDriverMock>[0];
     } = {},
   ) {
     vi.doMock('lokijs', () =>
       createLokiMock(overrides.loki, overrides.lokiSave, overrides.lokiInstance),
     );
     resetFsMock(overrides.fs);
+    vi.doMock('./db/driver.js', () => createDriverMock(overrides.sqliteOpenDatabase));
+    vi.doMock('./db/migrations.js', createMigrationsMock);
     vi.doMock('../configuration', () => ({
       ...createConfigMock(overrides.config ?? STORE_CONFIG),
       getPortwingAuthorizedKeysPath: vi.fn(() => overrides.portwingAuthorizedKeysPath),
@@ -151,6 +184,8 @@ const {
     createContainerMock,
     createAgentKeysMock,
     createLogMock,
+    createDriverMock,
+    createMigrationsMock,
     registerCommonMocks,
   };
 });
@@ -159,6 +194,8 @@ const {
 
 vi.mock('lokijs', () => createLokiMock());
 vi.mock('node:fs', () => ({ default: fsMock }));
+vi.mock('./db/driver.js', () => createDriverMock());
+vi.mock('./db/migrations.js', createMigrationsMock);
 vi.mock('../configuration', () => ({
   ...createConfigMock(),
   getPortwingAuthorizedKeysPath: vi.fn(() => undefined),
@@ -269,7 +306,7 @@ describe('Store Module', () => {
   test('should return configuration', async () => {
     const config = store.getConfiguration();
 
-    expect(config).toEqual(STORE_CONFIG);
+    expect(config).toEqual({ ...STORE_CONFIG, dbFile: 'dd.sqlite' });
   });
 
   test('should handle database load error', async () => {
@@ -646,6 +683,206 @@ describe('Store Module', () => {
     await expect(storeOnReadOnlyVolume.init()).rejects.toThrow('chmod failed: EROFS');
   });
 
+  test('should open the SQLite database at the default DD_STORE_DB_FILE and apply permissions to it and its WAL sidecars', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithDefaultDbFile = await import('./index.js');
+    await storeWithDefaultDbFile.init();
+
+    const driver = await import('./db/driver.js');
+    expect(driver.openDatabase).toHaveBeenCalledWith('/test/store/dd.sqlite');
+    const migrations = await import('./db/migrations.js');
+    expect(migrations.migrate).toHaveBeenCalledWith(driver.openDatabase.mock.results[0].value);
+
+    const mockedFs = (await import('node:fs')).default;
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/dd.sqlite', 0o600);
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/dd.sqlite-wal', 0o600);
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/dd.sqlite-shm', 0o600);
+  });
+
+  test('should open the SQLite database at an overridden DD_STORE_DB_FILE', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      config: { path: '/test/store', file: 'test.json', dbFile: 'custom.sqlite' },
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithCustomDbFile = await import('./index.js');
+    await storeWithCustomDbFile.init();
+
+    const driver = await import('./db/driver.js');
+    expect(driver.openDatabase).toHaveBeenCalledWith('/test/store/custom.sqlite');
+    const mockedFs = (await import('node:fs')).default;
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/custom.sqlite', 0o600);
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/custom.sqlite-wal', 0o600);
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/custom.sqlite-shm', 0o600);
+  });
+
+  test('should open the SQLite database at :memory: in memory mode and skip file permission enforcement', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeSqliteMemory = await import('./index.js');
+    await storeSqliteMemory.init({ memory: true });
+
+    const driver = await import('./db/driver.js');
+    expect(driver.openDatabase).toHaveBeenCalledWith(':memory:');
+    const migrations = await import('./db/migrations.js');
+    expect(migrations.migrate).toHaveBeenCalledWith(driver.openDatabase.mock.results[0].value);
+
+    const mockedFs = (await import('node:fs')).default;
+    expect(mockedFs.chmodSync).not.toHaveBeenCalled();
+  });
+
+  test('should tolerate a missing SQLite WAL sidecar when applying permissions', async () => {
+    vi.resetModules();
+    const enoentError = Object.assign(new Error('no such file or directory'), {
+      code: 'ENOENT',
+    });
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store/dd.sqlite-wal') {
+        throw enoentError;
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithMissingWal = await import('./index.js');
+    await expect(storeWithMissingWal.init()).resolves.toBeUndefined();
+    expect(chmodSync).toHaveBeenCalledWith('/test/store/dd.sqlite', 0o600);
+    expect(chmodSync).toHaveBeenCalledWith('/test/store/dd.sqlite-shm', 0o600);
+  });
+
+  test.each(['EPERM', 'EACCES', 'ENOTSUP'])(
+    'should warn and continue when SQLite database file permission enforcement fails with %s',
+    async (code) => {
+      vi.resetModules();
+      const permissionError = Object.assign(new Error(`chmod failed: ${code}`), { code });
+      const chmodSync = vi.fn((target: string) => {
+        if (target === '/test/store/dd.sqlite') {
+          throw permissionError;
+        }
+      });
+      registerCommonMocks({
+        fs: {
+          existsSync: vi.fn(() => true),
+          mkdirSync: vi.fn(),
+          renameSync: vi.fn(),
+          chmodSync,
+        },
+      });
+
+      const storeWithBadSqlitePermissions = await import('./index.js');
+      await expect(storeWithBadSqlitePermissions.init()).resolves.toBeUndefined();
+
+      const logger = (await import('../log/index.js')).default;
+      const scopedLog = logger.child.mock.results[0].value;
+      expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
+    },
+  );
+
+  test('should reject when SQLite database file permission enforcement fails with an unrecoverable code', async () => {
+    vi.resetModules();
+    const unexpectedError = Object.assign(new Error('bad file descriptor'), {
+      code: 'EBADF',
+    });
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store/dd.sqlite') {
+        throw unexpectedError;
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithBadSqliteFile = await import('./index.js');
+    await expect(storeWithBadSqliteFile.init()).rejects.toThrow('bad file descriptor');
+  });
+
+  test('should checkpoint and reapply permissions to the SQLite database on save', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithCheckpoint = await import('./index.js');
+    await storeWithCheckpoint.init();
+
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
+    const mockedFs = (await import('node:fs')).default;
+    mockedFs.chmodSync.mockClear();
+
+    await storeWithCheckpoint.save();
+
+    expect(sqliteInstance.pragma).toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/dd.sqlite', 0o600);
+  });
+
+  test('should not checkpoint the SQLite database when save runs in memory mode', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      lokiSave: vi.fn((callback) => callback(null)),
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeMemoryCheckpoint = await import('./index.js');
+    await storeMemoryCheckpoint.init({ memory: true });
+
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
+
+    await storeMemoryCheckpoint.save();
+
+    expect(sqliteInstance.pragma).not.toHaveBeenCalled();
+  });
+
+  test('should report an uninitialized store as memory-only even once Loki alone has been assigned', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+      sqliteOpenDatabase: vi.fn(() => {
+        throw new Error('SQLite open failed');
+      }),
+    });
+
+    const storeWithFailedSqliteOpen = await import('./index.js');
+    await expect(storeWithFailedSqliteOpen.init()).rejects.toThrow('SQLite open failed');
+    expect(storeWithFailedSqliteOpen.isMemoryStore()).toBe(true);
+  });
+
   test('should throw when store configuration is invalid', async () => {
     vi.resetModules();
 
@@ -674,6 +911,7 @@ describe('Store Module', () => {
     expect(storeDefault.getConfiguration()).toEqual({
       path: '/store',
       file: 'dd.json',
+      dbFile: 'dd.sqlite',
     });
   });
 
@@ -744,6 +982,7 @@ describe('Store Module', () => {
     expect(storeWithSnapshot.getDebugSnapshot()).toEqual({
       memoryMode: false,
       path: '/test/store/test.json',
+      sqlitePath: '/test/store/dd.sqlite',
       collectionCount: 6,
       documentCount: 8,
       serializedBytes: 91,
@@ -813,6 +1052,7 @@ describe('Store Module', () => {
     expect(storeInMemory.getDebugSnapshot()).toEqual({
       memoryMode: true,
       path: '/test/store/test.json',
+      sqlitePath: '/test/store/dd.sqlite',
       collectionCount: 0,
       documentCount: 0,
       serializedBytes: 0,
@@ -843,6 +1083,7 @@ describe('Store Module', () => {
     expect(storeWithoutInit.getDebugSnapshot()).toEqual({
       memoryMode: false,
       path: undefined,
+      sqlitePath: undefined,
       collectionCount: 0,
       documentCount: 0,
       serializedBytes: 0,
@@ -878,6 +1119,7 @@ describe('Store Module', () => {
     expect(storeWithStatError.getDebugSnapshot()).toEqual({
       memoryMode: false,
       path: '/test/store/test.json',
+      sqlitePath: '/test/store/dd.sqlite',
       collectionCount: 1,
       documentCount: 1,
       serializedBytes: 15,

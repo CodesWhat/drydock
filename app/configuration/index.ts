@@ -494,9 +494,22 @@ export function getAgentConfigurations() {
 
 /**
  * Get Input configurations.
+ *
+ * `DD_STORE_DB_FILE` is excluded from the generic dotted-path walk below: its
+ * two-word suffix would otherwise land as a nested `db.file`
+ * (`get()` treats every `_` after the prefix as a path separator, the same
+ * reason `getAgentConfigurations` excludes `DD_AGENT_ALLOW_INSECURE_SECRET`
+ * above), while every caller of this store configuration wants it as a flat
+ * `dbFile` alongside `path` and `file`.
  */
 export function getStoreConfiguration() {
-  return get('dd.store', ddEnvVars);
+  const { DD_STORE_DB_FILE: dbFileEnvVar, ...storeEnvVars } = ddEnvVars;
+  const configuration = get('dd.store', storeEnvVars) as Record<string, unknown>;
+  const dbFile = dbFileEnvVar?.trim();
+  if (dbFile) {
+    configuration.dbFile = dbFile;
+  }
+  return configuration;
 }
 
 /**
