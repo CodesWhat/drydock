@@ -22,6 +22,10 @@ type ContainerUpdateLogger = {
 
 type ContainerInspection = {
   Id?: string;
+  Config?: {
+    Image?: string;
+    [key: string]: unknown;
+  };
   State?: {
     Running?: boolean;
     [key: string]: unknown;
@@ -74,6 +78,21 @@ type ContainerForUpdate = {
   };
   [key: string]: unknown;
 };
+
+/**
+ * Drop a `@sha256:...` digest suffix so a pinned reference
+ * (`app:2.0@sha256:...`) and its unpinned form (`app:2.0`) compare equal.
+ * The operation's `targetImage` is deliberately recorded unpinned — it is a
+ * documented API field (`content/docs/current/api/container.mdx`) whose
+ * example shows a plain `repo:tag` — but `bindPulledImageIdentity` pins the
+ * replacement container's actual image to a digest, so the container found
+ * running under the original name reports the pinned form. Comparing the raw
+ * strings would treat the executor's own replacement as foreign whenever
+ * `getContainerIdBestEffort()` failed to capture `newContainerId`.
+ */
+function withoutImageDigest(imageReference: string): string {
+  return imageReference.split('@')[0];
+}
 
 function getContainerIdentityFilter(
   container: ContainerForUpdate,
@@ -464,6 +483,7 @@ class ContainerUpdateExecutor {
         pending,
         container,
         activeByOriginalName.inspection?.Id,
+        activeByOriginalName.inspection?.Config?.Image,
       );
       return;
     }
@@ -552,6 +572,7 @@ class ContainerUpdateExecutor {
     pending: PendingContainerUpdateOperation,
     container: ContainerForUpdate,
     activeContainerId?: string,
+    activeContainerImage?: string,
   ): void {
     const isPersistedReplacement =
       activeContainerId !== undefined && pending.newContainerId === activeContainerId;
@@ -572,6 +593,38 @@ class ContainerUpdateExecutor {
         outcome: 'error',
         reason: 'startup_reconcile_original_untouched',
         details: `Recovered interrupted update operation ${pending.id} without replacing original container ${pending.oldName}`,
+        fromVersion: pending.fromVersion,
+        toVersion: pending.toVersion,
+      });
+      return;
+    }
+
+    // The container's id under the original name doesn't match the id we
+    // recorded for our own replacement, so something else recreated it while
+    // this instance was down (e.g. a compose/Portainer recreate racing the
+    // outage). Best-effort id capture can also leave newContainerId
+    // undefined, in which case we can't tell it apart from our own
+    // replacement by id alone — fall through to an image check when we have
+    // both a target image and the found container's image to compare.
+    const imageMismatch =
+      !isPersistedReplacement &&
+      pending.targetImage !== undefined &&
+      activeContainerImage !== undefined &&
+      activeContainerImage !== pending.targetImage &&
+      withoutImageDigest(activeContainerImage) !== withoutImageDigest(pending.targetImage);
+
+    if (imageMismatch) {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: `Container found under original name ${pending.oldName} is running image ${activeContainerImage}, not the target image ${pending.targetImage}; a different recreate likely occurred during the outage`,
+        recoveredAt: new Date().toISOString(),
+      });
+      this.recordRollbackTelemetry({
+        container,
+        outcome: 'error',
+        reason: 'startup_reconcile_active_image_mismatch',
+        details: `Recovered interrupted update operation ${pending.id}: container ${pending.oldName} is running unexpected image ${activeContainerImage} (expected ${pending.targetImage})`,
         fromVersion: pending.fromVersion,
         toVersion: pending.toVersion,
       });
