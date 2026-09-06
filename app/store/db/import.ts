@@ -2,8 +2,8 @@
  * First-start import from the LokiJS store into SQLite (roadmap 7-STORE,
  * slice 1, spec section 3).
  *
- * Nothing calls this yet. Slice 2 wires it into `app/store/index.ts`, after the
- * existing `wud.json` to `dd.json` rename, which must still run first.
+ * `app/store/index.ts` calls this as of slice 3, after the existing
+ * `wud.json` to `dd.json` rename, which must still run first.
  *
  * The sequence, and why each step is where it is:
  *

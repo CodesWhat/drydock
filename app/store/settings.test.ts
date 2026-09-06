@@ -1,178 +1,80 @@
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import * as settings from './settings.js';
 
 vi.mock('../log', () => ({ default: { child: vi.fn(() => ({ info: vi.fn() })) } }));
 
-function createCollection(initialValue = null) {
-  let value = initialValue;
-  return {
-    findOne: vi.fn(() => value),
-    insert: vi.fn((nextValue) => {
-      value = nextValue;
-    }),
-    remove: vi.fn((valueToRemove) => {
-      if (valueToRemove === value) {
-        value = null;
-      }
-    }),
-  };
+function readRow(db: Database) {
+  return db.prepare('SELECT internetless_mode, update_mode FROM settings WHERE id = 1').get();
 }
 
 describe('Settings Store', () => {
+  let db: Database;
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    db = createMigratedMemoryDatabase();
   });
 
-  test('createCollections should create settings collection when it does not exist', () => {
-    const collection = createCollection();
-    const db = {
-      getCollection: vi.fn(() => null),
-      addCollection: vi.fn(() => collection),
-    };
+  afterEach(() => {
+    db.close();
+  });
+
+  test('createCollections writes defaults when no row exists', () => {
+    settings.createCollections(db);
+
+    expect(readRow(db)).toEqual({ internetless_mode: 0, update_mode: 'manual' });
+  });
+
+  test('createCollections preserves automatic updates for a row that predates update mode', () => {
+    db.prepare(
+      'INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, 1, NULL)',
+    ).run();
 
     settings.createCollections(db);
 
-    expect(db.addCollection).toHaveBeenCalledWith('settings');
-    expect(collection.insert).toHaveBeenCalledWith({
-      internetlessMode: false,
-      updateMode: 'manual',
-    });
-  });
-
-  test('createCollections should preserve automatic updates for existing pre-update-mode settings', () => {
-    const collection = createCollection({ internetlessMode: true });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
-    settings.createCollections(db);
-
-    expect(collection.insert).toHaveBeenCalledWith({
-      internetlessMode: true,
-      updateMode: 'auto',
-    });
+    expect(readRow(db)).toEqual({ internetless_mode: 1, update_mode: 'auto' });
     expect(settings.getSettings().updateMode).toBe('auto');
   });
 
-  test('createCollections should preserve an explicitly stored update mode', () => {
-    const collection = createCollection({ internetlessMode: false, updateMode: 'notify' });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
+  test('createCollections preserves an explicitly stored update mode', () => {
+    db.prepare(
+      "INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, 0, 'notify')",
+    ).run();
 
     settings.createCollections(db);
 
-    expect(collection.insert).toHaveBeenCalledWith({
-      internetlessMode: false,
-      updateMode: 'notify',
-    });
+    expect(readRow(db)).toEqual({ internetless_mode: 0, update_mode: 'notify' });
   });
 
-  test('createCollections should normalize existing settings', () => {
-    const collection = createCollection({
-      internetlessMode: true,
-      unknown: 'value',
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('getSettings returns defaults when empty', () => {
     settings.createCollections(db);
 
-    expect(db.addCollection).not.toHaveBeenCalled();
-    expect(collection.remove).toHaveBeenCalledWith({
-      internetlessMode: true,
-      unknown: 'value',
-    });
-    expect(collection.insert).toHaveBeenCalledWith({
-      internetlessMode: true,
-      updateMode: 'auto',
-    });
+    expect(settings.getSettings()).toEqual({ internetlessMode: false, updateMode: 'manual' });
   });
 
-  test('getSettings should return defaults when empty', () => {
-    const collection = createCollection();
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('updateSettings merges existing and update values', () => {
+    db.prepare(
+      'INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, 0, NULL)',
+    ).run();
     settings.createCollections(db);
 
-    expect(settings.getSettings()).toEqual({
-      internetlessMode: false,
-      updateMode: 'manual',
-    });
+    const settingsUpdated = settings.updateSettings({ internetlessMode: true });
+
+    expect(settingsUpdated).toEqual({ internetlessMode: true, updateMode: 'auto' });
+    expect(settings.getSettings()).toEqual({ internetlessMode: true, updateMode: 'auto' });
   });
 
-  test('getSettings should fall back to defaults when stored document is missing', () => {
-    const collection = {
-      findOne: vi.fn(() => null),
-      insert: vi.fn(),
-      remove: vi.fn(),
-    };
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('updateSettings supports an empty payload and keeps current values', () => {
+    db.prepare(
+      'INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, 1, NULL)',
+    ).run();
     settings.createCollections(db);
-    expect(settings.getSettings()).toEqual({
-      internetlessMode: false,
-      updateMode: 'manual',
-    });
-  });
 
-  test('updateSettings should merge existing and update values', () => {
-    const collection = createCollection({
-      internetlessMode: false,
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
-    settings.createCollections(db);
-    const settingsUpdated = settings.updateSettings({
-      internetlessMode: true,
-    });
-
-    expect(settingsUpdated).toEqual({
-      internetlessMode: true,
-      updateMode: 'auto',
-    });
-    expect(settings.getSettings()).toEqual({
-      internetlessMode: true,
-      updateMode: 'auto',
-    });
-  });
-
-  test('updateSettings should support empty payload and keep current values', () => {
-    const collection = createCollection({
-      internetlessMode: true,
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
-    settings.createCollections(db);
     const settingsUpdated = settings.updateSettings();
-    expect(settingsUpdated).toEqual({
-      internetlessMode: true,
-      updateMode: 'auto',
-    });
+    expect(settingsUpdated).toEqual({ internetlessMode: true, updateMode: 'auto' });
   });
 
-  test('updateSettings should persist and expose each update mode', () => {
-    const collection = createCollection();
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('updateSettings persists and exposes each update mode', () => {
     settings.createCollections(db);
 
     for (const updateMode of ['notify', 'manual', 'auto'] as const) {
@@ -181,13 +83,7 @@ describe('Settings Store', () => {
     }
   });
 
-  test('isInternetlessModeEnabled should return mode state', () => {
-    const collection = createCollection();
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('isInternetlessModeEnabled returns mode state', () => {
     settings.createCollections(db);
     expect(settings.isInternetlessModeEnabled()).toBe(false);
 
@@ -195,126 +91,54 @@ describe('Settings Store', () => {
     expect(settings.isInternetlessModeEnabled()).toBe(true);
   });
 
-  test('updateSettings should throw when value is invalid', () => {
-    const collection = createCollection();
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('updateSettings throws when value is invalid', () => {
     settings.createCollections(db);
     expect(() =>
-      settings.updateSettings({
-        internetlessMode: 'yes' as unknown as boolean,
-      }),
+      settings.updateSettings({ internetlessMode: 'yes' as unknown as boolean }),
     ).toThrow();
   });
 
-  test('getSettings should cache validated settings and invalidate cache after writes', () => {
-    const collection = createCollection({
-      internetlessMode: false,
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('getSettings caches validated settings and invalidates the cache after writes', () => {
+    db.prepare(
+      'INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, 0, NULL)',
+    ).run();
     settings.createCollections(db);
-    collection.findOne.mockClear();
+
+    const readSpy = vi.spyOn(db, 'prepare');
+    readSpy.mockClear();
 
     settings.getSettings();
-    const readCountAfterFirstGet = collection.findOne.mock.calls.length;
+    const callsAfterFirstGet = readSpy.mock.calls.length;
     settings.getSettings();
-    expect(collection.findOne.mock.calls.length).toBe(readCountAfterFirstGet);
+    expect(readSpy.mock.calls.length).toBe(callsAfterFirstGet);
 
     settings.updateSettings({ internetlessMode: true });
-    const readCountBeforeGetAfterWrite = collection.findOne.mock.calls.length;
     const settingsAfterWrite = settings.getSettings();
     expect(settingsAfterWrite).toEqual({ internetlessMode: true, updateMode: 'auto' });
-    expect(collection.findOne.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
+    expect(readSpy.mock.calls.length).toBeGreaterThan(callsAfterFirstGet);
+
+    readSpy.mockRestore();
   });
 
-  test('getSettings should normalize persisted settings after cache invalidation', () => {
-    const collection = createCollection({
-      internetlessMode: false,
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
+  test('getSettings falls back to defaults when the persisted row disappears after cache invalidation', () => {
+    db.prepare(
+      'INSERT INTO settings (id, internetless_mode, update_mode) VALUES (1, 1, NULL)',
+    ).run();
     settings.createCollections(db);
     settings.updateSettings({ internetlessMode: true });
-    collection.findOne.mockClear();
 
-    expect(settings.getSettings()).toEqual({ internetlessMode: true, updateMode: 'auto' });
-    expect(collection.findOne).toHaveBeenCalledWith({});
-  });
-
-  test('getSettings should fall back to defaults when cache is invalidated and persisted row disappears', () => {
-    const collection = createCollection({
-      internetlessMode: true,
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
-    settings.createCollections(db);
-    settings.updateSettings({ internetlessMode: true });
-    collection.findOne.mockImplementationOnce(() => null);
-
+    db.prepare('DELETE FROM settings').run();
+    // Cache was invalidated by the write above, so the next read hits the table.
     expect(settings.getSettings()).toEqual({ internetlessMode: false, updateMode: 'manual' });
   });
 
-  test('getSettings should strip $loki and meta from LokiJS documents', () => {
-    const collection = createCollection({
-      internetlessMode: true,
-      $loki: 4,
-      meta: { revision: 0, created: 1234567890, version: 0 },
-    });
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
-    settings.createCollections(db);
-    const result = settings.getSettings();
-    expect(result).toEqual({ internetlessMode: true, updateMode: 'auto' });
-    expect(result).not.toHaveProperty('$loki');
-    expect(result).not.toHaveProperty('meta');
-  });
-
-  test('updateSettings should strip $loki and meta from returned value', () => {
-    const mutatingInsert = vi.fn((obj) => {
-      obj.$loki = 5;
-      obj.meta = { revision: 0, created: Date.now(), version: 0 };
-    });
-    const collection = {
-      findOne: vi.fn(() => ({ internetlessMode: false })),
-      insert: mutatingInsert,
-      remove: vi.fn(),
-    };
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(),
-    };
-
-    settings.createCollections(db);
-    const result = settings.updateSettings({ internetlessMode: true });
-    expect(result).toEqual({ internetlessMode: true, updateMode: 'auto' });
-    expect(result).not.toHaveProperty('$loki');
-    expect(result).not.toHaveProperty('meta');
-  });
-
-  test('updateSettings should not fail before createCollections initializes storage', async () => {
+  test('updateSettings does not fail before createCollections initializes storage', async () => {
     vi.resetModules();
     const freshSettings = await import('./settings.js');
 
-    expect(
-      freshSettings.updateSettings({
-        internetlessMode: true,
-      }),
-    ).toEqual({ internetlessMode: true, updateMode: 'manual' });
+    expect(freshSettings.updateSettings({ internetlessMode: true })).toEqual({
+      internetlessMode: true,
+      updateMode: 'manual',
+    });
   });
 });
