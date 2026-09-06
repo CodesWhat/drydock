@@ -98,7 +98,7 @@ function enforceStorePermissions(storeDirectory: string, storePath: string): voi
 // Drop it so the main store stops re-serializing a stale copy on every save.
 const LEGACY_SESSIONS_COLLECTION_NAME = 'Sessions';
 
-function dropLegacySessionsCollection(): void {
+function dropLegacySessionsCollection(): boolean {
   // Guarded with typeof checks, not just db truthiness: several store unit
   // tests substitute a bare { loadDatabase, saveDatabase } stand-in for the
   // real Loki instance, and a real Loki database always exposes both methods.
@@ -108,16 +108,17 @@ function dropLegacySessionsCollection(): void {
     typeof db.removeCollection !== 'function' ||
     !db.getCollection(LEGACY_SESSIONS_COLLECTION_NAME)
   ) {
-    return;
+    return false;
   }
   db.removeCollection(LEGACY_SESSIONS_COLLECTION_NAME);
   log.info(
     'Dropped legacy Sessions collection from the main store; sessions now persist in their own file',
   );
+  return true;
 }
 
-function createCollections() {
-  dropLegacySessionsCollection();
+function createCollections(): boolean {
+  const droppedLegacySessionsCollection = dropLegacySessionsCollection();
   agentKeys.createCollections(db);
   app.createCollections(db);
   audit.createCollections(db);
@@ -141,6 +142,7 @@ function createCollections() {
   settings.createCollections(db);
   updateOperation.createCollections(db);
   app.completeStartupInitialization();
+  return droppedLegacySessionsCollection;
 }
 
 async function migrateSbomsOffHeap(): Promise<void> {
@@ -202,7 +204,14 @@ async function loadDb(
     reject(err);
   } else {
     // Create collections
-    createCollections();
+    const droppedLegacySessionsCollection = createCollections();
+    if (droppedLegacySessionsCollection) {
+      // loadDatabase() resolving is not itself a write: LokiJS only
+      // autosaves on a later dirty write, so a store that never writes
+      // again would keep the stale Sessions collection in dd.json forever.
+      // Flush once here so the drop is durable across a restart.
+      await save();
+    }
     await migrateSbomsOffHeap();
     loadAuthorizedKeysIfConfigured();
     resolve();
