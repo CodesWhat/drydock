@@ -4243,6 +4243,102 @@ test('updateContainer where a rollback-named container is renamed back to a norm
   expect(spyUpdated.mock.calls[0][0]).toMatchObject({ name: 'service' });
 });
 
+test('updateContainer with a name-only delta (docker rename) DOES emit emitContainerUpdated', () => {
+  const existingDoc = {
+    data: createContainerFixture({ id: 'renamed-container', name: 'old-name', status: 'running' }),
+  };
+  const collection = {
+    findOne: () => existingDoc,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  container.updateContainer(
+    createContainerFixture({ id: 'renamed-container', name: 'new-name', status: 'running' }),
+  );
+
+  expect(spyUpdated).toHaveBeenCalledTimes(1);
+  expect(spyUpdated.mock.calls[0][0]).toMatchObject({ name: 'new-name' });
+});
+
+test('updateContainer with a displayName-only delta DOES emit emitContainerUpdated', () => {
+  const existingDoc = {
+    data: createContainerFixture({
+      id: 'redisplayed-container',
+      name: 'same-name',
+      displayName: 'Old Display Name',
+      status: 'running',
+    }),
+  };
+  const collection = {
+    findOne: () => existingDoc,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  container.updateContainer(
+    createContainerFixture({
+      id: 'redisplayed-container',
+      name: 'same-name',
+      displayName: 'New Display Name',
+      status: 'running',
+    }),
+  );
+
+  expect(spyUpdated).toHaveBeenCalledTimes(1);
+  expect(spyUpdated.mock.calls[0][0]).toMatchObject({ displayName: 'New Display Name' });
+});
+
+test('updateContainer with no delta at all does NOT emit emitContainerUpdated', () => {
+  const existingDoc = {
+    data: createContainerFixture({ id: 'unchanged-container', name: 'steady', status: 'running' }),
+  };
+  const collection = {
+    findOne: () => existingDoc,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  container.updateContainer(
+    createContainerFixture({ id: 'unchanged-container', name: 'steady', status: 'running' }),
+  );
+
+  expect(spyUpdated).not.toHaveBeenCalled();
+});
+
 describe('container unhealthy transition emission', () => {
   function healthFixture(overrides: Record<string, any>) {
     const fixture = createContainerFixture(overrides);
