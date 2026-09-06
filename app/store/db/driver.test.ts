@@ -7,6 +7,7 @@ import {
 } from '../../test/sqlite-db.js';
 import {
   applyJournalMode,
+  applyOpenPragmas,
   type Database,
   DEFAULT_BUSY_TIMEOUT_MS,
   loadSqliteModule,
@@ -169,6 +170,32 @@ describe('store/db/driver', () => {
         expect.stringContaining('Write-ahead logging was refused'),
       );
       expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('/mnt/nas/dd.sqlite'));
+    });
+  });
+
+  describe('applyOpenPragmas', () => {
+    // The real WAL-refusal path only fires on NFS/CIFS mounts (see
+    // `applyJournalMode` above, which forces it the same way: by calling the
+    // function directly against a database that cannot grant WAL, rather
+    // than a real network mount). This calls the pragma-setting seam
+    // directly with the journal mode `applyJournalMode` would have returned,
+    // to pin the fallback's `synchronous` value without needing one.
+    test('keeps synchronous NORMAL under WAL', () => {
+      const db = open(databasePath);
+      applyOpenPragmas(db, DEFAULT_BUSY_TIMEOUT_MS, 'wal');
+      expect(db.pragma('synchronous')).toBe(1);
+    });
+
+    test('falls back to synchronous FULL for a writable file-backed database that is not in WAL mode', () => {
+      const db = open(databasePath);
+      applyOpenPragmas(db, DEFAULT_BUSY_TIMEOUT_MS, 'truncate');
+      expect(db.pragma('synchronous')).toBe(2);
+    });
+
+    test('keeps synchronous NORMAL when no journal mode was probed (read-only or memory)', () => {
+      const db = open(MEMORY_DATABASE_LOCATION);
+      applyOpenPragmas(db, DEFAULT_BUSY_TIMEOUT_MS);
+      expect(db.pragma('synchronous')).toBe(1);
     });
   });
 

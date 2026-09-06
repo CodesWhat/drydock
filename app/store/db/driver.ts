@@ -300,10 +300,22 @@ export function applyJournalMode(db: Pick<Database, 'pragma'>, location: string)
   return fallback;
 }
 
-function applyOpenPragmas(db: Database, busyTimeoutMs: number): void {
-  // Order matters and is fixed by the spec: journal mode, durability, foreign
-  // keys, lock wait.
-  db.pragma('synchronous', 'NORMAL');
+/**
+ * Apply the store's fixed pragma order: journal mode durability, foreign
+ * keys, lock wait.
+ *
+ * `journalMode` is the value `applyJournalMode` actually granted, or
+ * `undefined` when it was never probed at all (a read-only connection or a
+ * memory database, neither of which writes a journal). `synchronous =
+ * NORMAL` is only safe when the WAL file itself supplies the durability
+ * guarantee `FULL` exists for: under a rollback journal (the fallback
+ * `applyJournalMode` takes when WAL is refused, e.g. on NFS/CIFS mounts) a
+ * crash between deleting and recreating the journal can corrupt the database
+ * under NORMAL, so a writable file-backed database that isn't in WAL mode
+ * gets FULL instead. Everything else keeps NORMAL, unchanged.
+ */
+export function applyOpenPragmas(db: Database, busyTimeoutMs: number, journalMode?: string): void {
+  db.pragma('synchronous', journalMode !== undefined && journalMode !== 'wal' ? 'FULL' : 'NORMAL');
   db.pragma('foreign_keys', 'ON');
   db.pragma('busy_timeout', busyTimeoutMs);
 }
@@ -395,9 +407,10 @@ export function openDatabase(location: string, options: OpenDatabaseOptions = {}
     },
   };
 
+  let journalMode: string | undefined;
   if (!readOnly && location !== MEMORY_DATABASE_LOCATION) {
-    applyJournalMode(database, location);
+    journalMode = applyJournalMode(database, location);
   }
-  applyOpenPragmas(database, busyTimeoutMs);
+  applyOpenPragmas(database, busyTimeoutMs, journalMode);
   return database;
 }
