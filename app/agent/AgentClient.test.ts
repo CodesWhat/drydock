@@ -1253,6 +1253,52 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(false);
     });
 
+    test.each([
+      ['a bare object', {}],
+      ['an object with a nested containers array', { containers: [] }],
+      ['a string', 'oops'],
+      ['a number', 42],
+    ])(
+      'rejects a non-array /api/containers body (%s) before deregistering triggers (DR-25)',
+      async (_label, body) => {
+        axios.get.mockResolvedValueOnce({ data: body });
+
+        await expect(client.handshake()).rejects.toThrow(/Handshake failed for agent test-agent/);
+
+        expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+        expect(registry.registerComponent).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          expect.stringContaining('non-array /api/containers body'),
+        );
+        expect(client.isConnected).toBe(false);
+      },
+    );
+
+    test('a null /api/containers body handshakes normally (DR-25 control)', async () => {
+      axios.get.mockResolvedValueOnce({ data: null });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await expect(client.handshake()).rejects.toThrow();
+
+      // `null` fails Array.isArray the same as any other non-array body; the
+      // "control" here is that it is rejected the same way and never reaches
+      // deregisterAgentComponents, not that it is somehow accepted.
+      expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+    });
+
+    test('an empty-array /api/containers body handshakes normally (DR-25 control)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
+      expect(client.isConnected).toBe(true);
+    });
+
     test('should emit agent-connected when transitioning to connected state', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] })

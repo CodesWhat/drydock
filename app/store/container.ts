@@ -730,6 +730,12 @@ function hasContainerChangedWithSecurityHashes(
   if (existing.health !== incoming.health) {
     return true;
   }
+  if (existing.name !== incoming.name) {
+    return true;
+  }
+  if (existing.displayName !== incoming.displayName) {
+    return true;
+  }
   if (existing.error?.message !== incoming.error?.message) {
     return true;
   }
