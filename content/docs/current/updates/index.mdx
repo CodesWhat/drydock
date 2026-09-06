@@ -5,6 +5,20 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.10 Highlights — September 6, 2026
+
+Three fixes: the demo site no longer fails the weekly DAST scan on ZAP rule
+90004, since it never sent `Cross-Origin-Opener-Policy` and now does; the
+arm64 pass of the image arch check no longer fails every multi-platform cut,
+since `check-image-arch.sh` now resolves each platform's own manifest digest
+out of the index before running docker instead of reusing the same
+index-digest reference for both platforms; and DR-121, where the session
+store and the main store both wrote the same `/store/dd.json` so whichever
+autosave ran last erased the other's data, is fixed by giving the session
+store its own sibling file. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc10--2026-09-06)
+for the full release notes.
+
 ## v1.6.1-rc.9 Highlights — September 5, 2026
 
 Six fixes: the release cut now catches an arm64 image that is actually amd64

@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.9-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.10-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,17 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.10 highlights</strong></summary>
+
+- **The demo site no longer fails the weekly DAST scan on ZAP rule 90004** — it never sent `Cross-Origin-Opener-Policy`, and `apps/demo/vercel.json` now sends `same-origin`.
+- **The arm64 pass of the image arch check no longer fails every multi-platform cut** — it ran against the same index-digest reference as the amd64 pass, and docker's classic image store cannot hold two platform variants under one digest, so the arm64 pass that followed always failed and killed the v1.6.1-rc.9 cut. `check-image-arch.sh` now resolves each platform's own manifest digest out of the index before running docker.
+- **DR-121: containers, settings, and audit rows written after startup no longer vanish, and a restart no longer logs everyone out** — the session store and the main store both wrote the same `/store/dd.json`, so whichever autosave ran last erased the other's data. The session store now writes to its own sibling file, `dd-sessions.json` by default, and the main store drops a stale `Sessions` collection left behind in `dd.json` by an older build instead of re-saving it.
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc10--2026-09-06).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.9 highlights</strong></summary>
 
 - **The release cut now catches an arm64 image that is actually amd64 wearing an arm64 label before it ships** — a base image digest pin naming a single-platform manifest instead of a multi-arch index let buildx resolve the same digest for every `--platform`, which is how that shipped on the v1.7 line ([#1021](https://github.com/CodesWhat/drydock/issues/1021)); the 1.6 line was never affected, but the release cut now checks the Dockerfile's base image pins and each published platform's own binaries before promoting. ([#1032](https://github.com/CodesWhat/drydock/pull/1032))
