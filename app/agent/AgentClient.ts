@@ -950,6 +950,27 @@ export class AgentClient {
         merged[field] = existingRecord[field];
       }
     }
+    // `image.digest.watch` is derived from the `dd.watch.digest` label by the
+    // controller's own bridged Docker watcher (AgentWatcher's
+    // PortwingDockerBridge), never by Portwing itself — Portwing hardcodes
+    // `image.digest.watch` to false on every report of its own "live runtime
+    // state" since it does not do digest watching. Nothing else in this merge
+    // restores it (the field lives on `image`, which isn't in
+    // `controllerOwnedFields`), so without this, a later Portwing report
+    // wholesale-replaces the store's `image` and silently turns digest
+    // watching back off (DR-38).
+    if (existing.image?.digest) {
+      const mergedImage = merged.image as Container['image'] | undefined;
+      if (mergedImage) {
+        merged.image = {
+          ...mergedImage,
+          digest: {
+            ...mergedImage.digest,
+            watch: existing.image.digest.watch,
+          },
+        };
+      }
+    }
     return merged as unknown as Container;
   }
 
