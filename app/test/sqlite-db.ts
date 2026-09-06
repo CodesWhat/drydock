@@ -9,10 +9,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { type Database, MEMORY_DATABASE_LOCATION, openDatabase } from '../store/db/driver.js';
+import { migrate } from '../store/db/migrations.js';
 
 /** An in-memory database with no schema applied. */
 export function createMemoryDatabase(): Database {
   return openDatabase(MEMORY_DATABASE_LOCATION);
+}
+
+/** An in-memory database with the full schema applied. */
+export function createMigratedMemoryDatabase(): Database {
+  const db = createMemoryDatabase();
+  migrate(db);
+  return db;
 }
 
 /** A throwaway directory standing in for `DD_STORE_PATH`. */
