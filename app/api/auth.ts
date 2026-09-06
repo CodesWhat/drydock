@@ -372,7 +372,10 @@ export function init(app: Application): void {
   sessionMiddleware = session({
     name: SESSION_COOKIE_NAME,
     store: new LokiStore({
-      path: `${store.getConfiguration().path}/${store.getConfiguration().file}`,
+      // DR-121: this must be a sibling file, never the main store's own file —
+      // two independent LokiJS instances autosaving the same file clobber
+      // each other's writes.
+      path: store.getSessionStorePath(),
       // Keep store retention >= longest auth cookie lifespan (remember-me).
       ttl: getCookieMaxAge(REMEMBER_ME_DAYS) / 1000,
     }),
