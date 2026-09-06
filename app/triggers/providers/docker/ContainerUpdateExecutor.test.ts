@@ -644,6 +644,139 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('reconcile does not mark a foreign container recovered-active when its image does not match the target', async () => {
+    const pending = {
+      id: 'op-foreign',
+      oldContainerId: 'old-container-id',
+      newContainerId: 'new-container-id',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'app:2.0',
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({
+        container: {},
+        inspection: { Id: 'foreign-container-id', Config: { Image: 'app:1.0' } },
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-foreign',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: expect.stringContaining('app:1.0'),
+      }),
+    );
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+      'op-foreign',
+      expect.objectContaining({ status: 'succeeded' }),
+    );
+  });
+
+  test('reconcile still marks a foreign container recovered-active when its image matches the target', async () => {
+    const pending = {
+      id: 'op-foreign-match',
+      oldContainerId: 'old-container-id',
+      newContainerId: 'new-container-id',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'app:2.0',
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({
+        container: {},
+        inspection: { Id: 'foreign-container-id', Config: { Image: 'app:2.0' } },
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-foreign-match',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-active',
+      }),
+    );
+  });
+
+  test('reconcile still marks recovered-active on image match when newContainerId was never captured', async () => {
+    const pending = {
+      id: 'op-no-new-id',
+      oldContainerId: 'old-container-id',
+      newContainerId: undefined,
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'app:2.0',
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({
+        container: {},
+        inspection: { Id: 'some-container-id', Config: { Image: 'app:2.0' } },
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-no-new-id',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-active',
+      }),
+    );
+  });
+
+  test('reconcile still marks recovered-active when no target image was recorded to check against', async () => {
+    const pending = {
+      id: 'op-no-target-image',
+      oldContainerId: 'old-container-id',
+      newContainerId: 'new-container-id',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: undefined,
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({
+        container: {},
+        inspection: { Id: 'foreign-container-id', Config: { Image: 'app:1.0' } },
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-no-target-image',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-active',
+      }),
+    );
+  });
+
   test('execute fails cleanly without renaming or creating when the container is already a rollback-orphan name', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
