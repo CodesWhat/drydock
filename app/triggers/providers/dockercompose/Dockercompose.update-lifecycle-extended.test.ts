@@ -2461,6 +2461,230 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('a compose-file-once pull failure tags the blocking service with its container id (DR-37 coverage)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const markOperationTerminalSpy = vi.spyOn(updateOperationStore, 'markOperationTerminal');
+    const nginxContainer = makeContainer({ id: 'container-nginx', name: 'nginx-a' });
+    const redisContainer = makeContainer({ id: 'container-redis', name: 'redis-b' });
+    vi.spyOn(trigger, 'pullImage').mockRejectedValue(new Error('registry unreachable'));
+
+    // nginx is the first mapping, so it is the service whose pull actually
+    // fails; redis is never even reached by the pull loop.
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {}, redis: {} }),
+        [],
+        [
+          { service: 'nginx', container: nginxContainer },
+          { service: 'redis', container: redisContainer },
+        ],
+        undefined,
+      ),
+    ).rejects.toThrow('registry unreachable');
+
+    const [failedCall] = markOperationTerminalSpy.mock.calls.filter(
+      ([, patch]: any) => patch.status === 'failed',
+    );
+    expect(failedCall?.[1]).toMatchObject({ lastError: 'registry unreachable' });
+    const [skippedCall] = markOperationTerminalSpy.mock.calls.filter(
+      ([, patch]: any) => patch.status === 'skipped-dependency',
+    );
+    // redis names nginx's own container id as the blocker, proving the pull
+    // loop's catch tagged the failure with a real string container id.
+    expect(skippedCall?.[1]).toMatchObject({
+      status: 'skipped-dependency',
+      blockingContainerId: 'container-nginx',
+    });
+  });
+
+  test('a compose-file-once pull failure on a container with no string id tags the blocker with no container id (DR-37 coverage)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const markOperationTerminalSpy = vi.spyOn(updateOperationStore, 'markOperationTerminal');
+    // No `id` override: makeContainer leaves it undefined, so the pull
+    // loop's `typeof runtimeContainer.id === 'string'` check takes its false
+    // branch when tagging the blocker.
+    const nginxContainer = makeContainer({ name: 'nginx-a' });
+    const redisContainer = makeContainer({ id: 'container-redis', name: 'redis-b' });
+    vi.spyOn(trigger, 'pullImage').mockRejectedValue(new Error('registry unreachable'));
+
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {}, redis: {} }),
+        [],
+        [
+          { service: 'nginx', container: nginxContainer },
+          { service: 'redis', container: redisContainer },
+        ],
+        undefined,
+      ),
+    ).rejects.toThrow('registry unreachable');
+
+    const [skippedCall] = markOperationTerminalSpy.mock.calls.filter(
+      ([, patch]: any) => patch.status === 'skipped-dependency',
+    );
+    expect(skippedCall?.[1]).toMatchObject({
+      status: 'skipped-dependency',
+      blockingContainerId: undefined,
+    });
+  });
+
+  test('a divergent compose-file-once replica with a string container id names that id as the blocker (coverage)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    // Two replicas of the same service resolve to different targets; the
+    // second one (which carries a real string id) is the one whose
+    // comparison actually throws, so it is the one that must be tagged as
+    // the blocker.
+    const nginxA = makeContainer({ name: 'nginx-a', remoteValue: '1.1.0' });
+    const nginxB = makeContainer({
+      id: 'container-nginx-b',
+      name: 'nginx-b',
+      remoteValue: '1.2.0',
+    });
+    const redisContainer = makeContainer({ id: 'container-redis', name: 'redis-b' });
+    const markOperationTerminalSpy = vi.spyOn(updateOperationStore, 'markOperationTerminal');
+
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {}, redis: {} }),
+        [],
+        [
+          { service: 'nginx', container: nginxA },
+          { service: 'nginx', container: nginxB },
+          { service: 'redis', container: redisContainer },
+        ],
+        undefined,
+      ),
+    ).rejects.toThrow('resolves to different update targets');
+
+    // redis was never touched by the divergent nginx comparison, so it
+    // terminalizes skipped-dependency naming nginx-b's own container id as
+    // the blocker.
+    const [skippedCall] = markOperationTerminalSpy.mock.calls.filter(
+      ([, patch]: any) => patch.status === 'skipped-dependency',
+    );
+    expect(skippedCall?.[1]).toMatchObject({
+      status: 'skipped-dependency',
+      blockingContainerId: 'container-nginx-b',
+    });
+  });
+
+  test('a compose-file-once post-pull gate rejection on a container with no string id tags the blocker with no container id (coverage)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const markOperationTerminalSpy = vi.spyOn(updateOperationStore, 'markOperationTerminal');
+    // No `id` override on the failing container: the post-pull gate's own
+    // catch (which runs after buildComposeFileOnceRuntimeContextByService
+    // succeeds) must take the ternary's false branch when tagging it.
+    const nginxContainer = makeContainer({ name: 'nginx-a' });
+    const redisContainer = makeContainer({ id: 'container-redis', name: 'redis-b' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue(new Error('scan blocked'));
+
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {}, redis: {} }),
+        [],
+        [
+          { service: 'nginx', container: nginxContainer },
+          { service: 'redis', container: redisContainer },
+        ],
+        undefined,
+      ),
+    ).rejects.toThrow('scan blocked');
+
+    const [skippedCall] = markOperationTerminalSpy.mock.calls.filter(
+      ([, patch]: any) => patch.status === 'skipped-dependency',
+    );
+    expect(skippedCall?.[1]).toMatchObject({
+      status: 'skipped-dependency',
+      blockingContainerId: undefined,
+    });
+  });
+
+  test('a compose-file-once preflight block on a container with no name terminalizes the operation under its service name (coverage)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const insertOperationSpy = vi.spyOn(updateOperationStore, 'insertOperation');
+    // `name: null` defeats makeContainer's `name = 'nginx'` default (which
+    // only applies to `undefined`), so the container really has no name and
+    // `terminalizeComposeFileOncePreflightOperations` must fall back to the
+    // service string when inserting its operation record.
+    const nginxContainer = makeContainer({ name: null, id: 'container-nginx' });
+    vi.spyOn(trigger, 'pullImage').mockRejectedValue(new Error('registry unreachable'));
+
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {} }),
+        [],
+        [{ service: 'nginx', container: nginxContainer }],
+        undefined,
+      ),
+    ).rejects.toThrow('registry unreachable');
+
+    expect(insertOperationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ containerName: 'nginx' }),
+    );
+  });
+
+  test('a non-Error compose-file-once preflight rejection is never tagged, so every mapping falls back to failed (coverage)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const markOperationTerminalSpy = vi.spyOn(updateOperationStore, 'markOperationTerminal');
+    const nginxContainer = makeContainer({ id: 'container-nginx', name: 'nginx-a' });
+    const redisContainer = makeContainer({ id: 'container-redis', name: 'redis-b' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // A plain string rejection is truthy but not an object, so
+    // `tagComposeFileOncePreflightError` skips tagging it and
+    // `getComposeFileOncePreflightBlockingContext` reads it back as
+    // untagged: neither mapping can be singled out as the blocker, so both
+    // fall back to the old "mark everyone failed" behavior.
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue('scan blocked as a string');
+
+    await expect(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
+        makeCompose({ nginx: {}, redis: {} }),
+        [],
+        [
+          { service: 'nginx', container: nginxContainer },
+          { service: 'redis', container: redisContainer },
+        ],
+        undefined,
+      ),
+    ).rejects.toBe('scan blocked as a string');
+
+    expect(markOperationTerminalSpy).toHaveBeenCalledTimes(2);
+    for (const [, patch] of markOperationTerminalSpy.mock.calls as any[]) {
+      expect(patch).toMatchObject({ status: 'failed', phase: 'failed' });
+    }
+  });
+
   test('processComposeFile should leave the compose file and its backup untouched when a post-pull hook rejects', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;

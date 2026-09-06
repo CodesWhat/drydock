@@ -358,10 +358,12 @@ function getComposeFileOncePreflightBlockingContext(
   if (!error || typeof error !== 'object' || !(COMPOSE_FILE_ONCE_BLOCKING_CONTEXT in error)) {
     return undefined;
   }
-  const context = (error as Record<PropertyKey, unknown>)[COMPOSE_FILE_ONCE_BLOCKING_CONTEXT];
-  return context && typeof (context as { service?: unknown }).service === 'string'
-    ? (context as ComposeFileOncePreflightBlockingContext)
-    : undefined;
+  // Safe to trust the shape without a runtime check: `tagComposeFileOncePreflightError`
+  // is the only writer of this symbol key, and it always assigns a well-formed
+  // `ComposeFileOncePreflightBlockingContext` literal, never a partial one.
+  return (error as Record<PropertyKey, unknown>)[
+    COMPOSE_FILE_ONCE_BLOCKING_CONTEXT
+  ] as ComposeFileOncePreflightBlockingContext;
 }
 
 /**
