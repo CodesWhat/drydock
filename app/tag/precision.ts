@@ -116,11 +116,7 @@ export function isTagPinned(tag: string, transformTags: string | undefined): boo
     return false;
   }
 
-  if (getNumericTagShapeFromTransformedTag(transformedTag)) {
-    return true;
-  }
-
-  return true;
+  return getNumericTagShapeFromTransformedTag(transformedTag) !== null;
 }
 
 export function classifyTagPrecision(
