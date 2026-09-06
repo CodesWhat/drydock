@@ -219,6 +219,21 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.12</strong></summary>
+
+- **Le site de démonstration n'envoyait pas `Cross-Origin-Opener-Policy`, si bien que le scan DAST hebdomadaire échouait sur la règle ZAP 90004 à chaque exécution.** `apps/demo/vercel.json` envoie désormais `same-origin` à côté de l'en-tête `Cross-Origin-Embedder-Policy` déjà présent. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Le passage arm64 du contrôle d'architecture d'image du release échouait à chaque coupe multiplateforme avec `docker: cannot overwrite digest`.** `scripts/check-image-arch.sh` résout désormais le digest de manifeste propre à chaque plateforme à partir de l'index multi-architecture avant de le sonder, au lieu de réutiliser la même référence de digest d'index sous laquelle le magasin d'images classique de docker ne peut pas conserver deux variantes de plateforme. ([#1046](https://github.com/CodesWhat/drydock/pull/1046))
+- **Déplacer un conteneur vers un autre agent, ou retirer un agent de la configuration, ne réinitialise plus son snooze, son mode de maturité et ses tags ignorés.** L'élagage au retrait d'un agent et l'élagage propre à l'agent des conteneurs obsolètes transmettent désormais eux aussi `identityChangeExpected: true` et rangent la politique de mise à jour de l'enregistrement sortant sous son id Docker, comme le fait déjà l'élagage au démarrage. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Un « vérifier maintenant » manuel arrivant pendant qu'un scan était déjà en cours pouvait déclencher deux fois la même notification.** Le tableau de bord, l'API, un webhook et le contrôleur interrogeant un agent passent désormais tous par la même orchestration de scan single-flight que celle utilisée par la planification cron, si bien qu'un appel qui chevauche est replié dans l'unique suivi du scan en cours (`result.coalesced` dans le corps JSON, un en-tête `X-Drydock-Watch-Coalesced` sur le point de terminaison de l'agent) au lieu de démarrer un scan indépendant. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Une réservation `once=true` dont le déclencheur n'a jamais répondu conservait sa clé de déduplication pendant toute la durée de vie du processus.** Un gestionnaire qui dépassait son délai de 30 secondes conservait sa réservation au-delà du scan qui l'avait prise, ignorant silencieusement chaque envoi ultérieur pour ce résultat ; chaque réservation expire désormais via son propre minuteur et journalise un avertissement nommant la clé si personne ne l'a libérée avant. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **DR-121 : le magasin de sessions et le magasin principal écrivaient dans le même `/store/dd.json`, et celui qui enregistrait en dernier effaçait les données de l'autre.** Le magasin de sessions écrit désormais dans son propre fichier jumeau, `dd-sessions.json` par défaut, et le magasin principal abandonne une collection `Sessions` obsolète laissée par une ancienne version au lieu de continuer à l'enregistrer. ([#1063](https://github.com/CodesWhat/drydock/pull/1063))
+- **L'exemple apparié de registre Gitea de la page des agents faisait parler HTTPS au contrôleur avec un agent servant du HTTP simple.** Le bloc de l'agent monte désormais son propre certificat et définit `DD_SERVER_TLS_ENABLED`, si bien que l'exemple se connecte tel qu'écrit. ([#1042](https://github.com/CodesWhat/drydock/pull/1042))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc12--2026-09-06).
+
+</details>
+
+<details open>
 <summary><strong>Points forts de la v1.7.0-rc.11</strong></summary>
 
 - **La connexion OIDC ne revient plus à la page de connexion après la redirection du fournisseur d'identité.** Le repli de navigation du service worker répondait auparavant à chaque navigation de document depuis l'app shell en cache, sauf `/api/`, si bien que le callback OIDC n'atteignait jamais Express pour l'échange de code ; il ignore désormais chaque route appartenant au serveur (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))
