@@ -329,6 +329,37 @@ describe('store/db/driver', () => {
         iterateSpy.mockRestore();
       }
     });
+
+    test('tolerates an underlying iterator with no return method', () => {
+      const db = open(databasePath);
+      db.exec(CREATE_TABLE);
+      db.prepare('INSERT INTO t (id, v) VALUES (?, ?)').run('a', 1);
+      const select = db.prepare('SELECT id, v FROM t ORDER BY id');
+
+      const iterateSpy = vi.spyOn(StatementSync.prototype, 'iterate').mockImplementation((() => {
+        let done = false;
+        return {
+          next(): IteratorResult<Row> {
+            if (done) {
+              return { value: undefined, done: true };
+            }
+            done = true;
+            return { value: { id: 'a', v: 1 }, done: false };
+          },
+          [Symbol.iterator]() {
+            return this;
+          },
+        };
+      }) as unknown as typeof StatementSync.prototype.iterate);
+
+      try {
+        const iterator = select.iterate();
+        expect(iterator.return).toBeUndefined();
+        expect([...iterator]).toEqual([{ id: 'a', v: 1 }]);
+      } finally {
+        iterateSpy.mockRestore();
+      }
+    });
   });
 
   describe('transaction', () => {
