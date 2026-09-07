@@ -67,7 +67,9 @@ export function prepareSelfUpdateOperation(args: PrepareSelfUpdateOperationArgs)
     fromVersion,
     toVersion,
     targetImage: args.context.newImage,
-    helperLifecycleOwner: args.isCurrentProcess ? 'exiting-process' : 'surviving-process',
+    helperLifecycleOwner: (args.isCurrentProcess ? 'exiting-process' : 'surviving-process') as
+      | 'exiting-process'
+      | 'surviving-process',
     status: 'in-progress' as const,
     phase: 'prepare' as const,
   };

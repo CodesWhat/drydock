@@ -7,6 +7,7 @@ import {
   emitUpdateOperationChanged,
 } from '../event/index.js';
 import type { Container } from '../model/container.js';
+import { deriveContainerIdentityKey, getContainerIdentityKey } from '../model/container.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
@@ -29,7 +30,7 @@ import {
 } from '../model/container-update-operation.js';
 import { daysToMs } from '../model/maturity-policy.js';
 import { toPositiveInteger } from '../util/parse.js';
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
 interface UpdateOperationBase {
   id: string;
@@ -38,6 +39,13 @@ interface UpdateOperationBase {
   createdAt: string;
   updatedAt: string;
   containerId?: string;
+  /**
+   * Durable business identity (roadmap 7-STORE, slice 10). Derived on every
+   * insert and every patch from `container.identityKey` when a container
+   * snapshot is present, falling back to `${agent}::${watcher}::${containerName}`
+   * otherwise. Never accepted as caller input — see `deriveOperationIdentityKey`.
+   */
+  containerIdentityKey?: string;
   triggerName?: string;
   oldContainerId?: string;
   oldName?: string;
@@ -90,7 +98,6 @@ interface UpdateOperationBase {
    * env values) and always cleared by `markOperationTerminal`.
    */
   portainerRecovery?: unknown;
-  [key: string]: unknown;
 }
 
 interface QueuedUpdateOperation extends UpdateOperationBase {
@@ -217,7 +224,35 @@ interface InsertUpdateOperationInput
   containerName: string;
   status?: ContainerUpdateOperationStatus;
   phase?: ContainerUpdateOperationPhase;
-  [key: string]: unknown;
+  kind?: ContainerUpdateOperationKind;
+  containerId?: string;
+  triggerName?: string;
+  oldContainerId?: string;
+  oldName?: string;
+  tempName?: string;
+  oldContainerWasRunning?: boolean;
+  oldContainerStopped?: boolean;
+  newContainerId?: string;
+  agent?: string;
+  watcher?: string;
+  fromVersion?: string;
+  toVersion?: string;
+  targetImage?: string;
+  rollbackReason?: string;
+  lastError?: string;
+  recoveredAt?: string;
+  completedAt?: string;
+  skippedDependencyReason?: 'upstream-failed' | 'waiting-on-dependency-window';
+  blockingContainerId?: string;
+  blockingOperationId?: string;
+  cancelRequested?: boolean;
+  container?: Container;
+  finalizeSecretHash?: string;
+  helperLifecycleOwner?: 'exiting-process' | 'surviving-process';
+  portainerRecovery?: unknown;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
 }
 
 type ActiveOperationPatchBase = Partial<MutableUpdateOperationFields> & {
@@ -278,53 +313,11 @@ type TerminalUpdateOperationPatch =
       phase?: SkippedDependencyContainerUpdateOperationPhase;
     });
 
-interface UpdateOperationCollectionDocument {
-  data: UpdateOperation;
-  [key: string]: unknown;
-}
-
-type UpdateOperationQuery =
-  | { 'data.id': string }
-  | { 'data.status': ContainerUpdateOperationStatus }
-  | { 'data.containerName': string }
-  | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus }
-  | { 'data.containerId': string }
-  | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus }
-  | { 'data.newContainerId': string }
-  | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus }
-  | { 'data.batchId': string };
-
-interface UpdateOperationCollection {
-  insert(document: UpdateOperationCollectionDocument): void;
-  find(query?: UpdateOperationQuery): UpdateOperationCollectionDocument[];
-  findOne(query: { 'data.id': string }): UpdateOperationCollectionDocument | null;
-  remove(document: UpdateOperationCollectionDocument): void;
-}
-
-interface UpdateOperationCollectionOptions {
-  indices?: string[];
-}
-
-interface UpdateOperationStoreDb {
-  getCollection(name: string): UpdateOperationCollection | null;
-  addCollection(
-    name: string,
-    options?: UpdateOperationCollectionOptions,
-  ): UpdateOperationCollection;
-}
-
-let updateOperationCollection: UpdateOperationCollection | undefined;
+let db: Database | undefined;
 // In-memory registry: batchId → Set of operationIds. Populated on insert or startup
 // rehydration and cleared when the batch completes.
 const batchMemberRegistry = new Map<string, Set<string>>();
 const incompleteRehydratedBatchIds = new Set<string>();
-const UPDATE_OPERATION_COLLECTION_INDICES = [
-  'data.id',
-  'data.containerName',
-  'data.containerId',
-  'data.newContainerId',
-  'data.status',
-];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
 const DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS = 30 * 60 * 1000;
@@ -345,6 +338,295 @@ const UPDATE_OPERATION_ACTIVE_TTL_MS = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS,
   DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS,
 );
+
+/**
+ * The `update_operations` table's columns, in the fixed order every
+ * INSERT/UPDATE binds its parameters in (roadmap 7-STORE, slice 10). `id` is
+ * first because it is also the row-identity WHERE-clause parameter; the
+ * UPDATE statement slices it off before appending it back at the end.
+ */
+const UPDATE_OPERATION_COLUMNS = [
+  'id',
+  'container_identity_key',
+  'container_id',
+  'container_name',
+  'new_container_id',
+  'old_container_id',
+  'old_name',
+  'temp_name',
+  'status',
+  'phase',
+  'kind',
+  'batch_id',
+  'queue_position',
+  'queue_total',
+  'trigger_name',
+  'agent',
+  'watcher',
+  'from_version',
+  'to_version',
+  'target_image',
+  'rollback_reason',
+  'last_error',
+  'skipped_dependency_reason',
+  'blocking_container_id',
+  'blocking_operation_id',
+  'cancel_requested',
+  'old_container_was_running',
+  'old_container_stopped',
+  'helper_lifecycle_owner',
+  'finalize_secret_hash',
+  'created_at',
+  'updated_at',
+  'completed_at',
+  'recovered_at',
+  'container_snapshot',
+  'portainer_recovery',
+] as const;
+
+type UpdateOperationColumn = (typeof UPDATE_OPERATION_COLUMNS)[number];
+type UpdateOperationRow = Record<UpdateOperationColumn, string | number | null>;
+
+const UPDATE_OPERATION_UPDATE_COLUMNS = UPDATE_OPERATION_COLUMNS.filter(
+  (column): column is Exclude<UpdateOperationColumn, 'id'> => column !== 'id',
+);
+
+const UPDATE_OPERATION_INSERT_SQL = `INSERT INTO update_operations (${UPDATE_OPERATION_COLUMNS.join(', ')}) VALUES (${UPDATE_OPERATION_COLUMNS.map(() => '?').join(', ')})`;
+const UPDATE_OPERATION_UPDATE_SQL = `UPDATE update_operations SET ${UPDATE_OPERATION_UPDATE_COLUMNS.map((column) => `${column} = ?`).join(', ')} WHERE id = ?`;
+const UPDATE_OPERATION_SELECT_BY_ID_SQL = 'SELECT * FROM update_operations WHERE id = ?';
+const UPDATE_OPERATION_SELECT_BY_STATUS_SQL = 'SELECT * FROM update_operations WHERE status = ?';
+const UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL =
+  'SELECT * FROM update_operations WHERE container_identity_key = ?';
+const UPDATE_OPERATION_SELECT_BY_IDENTITY_STATUS_SQL =
+  'SELECT * FROM update_operations WHERE container_identity_key = ? AND status = ?';
+const UPDATE_OPERATION_SELECT_BY_CONTAINER_ID_SQL =
+  'SELECT * FROM update_operations WHERE container_id = ?';
+const UPDATE_OPERATION_SELECT_BY_CONTAINER_ID_STATUS_SQL =
+  'SELECT * FROM update_operations WHERE container_id = ? AND status = ?';
+const UPDATE_OPERATION_SELECT_BY_NEW_CONTAINER_ID_SQL =
+  'SELECT * FROM update_operations WHERE new_container_id = ?';
+const UPDATE_OPERATION_SELECT_BY_NEW_CONTAINER_ID_STATUS_SQL =
+  'SELECT * FROM update_operations WHERE new_container_id = ? AND status = ?';
+const UPDATE_OPERATION_SELECT_BY_BATCH_SQL = 'SELECT * FROM update_operations WHERE batch_id = ?';
+const UPDATE_OPERATION_DELETE_BY_ID_SQL = 'DELETE FROM update_operations WHERE id = ?';
+
+function toStoredJson(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+function fromStoredJson<T>(value: string | number | null): T | undefined {
+  return value === null || value === undefined ? undefined : (JSON.parse(String(value)) as T);
+}
+
+function optionalString(value: string | number | null): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+function optionalNumber(value: string | number | null): number | undefined {
+  return value === null || value === undefined ? undefined : Number(value);
+}
+
+function optionalBoolean(value: string | number | null): boolean | undefined {
+  return value === null || value === undefined ? undefined : Boolean(Number(value));
+}
+
+function toStoredBoolean(value: boolean | undefined): number | null {
+  return value === undefined ? null : value ? 1 : 0;
+}
+
+/**
+ * Turn a persisted operation into the row every INSERT/UPDATE binds. Called
+ * with an already-identity-derived operation (see `deriveOperationIdentityKey`),
+ * so `container_identity_key` is threaded straight through.
+ */
+function operationToRow(op: UpdateOperation): UpdateOperationRow {
+  const withBatch = op as Partial<QueuedUpdateOperation>;
+  return {
+    id: op.id,
+    container_identity_key: op.containerIdentityKey ?? null,
+    container_id: op.containerId ?? null,
+    container_name: op.containerName,
+    new_container_id: op.newContainerId ?? null,
+    old_container_id: op.oldContainerId ?? null,
+    old_name: op.oldName ?? null,
+    temp_name: op.tempName ?? null,
+    status: op.status,
+    phase: op.phase,
+    kind: op.kind ?? null,
+    batch_id: withBatch.batchId ?? null,
+    queue_position: withBatch.queuePosition ?? null,
+    queue_total: withBatch.queueTotal ?? null,
+    trigger_name: op.triggerName ?? null,
+    agent: op.agent ?? null,
+    watcher: op.watcher ?? null,
+    from_version: op.fromVersion ?? null,
+    to_version: op.toVersion ?? null,
+    target_image: op.targetImage ?? null,
+    rollback_reason: op.rollbackReason ?? null,
+    last_error: op.lastError ?? null,
+    skipped_dependency_reason: op.skippedDependencyReason ?? null,
+    blocking_container_id: op.blockingContainerId ?? null,
+    blocking_operation_id: op.blockingOperationId ?? null,
+    cancel_requested: toStoredBoolean(op.cancelRequested) ?? 0,
+    old_container_was_running: toStoredBoolean(op.oldContainerWasRunning),
+    old_container_stopped: toStoredBoolean(op.oldContainerStopped),
+    helper_lifecycle_owner: op.helperLifecycleOwner ?? null,
+    finalize_secret_hash: op.finalizeSecretHash ?? null,
+    created_at: op.createdAt,
+    updated_at: op.updatedAt,
+    completed_at: op.completedAt ?? null,
+    recovered_at: op.recoveredAt ?? null,
+    container_snapshot: toStoredJson(op.container),
+    portainer_recovery: toStoredJson(op.portainerRecovery),
+  };
+}
+
+function rowToOperation(row: Row): UpdateOperation {
+  const typedRow = row as unknown as UpdateOperationRow;
+  const raw: Record<string, unknown> = {
+    id: String(typedRow.id),
+    containerIdentityKey: optionalString(typedRow.container_identity_key),
+    containerId: optionalString(typedRow.container_id),
+    containerName: String(typedRow.container_name),
+    newContainerId: optionalString(typedRow.new_container_id),
+    oldContainerId: optionalString(typedRow.old_container_id),
+    oldName: optionalString(typedRow.old_name),
+    tempName: optionalString(typedRow.temp_name),
+    status: String(typedRow.status),
+    phase: String(typedRow.phase),
+    kind: optionalString(typedRow.kind),
+    batchId: optionalString(typedRow.batch_id),
+    queuePosition: optionalNumber(typedRow.queue_position),
+    queueTotal: optionalNumber(typedRow.queue_total),
+    triggerName: optionalString(typedRow.trigger_name),
+    agent: optionalString(typedRow.agent),
+    watcher: optionalString(typedRow.watcher),
+    fromVersion: optionalString(typedRow.from_version),
+    toVersion: optionalString(typedRow.to_version),
+    targetImage: optionalString(typedRow.target_image),
+    rollbackReason: optionalString(typedRow.rollback_reason),
+    lastError: optionalString(typedRow.last_error),
+    skippedDependencyReason: optionalString(typedRow.skipped_dependency_reason),
+    blockingContainerId: optionalString(typedRow.blocking_container_id),
+    blockingOperationId: optionalString(typedRow.blocking_operation_id),
+    // c8 ignore next -- cancel_requested is NOT NULL DEFAULT 0 in the schema; optionalBoolean never returns undefined for it.
+    cancelRequested: optionalBoolean(typedRow.cancel_requested) ?? false,
+    oldContainerWasRunning: optionalBoolean(typedRow.old_container_was_running),
+    oldContainerStopped: optionalBoolean(typedRow.old_container_stopped),
+    helperLifecycleOwner: optionalString(typedRow.helper_lifecycle_owner),
+    finalizeSecretHash: optionalString(typedRow.finalize_secret_hash),
+    createdAt: String(typedRow.created_at),
+    updatedAt: String(typedRow.updated_at),
+    completedAt: optionalString(typedRow.completed_at),
+    recoveredAt: optionalString(typedRow.recovered_at),
+    container: fromStoredJson<Container>(typedRow.container_snapshot),
+    portainerRecovery: fromStoredJson<unknown>(typedRow.portainer_recovery),
+  };
+  return raw as unknown as UpdateOperation;
+}
+
+function insertOperationRow(database: Database, op: UpdateOperation): void {
+  const row = operationToRow(op);
+  database
+    .prepare(UPDATE_OPERATION_INSERT_SQL)
+    .run(...UPDATE_OPERATION_COLUMNS.map((column) => row[column]));
+}
+
+function updateOperationRow(database: Database, op: UpdateOperation): void {
+  const row = operationToRow(op);
+  database
+    .prepare(UPDATE_OPERATION_UPDATE_SQL)
+    .run(...UPDATE_OPERATION_UPDATE_COLUMNS.map((column) => row[column]), row.id);
+}
+
+function selectOperationById(database: Database, id: string): UpdateOperation | undefined {
+  const row = database.prepare(UPDATE_OPERATION_SELECT_BY_ID_SQL).get(id);
+  return row ? rowToOperation(row) : undefined;
+}
+
+function selectOperationsByStatus(
+  database: Database,
+  status: ContainerUpdateOperationStatus,
+): UpdateOperation[] {
+  return database.prepare(UPDATE_OPERATION_SELECT_BY_STATUS_SQL).all(status).map(rowToOperation);
+}
+
+/**
+ * Derive the durable identity key an operation row is filed under (roadmap
+ * 7-STORE, slice 10, spec 2.3). Prefers the container snapshot's own
+ * `identityKey` (compose-aware, already computed by `validateContainer`);
+ * falls back to the legacy `${agent}::${watcher}::${containerName}` form when
+ * only agent/watcher/containerName are known (e.g. an agent event that has
+ * not yet attached a full snapshot). Undefined when neither is available —
+ * the row is filed with no identity, exactly like any other never-resolved
+ * legacy value.
+ */
+function deriveOperationIdentityKey(op: {
+  containerName?: string;
+  agent?: string;
+  watcher?: string;
+  container?: Container;
+}): string | undefined {
+  if (op.container) {
+    const fromSnapshot = op.container.identityKey ?? deriveContainerIdentityKey(op.container);
+    if (fromSnapshot) {
+      return fromSnapshot;
+    }
+  }
+  if (typeof op.watcher === 'string' && op.watcher && typeof op.containerName === 'string') {
+    return getContainerIdentityKey({
+      agent: op.agent,
+      watcher: op.watcher,
+      name: op.containerName,
+    });
+  }
+  return undefined;
+}
+
+/**
+ * Build the full parameter row for an imported legacy update-operation
+ * document (roadmap 7-STORE slice 10's importer,
+ * `store/db/importers/update-operations.ts`). Recomputes
+ * `containerIdentityKey` the same way a fresh `insertOperation()` does, from
+ * whatever agent/watcher/containerName/container snapshot the legacy
+ * document carried, so an operation written before the identity cut still
+ * resolves through `getInProgressOperationByContainerIdentity` and its
+ * siblings once imported. A document missing one of the columns the schema
+ * requires NOT NULL (`id`, `containerName`, `status`, `phase`, `createdAt`,
+ * `updatedAt`) is skipped rather than guessed at, matching every other
+ * importer's convention.
+ */
+export function buildImportedUpdateOperationRow(
+  rawOperation: unknown,
+): UpdateOperationRow | undefined {
+  if (!rawOperation || typeof rawOperation !== 'object') {
+    return undefined;
+  }
+  const record = rawOperation as Record<string, unknown>;
+  if (
+    typeof record.id !== 'string' ||
+    typeof record.containerName !== 'string' ||
+    typeof record.status !== 'string' ||
+    typeof record.phase !== 'string' ||
+    typeof record.createdAt !== 'string' ||
+    typeof record.updatedAt !== 'string'
+  ) {
+    return undefined;
+  }
+  const operation = record as unknown as UpdateOperation;
+  const containerIdentityKey = deriveOperationIdentityKey(operation);
+  return operationToRow({ ...operation, containerIdentityKey } as UpdateOperation);
+}
+
+/** Insert one row built by `buildImportedUpdateOperationRow` into `database`. */
+export function insertImportedUpdateOperationRow(
+  database: Database,
+  row: UpdateOperationRow,
+): void {
+  database
+    .prepare(UPDATE_OPERATION_INSERT_SQL)
+    .run(...UPDATE_OPERATION_COLUMNS.map((column) => row[column]));
+}
 
 function getOperationTimestamp(operation: UpdateOperation): number {
   const timestamp = Date.parse(operation.updatedAt || operation.createdAt);
@@ -483,7 +765,11 @@ function expireActiveOperationWithMessage(
   operation: UpdateOperation,
   message: string,
 ): UpdateOperation | undefined {
-  const existing = updateOperationCollection!.findOne({ 'data.id': operation.id })?.data;
+  // c8 ignore next 3 -- callers only reach here once db is confirmed set.
+  if (!db) {
+    return operation;
+  }
+  const existing = selectOperationById(db, operation.id);
   if (!existing || !isActiveOperationStatus(existing.status)) {
     return existing;
   }
@@ -524,17 +810,19 @@ function getFreshActiveOperation(
   return undefined;
 }
 
-function pruneOperationsForRetention(
-  collection: UpdateOperationCollection,
-  nowMs = Date.now(),
-): number {
-  // Query only terminal documents per status using the existing data.status index,
-  // avoiding a full-collection materialisation that would load active ops too.
-  const terminalDocuments = TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
-    findOperationDocumentsByStatus(collection, status),
+function pruneOperationsForRetention(nowMs = Date.now()): number {
+  // c8 ignore next 3 -- only called from createCollections, right after db is assigned.
+  if (!db) {
+    return 0;
+  }
+  const database = db;
+  // Query only terminal rows per status using the existing status index,
+  // avoiding a full-table materialisation that would load active ops too.
+  const terminalOperations = TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
+    selectOperationsByStatus(database, status),
   );
 
-  if (terminalDocuments.length === 0) {
+  if (terminalOperations.length === 0) {
     return 0;
   }
 
@@ -542,38 +830,33 @@ function pruneOperationsForRetention(
   const cutoffTimestamp = nowMs - retentionWindowMs;
 
   const retainedTerminalIds = new Set(
-    terminalDocuments
-      .filter((document) => getOperationTimestamp(document.data) >= cutoffTimestamp)
-      .sort((a, b) => getOperationTimestamp(b.data) - getOperationTimestamp(a.data))
+    terminalOperations
+      .filter((operation) => getOperationTimestamp(operation) >= cutoffTimestamp)
+      .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a))
       .slice(0, UPDATE_OPERATION_MAX_ENTRIES)
-      .map((document) => document.data.id),
+      .map((operation) => operation.id),
   );
 
-  const toRemove = terminalDocuments.filter(
-    (document) => !retainedTerminalIds.has(document.data.id),
-  );
+  const toRemove = terminalOperations.filter((operation) => !retainedTerminalIds.has(operation.id));
 
-  for (const document of toRemove) {
-    collection.remove(document);
+  if (toRemove.length === 0) {
+    return 0;
+  }
+
+  const deleteStatement = database.prepare(UPDATE_OPERATION_DELETE_BY_ID_SQL);
+  for (const operation of toRemove) {
+    deleteStatement.run(operation.id);
   }
 
   return toRemove.length;
 }
 
-function maybePruneOperationsForRetention(collection: UpdateOperationCollection): void {
+function maybePruneOperationsForRetention(): void {
   updateOperationMutationsSincePrune += 1;
   if (updateOperationMutationsSincePrune >= UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL) {
-    pruneOperationsForRetention(collection);
+    pruneOperationsForRetention();
     updateOperationMutationsSincePrune = 0;
   }
-}
-
-function findOperationDocumentsByStatus(
-  collection: UpdateOperationCollection,
-  status: ContainerUpdateOperationStatus,
-): UpdateOperationCollectionDocument[] {
-  const documents = collection.find({ 'data.status': status });
-  return Array.isArray(documents) ? documents : [];
 }
 
 function isResumableActiveOperationOnStartup(operation: ActiveUpdateOperation): boolean {
@@ -583,9 +866,8 @@ function isResumableActiveOperationOnStartup(operation: ActiveUpdateOperation): 
   return operation.status === 'queued' || operation.status === 'in-progress';
 }
 
-function resetActiveOperationDocumentToQueuedOnStartup(
-  collection: UpdateOperationCollection,
-  document: UpdateOperationCollectionDocument,
+function resetActiveOperationToQueuedOnStartup(
+  database: Database,
   operation: InProgressUpdateOperation,
 ): void {
   const now = new Date().toISOString();
@@ -598,14 +880,12 @@ function resetActiveOperationDocumentToQueuedOnStartup(
     lastError: undefined,
     completedAt: undefined,
   } as QueuedUpdateOperation;
-  collection.remove(document);
-  collection.insert({ data: reset });
+  updateOperationRow(database, reset);
   emitOperationChangedEvent(reset);
 }
 
 function refreshInProgressOperationForStartupRecovery(
-  collection: UpdateOperationCollection,
-  document: UpdateOperationCollectionDocument,
+  database: Database,
   operation: InProgressUpdateOperation,
 ): void {
   const now = new Date().toISOString();
@@ -614,23 +894,27 @@ function refreshInProgressOperationForStartupRecovery(
     updatedAt: now,
     recoveredAt: now,
   };
-  collection.remove(document);
-  collection.insert({ data: refreshed });
+  updateOperationRow(database, refreshed);
   emitOperationChangedEvent(refreshed);
 }
 
-function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationCollection): number {
-  const documents = ACTIVE_STATUSES.flatMap((status) =>
-    findOperationDocumentsByStatus(collection, status),
+function reconcileStaleActiveOperationsOnStartup(): number {
+  // c8 ignore next 3 -- only called from createCollections, right after db is assigned.
+  if (!db) {
+    return 0;
+  }
+  const database = db;
+  const operations = ACTIVE_STATUSES.flatMap((status) =>
+    selectOperationsByStatus(database, status),
   );
-  if (documents.length === 0) {
+  if (operations.length === 0) {
     return 0;
   }
 
-  // findOperationDocumentsByStatus filters by status, so every document here is
-  // an ActiveUpdateOperation (queued or in-progress).
-  for (const document of documents) {
-    const operation = document.data as ActiveUpdateOperation;
+  // selectOperationsByStatus filters by status, so every operation here is an
+  // ActiveUpdateOperation (queued or in-progress).
+  for (const operationRow of operations) {
+    const operation = operationRow as ActiveUpdateOperation;
     // A fresh self-update in-progress op (past the pull phase) is still being
     // finalized by the helper container; skip it so the new process does not
     // expire the operation before the helper POSTs to /internal/self-update/finalize.
@@ -649,15 +933,15 @@ function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationColl
     if (operation.status === 'in-progress' && operation.phase === 'pulling') {
       // Resumable in-progress (pulling) → reset to queued so the recovery
       // dispatcher picks it up uniformly with already-queued operations.
-      resetActiveOperationDocumentToQueuedOnStartup(collection, document, operation);
+      resetActiveOperationToQueuedOnStartup(database, operation);
     } else if (operation.status === 'in-progress') {
       // Give the post-registry Docker reconciliation pass a fresh TTL window.
-      refreshInProgressOperationForStartupRecovery(collection, document, operation);
+      refreshInProgressOperationForStartupRecovery(database, operation);
     }
     // Already-queued resumable operations stay as-is.
   }
 
-  return documents.length;
+  return operations.length;
 }
 
 function getPersistedBatchId(operation: UpdateOperation): string | undefined {
@@ -666,27 +950,30 @@ function getPersistedBatchId(operation: UpdateOperation): string | undefined {
     : undefined;
 }
 
-function rehydrateActiveBatchMembership(collection: UpdateOperationCollection): void {
-  const activeDocuments = ACTIVE_STATUSES.flatMap((status) =>
-    findOperationDocumentsByStatus(collection, status),
+function rehydrateActiveBatchMembership(): void {
+  // c8 ignore next 3 -- only called from createCollections, right after db is assigned.
+  if (!db) {
+    return;
+  }
+  const database = db;
+  const activeOperations = ACTIVE_STATUSES.flatMap((status) =>
+    selectOperationsByStatus(database, status),
   );
   const activeBatchIds = new Set(
-    activeDocuments.map((document) => getPersistedBatchId(document.data)).filter(Boolean),
+    activeOperations.map((operation) => getPersistedBatchId(operation)).filter(Boolean),
   );
   if (activeBatchIds.size === 0) {
     return;
   }
 
-  const allDocuments = [
-    ...activeDocuments,
+  const allOperations = [
+    ...activeOperations,
     ...TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
-      findOperationDocumentsByStatus(collection, status),
+      selectOperationsByStatus(database, status),
     ),
   ];
   for (const batchId of activeBatchIds) {
-    const members = allDocuments
-      .map((document) => document.data)
-      .filter((operation) => getPersistedBatchId(operation) === batchId);
+    const members = allOperations.filter((operation) => getPersistedBatchId(operation) === batchId);
     const memberIds = new Set(members.map((operation) => operation.id));
     batchMemberRegistry.set(batchId, memberIds);
 
@@ -702,13 +989,13 @@ function rehydrateActiveBatchMembership(collection: UpdateOperationCollection): 
 }
 
 /**
- * Create update operation collection.
- * @param db
+ * Wire the update-operation store to the shared SQLite database
+ * (roadmap 7-STORE, slice 10) and run the same startup repair the LokiJS
+ * collection used to run on `addCollection`.
+ * @param database
  */
-export function createCollections(db: UpdateOperationStoreDb): void {
-  updateOperationCollection = initCollection(db, 'updateOperations', {
-    indices: UPDATE_OPERATION_COLLECTION_INDICES,
-  }) as UpdateOperationCollection;
+export function createCollections(database: Database): void {
+  db = database;
   updateOperationMutationsSincePrune = 0;
   batchMemberRegistry.clear();
   incompleteRehydratedBatchIds.clear();
@@ -716,9 +1003,9 @@ export function createCollections(db: UpdateOperationStoreDb): void {
   // initialization has registered subscribers. That is acceptable because the
   // UI reloads state over HTTP on connect instead of depending on replay of
   // startup reconciliation events.
-  reconcileStaleActiveOperationsOnStartup(updateOperationCollection);
-  pruneOperationsForRetention(updateOperationCollection);
-  rehydrateActiveBatchMembership(updateOperationCollection);
+  reconcileStaleActiveOperationsOnStartup();
+  pruneOperationsForRetention();
+  rehydrateActiveBatchMembership();
   updateOperationMutationsSincePrune = 0;
 }
 
@@ -765,9 +1052,11 @@ export function insertOperation(
     }
   }
 
-  if (updateOperationCollection) {
-    updateOperationCollection.insert({ data: operationToSave });
-    maybePruneOperationsForRetention(updateOperationCollection);
+  operationToSave.containerIdentityKey = deriveOperationIdentityKey(operationToSave);
+
+  if (db) {
+    insertOperationRow(db, operationToSave);
+    maybePruneOperationsForRetention();
     if (!options.skipChangeEvent) {
       emitOperationChangedEvent(operationToSave);
     }
@@ -793,11 +1082,11 @@ export function insertOperation(
  * Return a single operation by its unique ID.
  */
 export function getOperationById(id: string): UpdateOperation | undefined {
-  if (!updateOperationCollection || !id) {
+  if (!db || !id) {
     return undefined;
   }
 
-  return updateOperationCollection.findOne({ 'data.id': id })?.data;
+  return selectOperationById(db, id);
 }
 
 /**
@@ -806,11 +1095,11 @@ export function getOperationById(id: string): UpdateOperation | undefined {
  * non-self-update kinds. Terminal rows are returned as-is.
  */
 export function getFreshSelfUpdateOperationById(id: string): UpdateOperation | undefined {
-  if (!updateOperationCollection || !id) {
+  if (!db || !id) {
     return undefined;
   }
 
-  const op = updateOperationCollection.findOne({ 'data.id': id })?.data;
+  const op = selectOperationById(db, id);
   if (!op || op.kind !== 'self-update') {
     return undefined;
   }
@@ -831,24 +1120,29 @@ function persistOperationPatch(
   id: string,
   patch: PersistedUpdateOperationPatch = {},
 ): UpdateOperation | undefined {
-  const existingDoc = updateOperationCollection.findOne({ 'data.id': id });
-  if (!existingDoc) {
+  // c8 ignore next 3 -- callers only reach here after getOperationById confirmed db is set.
+  if (!db) {
+    return undefined;
+  }
+  const database = db;
+  const existing = selectOperationById(database, id);
+  if (!existing) {
     return undefined;
   }
 
   const updated: UpdateOperation = {
-    ...existingDoc.data,
+    ...existing,
     ...patch,
-    id: existingDoc.data.id,
+    id: existing.id,
     updatedAt: new Date().toISOString(),
   } as UpdateOperation;
   if (Object.hasOwn(patch, 'portainerRecovery') && patch.portainerRecovery === undefined) {
-    delete (updated as Record<string, unknown>).portainerRecovery;
+    delete (updated as unknown as Record<string, unknown>).portainerRecovery;
   }
+  updated.containerIdentityKey = deriveOperationIdentityKey(updated);
 
-  updateOperationCollection.remove(existingDoc);
-  updateOperationCollection.insert({ data: updated });
-  maybePruneOperationsForRetention(updateOperationCollection);
+  updateOperationRow(database, updated);
+  maybePruneOperationsForRetention();
   emitOperationChangedEvent(updated);
 
   return updated;
@@ -998,12 +1292,14 @@ export function markOperationTerminal(
   // After writing terminal state, check if this was the last active operation in the batch.
   if (preBatchId) {
     // Check remaining active ops in batch (active ops still have batchId set).
-    // c8 ignore next: updateOperationCollection is always set when preBatchId is truthy
+    // c8 ignore next: db is always set when preBatchId is truthy
     /* c8 ignore next */
-    const remainingActive = updateOperationCollection
-      ? updateOperationCollection
-          .find({ 'data.batchId': preBatchId })
-          .filter((doc) => isActiveOperationStatus(doc.data.status))
+    const remainingActive = db
+      ? db
+          .prepare(UPDATE_OPERATION_SELECT_BY_BATCH_SQL)
+          .all(preBatchId)
+          .map(rowToOperation)
+          .filter((operation) => isActiveOperationStatus(operation.status))
       : [];
 
     if (remainingActive.length === 0) {
@@ -1079,111 +1375,24 @@ export function markOperationTerminal(
 }
 
 /**
- * Optional agent+watcher identity filter for name-based operation lookups.
- * When supplied, operations carrying a container snapshot are matched only
- * when both `agent` and `watcher` agree with the snapshot values. Operations
- * that lack a snapshot (legacy rows pre-#385) are accepted unconditionally as
- * a backward-compatible fallback.
+ * Return the latest in-progress operation for a container's durable identity
+ * key (roadmap 7-STORE, slice 10, spec 2.3). `identityKey` already encodes
+ * agent+watcher+name (or the compose project/service pair), so no separate
+ * agent/watcher filter is needed the way the pre-migration by-name lookup
+ * required one to avoid cross-agent collisions (issue #411).
  */
-export interface ContainerIdentityFilter {
-  agent?: string;
-  watcher?: string;
-}
-
-type OperationIdentitySource = {
-  agent?: string;
-  watcher?: string;
-  container?: { agent?: string; watcher?: string };
-};
-
-function getOperationIdentity(op: OperationIdentitySource): {
-  modern: boolean;
-  agent?: string;
-  watcher?: string;
-} {
-  if (op.container || typeof op.agent === 'string' || typeof op.watcher === 'string') {
-    return {
-      modern: true,
-      agent: typeof op.container?.agent === 'string' ? op.container.agent : op.agent,
-      watcher: typeof op.container?.watcher === 'string' ? op.container.watcher : op.watcher,
-    };
-  }
-
-  return { modern: false };
-}
-
-function matchesIdentityFilter(
-  op: OperationIdentitySource,
-  identity: ContainerIdentityFilter,
-): boolean {
-  // No watcher supplied — skip the filter rather than reject valid ops.
-  if (!identity.watcher) {
-    return true;
-  }
-
-  const operationIdentity = getOperationIdentity(op);
-
-  // Legacy row without any persisted identity: accept as backward-compat fallback.
-  if (!operationIdentity.modern) {
-    return true;
-  }
-
-  // Modern row: both agent and watcher must match.
-  return (
-    (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
-    operationIdentity.watcher === identity.watcher
-  );
-}
-
-function matchesStrictIdentityFilter(
-  op: OperationIdentitySource,
-  identity: ContainerIdentityFilter,
-): boolean {
-  if (!identity.watcher) {
-    return true;
-  }
-
-  const operationIdentity = getOperationIdentity(op);
-  if (!operationIdentity.modern) {
-    return false;
-  }
-
-  // `?? ''` means "local (unagented)" on both sides.  The collision is safe only
-  // because insertOperation normalises '' to undefined before storing, so '' can
-  // never be a real agent name in the store.
-  return (
-    (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
-    operationIdentity.watcher === identity.watcher
-  );
-}
-
-/**
- * Return the latest in-progress operation for a container name.
- *
- * When `identity` is supplied the result is additionally filtered so that
- * operations belonging to a different agent+watcher are not returned — fixing
- * the false-409 multi-agent collision described in issue #411.
- */
-export function getInProgressOperationByContainerName(
-  containerName: string,
-  identity?: ContainerIdentityFilter,
+export function getInProgressOperationByContainerIdentity(
+  identityKey: string | undefined,
 ): InProgressUpdateOperation | undefined {
-  if (!updateOperationCollection) {
+  if (!db || !identityKey) {
     return undefined;
   }
 
-  const operations = updateOperationCollection
-    .find({
-      'data.containerName': containerName,
-      'data.status': 'in-progress',
-    })
-    .map((item) => item.data)
+  const operations = db
+    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_STATUS_SQL)
+    .all(identityKey, 'in-progress')
+    .map(rowToOperation)
     .filter(isInProgressUpdateOperation)
-    .filter(
-      (op) =>
-        !identity ||
-        matchesIdentityFilter(op as { container?: { agent?: string; watcher?: string } }, identity),
-    )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return operations.at(0);
@@ -1195,27 +1404,29 @@ export function getInProgressOperationByContainerName(
 export function getInProgressOperationByContainerId(
   containerId: string,
 ): InProgressUpdateOperation | undefined {
-  if (!updateOperationCollection || !containerId) {
+  if (!db || !containerId) {
     return undefined;
   }
 
   const operationsById = new Map<string, InProgressUpdateOperation>();
 
-  for (const document of updateOperationCollection.find({
-    'data.containerId': containerId,
-    'data.status': 'in-progress',
-  })) {
-    if (isInProgressUpdateOperation(document.data)) {
-      operationsById.set(document.data.id, document.data);
+  for (const operation of db
+    .prepare(UPDATE_OPERATION_SELECT_BY_CONTAINER_ID_STATUS_SQL)
+    .all(containerId, 'in-progress')
+    .map(rowToOperation)) {
+    // c8 ignore next 3 -- SQL already filtered WHERE status = 'in-progress'; redundant type narrowing.
+    if (isInProgressUpdateOperation(operation)) {
+      operationsById.set(operation.id, operation);
     }
   }
 
-  for (const document of updateOperationCollection.find({
-    'data.newContainerId': containerId,
-    'data.status': 'in-progress',
-  })) {
-    if (isInProgressUpdateOperation(document.data)) {
-      operationsById.set(document.data.id, document.data);
+  for (const operation of db
+    .prepare(UPDATE_OPERATION_SELECT_BY_NEW_CONTAINER_ID_STATUS_SQL)
+    .all(containerId, 'in-progress')
+    .map(rowToOperation)) {
+    // c8 ignore next 3 -- SQL already filtered WHERE status = 'in-progress'; redundant type narrowing.
+    if (isInProgressUpdateOperation(operation)) {
+      operationsById.set(operation.id, operation);
     }
   }
 
@@ -1227,29 +1438,22 @@ export function getInProgressOperationByContainerId(
 }
 
 /**
- * Return the latest active (in-progress OR queued) operation for a container name.
- *
- * When `identity` is supplied the result is additionally filtered so that
- * operations belonging to a different agent+watcher are not returned — fixing
- * the false-409 multi-agent collision described in issue #411.
+ * Return the latest active (in-progress OR queued) operation for a
+ * container's durable identity key.
  */
-export function getActiveOperationByContainerName(
-  containerName: string,
-  identity?: ContainerIdentityFilter,
+export function getActiveOperationByContainerIdentity(
+  identityKey: string | undefined,
 ): ActiveUpdateOperation | undefined {
-  if (!updateOperationCollection) {
+  if (!db || !identityKey) {
     return undefined;
   }
 
-  const operations = updateOperationCollection
-    .find({ 'data.containerName': containerName })
-    .map((item) => getFreshActiveOperation(item.data))
+  const operations = db
+    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL)
+    .all(identityKey)
+    .map(rowToOperation)
+    .map((operation) => getFreshActiveOperation(operation))
     .filter((item): item is ActiveUpdateOperation => Boolean(item))
-    .filter(
-      (op) =>
-        !identity ||
-        matchesIdentityFilter(op as { container?: { agent?: string; watcher?: string } }, identity),
-    )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return operations.at(0);
@@ -1257,39 +1461,29 @@ export function getActiveOperationByContainerName(
 
 /**
  * Return true when an active (in-progress or queued) operation exists for the
- * container name, excluding the given operation id.
+ * container identity, excluding the given operation id.
  *
  * Used by the duplicate-update dedup logic (issue #421): when a duplicate
  * request fails with a 409 while the winning update is still in flight, no
  * succeeded row exists yet — the presence of *another* active operation for
- * the same container and agent+watcher identity proves the conflict is benign.
- * Identity matching is strict (legacy rows without a container snapshot are
- * not counted) so an op from an identically-named container on a different
- * agent can never silence a genuine failure.
+ * the same container identity proves the conflict is benign.
  */
-export function hasOtherActiveOperationByContainerName(
-  containerName: string,
+export function hasOtherActiveOperationByContainerIdentity(
+  identityKey: string | undefined,
   excludeOperationId: string,
-  identity?: ContainerIdentityFilter,
 ): boolean {
-  if (!updateOperationCollection) {
+  if (!db || !identityKey) {
     return false;
   }
 
   const nowMs = Date.now();
-  return updateOperationCollection
-    .find({ 'data.containerName': containerName })
-    .map((item) => getFreshActiveOperation(item.data, nowMs))
+  return db
+    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL)
+    .all(identityKey)
+    .map(rowToOperation)
+    .map((operation) => getFreshActiveOperation(operation, nowMs))
     .filter((op): op is ActiveUpdateOperation => Boolean(op))
-    .some(
-      (op) =>
-        op.id !== excludeOperationId &&
-        (!identity ||
-          matchesStrictIdentityFilter(
-            op as { container?: { agent?: string; watcher?: string } },
-            identity,
-          )),
-    );
+    .some((op) => op.id !== excludeOperationId);
 }
 
 /**
@@ -1298,26 +1492,30 @@ export function hasOtherActiveOperationByContainerName(
 export function getActiveOperationByContainerId(
   containerId: string,
 ): ActiveUpdateOperation | undefined {
-  if (!updateOperationCollection || !containerId) {
+  if (!db || !containerId) {
     return undefined;
   }
 
   const operationsById = new Map<string, ActiveUpdateOperation>();
   const nowMs = Date.now();
 
-  for (const document of updateOperationCollection.find({ 'data.containerId': containerId })) {
-    const operation = getFreshActiveOperation(document.data, nowMs);
-    if (operation) {
-      operationsById.set(operation.id, operation);
+  for (const operation of db
+    .prepare(UPDATE_OPERATION_SELECT_BY_CONTAINER_ID_SQL)
+    .all(containerId)
+    .map(rowToOperation)) {
+    const fresh = getFreshActiveOperation(operation, nowMs);
+    if (fresh) {
+      operationsById.set(fresh.id, fresh);
     }
   }
 
-  for (const document of updateOperationCollection.find({
-    'data.newContainerId': containerId,
-  })) {
-    const operation = getFreshActiveOperation(document.data, nowMs);
-    if (operation) {
-      operationsById.set(operation.id, operation);
+  for (const operation of db
+    .prepare(UPDATE_OPERATION_SELECT_BY_NEW_CONTAINER_ID_SQL)
+    .all(containerId)
+    .map(rowToOperation)) {
+    const fresh = getFreshActiveOperation(operation, nowMs);
+    if (fresh) {
+      operationsById.set(fresh.id, fresh);
     }
   }
 
@@ -1329,65 +1527,61 @@ export function getActiveOperationByContainerId(
 }
 
 export function listActiveOperations(): ActiveUpdateOperation[] {
-  if (!updateOperationCollection) {
+  if (!db) {
     return [];
   }
+  const database = db;
 
   const nowMs = Date.now();
-  return ACTIVE_STATUSES.flatMap((status) =>
-    findOperationDocumentsByStatus(updateOperationCollection!, status),
-  )
-    .map((document) => getFreshActiveOperation(document.data, nowMs))
+  return ACTIVE_STATUSES.flatMap((status) => selectOperationsByStatus(database, status))
+    .map((operation) => getFreshActiveOperation(operation, nowMs))
     .filter((item): item is ActiveUpdateOperation => Boolean(item))
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 }
 
-export function getOperationsByContainerName(containerName: string): UpdateOperation[] {
-  if (!updateOperationCollection) {
+/** Every operation for a container's durable identity key, newest first. */
+export function getOperationsByContainerIdentity(
+  identityKey: string | undefined,
+): UpdateOperation[] {
+  if (!db || !identityKey) {
     return [];
   }
 
-  return updateOperationCollection
-    .find({ 'data.containerName': containerName })
-    .map((item) => item.data)
+  return db
+    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL)
+    .all(identityKey)
+    .map(rowToOperation)
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 }
 
 /**
- * Return the most recent terminal `succeeded` operation for a container name
- * that completed within the given `sinceMs` window (milliseconds before now).
+ * Return the most recent terminal `succeeded` operation for a container
+ * identity that completed within the given `sinceMs` window (milliseconds
+ * before now).
  *
  * Used by the duplicate-update dedup logic (issue #410) to distinguish between
  * a genuine execution failure and a stale-container 404/409 that arrived after
  * Docker Compose or an agent already recreated the container successfully.
  */
-export function getRecentTerminalSucceededOperationByContainerName(
-  containerName: string,
+export function getRecentTerminalSucceededOperationByContainerIdentity(
+  identityKey: string | undefined,
   sinceMs: number,
-  identity?: ContainerIdentityFilter,
 ): SucceededUpdateOperation | undefined {
-  if (!updateOperationCollection) {
+  if (!db || !identityKey) {
     return undefined;
   }
 
   const cutoffMs = Date.now() - sinceMs;
 
-  const candidates = updateOperationCollection
-    .find({ 'data.containerName': containerName, 'data.status': 'succeeded' })
-    .map((item) => item.data)
+  const candidates = db
+    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_STATUS_SQL)
+    .all(identityKey, 'succeeded')
+    .map(rowToOperation)
     .filter(
       (op): op is SucceededUpdateOperation =>
         op.status === 'succeeded' &&
         typeof op.completedAt === 'string' &&
         Date.parse(op.completedAt) >= cutoffMs,
-    )
-    .filter(
-      (op) =>
-        !identity ||
-        matchesStrictIdentityFilter(
-          op as { container?: { agent?: string; watcher?: string } },
-          identity,
-        ),
     )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
@@ -1406,14 +1600,14 @@ export function getRecentTerminalSucceededOperationByContainerName(
  * Returns an empty array when the collection is uninitialized.
  */
 export function listRecentSucceededOperations(sinceMs: number): SucceededUpdateOperation[] {
-  if (!updateOperationCollection) {
+  if (!db) {
     return [];
   }
+  const database = db;
 
   const cutoffMs = Date.now() - sinceMs;
 
-  return findOperationDocumentsByStatus(updateOperationCollection, 'succeeded')
-    .map((document) => document.data)
+  return selectOperationsByStatus(database, 'succeeded')
     .filter(
       (op): op is SucceededUpdateOperation =>
         op.status === 'succeeded' &&
@@ -1428,22 +1622,24 @@ export function listRecentSucceededOperations(sinceMs: number): SucceededUpdateO
  * deduped by operation id, sorted by timestamp descending.
  */
 export function getOperationsByContainerId(containerId: string): UpdateOperation[] {
-  if (!updateOperationCollection || !containerId) {
+  if (!db || !containerId) {
     return [];
   }
 
   const operationsById = new Map<string, UpdateOperation>();
 
-  for (const document of updateOperationCollection.find({
-    'data.containerId': containerId,
-  })) {
-    operationsById.set(document.data.id, document.data);
+  for (const operation of db
+    .prepare(UPDATE_OPERATION_SELECT_BY_CONTAINER_ID_SQL)
+    .all(containerId)
+    .map(rowToOperation)) {
+    operationsById.set(operation.id, operation);
   }
 
-  for (const document of updateOperationCollection.find({
-    'data.newContainerId': containerId,
-  })) {
-    operationsById.set(document.data.id, document.data);
+  for (const operation of db
+    .prepare(UPDATE_OPERATION_SELECT_BY_NEW_CONTAINER_ID_SQL)
+    .all(containerId)
+    .map(rowToOperation)) {
+    operationsById.set(operation.id, operation);
   }
 
   return [...operationsById.values()].sort(
@@ -1452,7 +1648,7 @@ export function getOperationsByContainerId(containerId: string): UpdateOperation
 }
 
 export function cancelQueuedOperation(id: string): UpdateOperation | undefined {
-  if (!updateOperationCollection) {
+  if (!db) {
     return undefined;
   }
   const existing = getOperationById(id);
@@ -1496,7 +1692,7 @@ export function isOperationCancelledError(error: unknown): error is OperationCan
 export function requestOperationCancellation(
   id: string,
 ): { outcome: 'cancelled' | 'cancel-requested'; operation: UpdateOperation } | undefined {
-  if (!updateOperationCollection) {
+  if (!db) {
     return undefined;
   }
   const existing = getOperationById(id);

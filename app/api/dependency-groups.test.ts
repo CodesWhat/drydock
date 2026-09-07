@@ -68,12 +68,14 @@ vi.mock('../store/update-operation.js', () => ({
   updateOperation: vi.fn(),
   markOperationTerminal: mockMarkOperationTerminal,
   getOperationById: vi.fn(),
-  getOperationsByContainerName: vi.fn(() => []),
+  getOperationsByContainerIdentity: vi.fn(() => []),
   getOperationsByContainerId: vi.fn(() => []),
-  getInProgressOperationByContainerName: vi.fn(),
+  getInProgressOperationByContainerIdentity: vi.fn(),
   getInProgressOperationByContainerId: vi.fn(),
-  getActiveOperationByContainerName: vi.fn(),
+  getActiveOperationByContainerIdentity: vi.fn(),
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
 }));
 
 vi.mock('../log/index.js', () => ({

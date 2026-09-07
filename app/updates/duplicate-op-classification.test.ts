@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const {
-  mockGetRecentTerminalSucceededOperationByContainerName,
-  mockHasOtherActiveOperationByContainerName,
+  mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  mockHasOtherActiveOperationByContainerIdentity,
 } = vi.hoisted(() => ({
-  mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined as unknown),
-  mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
+  mockGetRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined as unknown),
+  mockHasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
 }));
 
 vi.mock('../store/update-operation.js', () => ({
-  getRecentTerminalSucceededOperationByContainerName: (
-    ...args: Parameters<typeof mockGetRecentTerminalSucceededOperationByContainerName>
-  ) => mockGetRecentTerminalSucceededOperationByContainerName(...args),
-  hasOtherActiveOperationByContainerName: (
-    ...args: Parameters<typeof mockHasOtherActiveOperationByContainerName>
-  ) => mockHasOtherActiveOperationByContainerName(...args),
+  getRecentTerminalSucceededOperationByContainerIdentity: (
+    ...args: Parameters<typeof mockGetRecentTerminalSucceededOperationByContainerIdentity>
+  ) => mockGetRecentTerminalSucceededOperationByContainerIdentity(...args),
+  hasOtherActiveOperationByContainerIdentity: (
+    ...args: Parameters<typeof mockHasOtherActiveOperationByContainerIdentity>
+  ) => mockHasOtherActiveOperationByContainerIdentity(...args),
 }));
 
 import {
@@ -28,10 +28,10 @@ import {
 } from './duplicate-op-classification.js';
 
 beforeEach(() => {
-  mockGetRecentTerminalSucceededOperationByContainerName.mockReset();
-  mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-  mockHasOtherActiveOperationByContainerName.mockReset();
-  mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+  mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReset();
+  mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+  mockHasOtherActiveOperationByContainerIdentity.mockReset();
+  mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
 });
 
 describe('isContainerNotFoundError', () => {
@@ -239,8 +239,21 @@ describe('isDuplicateStyleError', () => {
 });
 
 describe('classifyDuplicateOpTerminalStatus', () => {
+  /**
+   * The old (error, containerName, windowMs, identityFilter, excludeOperationId)
+   * signature is gone (roadmap 7-STORE, slice 10): the function now takes a
+   * single `identityKey: string | undefined` as its 2nd argument and
+   * `excludeOperationId` moves up to the 4th slot. There is no more
+   * "identity.watcher present/absent" short-circuit — path 3's guard is just
+   * `excludeOperationId && identityKey`, and the store functions themselves do
+   * strict identityKey equality. Scenarios that only made sense under the old
+   * identity-filter object (e.g. "identity.watcher absent skips the lookup")
+   * have no equivalent under a single opaque key and are covered below as
+   * what they actually become.
+   */
+
   test('returns "failed" for a non-duplicate-style error regardless of recent success', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
@@ -248,7 +261,7 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   });
 
   test('returns "failed" for a duplicate-style error when no recent success exists', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     expect(classifyDuplicateOpTerminalStatus({ statusCode: 404 }, 'web')).toBe('failed');
     expect(
       classifyDuplicateOpTerminalStatus({ message: 'container web no longer exists' }, 'web'),
@@ -256,20 +269,19 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   });
 
   test('returns "expired" for a Docker 404 when a recent success exists', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
     expect(classifyDuplicateOpTerminalStatus({ statusCode: 404 }, 'web')).toBe('expired');
-    expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+    expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
       'web',
       DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
-      undefined,
     );
   });
 
   test('returns "expired" for a 409 conflict when a recent success exists', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
@@ -277,7 +289,7 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   });
 
   test('returns "expired" for "no longer exists" when a recent success exists', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
@@ -286,32 +298,27 @@ describe('classifyDuplicateOpTerminalStatus', () => {
     ).toBe('expired');
   });
 
-  test('passes the custom windowMs to getRecentTerminalSucceededOperationByContainerName', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+  test('passes the custom windowMs to getRecentTerminalSucceededOperationByContainerIdentity', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     classifyDuplicateOpTerminalStatus({ statusCode: 404 }, 'web', 5000);
-    expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+    expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
       'web',
       5000,
-      undefined,
     );
   });
 
-  test('passes agent and watcher identity to the recent success lookup', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+  test('passes the identity key through unchanged to the recent success lookup', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
 
     expect(
-      classifyDuplicateOpTerminalStatus({ statusCode: 404 }, 'web', 5000, {
-        agent: 'agent-A',
-        watcher: 'local',
-      }),
+      classifyDuplicateOpTerminalStatus({ statusCode: 404 }, 'agent-A::local::web', 5000),
     ).toBe('expired');
-    expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-      'web',
+    expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+      'agent-A::local::web',
       5000,
-      { agent: 'agent-A', watcher: 'local' },
     );
   });
 
@@ -321,7 +328,7 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   });
 
   test('returns "expired" for { status: 404 } shape when a recent success exists', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
@@ -329,33 +336,31 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   });
 
   test('returns "failed" for { status: 404 } shape when no recent success and no other active op', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
     expect(classifyDuplicateOpTerminalStatus({ status: 404 }, 'web')).toBe('failed');
   });
 
   test('409 + active-lock body + excludeOperationId + no recent success → "expired" via isActiveUpdateConflictError (SSE-lag race, issue #421)', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409, data: { error: 'Container update already in progress' } } },
         'web',
         undefined,
-        undefined,
         'op-loser',
       ),
     ).toBe('expired');
-    // Active-lock branch requires no store hit.
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    // Active-lock branch (path 2) is decided from the error body alone — no store hit.
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
   test('409 + active-lock body (queued) + excludeOperationId → "expired"', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409, data: { error: 'Container update already queued' } } },
         'web',
-        undefined,
         undefined,
         'op-loser',
       ),
@@ -363,7 +368,7 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   });
 
   test('409 + active-lock body WITHOUT excludeOperationId → "failed" (security gate, fix #4)', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409, data: { error: 'Container update already in progress' } } },
@@ -371,147 +376,123 @@ describe('classifyDuplicateOpTerminalStatus', () => {
         // excludeOperationId intentionally omitted
       ),
     ).toBe('failed');
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
   test('409 + unrelated body (e.g. snoozed blocker) + no recent success + no identity → falls through to "failed"', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409, data: { error: 'Container is snoozed' } } },
-        'web',
         undefined,
         undefined,
         'op-loser',
       ),
     ).toBe('failed');
-    // Store fn skipped because identity.watcher is absent.
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    // Path 3's guard requires a truthy identityKey; store fn skipped without one.
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
-  test('409 + no data field + no identity → "failed" (tightened: store fn not called without identity.watcher)', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+  test('409 + no data field + no identity → "failed" (path 3 guard requires identityKey)', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409 } },
-        'web',
         undefined,
         undefined,
         'op-loser',
       ),
     ).toBe('failed');
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
-  test('409 + no recent success + other active op + identity.watcher present → "expired" (issue #421 path 3)', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+  test('409 + no recent success + other active op + identityKey present → "expired" (issue #421 path 3)', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409 } },
-        'web',
+        'agent-A::local::web',
         undefined,
-        { agent: 'agent-A', watcher: 'local' },
         'op-loser',
       ),
     ).toBe('expired');
   });
 
-  test('409 + no recent success + no other active op + identity.watcher present → "failed"', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+  test('409 + no recent success + no other active op + identityKey present → "failed"', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409 } },
-        'web',
+        'agent-A::local::web',
         undefined,
-        { agent: 'agent-A', watcher: 'local' },
         'op-loser',
       ),
     ).toBe('failed');
   });
 
-  test('identity undefined → store fn NOT called, result "failed" (absent other signals)', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+  test('identityKey undefined → store fn NOT called, result "failed" (absent other signals)', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     const result = classifyDuplicateOpTerminalStatus(
       { response: { status: 409 } },
-      'web',
       undefined,
       undefined,
       'op-loser',
     );
     expect(result).toBe('failed');
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
-  test('identity with watcher → store fn called (path 3 guard passes)', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+  test('identityKey present → store fn called (path 3 guard passes)', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
     classifyDuplicateOpTerminalStatus(
       { response: { status: 409 } },
-      'web',
+      'agent-X::docker::web',
       undefined,
-      { agent: 'agent-X', watcher: 'docker' },
       'op-excl-99',
     );
-    expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith('web', 'op-excl-99', {
-      agent: 'agent-X',
-      watcher: 'docker',
-    });
+    expect(mockHasOtherActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+      'agent-X::docker::web',
+      'op-excl-99',
+    );
   });
 
   test('active-op check NOT invoked when excludeOperationId is omitted, result is "failed"', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
     expect(classifyDuplicateOpTerminalStatus({ response: { status: 409 } }, 'web')).toBe('failed');
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
   test('recent success short-circuits — active-op fn not called', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
       id: 'prev',
       status: 'succeeded',
     });
     classifyDuplicateOpTerminalStatus(
       { response: { status: 409 } },
-      'web',
-      undefined,
+      'agent-A::local::web',
       undefined,
       'op-loser',
     );
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(mockHasOtherActiveOperationByContainerIdentity).not.toHaveBeenCalled();
   });
 
-  test('forwards containerName, excludeOperationId, and identity to the store fn', () => {
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+  test('forwards identityKey and excludeOperationId to the store fn', () => {
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
     classifyDuplicateOpTerminalStatus(
       { response: { status: 409 } },
-      'mycontainer',
+      'agent-A::local::mycontainer',
       undefined,
-      { agent: 'agent-A', watcher: 'local' },
       'op-excl-42',
     );
-    expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
-      'mycontainer',
+    expect(mockHasOtherActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+      'agent-A::local::mycontainer',
       'op-excl-42',
-      { agent: 'agent-A', watcher: 'local' },
     );
-  });
-
-  test('path-3 identity guard: Docker 404 + excludeOperationId + identity { agent: "X", watcher: undefined } → "failed" and hasOtherActiveOperationByContainerName never called', () => {
-    // identity.watcher is absent — the guard `identity?.watcher` short-circuits
-    // before the store lookup, so no cross-agent masking is possible.
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-    const result = classifyDuplicateOpTerminalStatus(
-      { statusCode: 404 },
-      'web',
-      undefined,
-      { agent: 'X', watcher: undefined },
-      'op-self',
-    );
-    expect(result).toBe('failed');
-    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
   });
 });

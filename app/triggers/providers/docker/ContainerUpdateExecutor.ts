@@ -1,5 +1,4 @@
 import { isRollbackContainerName } from '../../../model/container.js';
-import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
@@ -67,6 +66,7 @@ type ContainerSpecLike = {
 type ContainerForUpdate = {
   id: string;
   name: string;
+  identityKey?: string;
   image: {
     tag: {
       value: string;
@@ -92,20 +92,6 @@ type ContainerForUpdate = {
  */
 function withoutImageDigest(imageReference: string): string {
   return imageReference.split('@')[0];
-}
-
-function getContainerIdentityFilter(
-  container: ContainerForUpdate,
-): ContainerIdentityFilter | undefined {
-  if (typeof container.watcher !== 'string') {
-    return undefined;
-  }
-
-  return {
-    /* v8 ignore next -- local watcher identity omits agent; agent-owned identity is covered by executor tests. */
-    ...(typeof container.agent === 'string' ? { agent: container.agent } : {}),
-    watcher: container.watcher,
-  };
 }
 
 type ContainerUpdateContext = {
@@ -171,7 +157,7 @@ type RollbackConfig = {
 };
 
 type PendingContainerUpdateOperation = NonNullable<
-  ReturnType<typeof updateOperationStore.getInProgressOperationByContainerName>
+  ReturnType<typeof updateOperationStore.getInProgressOperationByContainerIdentity>
 >;
 
 type ContainerUpdateExecutorDependencies = {
@@ -431,18 +417,15 @@ class ContainerUpdateExecutor {
     const pendingByContainerId = updateOperationStore.getInProgressOperationByContainerId(
       container.id,
     );
-    const pendingByContainerName =
+    const pendingByContainerIdentity =
       pendingByContainerId ??
-      updateOperationStore.getInProgressOperationByContainerName(container.name, {
-        agent: typeof container.agent === 'string' ? container.agent : undefined,
-        watcher: typeof container.watcher === 'string' ? container.watcher : undefined,
-      });
+      updateOperationStore.getInProgressOperationByContainerIdentity(container.identityKey);
     const pending =
       container.id &&
-      pendingByContainerName?.containerId &&
-      pendingByContainerName.containerId !== container.id
+      pendingByContainerIdentity?.containerId &&
+      pendingByContainerIdentity.containerId !== container.id
         ? undefined
-        : pendingByContainerName;
+        : pendingByContainerIdentity;
 
     if (!pending) {
       return;
@@ -908,12 +891,10 @@ class ContainerUpdateExecutor {
       // not axios response.status), so the classifier's 409 lock-body branch
       // cannot fire on this path; only the 404 recent-success and other-active-op
       // branches apply.
-      const identity = getContainerIdentityFilter(container);
       const terminalStatus = classifyDuplicateOpTerminalStatus(
         tailError,
-        container.name,
+        container.identityKey,
         undefined,
-        identity,
         operation.id,
       );
       if (terminalStatus === 'expired') {

@@ -79,13 +79,16 @@ vi.mock('../store/audit', () => ({
 
 vi.mock('../store/update-operation', () => ({
   listActiveOperations: vi.fn(() => []),
-  getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
+  getOperationsByContainerIdentity: (...args: unknown[]) =>
+    mockGetOperationsByContainerName(...args),
   getOperationsByContainerId: vi.fn(() => []),
   getOperationById: vi.fn(() => undefined),
-  getInProgressOperationByContainerName: vi.fn(() => undefined),
+  getInProgressOperationByContainerIdentity: vi.fn(() => undefined),
   getInProgressOperationByContainerId: vi.fn(() => undefined),
-  getActiveOperationByContainerName: vi.fn(() => undefined),
+  getActiveOperationByContainerIdentity: vi.fn(() => undefined),
   getActiveOperationByContainerId: vi.fn(() => undefined),
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
   toApiUpdateOperation: (op: Record<string, unknown>) => {
     const { container: _container, ...rest } = op;
     return rest;
@@ -1122,7 +1125,10 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ params: { id: 'c1' } }, res);
 
-      expect(mockGetOperationsByContainerName).toHaveBeenCalledWith('nginx');
+      // No identityKey on the container fixture, so the identity-scoped lookup
+      // is called with undefined; the legacy rows still merge in since none
+      // of them carry a containerId field.
+      expect(mockGetOperationsByContainerName).toHaveBeenCalledWith(undefined);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: operations,
@@ -1629,11 +1635,11 @@ describe('Container Router', () => {
             deleteContainer: vi.fn(),
           },
           updateOperationStore: {
-            getOperationsByContainerName: vi.fn(() => []),
+            getOperationsByContainerIdentity: vi.fn(() => []),
             getOperationsByContainerId: vi.fn(() => []),
-            getInProgressOperationByContainerName: vi.fn(() => undefined),
+            getInProgressOperationByContainerIdentity: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
-            getActiveOperationByContainerName: vi.fn(() => undefined),
+            getActiveOperationByContainerIdentity: vi.fn(() => undefined),
             getActiveOperationByContainerId: vi.fn(() => undefined),
           },
         },

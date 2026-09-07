@@ -43,6 +43,7 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const notification = await import('./notification.js');
       const approval = await import('./approval.js');
       const container = await import('./container.js');
+      const updateOperation = await import('./update-operation.js');
       const updateLifecycleCache = await import('./update-lifecycle-cache.js');
       const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
 
@@ -93,6 +94,20 @@ describe('store first-start import from a v1.7 dd.json', () => {
         (document: { id: string }) => document.id === 'approval-fixture-decided',
       );
       decidedApprovalDocument.decidedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+      // Both update-operation fixture rows carry fixed 2026-01 timestamps for
+      // readability, but updateOperation.createCollections() runs a startup
+      // prune of terminal rows older than the 30-day retention window (same
+      // reasoning as the audit and approval rows above). Move updatedAt to
+      // "just now" for both — pruning keys off updatedAt, falling back to
+      // createdAt — so they survive; the point of the test is the import
+      // round trip, not the prune timer.
+      const updateOperationsCollection = fixture.collections.find(
+        (collection: { name: string }) => collection.name === 'updateOperations',
+      );
+      for (const document of updateOperationsCollection.data) {
+        document.data.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      }
 
       fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
 
@@ -252,6 +267,26 @@ describe('store first-start import from a v1.7 dd.json', () => {
           .map((entry) => entry.id)
           .sort(),
       ).toEqual(['container-cache-web', 'container-full-app']);
+
+      // update operations (roadmap 7-STORE slice 10): the terminal fixture row's
+      // container_identity_key round-trips through the import, derived from its
+      // container snapshot exactly the way a fresh insertOperation() would; the
+      // orphaned row (no agent/watcher/container snapshot) imports with no
+      // identity rather than a guessed one.
+      const importedSucceeded = updateOperation.getOperationById('operation-fixture-succeeded');
+      expect(importedSucceeded).toMatchObject({
+        containerName: 'full-app',
+        status: 'succeeded',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+        containerIdentityKey: 'edge-one::local::full-app',
+      });
+      const importedOrphan = updateOperation.getOperationById('operation-fixture-orphan');
+      expect(importedOrphan).toMatchObject({
+        containerName: 'ghost-worker',
+        status: 'failed',
+      });
+      expect(importedOrphan?.containerIdentityKey).toBeUndefined();
 
       // update-lifecycle cache (roadmap 7-STORE slice 7): the fixture's legacy
       // `watcher::name` row maps forward to the still-present container's

@@ -12,7 +12,7 @@ import {
 registerCommonDockerBeforeEach();
 const {
   mockAuditCounterInc,
-  mockGetInProgressOperationByContainerName,
+  mockGetInProgressOperationByContainerIdentity,
   mockGetState,
   mockInsertAudit,
   mockMarkOperationTerminal,
@@ -1314,7 +1314,7 @@ describe('executeContainerUpdate', () => {
     };
     const context = createContainerUpdateContext({ dockerApi });
     const logContainer = createMockLog('info', 'warn', 'debug');
-    mockGetInProgressOperationByContainerName.mockReturnValue({
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue({
       id: 'op-recover-1',
       containerName: 'container-name',
       oldName: 'container-name',

@@ -101,14 +101,11 @@ export function attachInProgressUpdateOperation(
   container: Container,
 ): Container {
   const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
-  // Scoped by agent+watcher so cross-agent same-named ops don't pollute list responses (issue #411).
-  const byName = byId
+  // Scoped by identity so cross-agent same-named ops don't pollute list responses (issue #411).
+  const byIdentity = byId
     ? undefined
-    : context.updateOperationStore.getActiveOperationByContainerName(container.name, {
-        agent: container.agent,
-        watcher: container.watcher,
-      });
-  const matched = byId ?? byName;
+    : context.updateOperationStore.getActiveOperationByContainerIdentity(container.identityKey);
+  const matched = byId ?? byIdentity;
   const operation = sanitizeActiveUpdateOperation(matched);
 
   if (!operation) {
@@ -125,14 +122,11 @@ function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibility
       context.getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (container: Container) => {
       const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
-      // Scoped by agent+watcher so cross-agent same-named ops don't affect eligibility (issue #411).
-      const byName = byId
+      // Scoped by identity so cross-agent same-named ops don't affect eligibility (issue #411).
+      const byIdentity = byId
         ? undefined
-        : context.updateOperationStore.getActiveOperationByContainerName(container.name, {
-            agent: container.agent,
-            watcher: container.watcher,
-          });
-      const matched = byId ?? byName;
+        : context.updateOperationStore.getActiveOperationByContainerIdentity(container.identityKey);
+      const matched = byId ?? byIdentity;
       if (!matched || typeof matched !== 'object') {
         return undefined;
       }

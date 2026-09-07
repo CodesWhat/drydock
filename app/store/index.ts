@@ -206,7 +206,8 @@ function createCollections(): boolean {
   secrets.createCollections(sqliteDb as Database);
   uiPreferences.createCollections(sqliteDb as Database);
   settings.createCollections(sqliteDb as Database);
-  updateOperation.createCollections(db);
+  // roadmap 7-STORE slice 10.
+  updateOperation.createCollections(sqliteDb as Database);
   app.completeStartupInitialization();
   return droppedLegacySessionsCollection;
 }

@@ -122,15 +122,15 @@ const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
-const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
-const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
-const mockGetRecentTerminalSucceededOperationByContainerName = vi.hoisted(() =>
+const mockGetRecentTerminalSucceededOperationByContainerIdentity = vi.hoisted(() =>
   vi.fn(() => undefined),
 );
-const mockHasOtherActiveOperationByContainerName = vi.hoisted(() => vi.fn(() => false));
+const mockHasOtherActiveOperationByContainerIdentity = vi.hoisted(() => vi.fn(() => false));
 const MockOperationCancelledError = vi.hoisted(
   () =>
     class MockOperationCancelledError extends Error {
@@ -148,18 +148,18 @@ vi.mock('../../../store/update-operation.js', () => ({
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getOperationById: (...args: any[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
-  getInProgressOperationByContainerName: (...args: any[]) =>
-    mockGetInProgressOperationByContainerName(...args),
+  getInProgressOperationByContainerIdentity: (...args: any[]) =>
+    mockGetInProgressOperationByContainerIdentity(...args),
   getInProgressOperationByContainerId: (...args: any[]) =>
     mockGetInProgressOperationByContainerId(...args),
-  getActiveOperationByContainerName: (...args: any[]) =>
-    mockGetActiveOperationByContainerName(...args),
+  getActiveOperationByContainerIdentity: (...args: any[]) =>
+    mockGetActiveOperationByContainerIdentity(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
-  getRecentTerminalSucceededOperationByContainerName: (...args: any[]) =>
-    mockGetRecentTerminalSucceededOperationByContainerName(...args),
-  hasOtherActiveOperationByContainerName: (...args: any[]) =>
-    mockHasOtherActiveOperationByContainerName(...args),
+  getRecentTerminalSucceededOperationByContainerIdentity: (...args: any[]) =>
+    mockGetRecentTerminalSucceededOperationByContainerIdentity(...args),
+  hasOtherActiveOperationByContainerIdentity: (...args: any[]) =>
+    mockHasOtherActiveOperationByContainerIdentity(...args),
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -489,7 +489,7 @@ beforeEach(async () => {
     ...operation,
   }));
   mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
-  mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+  mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined);
 });
 
 test('getSelfUpdateFinalizeUrl should keep loopback finalize callbacks on plain HTTP even when public TLS is enabled', () => {
@@ -3369,7 +3369,7 @@ describe('executeContainerUpdate', () => {
     };
     const context = createContainerUpdateContext({ dockerApi });
     const logContainer = createMockLog('info', 'warn', 'debug');
-    mockGetInProgressOperationByContainerName.mockReturnValue({
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue({
       id: 'op-recover-1',
       containerName: 'container-name',
       oldName: 'container-name',
@@ -4835,7 +4835,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'prepare',
       });
       // A recent succeeded op for the same container name
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -4856,7 +4856,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -4875,7 +4875,7 @@ describe('extracted lifecycle delegation', () => {
         status: 'queued',
         phase: 'queued',
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -4892,7 +4892,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -4911,7 +4911,7 @@ describe('extracted lifecycle delegation', () => {
         status: 'in-progress',
         phase: 'prepare',
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -4928,7 +4928,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -5243,24 +5243,28 @@ describe('extracted lifecycle delegation', () => {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
-        container: { id: 'c-agent-b', name: 'web', agent: 'agent-B', watcher: 'local' },
+        containerIdentityKey: 'agent-B::local::web',
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
-        (_containerName, _windowMs, identity) =>
-          identity?.agent === 'agent-B'
+      // With the single identityKey signature there is no filter object to branch
+      // on inside the store call; the mock instead does exact identityKey equality,
+      // the way the real SQL lookup does. A recent success recorded under agent-A's
+      // identity must not match a lookup keyed by agent-B's identity.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockImplementation(
+        (identityKey) =>
+          identityKey === 'agent-B::local::web'
             ? undefined
             : { id: 'prev-agent-a', containerName: 'web', status: 'succeeded' },
       );
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
 
       try {
         await expect(
           docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-agent-b-1' }),
         ).rejects.toThrow('No such container');
 
-        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-          'web',
+        expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+          'agent-B::local::web',
           expect.any(Number),
-          { agent: 'agent-B', watcher: 'local' },
         );
         expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
           'op-404-agent-b-1',
@@ -5272,7 +5276,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -5316,7 +5320,7 @@ describe('extracted lifecycle delegation', () => {
       }
     });
 
-    test('scopes the duplicate-update lookup by watcher alone for a controller-owned operation', async () => {
+    test('passes a controller-owned operation containerIdentityKey (no agent segment) straight through to the duplicate-update lookup', async () => {
       const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
       const docker404Error = Object.assign(new Error('No such container: web'), {
         statusCode: 404,
@@ -5329,7 +5333,7 @@ describe('extracted lifecycle delegation', () => {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
-        container: { id: 'c-controller', name: 'web', watcher: 'local' },
+        containerIdentityKey: '::local::web',
       });
 
       try {
@@ -5337,10 +5341,9 @@ describe('extracted lifecycle delegation', () => {
           docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-controller-1' }),
         ).rejects.toThrow('No such container');
 
-        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-          'web',
+        expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+          '::local::web',
           expect.any(Number),
-          { watcher: 'local' },
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
@@ -5363,7 +5366,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'prepare',
       });
       // No recent success — genuine failure
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       try {
         await expect(
@@ -5399,7 +5402,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'pulling',
       });
       // Recent success present but this is not a duplicate-style error
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -5420,7 +5423,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -5438,12 +5441,12 @@ describe('extracted lifecycle delegation', () => {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
-        container: { id: 'c-loser', name: 'web', agent: 'agent-A', watcher: 'local' },
+        containerIdentityKey: 'agent-A::local::web',
       });
       // No recent succeeded op yet — the winner is still in flight
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       // But another active operation exists for the same container+identity
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
 
       try {
         await expect(
@@ -5459,15 +5462,14 @@ describe('extracted lifecycle delegation', () => {
           expect.objectContaining({ status: 'failed' }),
         );
         // Confirm operation.id was passed as the exclusion
-        expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
-          'web',
+        expect(mockHasOtherActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+          'agent-A::local::web',
           'op-409-race-loser',
-          { agent: 'agent-A', watcher: 'local' },
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-        mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+        mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
       }
     });
 

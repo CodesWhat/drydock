@@ -1,118 +1,130 @@
 import { performance } from 'node:perf_hooks';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { registerContainerUpdateApplied, registerContainerUpdateFailed } from '../event/index.js';
+import { getContainerIdentityKey } from '../model/container.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import * as updateOperation from './update-operation.js';
 
-function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string> }) {
-  function getByPath(object, path) {
-    return path.split('.').reduce((acc, key) => acc?.[key], object);
-  }
+/**
+ * Every fixture in this suite predates the identity cut (roadmap 7-STORE,
+ * slice 10) and was written against a bare container name. Rather than touch
+ * every one of the ~135 `insertOperation` call sites individually, `insertOp`
+ * threads a stand-in watcher through so `deriveOperationIdentityKey` always
+ * has something to resolve against, matching what a real Docker watcher
+ * always supplies. A call site that needs a different agent/watcher (the
+ * cross-agent disambiguation tests) overrides it by including its own
+ * `watcher`/`agent` key, which the later spread wins over.
+ */
+const DEFAULT_WATCHER = 'watcher-test';
 
-  function matchesQuery(doc, query = {}) {
-    return Object.entries(query).every(([key, value]) => {
-      const docValue = getByPath(doc, key);
-      if (value !== null && typeof value === 'object' && '$in' in value) {
-        return (value as { $in: unknown[] }).$in.includes(docValue);
-      }
-      return docValue === value;
-    });
-  }
-
-  const inactiveIds = options?.inactiveIds ?? new Set<string>();
-  const missingIds = options?.missingIds ?? new Set<string>();
-  const collections = {};
-  return {
-    getCollection: (name) => collections[name] || null,
-    addCollection: (name) => {
-      const docs = [];
-      collections[name] = {
-        insert: (doc) => {
-          doc.$loki = docs.length;
-          docs.push(doc);
-        },
-        find: (query = {}) => docs.filter((doc) => matchesQuery(doc, query)),
-        findOne: (query = {}) => {
-          const id = query['data.id'];
-          const doc = docs.find((item) => matchesQuery(item, query));
-
-          if (missingIds.has(id)) {
-            return null;
-          }
-
-          if (inactiveIds.has(id) && doc) {
-            return {
-              ...doc,
-              data: {
-                ...doc.data,
-                status: 'failed',
-              },
-            };
-          }
-
-          return doc || null;
-        },
-        remove: (doc) => {
-          const idx = docs.indexOf(doc);
-          if (idx >= 0) docs.splice(idx, 1);
-        },
-      };
-      return collections[name];
-    },
-  };
+function insertOp(
+  mod: Pick<typeof updateOperation, 'insertOperation'>,
+  operation: Parameters<typeof updateOperation.insertOperation>[0],
+  options?: Parameters<typeof updateOperation.insertOperation>[1],
+) {
+  return mod.insertOperation({ watcher: DEFAULT_WATCHER, ...operation }, options);
 }
 
-function createDocumentBackedDb(documents: any[]) {
-  return {
-    getCollection: () => null,
-    addCollection: () => ({
-      insert: (doc: any) => {
-        documents.push(doc);
-      },
-      find: (query: Record<string, string> = {}) =>
-        documents.filter((doc) =>
-          Object.entries(query).every(([key, value]) => {
-            const path = key.split('.');
-            let current: any = doc;
-            for (const segment of path) current = current?.[segment];
-            return current === value;
-          }),
-        ),
-      findOne: (query: Record<string, string>) =>
-        documents.find((doc) =>
-          Object.entries(query).every(([key, value]) => {
-            const path = key.split('.');
-            let current: any = doc;
-            for (const segment of path) current = current?.[segment];
-            return current === value;
-          }),
-        ) || null,
-      remove: (doc: any) => {
-        const index = documents.indexOf(doc);
-        if (index >= 0) {
-          documents.splice(index, 1);
+/** The identity key a container with this name resolves to under `insertOp`'s default watcher. */
+function identity(name: string, scope?: { agent?: string; watcher?: string }): string | undefined {
+  return getContainerIdentityKey({
+    agent: scope?.agent,
+    watcher: scope?.watcher ?? DEFAULT_WATCHER,
+    name,
+  });
+}
+
+const openDatabases: Database[] = [];
+
+afterEach(() => {
+  for (const database of openDatabases.splice(0)) {
+    database.close();
+  }
+});
+
+/** A fresh real SQLite database with the schema applied, closed automatically after the test. */
+function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string> }): Database {
+  const database = createMigratedMemoryDatabase();
+  openDatabases.push(database);
+
+  const missingIds = options?.missingIds;
+  const inactiveIds = options?.inactiveIds;
+  if (!missingIds && !inactiveIds) {
+    return database;
+  }
+
+  // Intercept the row-identity re-read `getFreshActiveOperation` performs
+  // (roadmap 7-STORE slice 10, `expireActiveOperationWithMessage`) so a test
+  // can simulate the row having disappeared or already gone inactive between
+  // the outer by-identity query and this per-id re-check, the same race the
+  // old Loki-backed `findOne` mock injected.
+  const realPrepare = database.prepare.bind(database);
+  const raceSql = 'SELECT * FROM update_operations WHERE id = ?';
+  database.prepare = ((sql: string) => {
+    const statement = realPrepare(sql);
+    if (sql !== raceSql) {
+      return statement;
+    }
+    return {
+      ...statement,
+      get: (...parameters: unknown[]) => {
+        const id = parameters[0] as string;
+        if (missingIds?.has(id)) {
+          return undefined;
         }
+        const row = statement.get(...(parameters as never[]));
+        if (row && inactiveIds?.has(id)) {
+          return { ...row, status: 'failed' };
+        }
+        return row;
       },
-    }),
-  };
+    };
+  }) as Database['prepare'];
+  return database;
 }
+
+/**
+ * Seed a real database with legacy `{ data: ... }`-enveloped documents before
+ * `createCollections` runs, exercising the same startup reconciliation path
+ * `createDocumentBackedDb` used to under LokiJS. Reuses the collection
+ * importer's own row builder (`buildImportedUpdateOperationRow`) so a seeded
+ * row is exactly what `store/db/importers/update-operations.ts` would import.
+ */
+function createDocumentBackedDb(documents: { data: Record<string, unknown> }[]): Database {
+  const database = createMigratedMemoryDatabase();
+  openDatabases.push(database);
+  for (const document of documents) {
+    // Same default-watcher stand-in insertOp threads through inserts: these
+    // fixtures predate the identity cut and never carried a watcher of their
+    // own, so give buildImportedUpdateOperationRow something to derive from.
+    const row = updateOperation.buildImportedUpdateOperationRow({
+      watcher: DEFAULT_WATCHER,
+      ...document.data,
+    });
+    if (row) {
+      updateOperation.insertImportedUpdateOperationRow(database, row);
+    }
+  }
+  return database;
+}
+
+describe('buildImportedUpdateOperationRow', () => {
+  test('returns undefined for non-object input', () => {
+    expect(updateOperation.buildImportedUpdateOperationRow(null)).toBeUndefined();
+    expect(updateOperation.buildImportedUpdateOperationRow('not-an-object')).toBeUndefined();
+  });
+});
 
 describe('Update Operation Store', () => {
   beforeEach(() => {
     updateOperation.createCollections(createDb());
   });
 
-  test('createCollections should create updateOperations collection when missing', () => {
-    const db = {
-      getCollection: () => null,
-      addCollection: vi.fn(() => ({ insert: vi.fn(), find: vi.fn(), remove: vi.fn() })),
-    };
-    updateOperation.createCollections(db);
-    expect(db.addCollection).toHaveBeenCalledWith(
-      'updateOperations',
-      expect.objectContaining({
-        indices: expect.arrayContaining(['data.id', 'data.containerName', 'data.status']),
-      }),
-    );
+  test('createCollections should leave a freshly migrated update_operations table empty and queryable', () => {
+    const database = createDb();
+    updateOperation.createCollections(database);
+    expect(database.prepare('SELECT COUNT(*) AS n FROM update_operations').get()).toEqual({ n: 0 });
   });
 
   test('createCollections should preserve Docker-mutating in-progress phases for runtime reconciliation', async () => {
@@ -232,12 +244,18 @@ describe('Update Operation Store', () => {
         }),
       );
 
-      expect(fresh.getActiveOperationByContainerName('queued-web')).toEqual(
+      expect(fresh.getActiveOperationByContainerIdentity(identity('queued-web'))).toEqual(
         expect.objectContaining({ id: 'queued-fresh-op-1', status: 'queued' }),
       );
-      expect(fresh.getActiveOperationByContainerName('started-web')?.status).toBe('in-progress');
-      expect(fresh.getActiveOperationByContainerName('health-web')?.status).toBe('in-progress');
-      expect(fresh.getActiveOperationByContainerName('deferred-web')?.status).toBe('in-progress');
+      expect(fresh.getActiveOperationByContainerIdentity(identity('started-web'))?.status).toBe(
+        'in-progress',
+      );
+      expect(fresh.getActiveOperationByContainerIdentity(identity('health-web'))?.status).toBe(
+        'in-progress',
+      );
+      expect(fresh.getActiveOperationByContainerIdentity(identity('deferred-web'))?.status).toBe(
+        'in-progress',
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -316,7 +334,7 @@ describe('Update Operation Store', () => {
         }),
       );
 
-      expect(fresh.getActiveOperationByContainerName('pulling-web')).toEqual(
+      expect(fresh.getActiveOperationByContainerIdentity(identity('pulling-web'))).toEqual(
         expect.objectContaining({ id: 'pulling-op-1', status: 'queued', phase: 'queued' }),
       );
     } finally {
@@ -405,47 +423,28 @@ describe('Update Operation Store', () => {
   test('createCollections should use targeted indexed status queries for startup repair', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const findQueries: Array<Record<string, string> | undefined> = [];
-    const db = {
-      getCollection: () => null,
-      addCollection: () => {
-        const docs: any[] = [];
-        const getByPath = (object: Record<string, unknown>, path: string) =>
-          path
-            .split('.')
-            .reduce<unknown>((acc, key) => (acc as Record<string, unknown>)?.[key], object);
-        const matchesQuery = (doc: Record<string, unknown>, query: Record<string, string> = {}) =>
-          Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    const statusQuerySql = 'SELECT * FROM update_operations WHERE status = ?';
+    const statusesQueried: string[] = [];
+    const database = createDb();
+    const realPrepare = database.prepare.bind(database);
+    database.prepare = ((sql: string) => {
+      const statement = realPrepare(sql);
+      if (sql !== statusQuerySql) {
+        return statement;
+      }
+      return {
+        ...statement,
+        all: (...parameters: unknown[]) => {
+          statusesQueried.push(parameters[0] as string);
+          return statement.all(...(parameters as never[]));
+        },
+      };
+    }) as Database['prepare'];
 
-        return {
-          insert: (doc: any) => {
-            docs.push(doc);
-          },
-          find: (query: Record<string, string> = {}) => {
-            findQueries.push(Object.keys(query).length === 0 ? undefined : query);
-            return docs.filter((doc) => matchesQuery(doc, query));
-          },
-          findOne: (query: Record<string, string>) =>
-            docs.find((doc) => matchesQuery(doc, query)) || null,
-          remove: (doc: any) => {
-            const index = docs.indexOf(doc);
-            if (index >= 0) {
-              docs.splice(index, 1);
-            }
-          },
-        };
-      },
-    };
+    fresh.createCollections(database);
 
-    fresh.createCollections(db as any);
-
-    const statusQueries = findQueries.filter(
-      (query): query is Record<string, string> =>
-        Boolean(query) && Object.keys(query).length === 1 && 'data.status' in query,
-    );
-
-    // Active statuses from startup repair + terminal statuses from the startup prune call
-    expect(new Set(statusQueries.map((query) => query['data.status']))).toEqual(
+    // Active statuses from startup repair + terminal statuses from the startup prune call.
+    expect(new Set(statusesQueried)).toEqual(
       new Set([
         'queued',
         'in-progress',
@@ -459,7 +458,7 @@ describe('Update Operation Store', () => {
   });
 
   test('insertOperation should default to in-progress prepare state', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       containerId: 'abc',
       triggerName: 'docker.update',
@@ -475,7 +474,7 @@ describe('Update Operation Store', () => {
   });
 
   test('insertOperation normalises empty-string agent to undefined', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       agent: '',
     });
@@ -484,7 +483,7 @@ describe('Update Operation Store', () => {
   });
 
   test('insertOperation normalises empty-string watcher to undefined', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       watcher: '',
     });
@@ -494,7 +493,7 @@ describe('Update Operation Store', () => {
 
   test('insertOperation normalises empty-string agent/watcher inside container snapshot to undefined', () => {
     const inputContainer = { id: 'c1', name: 'web', agent: '', watcher: '' } as any;
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       container: inputContainer,
     });
@@ -512,7 +511,7 @@ describe('Update Operation Store', () => {
   });
 
   test('insertOperation normalises empty-string agent but preserves non-empty watcher in container snapshot', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       container: { id: 'c1', name: 'web', agent: '', watcher: 'local' } as any,
     });
@@ -526,7 +525,7 @@ describe('Update Operation Store', () => {
   });
 
   test('insertOperation normalises empty-string watcher but preserves non-empty agent in container snapshot', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       container: { id: 'c1', name: 'web', agent: 'agent-A', watcher: '' } as any,
     });
@@ -540,7 +539,7 @@ describe('Update Operation Store', () => {
   });
 
   test('insertOperation preserves non-empty agent and watcher strings unchanged', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       agent: 'agent-A',
       watcher: 'local',
@@ -556,7 +555,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should merge patch and refresh updatedAt', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       containerId: 'abc',
       triggerName: 'docker.update',
@@ -579,7 +578,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should default queued active phases correctly', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'in-progress',
       phase: 'prepare',
@@ -598,7 +597,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should preserve the existing status when only phase changes', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'in-progress',
       phase: 'prepare',
@@ -622,7 +621,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should reject terminal statuses passed at runtime', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'in-progress',
       phase: 'pulling',
@@ -650,7 +649,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should reject terminal phases passed at runtime', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'in-progress',
       phase: 'pulling',
@@ -666,7 +665,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should reject completedAt passed at runtime', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'in-progress',
       phase: 'pulling',
@@ -682,7 +681,7 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should reject reopening a terminal row with an explicit active patch', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
@@ -703,7 +702,7 @@ describe('Update Operation Store', () => {
   });
 
   test('reopenTerminalOperation should explicitly restart a terminal row', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
@@ -744,7 +743,7 @@ describe('Update Operation Store', () => {
   });
 
   test('reopenTerminalOperation should clear stale terminal fields when caller forgets', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
@@ -782,7 +781,7 @@ describe('Update Operation Store', () => {
   });
 
   test('reopenTerminalOperation should reject terminal phases and terminal completedAt strings', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
@@ -815,7 +814,7 @@ describe('Update Operation Store', () => {
       }),
     ).toBeUndefined();
 
-    const active = updateOperation.insertOperation({
+    const active = insertOp(updateOperation, {
       containerName: 'web',
       status: 'in-progress',
       phase: 'pulling',
@@ -832,7 +831,7 @@ describe('Update Operation Store', () => {
   });
 
   test('reopenTerminalOperation should reject terminal statuses from a terminal row', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
@@ -852,33 +851,35 @@ describe('Update Operation Store', () => {
   test('markOperationTerminal should return undefined when the row disappears between lookup and patch', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
+    const database = createDb();
+    // markOperationTerminal reads the row once via getOperationById, then
+    // persistOperationPatch reads it again by id before writing. Answer the
+    // first by-id read for real and simulate the row having disappeared
+    // (deleted by a concurrent writer) by the second.
+    const byIdSql = 'SELECT * FROM update_operations WHERE id = ?';
+    const realPrepare = database.prepare.bind(database);
     let lookupCount = 0;
-    const collection = {
-      insert: vi.fn(),
-      find: vi.fn(() => []),
-      findOne: vi.fn(() => {
-        lookupCount += 1;
-        if (lookupCount === 1) {
-          return {
-            data: {
-              id: 'op-1',
-              containerName: 'web',
-              status: 'queued',
-              phase: 'queued',
-              createdAt: '2026-02-23T00:00:00.000Z',
-              updatedAt: '2026-02-23T00:00:00.000Z',
-            },
-          };
-        }
-        return null;
-      }),
-      remove: vi.fn(),
-    };
+    database.prepare = ((sql: string) => {
+      const statement = realPrepare(sql);
+      if (sql !== byIdSql) {
+        return statement;
+      }
+      return {
+        ...statement,
+        get: (...parameters: unknown[]) => {
+          lookupCount += 1;
+          return lookupCount === 1 ? statement.get(...(parameters as never[])) : undefined;
+        },
+      };
+    }) as Database['prepare'];
 
-    fresh.createCollections({
-      getCollection: () => collection,
-      addCollection: () => collection,
-    } as any);
+    fresh.createCollections(database);
+    insertOp(fresh, {
+      id: 'op-1',
+      containerName: 'web',
+      status: 'queued',
+      phase: 'queued',
+    });
 
     expect(
       fresh.markOperationTerminal('op-1', {
@@ -889,7 +890,7 @@ describe('Update Operation Store', () => {
   });
 
   test('reopenTerminalOperation should default invalid active phases to the active default', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
@@ -913,7 +914,7 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const inserted = updateOperation.insertOperation({
+      const inserted = insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -940,7 +941,9 @@ describe('Update Operation Store', () => {
           queueTotal: 4,
         }),
       );
-      expect(updateOperation.getActiveOperationByContainerName('web')).toBeUndefined();
+      expect(
+        updateOperation.getActiveOperationByContainerIdentity(identity('web')),
+      ).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }
@@ -950,7 +953,7 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const inserted = updateOperation.insertOperation({
+      const inserted = insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -982,16 +985,21 @@ describe('Update Operation Store', () => {
       updateOperation.markOperationTerminal('missing-op', { status: 'failed' }),
     ).toBeUndefined();
 
-    const terminal = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'failed',
       completedAt: '2026-02-23T00:00:00.000Z',
       lastError: 'already done',
     });
+    // Compare against a fresh read rather than insertOp's own return value:
+    // insertOperation echoes back what the caller passed in, while a read
+    // goes through rowToOperation's column defaults (e.g. cancelRequested
+    // defaults to false), so the two are not byte-for-byte identical.
+    const terminal = updateOperation.getOperationById(inserted.id);
 
     expect(
-      updateOperation.markOperationTerminal(terminal.id, {
+      updateOperation.markOperationTerminal(terminal!.id, {
         status: 'failed',
         lastError: 'new error',
       }),
@@ -999,19 +1007,23 @@ describe('Update Operation Store', () => {
   });
 
   test('markOperationTerminal tolerates a persisted batch row without in-memory membership', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-    documents.push({
-      data: {
-        id: 'unregistered-batch-member',
-        containerName: 'web',
-        status: 'in-progress',
-        phase: 'pulling',
-        batchId: 'unregistered-batch',
-        createdAt: '2026-02-23T00:00:00.000Z',
-        updatedAt: '2026-02-23T00:00:00.000Z',
-      },
+    const database = createDb();
+    updateOperation.createCollections(database);
+    // Write the row straight to storage after createCollections has already run
+    // its startup batch-membership rehydration, so this row was never
+    // registered in the in-memory batch-tracking maps: the same situation a
+    // row added by a concurrent process would produce.
+    const row = updateOperation.buildImportedUpdateOperationRow({
+      id: 'unregistered-batch-member',
+      containerName: 'web',
+      watcher: DEFAULT_WATCHER,
+      status: 'in-progress',
+      phase: 'pulling',
+      batchId: 'unregistered-batch',
+      createdAt: '2026-02-23T00:00:00.000Z',
+      updatedAt: '2026-02-23T00:00:00.000Z',
     });
+    updateOperation.insertImportedUpdateOperationRow(database, row!);
 
     expect(
       updateOperation.markOperationTerminal('unregistered-batch-member', {
@@ -1031,7 +1043,7 @@ describe('Update Operation Store', () => {
       watcher: 'local',
       updateAvailable: false,
     };
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'myapp',
       containerId: 'ctr-1',
       status: 'queued',
@@ -1071,7 +1083,7 @@ describe('Update Operation Store', () => {
       watcher: 'local',
       updateAvailable: false,
     };
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       containerName: 'myapp',
       containerId: 'ctr-2',
       status: 'queued',
@@ -1107,8 +1119,8 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getInProgressOperationByContainerName should return latest in-progress operation', () => {
-    const older = updateOperation.insertOperation({
+  test('getInProgressOperationByContainerIdentity should return latest in-progress operation', () => {
+    const older = insertOp(updateOperation, {
       containerName: 'web',
       containerId: 'abc',
       triggerName: 'docker.update',
@@ -1122,7 +1134,7 @@ describe('Update Operation Store', () => {
       completedAt: '2026-02-23T00:01:00.000Z',
     });
 
-    const newer = updateOperation.insertOperation({
+    const newer = insertOp(updateOperation, {
       containerName: 'web',
       containerId: 'abc',
       triggerName: 'docker.update',
@@ -1130,32 +1142,32 @@ describe('Update Operation Store', () => {
       tempName: 'web-old-2',
     });
 
-    const active = updateOperation.getInProgressOperationByContainerName('web');
+    const active = updateOperation.getInProgressOperationByContainerIdentity(identity('web'));
     expect(active.id).toBe(newer.id);
     expect(active.status).toBe('in-progress');
   });
 
-  test('getInProgressOperationByContainerName should return undefined when uninitialized', async () => {
+  test('getInProgressOperationByContainerIdentity should return undefined when uninitialized', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    expect(fresh.getInProgressOperationByContainerName('web')).toBeUndefined();
+    expect(fresh.getInProgressOperationByContainerIdentity(identity('web'))).toBeUndefined();
   });
 
-  test('getInProgressOperationByContainerName should sort by latest timestamp', () => {
+  test('getInProgressOperationByContainerIdentity should sort by latest timestamp', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
       });
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const second = updateOperation.insertOperation({
+      const second = insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
       });
 
-      const active = updateOperation.getInProgressOperationByContainerName('web');
+      const active = updateOperation.getInProgressOperationByContainerIdentity(identity('web'));
       expect(active?.id).toBe(second.id);
     } finally {
       vi.useRealTimers();
@@ -1163,58 +1175,34 @@ describe('Update Operation Store', () => {
   });
 
   test('getInProgressOperationByContainerId should ignore non-in-progress documents returned by the collection', () => {
-    const collection = {
-      insert: vi.fn(),
-      remove: vi.fn(),
-      find: vi.fn((query: Record<string, string> = {}) => {
-        if (query['data.containerId'] === 'container-1' && query['data.status'] === 'in-progress') {
-          return [
-            {
-              data: {
-                id: 'op-1',
-                containerId: 'container-1',
-                status: 'failed',
-                phase: 'failed',
-              },
-            },
-          ];
-        }
-
-        if (
-          query['data.newContainerId'] === 'container-1' &&
-          query['data.status'] === 'in-progress'
-        ) {
-          return [
-            {
-              data: {
-                id: 'op-2',
-                newContainerId: 'container-1',
-                status: 'succeeded',
-                phase: 'succeeded',
-              },
-            },
-          ];
-        }
-
-        return [];
-      }),
-      findOne: vi.fn(),
-    };
-
-    updateOperation.createCollections({
-      getCollection: () => collection,
-      addCollection: () => collection,
-    } as any);
+    // Neither row matches the `status = 'in-progress'` half of the SQL
+    // WHERE clause, so this exercises the same "no eligible row" path the
+    // old Loki mock's inconsistent (query-matched-but-status-differs)
+    // fixture was standing in for.
+    insertOp(updateOperation, {
+      id: 'op-1',
+      containerId: 'container-1',
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+    });
+    insertOp(updateOperation, {
+      id: 'op-2',
+      newContainerId: 'container-1',
+      containerName: 'web',
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
 
     expect(updateOperation.getInProgressOperationByContainerId('container-1')).toBeUndefined();
   });
 
   test('getInProgressOperationByContainerId should return operation matching the container ID', () => {
-    updateOperation.insertOperation({
+    insertOp(updateOperation, {
       containerName: 'portainer_agent',
       containerId: 'host1-abc',
     });
-    updateOperation.insertOperation({
+    insertOp(updateOperation, {
       containerName: 'portainer_agent',
       containerId: 'host2-def',
     });
@@ -1234,12 +1222,12 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'c1',
       });
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const second = updateOperation.insertOperation({
+      const second = insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'c1',
       });
@@ -1262,7 +1250,7 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      fresh.insertOperation({
+      insertOp(fresh, {
         containerName: 'web',
         containerId: 'old-123',
         status: 'in-progress',
@@ -1282,7 +1270,7 @@ describe('Update Operation Store', () => {
   });
 
   test('getInProgressOperationByContainerId should match replacement container IDs stored in newContainerId', () => {
-    const operation = updateOperation.insertOperation({
+    const operation = insertOp(updateOperation, {
       containerName: 'web',
       containerId: 'old-123',
     });
@@ -1301,7 +1289,7 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const original = updateOperation.insertOperation({
+      const original = insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'target-123',
         status: 'in-progress',
@@ -1309,7 +1297,7 @@ describe('Update Operation Store', () => {
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const replacement = updateOperation.insertOperation({
+      const replacement = insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'other-456',
         status: 'in-progress',
@@ -1333,60 +1321,47 @@ describe('Update Operation Store', () => {
   test('getInProgressOperationByContainerId should use targeted indexed queries instead of scanning', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const findQueries: Array<Record<string, string> | undefined> = [];
-    const db = {
-      getCollection: () => null,
-      addCollection: () => {
-        const docs: any[] = [];
-        const getByPath = (object: Record<string, unknown>, path: string) =>
-          path
-            .split('.')
-            .reduce<unknown>((acc, key) => (acc as Record<string, unknown>)?.[key], object);
-        const matchesQuery = (doc: Record<string, unknown>, query: Record<string, string> = {}) =>
-          Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    const database = createDb();
+    const queriesRun: Array<{ sql: string; parameters: unknown[] }> = [];
+    const realPrepare = database.prepare.bind(database);
+    database.prepare = ((sql: string) => {
+      const statement = realPrepare(sql);
+      return {
+        ...statement,
+        all: (...parameters: unknown[]) => {
+          queriesRun.push({ sql, parameters });
+          return statement.all(...(parameters as never[]));
+        },
+      };
+    }) as Database['prepare'];
 
-        return {
-          insert: (doc: any) => {
-            docs.push(doc);
-          },
-          find: (query: Record<string, string> = {}) => {
-            findQueries.push(Object.keys(query).length === 0 ? undefined : query);
-            return docs.filter((doc) => matchesQuery(doc, query));
-          },
-          findOne: (query: Record<string, string>) =>
-            docs.find((doc) => matchesQuery(doc, query)) || null,
-          remove: (doc: any) => {
-            const index = docs.indexOf(doc);
-            if (index >= 0) {
-              docs.splice(index, 1);
-            }
-          },
-        };
-      },
-    };
+    fresh.createCollections(database);
 
-    fresh.createCollections(db as any);
-
-    const operation = fresh.insertOperation({
+    const operation = insertOp(fresh, {
       containerName: 'web',
       containerId: 'old-123',
     });
     fresh.updateOperation(operation.id, {
       newContainerId: 'new-456',
     });
-    findQueries.length = 0;
+    queriesRun.length = 0;
 
     const active = fresh.getInProgressOperationByContainerId('new-456');
 
     expect(active?.id).toBe(operation.id);
-    expect(findQueries).toEqual([
+    expect(
+      queriesRun.map((query) => ({
+        sql: query.sql,
+        parameters: query.parameters,
+      })),
+    ).toEqual([
       {
-        'data.containerId': 'new-456',
-        'data.status': 'in-progress',
+        sql: 'SELECT * FROM update_operations WHERE container_id = ? AND status = ?',
+        parameters: ['new-456', 'in-progress'],
       },
       {
-        'data.newContainerId': 'new-456',
-        'data.status': 'in-progress',
+        sql: 'SELECT * FROM update_operations WHERE new_container_id = ? AND status = ?',
+        parameters: ['new-456', 'in-progress'],
       },
     ]);
   });
@@ -1411,7 +1386,7 @@ describe('Update Operation Store', () => {
     expect(fresh.getOperationById('op-1')).toBeUndefined();
   });
 
-  test('getActiveOperationByContainerName should expire stale queued operations', async () => {
+  test('getActiveOperationByContainerIdentity should expire stale queued operations', async () => {
     vi.resetModules();
     const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
     process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
@@ -1422,7 +1397,7 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const queued = fresh.insertOperation({
+      const queued = insertOp(fresh, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -1432,7 +1407,7 @@ describe('Update Operation Store', () => {
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
-      const active = fresh.getActiveOperationByContainerName('web');
+      const active = fresh.getActiveOperationByContainerIdentity(identity('web'));
 
       expect(active).toBeUndefined();
       expect(fresh.getOperationById(queued.id)).toEqual(
@@ -1457,7 +1432,7 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getActiveOperationByContainerName should return undefined when stale operation disappears during expiration', async () => {
+  test('getActiveOperationByContainerIdentity should return undefined when stale operation disappears during expiration', async () => {
     vi.resetModules();
     const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
     process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
@@ -1469,7 +1444,7 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb({ missingIds }) as any);
 
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const queued = fresh.insertOperation({
+      const queued = insertOp(fresh, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -1477,7 +1452,7 @@ describe('Update Operation Store', () => {
       missingIds.add(queued.id);
 
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
-      expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerIdentity(identity('web'))).toBeUndefined();
     } finally {
       vi.useRealTimers();
       if (previousActiveTtlMs === undefined) {
@@ -1488,7 +1463,7 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getActiveOperationByContainerName should return undefined when stale operation is already inactive', async () => {
+  test('getActiveOperationByContainerIdentity should return undefined when stale operation is already inactive', async () => {
     vi.resetModules();
     const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
     process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
@@ -1500,7 +1475,7 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb({ inactiveIds }) as any);
 
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const queued = fresh.insertOperation({
+      const queued = insertOp(fresh, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -1508,7 +1483,7 @@ describe('Update Operation Store', () => {
       inactiveIds.add(queued.id);
 
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
-      expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerIdentity(identity('web'))).toBeUndefined();
     } finally {
       vi.useRealTimers();
       if (previousActiveTtlMs === undefined) {
@@ -1519,24 +1494,24 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getActiveOperationByContainerName should return latest active operation by timestamp', () => {
+  test('getActiveOperationByContainerIdentity should return latest active operation by timestamp', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const newer = updateOperation.insertOperation({
+      const newer = insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
       });
 
-      const active = updateOperation.getActiveOperationByContainerName('web');
+      const active = updateOperation.getActiveOperationByContainerIdentity(identity('web'));
 
       expect(active?.id).toBe(newer.id);
     } finally {
@@ -1544,7 +1519,7 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getActiveOperationByContainerName should ignore terminal operations and append stale errors', async () => {
+  test('getActiveOperationByContainerIdentity should ignore terminal operations and append stale errors', async () => {
     vi.resetModules();
     const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
     process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
@@ -1555,20 +1530,20 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const queued = fresh.insertOperation({
+      const queued = insertOp(fresh, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
         lastError: 'previous failure',
       });
-      fresh.insertOperation({
+      insertOp(fresh, {
         containerName: 'web',
         status: 'succeeded',
         phase: 'succeeded',
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
-      expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerIdentity(identity('web'))).toBeUndefined();
       expect(fresh.getOperationById(queued.id)?.lastError).toContain(
         'previous failure; Marked expired after exceeding active update TTL',
       );
@@ -1582,10 +1557,10 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getActiveOperationByContainerName should return undefined when uninitialized', async () => {
+  test('getActiveOperationByContainerIdentity should return undefined when uninitialized', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
+    expect(fresh.getActiveOperationByContainerIdentity(identity('web'))).toBeUndefined();
   });
 
   test('listActiveOperations returns an empty list when uninitialized', async () => {
@@ -1598,7 +1573,7 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         id: 'queued-op',
         containerName: 'web',
         status: 'queued',
@@ -1607,7 +1582,7 @@ describe('Update Operation Store', () => {
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         id: 'progress-op',
         containerName: 'api',
         status: 'in-progress',
@@ -1615,7 +1590,7 @@ describe('Update Operation Store', () => {
         updatedAt: '2026-02-23T00:01:00.000Z',
       });
 
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         id: 'failed-op',
         containerName: 'worker',
         status: 'failed',
@@ -1632,7 +1607,7 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getActiveOperationByContainerName should handle a terminal replacement returned from storage', async () => {
+  test('getActiveOperationByContainerIdentity should handle a terminal replacement returned from storage', async () => {
     vi.resetModules();
     const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
     process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
@@ -1640,40 +1615,19 @@ describe('Update Operation Store', () => {
 
     try {
       const fresh = await import('./update-operation.js');
-      const staleDoc = {
-        data: {
-          id: 'op-1',
-          containerName: 'web',
-          status: 'queued',
-          phase: 'queued',
-          createdAt: '2026-02-23T00:00:00.000Z',
-          updatedAt: '2026-02-23T00:00:00.000Z',
-        },
-      };
-      const collection = {
-        insert: vi.fn(),
-        remove: vi.fn(),
-        find: vi.fn((query = {}) => (query['data.containerName'] === 'web' ? [staleDoc] : [])),
-        findOne: vi.fn((query = {}) =>
-          query['data.id'] === 'op-1'
-            ? {
-                data: {
-                  ...staleDoc.data,
-                  status: 'failed',
-                },
-              }
-            : null,
-        ),
-      };
-      const db = {
-        getCollection: vi.fn(() => collection),
-        addCollection: vi.fn(),
-      };
-      fresh.createCollections(db as never);
+      const inactiveIds = new Set<string>(['op-1']);
+      const database = createDb({ inactiveIds });
+      fresh.createCollections(database);
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      insertOp(fresh, {
+        id: 'op-1',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
-      expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
-      expect(collection.findOne).toHaveBeenCalledWith({ 'data.id': 'op-1' });
+      expect(fresh.getActiveOperationByContainerIdentity(identity('web'))).toBeUndefined();
     } finally {
       vi.useRealTimers();
       if (previousActiveTtlMs === undefined) {
@@ -1695,7 +1649,7 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const operation = fresh.insertOperation({
+      const operation = insertOp(fresh, {
         containerName: 'web',
         containerId: 'old-123',
         status: 'in-progress',
@@ -1732,14 +1686,14 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'new-456',
         status: 'queued',
         phase: 'queued',
       });
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const replacement = updateOperation.insertOperation({
+      const replacement = insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'old-123',
         status: 'in-progress',
@@ -1760,14 +1714,14 @@ describe('Update Operation Store', () => {
     expect(updateOperation.getActiveOperationByContainerId('')).toBeUndefined();
   });
 
-  test('getActiveOperationByContainerName should ignore inactive operations', () => {
-    updateOperation.insertOperation({
+  test('getActiveOperationByContainerIdentity should ignore inactive operations', () => {
+    insertOp(updateOperation, {
       containerName: 'web',
       status: 'failed',
       phase: 'rollback-failed',
     });
 
-    expect(updateOperation.getActiveOperationByContainerName('web')).toBeUndefined();
+    expect(updateOperation.getActiveOperationByContainerIdentity(identity('web'))).toBeUndefined();
   });
 
   test('getOperationById should return undefined for empty string', () => {
@@ -1775,7 +1729,7 @@ describe('Update Operation Store', () => {
   });
 
   test('same-named containers should be disambiguated by container ID', () => {
-    const op = updateOperation.insertOperation({
+    const op = insertOp(updateOperation, {
       containerName: 'portainer_agent',
       containerId: 'host1-abc',
     });
@@ -1784,25 +1738,27 @@ describe('Update Operation Store', () => {
     expect(updateOperation.getInProgressOperationByContainerId('host2-def')).toBeUndefined();
 
     // Looking up by NAME finds it (old behavior — this is the root cause of #256)
-    expect(updateOperation.getInProgressOperationByContainerName('portainer_agent')).toBeDefined();
+    expect(
+      updateOperation.getInProgressOperationByContainerIdentity(identity('portainer_agent')),
+    ).toBeDefined();
 
     // Looking up by the CORRECT container ID should find it
     const found = updateOperation.getInProgressOperationByContainerId('host1-abc');
     expect(found?.id).toBe(op.id);
   });
 
-  test('getOperationsByContainerName should return container operations sorted by latest update', () => {
+  test('getOperationsByContainerIdentity should return container operations sorted by latest update', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const first = updateOperation.insertOperation({
+      const first = insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'abc',
         triggerName: 'docker.update',
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const second = updateOperation.insertOperation({
+      const second = insertOp(updateOperation, {
         containerName: 'web',
         containerId: 'def',
         triggerName: 'docker.update',
@@ -1815,13 +1771,13 @@ describe('Update Operation Store', () => {
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:03:00.000Z'));
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'db',
         containerId: 'ghi',
         triggerName: 'docker.update',
       });
 
-      const operations = updateOperation.getOperationsByContainerName('web');
+      const operations = updateOperation.getOperationsByContainerIdentity(identity('web'));
       expect(operations).toHaveLength(2);
       expect(operations.map((operation) => operation.id)).toEqual([first.id, second.id]);
       expect(operations.every((operation) => operation.containerName === 'web')).toBe(true);
@@ -1845,7 +1801,7 @@ describe('Update Operation Store', () => {
 
       for (let i = 0; i < 3; i += 1) {
         vi.setSystemTime(new Date(2026, 1, 1, 0, 0, i));
-        const inserted = fresh.insertOperation({
+        const inserted = insertOp(fresh, {
           containerName: 'web',
           status: 'succeeded',
           phase: 'succeeded',
@@ -1854,12 +1810,12 @@ describe('Update Operation Store', () => {
       }
 
       // Pruning is amortized, so the first few writes should not prune yet.
-      expect(fresh.getOperationsByContainerName('web')).toHaveLength(3);
+      expect(fresh.getOperationsByContainerIdentity(identity('web'))).toHaveLength(3);
 
       // Mutation #100 should trigger retention pruning.
       for (let i = 3; i < 100; i += 1) {
         vi.setSystemTime(new Date(2026, 1, 1, 0, 0, i));
-        const inserted = fresh.insertOperation({
+        const inserted = insertOp(fresh, {
           containerName: 'web',
           status: 'succeeded',
           phase: 'succeeded',
@@ -1867,7 +1823,7 @@ describe('Update Operation Store', () => {
         insertedIds.push(inserted.id);
       }
 
-      const operations = fresh.getOperationsByContainerName('web');
+      const operations = fresh.getOperationsByContainerIdentity(identity('web'));
       expect(operations).toHaveLength(2);
       expect(operations.map((operation) => operation.id)).toEqual([
         insertedIds[insertedIds.length - 1]!,
@@ -1901,26 +1857,26 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
-      const first = fresh.insertOperation({
+      const first = insertOp(fresh, {
         containerName: 'web',
         status: 'succeeded',
         phase: 'succeeded',
       });
 
       vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
-      const second = fresh.insertOperation({
+      const second = insertOp(fresh, {
         containerName: 'web',
         status: 'rolled-back',
         phase: 'rolled-back',
       });
 
       vi.setSystemTime(new Date('2026-02-01T00:00:02.000Z'));
-      const third = fresh.insertOperation({
+      const third = insertOp(fresh, {
         containerName: 'web',
         status: 'failed',
         phase: 'rollback-failed',
       });
-      const active = fresh.insertOperation({
+      const active = insertOp(fresh, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
@@ -1933,7 +1889,7 @@ describe('Update Operation Store', () => {
         });
       }
 
-      const operations = fresh.getOperationsByContainerName('web');
+      const operations = fresh.getOperationsByContainerIdentity(identity('web'));
       const terminalOperations = operations.filter(
         (operation) => operation.status !== 'queued' && operation.status !== 'in-progress',
       );
@@ -1969,19 +1925,19 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
-      const inProgress = fresh.insertOperation({
+      const inProgress = insertOp(fresh, {
         containerName: 'web',
       });
 
       vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
-      fresh.insertOperation({
+      insertOp(fresh, {
         containerName: 'web',
         status: 'succeeded',
         phase: 'succeeded',
       });
 
       vi.setSystemTime(new Date('2026-02-01T00:00:02.000Z'));
-      const latestTerminal = fresh.insertOperation({
+      const latestTerminal = insertOp(fresh, {
         containerName: 'web',
         status: 'failed',
         phase: 'rollback-failed',
@@ -1994,7 +1950,7 @@ describe('Update Operation Store', () => {
         });
       }
 
-      const operations = fresh.getOperationsByContainerName('web');
+      const operations = fresh.getOperationsByContainerIdentity(identity('web'));
       expect(operations).toHaveLength(2);
       expect(operations.find((operation) => operation.id === inProgress.id)?.status).toBe(
         'in-progress',
@@ -2030,14 +1986,14 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDb());
 
       vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
-      const queued = fresh.insertOperation({
+      const queued = insertOp(fresh, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
       });
 
       vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
-      const latestTerminal = fresh.insertOperation({
+      const latestTerminal = insertOp(fresh, {
         containerName: 'web',
         status: 'failed',
         phase: 'rollback-failed',
@@ -2050,7 +2006,7 @@ describe('Update Operation Store', () => {
         });
       }
 
-      const operations = fresh.getOperationsByContainerName('web');
+      const operations = fresh.getOperationsByContainerIdentity(identity('web'));
       expect(operations).toHaveLength(2);
       expect(operations.find((operation) => operation.id === queued.id)?.status).toBe('queued');
       expect(operations.find((operation) => operation.id === latestTerminal.id)?.status).toBe(
@@ -2071,10 +2027,10 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('getOperationsByContainerName should return empty array when uninitialized', async () => {
+  test('getOperationsByContainerIdentity should return empty array when uninitialized', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    expect(fresh.getOperationsByContainerName('web')).toEqual([]);
+    expect(fresh.getOperationsByContainerIdentity(identity('web'))).toEqual([]);
   });
 
   test('getOperationsByContainerId should return empty array when uninitialized', async () => {
@@ -2088,13 +2044,13 @@ describe('Update Operation Store', () => {
   });
 
   test('getOperationsByContainerId should return empty array when no operations match', () => {
-    updateOperation.insertOperation({ containerName: 'web', containerId: 'other-id' });
+    insertOp(updateOperation, { containerName: 'web', containerId: 'other-id' });
     expect(updateOperation.getOperationsByContainerId('no-match')).toEqual([]);
   });
 
   test('getOperationsByContainerId should return operations matched by containerId', () => {
-    updateOperation.insertOperation({ containerName: 'sibling', containerId: 'sibling-id' });
-    const op = updateOperation.insertOperation({ containerName: 'web', containerId: 'target-id' });
+    insertOp(updateOperation, { containerName: 'sibling', containerId: 'sibling-id' });
+    const op = insertOp(updateOperation, { containerName: 'web', containerId: 'target-id' });
 
     const results = updateOperation.getOperationsByContainerId('target-id');
     expect(results).toHaveLength(1);
@@ -2102,7 +2058,7 @@ describe('Update Operation Store', () => {
   });
 
   test('getOperationsByContainerId should return operations matched by newContainerId', () => {
-    const op = updateOperation.insertOperation({ containerName: 'web', containerId: 'old-id' });
+    const op = insertOp(updateOperation, { containerName: 'web', containerId: 'old-id' });
     updateOperation.updateOperation(op.id, { newContainerId: 'new-id' });
 
     const results = updateOperation.getOperationsByContainerId('new-id');
@@ -2111,7 +2067,7 @@ describe('Update Operation Store', () => {
   });
 
   test('getOperationsByContainerId should deduplicate an operation that matches both containerId and newContainerId', () => {
-    const op = updateOperation.insertOperation({ containerName: 'web', containerId: 'shared-id' });
+    const op = insertOp(updateOperation, { containerName: 'web', containerId: 'shared-id' });
     updateOperation.updateOperation(op.id, { newContainerId: 'shared-id' });
 
     const results = updateOperation.getOperationsByContainerId('shared-id');
@@ -2123,10 +2079,10 @@ describe('Update Operation Store', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-      const first = updateOperation.insertOperation({ containerName: 'web', containerId: 'c1' });
+      const first = insertOp(updateOperation, { containerName: 'web', containerId: 'c1' });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
-      const second = updateOperation.insertOperation({ containerName: 'web', containerId: 'c1' });
+      const second = insertOp(updateOperation, { containerName: 'web', containerId: 'c1' });
 
       const results = updateOperation.getOperationsByContainerId('c1');
       expect(results).toHaveLength(2);
@@ -2140,7 +2096,7 @@ describe('Update Operation Store', () => {
   test('insertOperation should work without initialized collection', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const inserted = fresh.insertOperation({ containerName: 'web' });
+    const inserted = insertOp(fresh, { containerName: 'web' });
     expect(inserted.id).toBeDefined();
     expect(inserted.status).toBe('in-progress');
     expect(inserted.phase).toBe('prepare');
@@ -2155,151 +2111,92 @@ describe('Update Operation Store', () => {
   test('retention pruning should handle empty collections safely', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const db = {
-      getCollection: () => null,
-      addCollection: () => ({
-        insert: vi.fn(),
-        find: vi.fn(() => []),
-        findOne: vi.fn(() => null),
-        remove: vi.fn(),
-      }),
-    };
-    fresh.createCollections(db as any);
-    const inserted = fresh.insertOperation({ containerName: 'web' });
+    fresh.createCollections(createDb());
+    const inserted = insertOp(fresh, { containerName: 'web' });
     expect(inserted.containerName).toBe('web');
   });
 
+  /**
+   * `insertOperation`/`persistOperationPatch` always stamp `updatedAt` with
+   * the current time, so an invalid or blank timestamp can only reach a row
+   * the way a legacy import or a hand-edited store file would: written
+   * straight to the column, bypassing the store API. Corrupt the row via a
+   * raw UPDATE against the same database handle `createCollections` was
+   * given, the SQL-backed equivalent of the old Loki mock's `insert` hook
+   * that rewrote `doc.data.updatedAt` after the fact.
+   */
   test('sorting helpers should handle invalid timestamps by treating them as zero', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const db = {
-      getCollection: () => null,
-      addCollection: () => {
-        const docs: any[] = [];
-        return {
-          insert: (doc: any) => {
-            doc.data.updatedAt = 'not-a-date';
-            docs.push(doc);
-          },
-          find: () => docs,
-          findOne: (query: Record<string, string>) =>
-            docs.find((doc) => doc.data.id === query['data.id']) || null,
-          remove: vi.fn(),
-        };
-      },
-    };
-    fresh.createCollections(db as any);
-    fresh.insertOperation({ containerName: 'web' });
+    const database = createDb();
+    fresh.createCollections(database);
+    const inserted = insertOp(fresh, { containerName: 'web' });
+    database
+      .prepare('UPDATE update_operations SET updated_at = ? WHERE id = ?')
+      .run('not-a-date', inserted.id);
 
-    expect(fresh.getOperationsByContainerName('web')).toHaveLength(1);
-    expect(fresh.getInProgressOperationByContainerName('web')).toBeDefined();
+    expect(fresh.getOperationsByContainerIdentity(identity('web'))).toHaveLength(1);
+    expect(fresh.getInProgressOperationByContainerIdentity(identity('web'))).toBeDefined();
   });
 
   test('sorting should place records with invalid updatedAt behind valid timestamps', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const db = {
-      getCollection: () => null,
-      addCollection: () => {
-        const docs: any[] = [];
-        return {
-          insert: (doc: any) => {
-            if (doc.data.phase === 'rollback-failed') {
-              doc.data.updatedAt = 'not-a-date';
-            }
-            docs.push(doc);
-          },
-          find: (query: Record<string, string> = {}) =>
-            docs.filter((doc) =>
-              Object.entries(query).every(([key, value]) => {
-                const path = key.split('.');
-                let current: any = doc;
-                for (const segment of path) current = current?.[segment];
-                return current === value;
-              }),
-            ),
-          findOne: (query: Record<string, string>) =>
-            docs.find((doc) => doc.data.id === query['data.id']) || null,
-          remove: vi.fn(),
-        };
-      },
-    };
-    fresh.createCollections(db as any);
+    const database = createDb();
+    fresh.createCollections(database);
 
-    const valid = fresh.insertOperation({
+    const valid = insertOp(fresh, {
       containerName: 'web',
       status: 'succeeded',
       phase: 'succeeded',
     });
-    const invalid = fresh.insertOperation({
+    const invalid = insertOp(fresh, {
       containerName: 'web',
       status: 'failed',
       phase: 'rollback-failed',
     });
+    database
+      .prepare('UPDATE update_operations SET updated_at = ? WHERE id = ?')
+      .run('not-a-date', invalid.id);
 
-    const operations = fresh.getOperationsByContainerName('web');
+    const operations = fresh.getOperationsByContainerIdentity(identity('web'));
     expect(operations.map((operation) => operation.id)).toEqual([valid.id, invalid.id]);
   });
 
   test('sorting helpers should fallback to createdAt when updatedAt is blank', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const db = {
-      getCollection: () => null,
-      addCollection: () => {
-        const docs: any[] = [];
-        return {
-          insert: (doc: any) => {
-            doc.data.updatedAt = '';
-            docs.push(doc);
-          },
-          find: () => docs,
-          findOne: (query: Record<string, string>) =>
-            docs.find((doc) => doc.data.id === query['data.id']) || null,
-          remove: vi.fn(),
-        };
-      },
-    };
-    fresh.createCollections(db as any);
+    const database = createDb();
+    fresh.createCollections(database);
 
-    const older = fresh.insertOperation({
+    const older = insertOp(fresh, {
       containerName: 'web',
       createdAt: '2026-02-23T00:00:00.000Z',
     });
-    const newer = fresh.insertOperation({
+    const newer = insertOp(fresh, {
       containerName: 'web',
       createdAt: '2026-02-23T00:01:00.000Z',
     });
+    database
+      .prepare("UPDATE update_operations SET updated_at = '' WHERE id IN (?, ?)")
+      .run(older.id, newer.id);
 
-    const operations = fresh.getOperationsByContainerName('web');
+    const operations = fresh.getOperationsByContainerIdentity(identity('web'));
     expect(operations.map((operation) => operation.id)).toEqual([newer.id, older.id]);
   });
 
   test('sorting helpers should treat invalid createdAt as zero when updatedAt is blank', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const db = {
-      getCollection: () => null,
-      addCollection: () => {
-        const docs: any[] = [];
-        return {
-          insert: (doc: any) => {
-            doc.data.updatedAt = '';
-            doc.data.createdAt = 'invalid-created-at';
-            docs.push(doc);
-          },
-          find: () => docs,
-          findOne: (query: Record<string, string>) =>
-            docs.find((doc) => doc.data.id === query['data.id']) || null,
-          remove: vi.fn(),
-        };
-      },
-    };
-    fresh.createCollections(db as any);
-    fresh.insertOperation({ containerName: 'web' });
+    const database = createDb();
+    fresh.createCollections(database);
+    const inserted = insertOp(fresh, { containerName: 'web' });
+    database
+      .prepare("UPDATE update_operations SET updated_at = '', created_at = ? WHERE id = ?")
+      .run('invalid-created-at', inserted.id);
 
-    expect(fresh.getOperationsByContainerName('web')).toHaveLength(1);
-    expect(fresh.getInProgressOperationByContainerName('web')).toBeDefined();
+    expect(fresh.getOperationsByContainerIdentity(identity('web'))).toHaveLength(1);
+    expect(fresh.getInProgressOperationByContainerIdentity(identity('web'))).toBeDefined();
   });
 
   test('retention pruning stays within lightweight runtime budget for medium history', () => {
@@ -2311,7 +2208,7 @@ describe('Update Operation Store', () => {
       updateOperation.createCollections(createDb());
       const started = performance.now();
       for (let i = 0; i < insertsPerRun; i += 1) {
-        updateOperation.insertOperation({
+        insertOp(updateOperation, {
           containerName: `service-${i % 200}`,
           status: i % 7 === 0 ? 'failed' : 'succeeded',
           phase: i % 7 === 0 ? 'rollback-failed' : 'succeeded',
@@ -2327,7 +2224,7 @@ describe('Update Operation Store', () => {
 
   describe('cancelQueuedOperation', () => {
     test('transitions a queued operation to failed with cancellation error', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -2344,7 +2241,7 @@ describe('Update Operation Store', () => {
     });
 
     test('returns undefined for an in-progress operation', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
@@ -2397,35 +2294,40 @@ describe('Update Operation Store', () => {
     });
 
     test('returns undefined when a queued operation disappears during cancellation', () => {
-      let findOneCalls = 0;
-      const doc = {
-        data: {
-          id: 'queued-race',
-          containerName: 'web',
-          status: 'queued',
-          phase: 'queued',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      };
-      updateOperation.createCollections({
-        getCollection: () => null,
-        addCollection: () => ({
-          insert: vi.fn(),
-          find: () => [],
-          findOne: () => {
-            findOneCalls++;
-            return findOneCalls < 3 ? doc : null;
+      // requestOperationCancellation reads the row (1), then markOperationTerminal
+      // reads it again via getOperationById (2) and once more inside
+      // persistOperationPatch (3). Answer the first two for real and simulate the
+      // row having disappeared (deleted by a concurrent writer) by the third.
+      const database = createDb();
+      const byIdSql = 'SELECT * FROM update_operations WHERE id = ?';
+      const realPrepare = database.prepare.bind(database);
+      let reads = 0;
+      database.prepare = ((sql: string) => {
+        const statement = realPrepare(sql);
+        if (sql !== byIdSql) {
+          return statement;
+        }
+        return {
+          ...statement,
+          get: (...parameters: unknown[]) => {
+            reads += 1;
+            return reads < 3 ? statement.get(...(parameters as never[])) : undefined;
           },
-          remove: vi.fn(),
-        }),
-      } as any);
+        };
+      }) as Database['prepare'];
+      updateOperation.createCollections(database);
+      insertOp(updateOperation, {
+        id: 'queued-race',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
 
       expect(updateOperation.requestOperationCancellation('queued-race')).toBeUndefined();
     });
 
     test('cancels a queued operation immediately', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -2441,7 +2343,7 @@ describe('Update Operation Store', () => {
     });
 
     test('flags an in-progress operation with cancelRequested', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'api',
         status: 'in-progress',
         phase: 'pulling',
@@ -2457,35 +2359,39 @@ describe('Update Operation Store', () => {
     });
 
     test('returns undefined when an in-progress operation disappears during cancellation', () => {
-      let findOneCalls = 0;
-      const doc = {
-        data: {
-          id: 'in-progress-race',
-          containerName: 'api',
-          status: 'in-progress',
-          phase: 'pulling',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      };
-      updateOperation.createCollections({
-        getCollection: () => null,
-        addCollection: () => ({
-          insert: vi.fn(),
-          find: () => [],
-          findOne: () => {
-            findOneCalls++;
-            return findOneCalls < 2 ? doc : null;
+      // requestOperationCancellation reads the row (1), then persistOperationPatch
+      // reads it again (2). Answer the first for real and simulate the row having
+      // disappeared (deleted by a concurrent writer) by the second.
+      const database = createDb();
+      const byIdSql = 'SELECT * FROM update_operations WHERE id = ?';
+      const realPrepare = database.prepare.bind(database);
+      let reads = 0;
+      database.prepare = ((sql: string) => {
+        const statement = realPrepare(sql);
+        if (sql !== byIdSql) {
+          return statement;
+        }
+        return {
+          ...statement,
+          get: (...parameters: unknown[]) => {
+            reads += 1;
+            return reads < 2 ? statement.get(...(parameters as never[])) : undefined;
           },
-          remove: vi.fn(),
-        }),
-      } as any);
+        };
+      }) as Database['prepare'];
+      updateOperation.createCollections(database);
+      insertOp(updateOperation, {
+        id: 'in-progress-race',
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
 
       expect(updateOperation.requestOperationCancellation('in-progress-race')).toBeUndefined();
     });
 
     test('returns undefined for a succeeded operation', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'succeeded',
         phase: 'succeeded',
@@ -2496,7 +2402,7 @@ describe('Update Operation Store', () => {
     });
 
     test('returns undefined for a failed operation', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'failed',
         phase: 'failed',
@@ -2507,7 +2413,7 @@ describe('Update Operation Store', () => {
     });
 
     test('returns undefined for a rolled-back operation', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'rolled-back',
         phase: 'rolled-back',
@@ -2538,7 +2444,7 @@ describe('Update Operation Store', () => {
     });
 
     test('returns false for an operation without cancelRequested set', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'worker',
         status: 'in-progress',
         phase: 'pulling',
@@ -2548,7 +2454,7 @@ describe('Update Operation Store', () => {
     });
 
     test('returns true for an operation with cancelRequested set to true', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'worker',
         status: 'in-progress',
         phase: 'pulling',
@@ -2560,12 +2466,12 @@ describe('Update Operation Store', () => {
     });
   });
 
-  describe('getRecentTerminalSucceededOperationByContainerName (issue #410 dedup helper)', () => {
+  describe('getRecentTerminalSucceededOperationByContainerIdentity (issue #410 dedup helper)', () => {
     test('returns a succeeded terminal op within the time window', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const op = updateOperation.insertOperation({
+        const op = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -2574,8 +2480,8 @@ describe('Update Operation Store', () => {
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
         const windowMs = 15 * 60 * 1000; // 15 min
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'nginx',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('nginx'),
           windowMs,
         );
         expect(result).toBeDefined();
@@ -2590,7 +2496,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const older = updateOperation.insertOperation({
+        const older = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -2598,7 +2504,7 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(older.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-04T12:03:00.000Z'));
-        const newer = updateOperation.insertOperation({
+        const newer = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -2606,8 +2512,8 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(newer.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'nginx',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('nginx'),
           15 * 60 * 1000,
         );
         expect(result?.id).toBe(newer.id);
@@ -2621,7 +2527,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const op = updateOperation.insertOperation({
+        const op = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -2630,8 +2536,8 @@ describe('Update Operation Store', () => {
 
         vi.setSystemTime(new Date('2026-06-04T12:20:00.000Z'));
         const windowMs = 15 * 60 * 1000; // 15 min, but 20 min elapsed
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'nginx',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('nginx'),
           windowMs,
         );
         expect(result).toBeUndefined();
@@ -2644,7 +2550,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const failed = updateOperation.insertOperation({
+        const failed = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -2652,8 +2558,8 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(failed.id, { status: 'failed' });
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'nginx',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('nginx'),
           15 * 60 * 1000,
         );
         expect(result).toBeUndefined();
@@ -2666,7 +2572,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const op = updateOperation.insertOperation({
+        const op = insertOp(updateOperation, {
           containerName: 'redis',
           status: 'in-progress',
           phase: 'pulling',
@@ -2674,8 +2580,8 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'nginx',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('nginx'),
           15 * 60 * 1000,
         );
         expect(result).toBeUndefined();
@@ -2688,7 +2594,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const op = updateOperation.insertOperation({
+        const op = insertOp(updateOperation, {
           containerName: 'web',
           status: 'in-progress',
           phase: 'pulling',
@@ -2697,10 +2603,9 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'web',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
           15 * 60 * 1000,
-          { agent: 'agent-A', watcher: 'local' },
         );
         expect(result?.id).toBe(op.id);
       } finally {
@@ -2712,7 +2617,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const op = updateOperation.insertOperation({
+        const op = insertOp(updateOperation, {
           containerName: 'web',
           status: 'in-progress',
           phase: 'pulling',
@@ -2723,10 +2628,9 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'web',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
           15 * 60 * 1000,
-          { agent: 'agent-A', watcher: 'local' },
         );
         expect(result?.id).toBe(op.id);
       } finally {
@@ -2738,7 +2642,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
-        const op = updateOperation.insertOperation({
+        const op = insertOp(updateOperation, {
           containerName: 'web',
           status: 'in-progress',
           phase: 'pulling',
@@ -2747,10 +2651,9 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
-        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
-          'web',
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
           15 * 60 * 1000,
-          { agent: 'agent-A', watcher: 'local' },
         );
         expect(result).toBeUndefined();
       } finally {
@@ -2762,14 +2665,28 @@ describe('Update Operation Store', () => {
       vi.resetModules();
       const fresh = await import('./update-operation.js');
       expect(
-        fresh.getRecentTerminalSucceededOperationByContainerName('nginx', 15 * 60 * 1000),
+        fresh.getRecentTerminalSucceededOperationByContainerIdentity(
+          identity('nginx'),
+          15 * 60 * 1000,
+        ),
       ).toBeUndefined();
     });
   });
 
-  describe('hasOtherActiveOperationByContainerName (issue #421)', () => {
-    test('returns true when another in-progress op with the same name exists', () => {
-      updateOperation.insertOperation({
+  /**
+   * The old `ContainerIdentityFilter` this function took as a third
+   * argument is gone (roadmap 7-STORE, slice 10): there is no more two-tier
+   * "match by name, then optionally narrow by agent/watcher" logic, just one
+   * identity key checked for exact equality against the row's own
+   * `containerIdentityKey`. Scenarios that only made sense under the old
+   * filter's short-circuit rules (an omitted watcher accepting any op, a
+   * bare name with no filter matching everything) have no equivalent under
+   * single-key equality and are covered below as what they actually become:
+   * an unresolvable identity that never matches anything.
+   */
+  describe('hasOtherActiveOperationByContainerIdentity (issue #421)', () => {
+    test('returns true when another in-progress op with the same identity exists', () => {
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
@@ -2777,15 +2694,15 @@ describe('Update Operation Store', () => {
       });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-A',
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          'some-other-id',
+        ),
       ).toBe(true);
     });
 
     test('returns true for a queued op', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
@@ -2793,15 +2710,15 @@ describe('Update Operation Store', () => {
       });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-A',
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          'some-other-id',
+        ),
       ).toBe(true);
     });
 
     test('returns false when the only active op is the excluded id', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
@@ -2809,15 +2726,15 @@ describe('Update Operation Store', () => {
       });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', op.id, {
-          agent: 'agent-A',
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          op.id,
+        ),
       ).toBe(false);
     });
 
     test('returns false when no active ops exist (only terminal rows)', () => {
-      const op = updateOperation.insertOperation({
+      const op = insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
@@ -2826,15 +2743,15 @@ describe('Update Operation Store', () => {
       updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-A',
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          'some-other-id',
+        ),
       ).toBe(false);
     });
 
-    test('strict identity — op from different agent is not counted when identity has watcher', () => {
-      updateOperation.insertOperation({
+    test('a different agent does not match the identity', () => {
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
@@ -2842,104 +2759,32 @@ describe('Update Operation Store', () => {
       });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-A',
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          'some-other-id',
+        ),
       ).toBe(false);
     });
 
-    test('strict identity — legacy row (no container snapshot) is not counted when identity has a watcher', () => {
+    test('a row with no derivable identity is never counted', () => {
+      // Bypass insertOp's default-watcher stand-in so this row genuinely has
+      // no identity, matching a document written before the identity cut.
       updateOperation.insertOperation({
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
-        // no container snapshot — legacy row
       });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-A',
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          'some-other-id',
+        ),
       ).toBe(false);
     });
 
-    test('returns true when identity agent+watcher align', () => {
-      updateOperation.insertOperation({
-        containerName: 'web',
-        status: 'queued',
-        phase: 'queued',
-        container: { id: 'c-match', name: 'web', watcher: 'remote', agent: 'agent-X' } as any,
-      });
-
-      expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-X',
-          watcher: 'remote',
-        }),
-      ).toBe(true);
-    });
-
-    test('identity omitted — any other active op counts', () => {
-      updateOperation.insertOperation({
-        containerName: 'web',
-        status: 'in-progress',
-        phase: 'pulling',
-        container: { id: 'c-any', name: 'web', watcher: 'local', agent: 'agent-Z' } as any,
-      });
-
-      expect(updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id')).toBe(
-        true,
-      );
-    });
-
-    test('returns false when collection is uninitialized', async () => {
-      vi.resetModules();
-      const fresh = await import('./update-operation.js');
-      expect(fresh.hasOtherActiveOperationByContainerName('web', 'any-id')).toBe(false);
-    });
-
-    test('strict identity no-watcher short-circuit — identity with watcher:undefined accepts any modern op', () => {
-      // Exercises the matchesStrictIdentityFilter `!identity.watcher → return true` branch.
-      // Even though the op belongs to agent-B, passing watcher:undefined skips the strict check.
-      updateOperation.insertOperation({
-        containerName: 'web',
-        status: 'in-progress',
-        phase: 'pulling',
-        container: { id: 'c-skip', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
-      });
-
-      expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          agent: 'agent-A',
-          watcher: undefined,
-        }),
-      ).toBe(true);
-    });
-
-    test('strict identity — legacy row accepted when identity has no watcher (no-watcher short-circuit)', () => {
-      // Legacy row + { watcher: undefined } → matchesStrictIdentityFilter returns true.
-      updateOperation.insertOperation({
-        containerName: 'web',
-        status: 'queued',
-        phase: 'queued',
-        // no container snapshot — legacy row
-      });
-
-      expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
-          watcher: undefined,
-        }),
-      ).toBe(true);
-    });
-
-    test('strict identity — both sides fall back to empty-string agent when neither op snapshot nor identity carry an agent', () => {
-      // Inserts an op with a container snapshot that has watcher but NO agent field.
-      // Calling hasOtherActiveOperationByContainerName with an identity that also omits agent
-      // means both (operationIdentity.agent ?? '') and (identity.agent ?? '') resolve to ''.
-      // They must compare equal so the function returns true (line 972 ?? '' paths covered).
-      updateOperation.insertOperation({
+    test('both sides fall back to an empty-string agent when neither carries one', () => {
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'in-progress',
         phase: 'pulling',
@@ -2947,15 +2792,37 @@ describe('Update Operation Store', () => {
       });
 
       expect(
-        updateOperation.hasOtherActiveOperationByContainerName('web', 'other-id', {
-          watcher: 'local',
-        }),
+        updateOperation.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { watcher: 'local' }),
+          'other-id',
+        ),
       ).toBe(true);
+    });
+
+    test('an unresolvable identity key never matches, even with other active ops present', () => {
+      insertOp(updateOperation, {
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-any', name: 'web', watcher: 'local', agent: 'agent-Z' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerIdentity(undefined, 'some-other-id'),
+      ).toBe(false);
+    });
+
+    test('returns false when collection is uninitialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.hasOtherActiveOperationByContainerIdentity(identity('web'), 'any-id')).toBe(
+        false,
+      );
     });
 
     test('returns false and expires the winner op when it is past the active TTL', async () => {
       // Verify that a stale in-progress "winner" op (past DD_UPDATE_OPERATION_ACTIVE_TTL_MS)
-      // is not counted as active: hasOtherActiveOperationByContainerName must return false
+      // is not counted as active: hasOtherActiveOperationByContainerIdentity must return false
       // and the freshness check inside it must terminalize the winner op as expired.
       vi.resetModules();
       const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
@@ -2967,7 +2834,7 @@ describe('Update Operation Store', () => {
         fresh.createCollections(createDb());
 
         vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
-        const winner = fresh.insertOperation({
+        const winner = insertOp(fresh, {
           containerName: 'web',
           status: 'in-progress',
           phase: 'pulling',
@@ -2977,14 +2844,14 @@ describe('Update Operation Store', () => {
         // Advance past the 60 s TTL so the winner op is stale.
         vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
 
-        const result = fresh.hasOtherActiveOperationByContainerName('web', 'loser-op-id', {
-          agent: 'agent-A',
-          watcher: 'local',
-        });
+        const result = fresh.hasOtherActiveOperationByContainerIdentity(
+          identity('web', { agent: 'agent-A', watcher: 'local' }),
+          'loser-op-id',
+        );
 
         expect(result).toBe(false);
 
-        // The freshness check inside hasOtherActiveOperationByContainerName must have
+        // The freshness check inside hasOtherActiveOperationByContainerIdentity must have
         // terminalized the stale winner op as expired.
         const winnerAfter = fresh.getOperationById(winner.id);
         expect(winnerAfter?.status).toBe('expired');
@@ -2999,162 +2866,170 @@ describe('Update Operation Store', () => {
     });
   });
 
-  describe('getActiveOperationByContainerName identity scoping (issue #411)', () => {
+  /**
+   * The old ContainerIdentityFilter parameter is gone (roadmap 7-STORE,
+   * slice 10): both functions take exactly one `identityKey: string |
+   * undefined` argument and do strict equality against the row's own
+   * `containerIdentityKey`. There is no more "legacy op is returned
+   * regardless" or "omitted watcher skips the filter" short-circuit — an
+   * identity that fails to resolve (or a row with none) simply never
+   * matches, via the shared `!db || !identityKey` guard.
+   */
+  describe('getActiveOperationByContainerIdentity identity scoping (issue #411)', () => {
     test('same agent+watcher returns the operation', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
         container: { id: 'c1', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
       });
 
-      const result = updateOperation.getActiveOperationByContainerName('web', {
-        agent: 'agent-A',
-        watcher: 'local',
-      });
+      const result = updateOperation.getActiveOperationByContainerIdentity(
+        identity('web', { agent: 'agent-A', watcher: 'local' }),
+      );
       expect(result).toBeDefined();
       expect(result?.containerName).toBe('web');
     });
 
     test('different agent, snapshot present → returns undefined', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
         container: { id: 'c-b', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
       });
 
-      const result = updateOperation.getActiveOperationByContainerName('web', {
-        agent: 'agent-A',
-        watcher: 'local',
-      });
+      const result = updateOperation.getActiveOperationByContainerIdentity(
+        identity('web', { agent: 'agent-A', watcher: 'local' }),
+      );
       expect(result).toBeUndefined();
     });
 
     test('different watcher, snapshot present → returns undefined', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
         container: { id: 'c2', name: 'web', watcher: 'watcher-2' } as any,
       });
 
-      const result = updateOperation.getActiveOperationByContainerName('web', {
-        agent: undefined,
-        watcher: 'watcher-1',
-      });
+      const result = updateOperation.getActiveOperationByContainerIdentity(
+        identity('web', { watcher: 'watcher-1' }),
+      );
       expect(result).toBeUndefined();
     });
 
-    test('legacy op (no container snapshot) is returned even when identity filter is passed', () => {
+    test('a row with no derivable identity is never returned by identity lookup', () => {
+      // Bypass insertOp's default-watcher stand-in so this row genuinely has
+      // no identity, matching a document written before the identity cut.
       updateOperation.insertOperation({
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
-        // no container snapshot — legacy row
       });
 
-      const result = updateOperation.getActiveOperationByContainerName('web', {
-        agent: 'agent-A',
-        watcher: 'local',
-      });
-      expect(result).toBeDefined();
-      expect(result?.containerName).toBe('web');
+      const result = updateOperation.getActiveOperationByContainerIdentity(
+        identity('web', { agent: 'agent-A', watcher: 'local' }),
+      );
+      expect(result).toBeUndefined();
     });
 
-    test('identity-bearing op without watcher is not treated as a legacy name-only match', () => {
-      updateOperation.insertOperation({
+    test('an op whose identity is derived from top-level agent/watcher (no container snapshot) still enforces strict matching', () => {
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
         agent: 'agent-B',
       });
 
-      const result = updateOperation.getActiveOperationByContainerName('web', {
-        agent: 'agent-A',
-        watcher: 'local',
-      });
+      const result = updateOperation.getActiveOperationByContainerIdentity(
+        identity('web', { agent: 'agent-A', watcher: 'local' }),
+      );
       expect(result).toBeUndefined();
     });
 
-    test('identity without a watcher skips the filter and returns the operation', () => {
-      updateOperation.insertOperation({
+    test('returns undefined when the identity key itself is undefined', () => {
+      insertOp(updateOperation, {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
         container: { id: 'c-no-watcher', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
       });
 
-      const result = updateOperation.getActiveOperationByContainerName('web', {
-        agent: 'agent-A',
-        watcher: undefined,
-      });
-      expect(result).toBeDefined();
-      expect(result?.containerName).toBe('web');
+      const result = updateOperation.getActiveOperationByContainerIdentity(undefined);
+      expect(result).toBeUndefined();
     });
   });
 
-  describe('getInProgressOperationByContainerName identity scoping (issue #411)', () => {
+  describe('getInProgressOperationByContainerIdentity identity scoping (issue #411)', () => {
     test('same agent+watcher returns the operation', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'api',
         status: 'in-progress',
         phase: 'pulling',
         container: { id: 'c3', name: 'api', watcher: 'local', agent: 'agent-A' } as any,
       });
 
-      const result = updateOperation.getInProgressOperationByContainerName('api', {
-        agent: 'agent-A',
-        watcher: 'local',
-      });
+      const result = updateOperation.getInProgressOperationByContainerIdentity(
+        identity('api', { agent: 'agent-A', watcher: 'local' }),
+      );
       expect(result).toBeDefined();
       expect(result?.containerName).toBe('api');
     });
 
     test('different agent, snapshot present → returns undefined', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'api',
         status: 'in-progress',
         phase: 'pulling',
         container: { id: 'c-b2', name: 'api', watcher: 'local', agent: 'agent-B' } as any,
       });
 
-      const result = updateOperation.getInProgressOperationByContainerName('api', {
-        agent: 'agent-A',
-        watcher: 'local',
-      });
+      const result = updateOperation.getInProgressOperationByContainerIdentity(
+        identity('api', { agent: 'agent-A', watcher: 'local' }),
+      );
       expect(result).toBeUndefined();
     });
 
     test('different watcher, snapshot present → returns undefined', () => {
-      updateOperation.insertOperation({
+      insertOp(updateOperation, {
         containerName: 'api',
         status: 'in-progress',
         phase: 'pulling',
         container: { id: 'c4', name: 'api', watcher: 'watcher-2' } as any,
       });
 
-      const result = updateOperation.getInProgressOperationByContainerName('api', {
-        agent: undefined,
-        watcher: 'watcher-1',
-      });
+      const result = updateOperation.getInProgressOperationByContainerIdentity(
+        identity('api', { watcher: 'watcher-1' }),
+      );
       expect(result).toBeUndefined();
     });
 
-    test('legacy op (no container snapshot) is returned even when identity filter is passed', () => {
+    test('a row with no derivable identity is never returned by identity lookup', () => {
+      // Bypass insertOp's default-watcher stand-in so this row genuinely has
+      // no identity, matching a document written before the identity cut.
       updateOperation.insertOperation({
         containerName: 'api',
         status: 'in-progress',
         phase: 'pulling',
-        // no container snapshot — legacy row
       });
 
-      const result = updateOperation.getInProgressOperationByContainerName('api', {
-        agent: 'agent-A',
-        watcher: 'local',
+      const result = updateOperation.getInProgressOperationByContainerIdentity(
+        identity('api', { agent: 'agent-A', watcher: 'local' }),
+      );
+      expect(result).toBeUndefined();
+    });
+
+    test('returns undefined when the identity key itself is undefined', () => {
+      insertOp(updateOperation, {
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-any', name: 'api', watcher: 'local', agent: 'agent-A' } as any,
       });
-      expect(result).toBeDefined();
-      expect(result?.containerName).toBe('api');
+
+      const result = updateOperation.getInProgressOperationByContainerIdentity(undefined);
+      expect(result).toBeUndefined();
     });
   });
 
@@ -3163,7 +3038,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-10T10:00:00.000Z'));
-        const older = updateOperation.insertOperation({
+        const older = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -3171,7 +3046,7 @@ describe('Update Operation Store', () => {
         updateOperation.markOperationTerminal(older.id, { status: 'succeeded' });
 
         vi.setSystemTime(new Date('2026-06-10T10:30:00.000Z'));
-        const newer = updateOperation.insertOperation({
+        const newer = insertOp(updateOperation, {
           containerName: 'redis',
           status: 'in-progress',
           phase: 'pulling',
@@ -3193,7 +3068,7 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-10T08:00:00.000Z'));
-        const old = updateOperation.insertOperation({
+        const old = insertOp(updateOperation, {
           containerName: 'nginx',
           status: 'in-progress',
           phase: 'pulling',
@@ -3213,14 +3088,14 @@ describe('Update Operation Store', () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-06-10T10:00:00.000Z'));
-        const failed = updateOperation.insertOperation({
+        const failed = insertOp(updateOperation, {
           containerName: 'app',
           status: 'in-progress',
           phase: 'pulling',
         });
         updateOperation.markOperationTerminal(failed.id, { status: 'failed' });
 
-        const rolledBack = updateOperation.insertOperation({
+        const rolledBack = insertOp(updateOperation, {
           containerName: 'app2',
           status: 'in-progress',
           phase: 'pulling',
@@ -3272,7 +3147,7 @@ describe('getFreshSelfUpdateOperationById', () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
     fresh.createCollections(createDb());
-    const op = fresh.insertOperation({
+    const op = insertOp(fresh, {
       id: 'regular-op',
       containerName: 'web',
       kind: 'container-update',
@@ -3291,7 +3166,7 @@ describe('getFreshSelfUpdateOperationById', () => {
       const fresh = await import('./update-operation.js');
       fresh.createCollections(createDb());
       // Insert at current system time (01:00) — op is 0 minutes old, within grace window
-      fresh.insertOperation({
+      insertOp(fresh, {
         id: 'fresh-self-update',
         containerName: 'drydock',
         kind: 'self-update',
@@ -3313,7 +3188,7 @@ describe('getFreshSelfUpdateOperationById', () => {
       vi.resetModules();
       const fresh = await import('./update-operation.js');
       fresh.createCollections(createDb());
-      fresh.insertOperation({
+      insertOp(fresh, {
         id: 'stale-self-update',
         containerName: 'drydock',
         kind: 'self-update',
@@ -3342,7 +3217,7 @@ describe('getFreshSelfUpdateOperationById', () => {
       const fresh = await import('./update-operation.js');
       fresh.createCollections(createDb());
       // Insert, then mark terminal
-      fresh.insertOperation({
+      insertOp(fresh, {
         id: 'done-self-update',
         containerName: 'drydock',
         kind: 'self-update',
@@ -3391,7 +3266,7 @@ describe('toApiUpdateOperation', () => {
   });
 
   test('markOperationTerminal clears the Portainer recovery descriptor', () => {
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       id: 'op-portainer-terminal',
       containerName: 'web',
       status: 'in-progress',
@@ -3401,12 +3276,17 @@ describe('toApiUpdateOperation', () => {
 
     updateOperation.markOperationTerminal(inserted.id, { status: 'succeeded' });
 
-    expect(updateOperation.getOperationById(inserted.id)).not.toHaveProperty('portainerRecovery');
+    // rowToOperation always materialises every column as an explicit key
+    // (unlike the old sparse Loki document), so a cleared value now reads
+    // back as an own property holding undefined rather than a missing key.
+    // toApiUpdateOperation strips the key outright before it ever reaches a
+    // consumer; this only needs to prove the persisted value itself is gone.
+    expect(updateOperation.getOperationById(inserted.id)?.portainerRecovery).toBeUndefined();
   });
 
   test('updateOperation preserves Portainer recovery when the patch omits it', () => {
     const recovery = { originalImageId: 'sha256:old' };
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       id: 'op-portainer-preserve',
       containerName: 'web',
       status: 'in-progress',
@@ -3422,7 +3302,7 @@ describe('toApiUpdateOperation', () => {
 
   test('requestOperationCancellation preserves Portainer recovery while flagging cancellation', () => {
     const recovery = { originalImageId: 'sha256:old' };
-    const inserted = updateOperation.insertOperation({
+    const inserted = insertOp(updateOperation, {
       id: 'op-portainer-cancel-preserve',
       containerName: 'web',
       status: 'in-progress',

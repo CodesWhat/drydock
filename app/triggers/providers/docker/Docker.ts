@@ -34,7 +34,6 @@ import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import { isMemoryStore, save as saveStore } from '../../../store/index.js';
-import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
@@ -202,38 +201,6 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
   }
 
   return undefined;
-}
-
-function getOperationIdentityFilter(operation: {
-  agent?: unknown;
-  watcher?: unknown;
-  container?: { agent?: unknown; watcher?: unknown };
-}): ContainerIdentityFilter | undefined {
-  const container = operation.container;
-  /* v8 ignore next 6 -- operation identity filters are requested for watcher-scoped operations. */
-  const watcher =
-    typeof container?.watcher === 'string'
-      ? container.watcher
-      : typeof operation.watcher === 'string'
-        ? operation.watcher
-        : undefined;
-
-  if (!watcher) {
-    return undefined;
-  }
-
-  /* v8 ignore next 5 -- container snapshots carry agent when the operation is agent-owned. */
-  const agent =
-    typeof container?.agent === 'string'
-      ? container.agent
-      : typeof operation.agent === 'string'
-        ? operation.agent
-        : undefined;
-
-  return {
-    ...(agent !== undefined ? { agent } : {}),
-    watcher,
-  };
 }
 
 function getRollbackStateContainerId(
@@ -2601,9 +2568,8 @@ class Docker<
           } else if (
             classifyDuplicateOpTerminalStatus(
               error,
-              operation.containerName,
+              operation.containerIdentityKey,
               undefined,
-              getOperationIdentityFilter(operation),
               operation.id,
             ) === 'expired'
           ) {
