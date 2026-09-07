@@ -62,6 +62,9 @@ DOCKER_ARGS=(
 	--name drydock
 	--publish "${DD_E2E_PORT}:3000"
 	--volume /var/run/docker.sock:/var/run/docker.sock
+	# Config file fixture (roadmap 7.1): the same one test/qa-compose.yml mounts,
+	# so api-config.feature sees a present file with DD_SERVER_NAME sourced from it.
+	--volume "${SCRIPT_DIR}/../test/qa-drydock.yml:/config/drydock.yml:ro"
 	--env DD_ACTION_DOCKER_LOCAL_AUTO=false
 	--env DD_NOTIFICATION_MOCK_EXAMPLE_MOCK=mock
 	--env DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
