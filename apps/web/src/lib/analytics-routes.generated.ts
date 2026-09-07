@@ -2,6 +2,7 @@
 const routes = [
   "/",
   "/compare",
+  "/compare/arcane",
   "/compare/diun",
   "/compare/dockge",
   "/compare/dockhand",
