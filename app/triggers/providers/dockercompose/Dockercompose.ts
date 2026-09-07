@@ -192,6 +192,60 @@ type ComposeRuntimeContext = {
   preferredDigest?: string | null;
 };
 
+/**
+ * The post-pull gate fields `capturePulledImageIdentity()` computes inside
+ * the compose-file-once preflight (`buildComposeFileOnceRuntimeContextByService()`)
+ * or the ordinary runtime refresh (`refreshComposeServiceWithDockerApi()`):
+ * which digest to gate against, and whether the gate had to be skipped with a
+ * warning instead. `trigger()` and `triggerBatch()` accept an `unknown`
+ * runtime-context argument from their callers — the agent trigger API
+ * whitelists its own context to `{ operationIds }`, and every other caller is
+ * internal, so this was flagged as CWE-693 and refuted only on that
+ * unreachability basis. A value shaped like this arriving through that
+ * argument must still never decide the gate: it picks which image gets
+ * verified and scanned, and whether that happens at all.
+ * `sanitizeComposeCallerRuntimeContext()` strips these exact keys from the
+ * caller's argument at the `trigger()`/`triggerBatch()` boundary, before it is
+ * merged into any service's runtime context, so nothing downstream of that
+ * boundary can receive them from a caller (DR-52).
+ */
+type ComposeInternalGateOutcome = Pick<
+  ComposeRuntimeContext,
+  | 'imageIdentity'
+  | 'securityGateUnboundWarn'
+  | 'securityGateUnboundReason'
+  | 'securityGateUnboundWarnRecorded'
+>;
+
+const COMPOSE_INTERNAL_GATE_OUTCOME_KEYS: (keyof ComposeInternalGateOutcome)[] = [
+  'imageIdentity',
+  'securityGateUnboundWarn',
+  'securityGateUnboundReason',
+  'securityGateUnboundWarnRecorded',
+];
+
+/**
+ * Strip the internal-only gate outcome keys (see `ComposeInternalGateOutcome`)
+ * from a caller-supplied runtime context. Called once, at the
+ * `trigger()`/`triggerBatch()` boundary, on the raw `unknown` argument those
+ * public entries accept, so every merge downstream of it is safe by
+ * construction rather than by each call site remembering to filter.
+ */
+function sanitizeComposeCallerRuntimeContext(runtimeContext: unknown): unknown {
+  if (!runtimeContext || typeof runtimeContext !== 'object') {
+    return runtimeContext;
+  }
+  const candidate = runtimeContext as Record<string, unknown>;
+  if (!COMPOSE_INTERNAL_GATE_OUTCOME_KEYS.some((key) => key in candidate)) {
+    return runtimeContext;
+  }
+  const sanitized: Record<string, unknown> = { ...candidate };
+  for (const key of COMPOSE_INTERNAL_GATE_OUTCOME_KEYS) {
+    delete sanitized[key];
+  }
+  return sanitized;
+}
+
 type ComposeUpdateLifecycleContext = {
   composeFile: string;
   service: string;
@@ -2171,6 +2225,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * @returns {Promise<boolean[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<boolean[]> {
+    // Strip the internal-only gate outcome keys here, at the public entry,
+    // before the caller's argument is threaded anywhere it could be merged
+    // into a service's runtime context (DR-52). trigger() delegates to this
+    // method, so this is the one place both public entries have to guard.
+    const sanitizedRuntimeContext = sanitizeComposeCallerRuntimeContext(runtimeContext);
     const configuredComposeFilePath = await this.resolveDefaultComposeFilePathForRuntime();
     const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
       containers,
@@ -2190,24 +2249,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     } of containersByComposeFile.values()) {
       if (composeFiles.length > 1) {
         batchResults.push(
-          runtimeContext === undefined
+          sanitizedRuntimeContext === undefined
             ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
             : await this.processComposeFile(
                 composeFile,
                 containersInFile,
                 composeFiles,
-                runtimeContext,
+                sanitizedRuntimeContext,
               ),
         );
       } else {
         batchResults.push(
-          runtimeContext === undefined
+          sanitizedRuntimeContext === undefined
             ? await this.processComposeFile(composeFile, containersInFile)
             : await this.processComposeFile(
                 composeFile,
                 containersInFile,
                 undefined,
-                runtimeContext,
+                sanitizedRuntimeContext,
               ),
         );
       }

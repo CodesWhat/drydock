@@ -1034,6 +1034,81 @@ describe('Dockercompose Trigger', () => {
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
   });
 
+  test('trigger and triggerBatch should ignore caller-supplied gate outcome fields and gate on the identity captured internally (DR-52)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const container = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: {
+        'com.docker.compose.service': 'nginx',
+        'dd.compose.file': composeFile,
+      },
+    });
+    const realPinnedIdentity = 'nginx:1.1.0@sha256:abcdef123456';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // What this refresh actually pulls and binds: a real digest, distinct
+    // from anything a caller could name.
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:nginx-real-local-id',
+        RepoDigests: ['nginx@sha256:abcdef123456'],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    const recordUnboundWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
+    const verifySigSpy = vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    const scanAndGatePostPullSpy = vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger as any, 'recreateReplacementContainerWithCleanup').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    // A caller reaching trigger()/triggerBatch() through their `unknown`
+    // runtime-context argument tries to skip the gate outright and redirect
+    // it to an image this refresh never pulled (DR-52).
+    const forgedRuntimeContext = {
+      imageIdentity: `evilredirect:latest@sha256:${'f'.repeat(64)}`,
+      securityGateUnboundWarn: true,
+      securityGateUnboundReason: 'forged by caller',
+      securityGateUnboundWarnRecorded: true,
+    };
+
+    await trigger.trigger({ ...container, updateAvailable: true }, forgedRuntimeContext);
+
+    // The gate still ran, on the identity this refresh captured for itself,
+    // never on the caller's forged flag or image.
+    expect(recordUnboundWarningSpy).not.toHaveBeenCalled();
+    expect(verifySigSpy).toHaveBeenCalledTimes(1);
+    expect(verifySigSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: realPinnedIdentity }),
+      expect.objectContaining({ name: 'nginx-a' }),
+      expect.anything(),
+    );
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(1);
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: realPinnedIdentity }),
+      expect.objectContaining({ name: 'nginx-a' }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   test("compose-file-once should judge a bind failure against each replica's own dd.security.gate label, recording exactly one audit row per replica that needs one (DR-42)", async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
