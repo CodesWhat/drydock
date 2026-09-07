@@ -34,6 +34,16 @@ function toNtfyEventKey(ruleId: string): NtfyEventKey {
   return ruleId.replaceAll('-', '') as NtfyEventKey;
 }
 
+/**
+ * Map a batch runtime context's digest event kind (e.g. `security-alert-digest`)
+ * to the notification rule id that `resolveTopic`/`resolvePriority` expect
+ * (e.g. `security-alert`). Digest event kinds are always the base rule id
+ * suffixed with `-digest`, so stripping the suffix recovers it.
+ */
+function toRuleIdFromEventKind(eventKind: string): string {
+  return eventKind.replace(/-digest$/, '');
+}
+
 interface NtfyAction {
   action: 'view' | 'http';
   label: string;
@@ -162,12 +172,13 @@ class Ntfy extends Trigger<NtfyConfiguration> {
     if (!this.configuration.actions?.length) {
       return undefined;
     }
+    const templateContainer = this.getTemplateContainer(container);
     return this.configuration.actions.map((action) => ({
       action: action.action,
-      label: renderSimple(action.label, container),
-      url: renderSimple(action.url, container),
+      label: renderSimple(action.label, templateContainer),
+      url: renderSimple(action.url, templateContainer),
       ...(action.method ? { method: action.method } : {}),
-      ...(action.body ? { body: renderSimple(action.body, container) } : {}),
+      ...(action.body ? { body: renderSimple(action.body, templateContainer) } : {}),
       ...(action.clear !== undefined ? { clear: action.clear } : {}),
     }));
   }
@@ -194,8 +205,9 @@ class Ntfy extends Trigger<NtfyConfiguration> {
    * @returns {Promise<*>}
    */
   async triggerBatch(containers: Container[], runtimeContext?: BatchRuntimeContext) {
-    const ruleId =
-      containers.length > 0
+    const ruleId = runtimeContext?.eventKind
+      ? toRuleIdFromEventKind(runtimeContext.eventKind)
+      : containers.length > 0
         ? (getNotificationEvent(containers[0])?.kind ?? 'update-available')
         : 'update-available';
     return this.sendHttpRequest({

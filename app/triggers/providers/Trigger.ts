@@ -4047,7 +4047,7 @@ class Trigger<
     return '';
   }
 
-  private getTemplateContainer(container: Container): TriggerTemplateContainer {
+  protected getTemplateContainer(container: Container): TriggerTemplateContainer {
     const notificationAgentPrefix = this.getNotificationAgentPrefix(container);
     const notificationServerName = this.getNotificationServerName(container);
     const notificationWatcherSuffix = this.getNotificationWatcherSuffix(

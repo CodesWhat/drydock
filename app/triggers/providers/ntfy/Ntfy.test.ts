@@ -383,3 +383,61 @@ test('triggerBatch should default to update-available routing and omit actions f
     }),
   );
 });
+
+test('triggerBatch should route a security-alert digest batch by the runtime context event kind, not the row', async () => {
+  ntfy.configuration = {
+    ...configurationValid,
+    topics: { securityalert: 'sec-alerts' },
+    priorities: { securityalert: 5 },
+  };
+  const rows = [{ name: 'row1' }];
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.triggerBatch(rows, {
+    eventKind: 'security-alert-digest',
+    title: 'Security digest: 3 findings',
+    body: '- row1 has a critical finding',
+  });
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        topic: 'sec-alerts',
+        priority: 5,
+        title: 'Security digest: 3 findings',
+        message: '- row1 has a critical finding',
+      }),
+    }),
+  );
+});
+
+test('trigger should render action templates against the enriched template container, not the raw container', async () => {
+  ntfy.configuration = {
+    ...configurationValid,
+    actions: [
+      {
+        action: 'view',
+        label: 'Open on ${container.notificationServerName}',
+        url: 'https://${container.notificationServerName}/containers/${container.name}',
+      },
+    ],
+  };
+  const container = {
+    name: 'web',
+    agent: 'edge-1',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+  };
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.trigger(container);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        actions: [
+          {
+            action: 'view',
+            label: 'Open on edge-1',
+            url: 'https://edge-1/containers/web',
+          },
+        ],
+      }),
+    }),
+  );
+});
