@@ -86,8 +86,8 @@ test('fast-xml-parser is pinned to the patched release in app', () => {
   const manifest = readJson('app/package.json');
   const lockfile = readJson('app/package-lock.json');
 
-  assert.equal(manifest.dependencies?.['fast-xml-parser'], '5.10.1');
-  assert.equal(manifest.overrides?.['fast-xml-parser'], '5.10.1');
+  assert.equal(manifest.dependencies?.['fast-xml-parser'], '5.11.1');
+  assert.equal(manifest.overrides?.['fast-xml-parser'], '5.11.1');
   assert.ok(compareSemver(resolvedVersion(lockfile, 'fast-xml-parser'), '5.10.1') >= 0);
 });
 

@@ -23,7 +23,7 @@ export interface DockerScannerRegistryAuth {
   registrytoken?: string;
 }
 
-export interface DockerScannerHardeningOptions {
+interface DockerScannerHardeningOptions {
   cacheTarget?: string;
   memoryBytes?: number;
   networkMode?: string;
