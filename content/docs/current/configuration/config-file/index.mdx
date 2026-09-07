@@ -102,6 +102,7 @@ Config file "/config/drydock.yml": agent.secret: DD_AGENT_SECRET is only read fr
 
 The rejected keys, grouped by what they configure:
 
+- **Config file bootstrap** — `DD_CONFIG_WATCH` (the flag that decides whether the file is watched cannot live in the file it watches; `DD_CONFIG_FILE` is env-only for the same reason, it is read before any file exists)
 - **Agent secret handling** — `DD_AGENT_SECRET`, `DD_AGENT_SECRET_FILE`, `DD_AGENT_ALLOW_INSECURE_SECRET`
 - **Privilege guards** — `DD_ALLOW_INSECURE_ROOT`, `DD_RUN_AS_ROOT`
 - **Anonymous-auth confirmation** — `DD_ANONYMOUS_AUTH_CONFIRM`, `DD_AUTH_ANONYMOUS_CONFIRM`
