@@ -819,7 +819,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
-| `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
+| `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` — see the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
@@ -863,7 +863,7 @@ Inspect the resolved graph with `GET /api/v1/containers/dependencies`, dry-run t
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. By default the extracted value overwrites the image tag (enabling update detection against the embedded semver) and is also written to `image.softwareVersion` (shown in the Version column). Add `dd.inspect.tag.version-only=true` when you want the Version column populated without changing how drydock matches updates. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
-<Callout type="warn" title="dd.tag.transform is validated at startup">`dd.tag.transform` regex patterns are validated at config time. A malformed or oversized regex pattern causes drydock to throw at startup with a descriptive error rather than silently producing broken tag transformations that could generate false positive update detections.</Callout>
+<Callout type="warn" title="An invalid dd.tag.transform pattern fails that container's scan, not the app">`dd.tag.transform` regex patterns are compiled and validated every time a container's image details are refreshed — not once at process startup. A malformed pattern (fails to compile) or an oversized one (over 1024 characters) makes that refresh throw, which drydock catches per container: it logs a `Failed to fetch image detail` warning naming the pattern and the parse error, and that container's tag/update state is left stale until the label is fixed. It does not crash drydock and does not affect other containers, but it does repeat on every subsequent scan until the label is corrected. See the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) for the exact syntax rules and what counts as invalid.</Callout>
 
 <Callout type="info">**Source project link** — When an `org.opencontainers.image.source` OCI label, `dd.source.repo` label, or GHCR-derived source URL is available for a container, drydock shows a clickable "View project" link in the detail panel and container card. Set `dd.source.repo=owner/repo` on a container to override or supply the source URL when the image does not carry `org.opencontainers.image.source`.</Callout>
 
@@ -1126,7 +1126,36 @@ The capturing groups are accessible with the syntax `$1`, `$2`, `$3`....
 
 <Callout type="warn">The first capturing group is accessible as `$1`!</Callout>
 
+#### Grammar
+
+- **Regex flavor is RE2**, the same engine used by `dd.tag.include`/`dd.tag.exclude` (see [RE2 syntax](https://github.com/google/re2/wiki/Syntax)), not JavaScript regex. RE2 has no lookahead/lookbehind and no backreferences (`\1`) — those fail to compile. Inline flags like `(?i)` for case-insensitive matching are supported and are the only way to get case-insensitive matching; matching is case-sensitive by default.
+- **The separator is the first `=>` in the formula.** Everything before it (trimmed) is the pattern; everything after it (trimmed) is the replacement. Whitespace around `=>` is optional (`pattern=>replacement` works the same as `pattern => replacement`). Only one pattern/replacement pair is supported per label — there is no chaining or delimiter for multiple transforms.
+- **A formula with no `=>` is ignored.** The tag passes through unchanged; this is not treated as an error.
+- **An empty or unset `dd.tag.transform` is a no-op** — the tag passes through unchanged.
+- **Replacement placeholders are `$1`, `$2`, `$3`...** referencing capturing groups in the pattern, in the order they appear (not by name). A placeholder that references a group the pattern doesn't have, or a group that didn't participate in the match, is replaced with an empty string rather than left literal or causing an error. A replacement with no placeholders at all is a valid way to force a constant value (e.g. `^v(.+)$ => stable`).
+- **When the pattern doesn't match the tag, the original tag is returned unchanged** — the replacement is never applied partially.
+- **Anchoring is up to you.** RE2 (like most regex engines) matches anywhere in the string unless you anchor with `^`/`$`; the worked examples below all anchor explicitly, which is the recommended default for a transform since an unanchored pattern can match more of the tag than intended.
+- **Patterns are capped at 1024 characters.** Longer patterns fail to compile — see the callout above for what that does at runtime.
+
+| Input tag | `dd.tag.transform` | Result | Why |
+|---|---|---|---|
+| `v1.2.3` | `^v(.+)$ => $1` | `1.2.3` | Strips a leading `v`; `$1` is everything after it. |
+| `1.2.3-99-xyz` | `^(\d+\.\d+\.\d+-\d+)-.*$ => $1` | `1.2.3-99` | Keeps the semver-with-prerelease prefix, drops the trailing build/hash segment. |
+| `1.2-xyz-3` | `^(\d+\.\d+)-.*-(\d+) => $1.$2` | `1.2.3` | Two capturing groups recombined into a new value via `$1` and `$2`. |
+| `v1.2.3` | `^v(.+)$ => stable` | `stable` | Replacement with no placeholders — always produces the same constant. |
+| `123` | `^(\d+)$ => $2` | (empty string) | `$2` references a group that doesn't exist; missing groups become `''`. |
+| `1.2.3` | `^nomatch$ => $1` | `1.2.3` | Pattern doesn't match, so the original tag passes through unchanged. |
+| `1.2.3` | `invalid-formula` | `1.2.3` | No `=>` in the formula — ignored, original tag passes through. |
+| `v1.2.3` | `(?i)^V(.+)$ => $1` | `1.2.3` | Inline `(?i)` makes the match case-insensitive; without it, `^V` would not match a lowercase `v`. |
+
+<Callout type="warn">A pattern that fails to compile — for example `[invalid-regex => $1` (unbalanced bracket) or one using lookaround (`(?=...)`) or a backreference (`\1`), neither of which RE2 supports — is a configuration error, not a "no match": see the callout above for what happens to that container's scans until the label is fixed.</Callout>
+
+#### Interaction with include/exclude and semver comparison
+
+`dd.tag.include`/`dd.tag.exclude` are matched against the **raw tags returned by the registry**, before any transform is applied — the transform never changes which tags are considered candidates. `dd.tag.transform` is applied afterward, to both the current tag and each surviving candidate, and it's the **transformed** value that gets semver-parsed, family-matched, and compared to decide whether an update is available and what precision (`tagPrecision`) and family shape the tag has. In other words: use include/exclude to narrow down _which_ tags are in play using their real names, and transform to reshape _those_ tags into something semver-comparable. The `${transformed}` variable in `dd.link.template` is this same post-transform value.
+
 For example, to watch only `x.y.z-n-hash`-style tags and strip the hash suffix before comparison:
+
 <Tabs items={["Docker Compose (Tag Transform)", "Docker (Tag Transform)"]}>
 <Tab value="Docker Compose (Tag Transform)">
 
