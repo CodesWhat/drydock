@@ -63,14 +63,11 @@ export function insertBackup(backup: ImageBackup): ImageBackup {
 }
 
 /**
- * Get all backups for a container by name, sorted by timestamp desc.
- * Uses containerName (stable across recreates) rather than containerId
- * (which changes every time Docker recreates the container).
- *
- * `backups` carries a `container_identity_key` column (roadmap 7-STORE,
- * slice 5), populated on every write, but this reader stays a thin
- * name-keyed wrapper until identity-based lookups replace it in a later
- * slice — nothing above the store changes yet.
+ * Get all backups for a container by name, sorted by timestamp desc. This is
+ * a display/listing convenience (the `?containerName=` query param on
+ * `GET /api/v1/backups`) — not an ownership scope. Backup ownership goes
+ * through `getBackupsForContainer`, keyed on the durable identity, so a
+ * renamed or recreated container still finds its own backups.
  * @param containerName
  */
 export function getBackupsByName(containerName: string): ImageBackup[] {
@@ -85,18 +82,27 @@ export function getBackupsByName(containerName: string): ImageBackup[] {
 
 /** Return whether a backup belongs to a container's canonical identity scope. */
 export function isBackupInScope(backup: ImageBackup, scope: ContainerBackupScope): boolean {
-  if (backup.containerName !== scope.containerName) {
-    return false;
-  }
-  if (backup.containerIdentityKey) {
-    return backup.containerIdentityKey === scope.containerIdentityKey;
-  }
-  return scope.includeLegacy;
+  return (
+    Boolean(scope.containerIdentityKey) &&
+    backup.containerIdentityKey === scope.containerIdentityKey
+  );
 }
 
-/** Get backups belonging to one canonical container identity. */
+/**
+ * Get backups belonging to one canonical container identity, sorted by
+ * timestamp desc. Queries `container_identity_key` directly instead of
+ * filtering a by-name result set, so a rename (which changes `containerName`
+ * but not the identity key) doesn't lose the backup history (roadmap
+ * 7-STORE, slice 10).
+ */
 export function getBackupsForContainer(scope: ContainerBackupScope): ImageBackup[] {
-  return getBackupsByName(scope.containerName).filter((backup) => isBackupInScope(backup, scope));
+  if (!db || !scope.containerIdentityKey) {
+    return [];
+  }
+  return db
+    .prepare('SELECT * FROM backups WHERE container_identity_key = ? ORDER BY timestamp DESC')
+    .all(scope.containerIdentityKey)
+    .map(rowToBackup);
 }
 
 /**
@@ -134,25 +140,19 @@ export function deleteBackup(id: string): boolean {
 }
 
 /**
- * Prune old backups for a container, keeping only the N most recent.
- * @param containerScope
+ * Prune old backups for a container's canonical identity, keeping only the N
+ * most recent.
+ * @param scope
  * @param maxCount
  */
-export function pruneOldBackups(
-  containerScope: string | ContainerBackupScope,
-  maxCount: number | undefined,
-): number {
+export function pruneOldBackups(scope: ContainerBackupScope, maxCount: number | undefined): number {
   if (!db) {
     return 0;
   }
   if (typeof maxCount !== 'number' || !Number.isFinite(maxCount)) {
     return 0;
   }
-  const containerName =
-    typeof containerScope === 'string' ? containerScope : containerScope.containerName;
-  const backups = getBackupsByName(containerName).filter(
-    (backup) => typeof containerScope === 'string' || isBackupInScope(backup, containerScope),
-  );
+  const backups = getBackupsForContainer(scope);
   const toRemove = backups.slice(maxCount);
   for (const removed of toRemove) {
     db.prepare('DELETE FROM backups WHERE id = ?').run(removed.id);

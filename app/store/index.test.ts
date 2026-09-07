@@ -192,6 +192,7 @@ const {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', () => createContainerMock(overrides.container));
+    vi.doMock('./mqtt-hass', createCollectionsMock);
     vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createNotificationMock);
     vi.doMock('./notification-history', createCollectionsMock);
@@ -238,6 +239,7 @@ vi.mock('./approval', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createContainerMock);
+vi.mock('./mqtt-hass', createCollectionsMock);
 vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createNotificationMock);
 vi.mock('./notification-history', createCollectionsMock);
@@ -251,6 +253,15 @@ vi.mock('./update-lifecycle-cache', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
 vi.mock('./update-policy-retention-cache', createCollectionsMock);
 vi.mock('../log', createLogMock);
+
+/** The child logger store/index.ts created for itself, selected by component rather than
+ * by call order, since other store modules loaded through it create their own children. */
+function storeScopedLog(logger: { child: ReturnType<typeof vi.fn> }) {
+  const index = logger.child.mock.calls.findIndex(
+    (call: unknown[]) => (call[0] as { component?: string } | undefined)?.component === 'store',
+  );
+  return logger.child.mock.results[index].value;
+}
 
 describe('Store Module', () => {
   const originalUmask = process.umask();
@@ -280,6 +291,7 @@ describe('Store Module', () => {
     const apiKey = await import('./api-key.js');
     const app = await import('./app.js');
     const container = await import('./container.js');
+    const mqttHass = await import('./mqtt-hass.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
     const uiPreferences = await import('./ui-preferences.js');
@@ -290,6 +302,7 @@ describe('Store Module', () => {
     expect(apiKey.createCollections).toHaveBeenCalled();
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
+    expect(mqttHass.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
@@ -454,6 +467,7 @@ describe('Store Module', () => {
     const apiKey = await import('./api-key.js');
     const app = await import('./app.js');
     const container = await import('./container.js');
+    const mqttHass = await import('./mqtt-hass.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
     const uiPreferences = await import('./ui-preferences.js');
@@ -461,6 +475,7 @@ describe('Store Module', () => {
     expect(apiKey.createCollections).toHaveBeenCalled();
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
+    expect(mqttHass.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
@@ -507,7 +522,7 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const Loki = (await import('lokijs')).default;
     const logger = (await import('../log/index.js')).default;
-    const scopedLog = logger.child.mock.results[0].value;
+    const scopedLog = storeScopedLog(logger);
     expect(container.updateContainer).toHaveBeenCalledWith(migratedContainer);
     expect(Loki.mock.results[0].value.saveDatabase).toHaveBeenCalledOnce();
     expect(scopedLog.info).toHaveBeenCalledWith(
@@ -714,7 +729,7 @@ describe('Store Module', () => {
       await expect(storeWithBadDirPermissions.init()).resolves.toBeUndefined();
 
       const logger = (await import('../log/index.js')).default;
-      const scopedLog = logger.child.mock.results[0].value;
+      const scopedLog = storeScopedLog(logger);
       expect(scopedLog.warn).toHaveBeenCalledOnce();
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
       expect(chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
@@ -744,7 +759,7 @@ describe('Store Module', () => {
       await expect(storeWithBadFilePermissions.init()).resolves.toBeUndefined();
 
       const logger = (await import('../log/index.js')).default;
-      const scopedLog = logger.child.mock.results[0].value;
+      const scopedLog = storeScopedLog(logger);
       expect(scopedLog.warn).toHaveBeenCalledOnce();
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
     },
@@ -886,7 +901,7 @@ describe('Store Module', () => {
       await expect(storeWithBadSqlitePermissions.init()).resolves.toBeUndefined();
 
       const logger = (await import('../log/index.js')).default;
-      const scopedLog = logger.child.mock.results[0].value;
+      const scopedLog = storeScopedLog(logger);
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
     },
   );

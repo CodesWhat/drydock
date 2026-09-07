@@ -406,6 +406,116 @@ test('trigger should normalize recreated alias-prefixed container names to their
   );
 });
 
+test('trigger should key the state topic by compose project-service identity when compose labels are present', async () => {
+  mqtt.configuration = {
+    topic: 'dd/container',
+    exclude: '',
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
+  };
+
+  const container = {
+    id: 'abc123',
+    name: 'myapp_web_1',
+    watcher: 'local',
+    labels: {
+      'com.docker.compose.project': 'myapp',
+      'com.docker.compose.service': 'web',
+    },
+    image: {
+      id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+      registry: {
+        url: '123456789.dkr.ecr.eu-west-1.amazonaws.com',
+      },
+      name: 'test',
+      tag: {
+        value: '2021.6.4',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: 'sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72',
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '2021.6.5',
+    },
+  };
+
+  await mqtt.trigger(container);
+
+  expect(mqtt.client.publish).toHaveBeenCalledWith(
+    'dd/container/local/myapp.web',
+    JSON.stringify(flatten(container)),
+    {
+      retain: true,
+    },
+  );
+});
+
+test('trigger should keep the compose-identity state topic stable across a container rename', async () => {
+  mqtt.configuration = {
+    topic: 'dd/container',
+    exclude: '',
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
+  };
+
+  const renamedContainer = {
+    id: 'abc123',
+    name: 'myapp_web_2_renamed',
+    watcher: 'local',
+    labels: {
+      'com.docker.compose.project': 'myapp',
+      'com.docker.compose.service': 'web',
+    },
+    image: {
+      id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+      registry: {
+        url: '123456789.dkr.ecr.eu-west-1.amazonaws.com',
+      },
+      name: 'test',
+      tag: {
+        value: '2021.6.4',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: 'sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72',
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '2021.6.5',
+    },
+  };
+
+  await mqtt.trigger(renamedContainer);
+
+  expect(mqtt.client.publish).toHaveBeenCalledWith(
+    'dd/container/local/myapp.web',
+    JSON.stringify(flatten(renamedContainer)),
+    {
+      retain: true,
+    },
+  );
+});
+
 test('initTrigger should read TLS files when configured', async () => {
   // Re-set mock after vi.resetAllMocks() cleared it
   fs.readFile.mockResolvedValue(Buffer.from('file-content'));

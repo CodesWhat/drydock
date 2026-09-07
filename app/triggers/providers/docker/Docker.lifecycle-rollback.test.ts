@@ -12,7 +12,7 @@ import {
 registerCommonDockerBeforeEach();
 const {
   mockAuditCounterInc,
-  mockGetInProgressOperationByContainerName,
+  mockGetInProgressOperationByContainerIdentity,
   mockGetState,
   mockInsertAudit,
   mockMarkOperationTerminal,
@@ -621,7 +621,6 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     const backupStore = await import('../../../store/backup.js');
-    const storeContainer = await import('../../../store/container.js');
     docker.configuration.prune = true;
     vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
@@ -646,14 +645,11 @@ describe('additional docker trigger coverage', () => {
         kind: 'tag',
       },
     };
-    vi.mocked(storeContainer.getContainers).mockReturnValue([container] as any);
-
     await docker.cleanupOldImages({}, registryProvider, container, logContainer);
 
     expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
       containerName: 'container-name',
       containerIdentityKey: '::test::container-name',
-      includeLegacy: true,
     });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();
@@ -1314,7 +1310,7 @@ describe('executeContainerUpdate', () => {
     };
     const context = createContainerUpdateContext({ dockerApi });
     const logContainer = createMockLog('info', 'warn', 'debug');
-    mockGetInProgressOperationByContainerName.mockReturnValue({
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue({
       id: 'op-recover-1',
       containerName: 'container-name',
       oldName: 'container-name',

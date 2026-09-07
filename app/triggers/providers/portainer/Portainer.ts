@@ -1259,10 +1259,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
 
     const existing =
       updateOperationStore.getActiveOperationByContainerId(container.id) ||
-      updateOperationStore.getActiveOperationByContainerName(container.name, {
-        agent: container.agent,
-        watcher: container.watcher,
-      });
+      updateOperationStore.getActiveOperationByContainerIdentity(container.identityKey);
     const operationId = existing?.id || crypto.randomUUID();
     if (existing) {
       return super.runContainerUpdateLifecycle(container, { operationId });
@@ -1513,10 +1510,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
   async reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer) {
     const pending =
       updateOperationStore.getInProgressOperationByContainerId(container.id) ||
-      updateOperationStore.getInProgressOperationByContainerName(container.name, {
-        agent: container.agent,
-        watcher: container.watcher,
-      });
+      updateOperationStore.getInProgressOperationByContainerIdentity(container.identityKey);
     if (!pending) {
       return;
     }

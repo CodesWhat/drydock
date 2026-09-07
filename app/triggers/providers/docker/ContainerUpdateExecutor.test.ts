@@ -2,18 +2,18 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { attachCreatedContainerCandidate } from './created-container-candidate.js';
 
 const {
-  mockGetInProgressOperationByContainerName,
+  mockGetInProgressOperationByContainerIdentity,
   mockGetInProgressOperationByContainerId,
   mockGetOperationById,
   mockInsertOperation,
   mockReopenTerminalOperation,
   mockUpdateOperation,
   mockMarkOperationTerminal,
-  mockGetActiveOperationByContainerName,
+  mockGetActiveOperationByContainerIdentity,
   mockGetActiveOperationByContainerId,
   mockIsOperationCancelRequested,
-  mockGetRecentTerminalSucceededOperationByContainerName,
-  mockHasOtherActiveOperationByContainerName,
+  mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  mockHasOtherActiveOperationByContainerIdentity,
   MockOperationCancelledError,
   mockStartHealthGateHeartbeat,
   mockCancelHeartbeat,
@@ -30,18 +30,18 @@ const {
   const mockCancelHeartbeat = vi.fn();
   const mockStartHealthGateHeartbeat = vi.fn(() => mockCancelHeartbeat);
   return {
-    mockGetInProgressOperationByContainerName: vi.fn(),
+    mockGetInProgressOperationByContainerIdentity: vi.fn(),
     mockGetInProgressOperationByContainerId: vi.fn(),
     mockGetOperationById: vi.fn(),
     mockInsertOperation: vi.fn(),
     mockReopenTerminalOperation: vi.fn(),
     mockUpdateOperation: vi.fn(),
     mockMarkOperationTerminal: vi.fn(),
-    mockGetActiveOperationByContainerName: vi.fn(),
+    mockGetActiveOperationByContainerIdentity: vi.fn(),
     mockGetActiveOperationByContainerId: vi.fn(),
     mockIsOperationCancelRequested: vi.fn(() => false),
-    mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
-    mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
+    mockGetRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+    mockHasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
     MockOperationCancelledError,
     mockStartHealthGateHeartbeat,
     mockCancelHeartbeat,
@@ -49,19 +49,19 @@ const {
 });
 
 vi.mock('../../../store/update-operation.js', () => ({
-  getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
+  getInProgressOperationByContainerIdentity: mockGetInProgressOperationByContainerIdentity,
   getInProgressOperationByContainerId: mockGetInProgressOperationByContainerId,
   getOperationById: mockGetOperationById,
   insertOperation: mockInsertOperation,
   reopenTerminalOperation: mockReopenTerminalOperation,
   updateOperation: mockUpdateOperation,
   markOperationTerminal: mockMarkOperationTerminal,
-  getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
+  getActiveOperationByContainerIdentity: mockGetActiveOperationByContainerIdentity,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
   isOperationCancelRequested: mockIsOperationCancelRequested,
-  getRecentTerminalSucceededOperationByContainerName:
-    mockGetRecentTerminalSucceededOperationByContainerName,
-  hasOtherActiveOperationByContainerName: mockHasOtherActiveOperationByContainerName,
+  getRecentTerminalSucceededOperationByContainerIdentity:
+    mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  hasOtherActiveOperationByContainerIdentity: mockHasOtherActiveOperationByContainerIdentity,
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -165,13 +165,13 @@ describe('ContainerUpdateExecutor', () => {
     vi.clearAllMocks();
     mockInsertOperation.mockReturnValue({ id: 'op-1' });
     mockReopenTerminalOperation.mockReturnValue({ id: 'op-1' });
-    mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
     mockGetOperationById.mockReturnValue(undefined);
     mockIsOperationCancelRequested.mockReturnValue(false);
     mockStartHealthGateHeartbeat.mockReturnValue(mockCancelHeartbeat);
-    mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
-    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
+    mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
   });
 
   test('constructor provides default configuration fallback', () => {
@@ -282,7 +282,7 @@ describe('ContainerUpdateExecutor', () => {
   });
 
   test('reconcileInProgressContainerUpdateOperation no-ops when no pending operation exists', async () => {
-    mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined);
     const executor = createExecutor();
 
     await expect(
@@ -293,7 +293,7 @@ describe('ContainerUpdateExecutor', () => {
   });
 
   test('reconcile ignores same-name in-progress operations for a different container id', async () => {
-    mockGetInProgressOperationByContainerName.mockReturnValue({
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue({
       id: 'other-host-op',
       containerId: 'other-host-container-id',
       oldName: 'docker-socket-proxy',
@@ -317,11 +317,57 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
+  test('reconcile recovers a match found via new_container_id instead of discarding it as an identity mismatch (review finding 6)', async () => {
+    // getInProgressOperationByContainerId matches on EITHER container_id or
+    // new_container_id. Here the container we're reconciling IS the
+    // operation's new_container_id (the post-update container), so the
+    // operation's own `containerId` field still holds the pre-update id and
+    // never equals container.id. That is the whole point of an id-based
+    // match, not a stale-identity collision, so it must not be discarded by
+    // the identity cross-check that exists for the identity-based fallback.
+    const pending = {
+      id: 'op-1',
+      containerId: 'old-container-id',
+      newContainerId: 'current-container-id',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerId.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({ container: {}, inspection: {} })
+      .mockResolvedValueOnce({ container: {}, inspection: {} });
+    vi.spyOn(executor, 'stopAndRemoveContainerBestEffort').mockResolvedValueOnce(false);
+    const log = createLog();
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({ id: 'current-container-id' }),
+      log,
+    );
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Found in-progress update operation op-1'),
+    );
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-cleanup-temp',
+      }),
+    );
+  });
+
   test('reconcile ignores same-name in-progress operations from a different agent (issue #411)', async () => {
-    // The scoped getInProgressOperationByContainerName returns undefined because the
-    // op belongs to agent-B while the current container belongs to agent-A.
+    // With the single durable identityKey signature there is no filter object
+    // to short-circuit on; the store call is scoped by the container's own
+    // identityKey and simply doesn't match agent-B's operation because the
+    // identity keys differ.
     mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
-    mockGetInProgressOperationByContainerName.mockReturnValue(undefined); // scoped call filtered out agent-B op
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined); // scoped call filtered out agent-B op
     const executor = createExecutor();
     const log = createLog();
 
@@ -332,8 +378,13 @@ describe('ContainerUpdateExecutor', () => {
         name: 'docker-socket-proxy',
         agent: 'agent-A',
         watcher: 'local',
+        identityKey: 'agent-A::local::docker-socket-proxy',
       }),
       log,
+    );
+
+    expect(mockGetInProgressOperationByContainerIdentity).toHaveBeenCalledWith(
+      'agent-A::local::docker-socket-proxy',
     );
 
     // No reconciliation warning should be emitted
@@ -349,7 +400,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -376,7 +427,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -404,7 +455,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const tempContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
@@ -448,7 +499,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const tempContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
@@ -477,7 +528,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const tempContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
@@ -518,7 +569,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const tempContainer = {
       rename: vi.fn().mockRejectedValue(new Error('rename failed')),
@@ -551,7 +602,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const tempContainer = {
       rename: vi.fn().mockRejectedValue('rename failed as string'),
@@ -584,7 +635,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     const inspectSpy = vi.spyOn(executor, 'inspectContainerByIdentifier');
@@ -622,7 +673,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '1.0.1',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -655,7 +706,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '2.0.0',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -692,7 +743,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '2.0.0',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -724,7 +775,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '2.0.0',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -761,7 +812,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '2.0.0',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -796,7 +847,7 @@ describe('ContainerUpdateExecutor', () => {
       fromVersion: '1.0.0',
       toVersion: '2.0.0',
     };
-    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
 
     const executor = createExecutor();
     vi.spyOn(executor, 'inspectContainerByIdentifier')
@@ -2419,7 +2470,7 @@ describe('ContainerUpdateExecutor', () => {
         lastError: 'container exited with code 1',
       };
 
-      mockGetInProgressOperationByContainerName.mockReturnValue(pendingOperation);
+      mockGetInProgressOperationByContainerIdentity.mockReturnValue(pendingOperation);
       mockMarkOperationTerminal.mockReturnValue({ ...pendingOperation, status: 'rolled-back' });
 
       // temp container found (rename succeeds) — no active container at original name
@@ -2601,7 +2652,7 @@ describe('ContainerUpdateExecutor', () => {
       });
 
       // A recent succeeded op for "web" exists
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -2639,25 +2690,33 @@ describe('ContainerUpdateExecutor', () => {
       const executor = createExecutor({
         isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
-        (_containerName, _windowMs, identity) =>
-          identity?.agent === 'agent-B'
+      // With the single identityKey signature there is no filter object to branch
+      // on inside the store call; the mock instead does exact identityKey equality,
+      // the way the real SQL lookup does. A recent success recorded under agent-A's
+      // identity must not match a lookup keyed by agent-B's identity.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockImplementation(
+        (identityKey) =>
+          identityKey === 'agent-B::local::web'
             ? undefined
             : { id: 'prev-agent-a', containerName: 'web', status: 'succeeded' },
       );
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
 
       await expect(
         executor.execute(
           context,
-          createContainer({ agent: 'agent-B', watcher: 'local' }),
+          createContainer({
+            agent: 'agent-B',
+            watcher: 'local',
+            identityKey: 'agent-B::local::web',
+          }),
           createLog(),
         ),
       ).rejects.toThrow('No such container: web');
 
-      expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-        'web',
+      expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+        'agent-B::local::web',
         expect.any(Number),
-        { agent: 'agent-B', watcher: 'local' },
       );
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
         'op-1',
@@ -2685,7 +2744,7 @@ describe('ContainerUpdateExecutor', () => {
       });
 
       // No recent success
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
         'No such container: web',
@@ -2716,12 +2775,17 @@ describe('ContainerUpdateExecutor', () => {
       });
 
       // No recent success, but the winning op is still in flight.
-      // watcher must be present so identity.watcher passes the path-3 guard.
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      // identityKey must be present (path-3 guard is `excludeOperationId && identityKey`)
+      // for the other-active-op lookup to fire at all.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
 
       await expect(
-        executor.execute(context, createContainer({ watcher: 'local' }), createLog()),
+        executor.execute(
+          context,
+          createContainer({ watcher: 'local', identityKey: '::local::web' }),
+          createLog(),
+        ),
       ).rejects.toThrow('No such container: web');
 
       // Should be expired — winner still active, conflict is benign
@@ -2754,8 +2818,8 @@ describe('ContainerUpdateExecutor', () => {
       });
 
       // No recent success and no other active op — genuine failure
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
 
       await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
         'No such container: web',

@@ -13,7 +13,7 @@ import {
   type HassAttributePreset,
 } from './filter.js';
 import Hass from './Hass.js';
-import { getSanitizedCanonicalContainerName } from './naming.js';
+import { getContainerIdentitySlug } from './naming.js';
 
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
@@ -30,8 +30,8 @@ function generateClientId() {
  * @return {string}
  */
 function getContainerTopic({ baseTopic, container }) {
-  const containerName = getSanitizedCanonicalContainerName(container);
-  return `${baseTopic}/${container.watcher}/${containerName}`;
+  const identitySlug = getContainerIdentitySlug(container);
+  return `${baseTopic}/${container.watcher}/${identitySlug}`;
 }
 
 interface MqttConfiguration extends TriggerConfiguration {

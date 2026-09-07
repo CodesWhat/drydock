@@ -1891,7 +1891,12 @@ export class AgentClient {
       ...(watcher !== undefined ? { watcher } : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
-      ...(containerSnapshot !== undefined ? { container: containerSnapshot } : {}),
+      // The wire payload from an agent is untyped JSON; the store only ever
+      // reads named Container fields off it (identityKey, agent, watcher,
+      // labels), so this cast is a trust boundary, not a shape guarantee.
+      ...(containerSnapshot !== undefined
+        ? { container: containerSnapshot as unknown as Container }
+        : {}),
     };
   }
 

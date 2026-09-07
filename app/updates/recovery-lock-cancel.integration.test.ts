@@ -35,71 +35,6 @@ function deferred<T = void>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-function getByPath(object: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((acc, key) => {
-    if (typeof acc !== 'object' || acc === null) {
-      return undefined;
-    }
-    return (acc as Record<string, unknown>)[key];
-  }, object);
-}
-
-function matchesQueryOperator(actual: unknown, expected: unknown): boolean {
-  if (!expected || typeof expected !== 'object') {
-    return actual === expected;
-  }
-
-  const operators = expected as Record<string, unknown>;
-  if ('$lte' in operators) {
-    return typeof actual === 'string' && actual <= String(operators.$lte);
-  }
-  if ('$lt' in operators) {
-    return typeof actual === 'string' && actual < String(operators.$lt);
-  }
-  return actual === expected;
-}
-
-function matchesQuery(document: unknown, query: Record<string, unknown> = {}): boolean {
-  return Object.entries(query).every(([key, value]) =>
-    matchesQueryOperator(getByPath(document, key), value),
-  );
-}
-
-function createCollection(initialDocuments: unknown[] = []) {
-  const documents = [...initialDocuments];
-
-  return {
-    ensureIndex: vi.fn(),
-    insert: (document: unknown) => {
-      documents.push(document);
-    },
-    find: (query: Record<string, unknown> = {}) =>
-      documents.filter((document) => matchesQuery(document, query)),
-    findOne: (query: Record<string, unknown> = {}) =>
-      documents.find((document) => matchesQuery(document, query)) || null,
-    remove: (document: unknown) => {
-      const index = documents.indexOf(document);
-      if (index >= 0) {
-        documents.splice(index, 1);
-      }
-    },
-    update: vi.fn(),
-  };
-}
-
-function createDb(initialDocuments: Record<string, unknown[]> = {}) {
-  const collections = new Map<string, ReturnType<typeof createCollection>>();
-
-  return {
-    getCollection: (name: string) => collections.get(name) || null,
-    addCollection: (name: string) => {
-      const collection = createCollection(initialDocuments[name]);
-      collections.set(name, collection);
-      return collection;
-    },
-  };
-}
-
 function createContainer(overrides: Partial<Container> = {}): Container {
   return {
     id: 'c-web',
@@ -172,8 +107,8 @@ class FlakyNotificationTrigger extends Trigger {
 }
 
 describe('startup recovery lock and cancel integration', () => {
+  let db: Database | undefined;
   let outboxDb: Database | undefined;
-  let containerDb: Database | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -199,11 +134,28 @@ describe('startup recovery lock and cancel integration', () => {
     sseRouter._connectionsPerSession.clear();
     sseRouter._clearPendingSelfUpdateAcks();
     notificationOutboxStore._resetOutboxStoreForTests();
+    db?.close();
+    db = undefined;
     outboxDb?.close();
     outboxDb = undefined;
-    containerDb?.close();
-    containerDb = undefined;
   });
+
+  /**
+   * Seed one or more update-operation rows directly into `database`, as if
+   * they were written before this process started — the same "pre-existing
+   * persisted state" shape `updateOperationStore.createCollections()`'s
+   * startup recovery reconciliation expects to find. Mirrors the
+   * `buildImportedUpdateOperationRow`/`insertImportedUpdateOperationRow` seed
+   * pattern used in update-operation-batch.test.ts.
+   */
+  function seedUpdateOperations(database: Database, rawOperations: Record<string, unknown>[]) {
+    for (const rawOperation of rawOperations) {
+      const row = updateOperationStore.buildImportedUpdateOperationRow(rawOperation);
+      if (row) {
+        updateOperationStore.insertImportedUpdateOperationRow(database, row);
+      }
+    }
+  }
 
   test('recovers a queued compose update through keyed FIFO locks and honours mid-flight cancellation before a solo container update', async () => {
     const operationId = 'op-recovered-compose';
@@ -216,28 +168,20 @@ describe('startup recovery lock and cancel integration', () => {
     const events: string[] = [];
     let triggerError: unknown;
 
-    const db = createDb({
-      updateOperations: [
-        {
-          data: {
-            id: operationId,
-            containerId: container.id,
-            containerName: container.name,
-            status: 'in-progress',
-            phase: 'pulling',
-            createdAt: '2026-02-23T01:00:00.000Z',
-            updatedAt: '2026-02-23T01:00:00.000Z',
-          },
-        },
-      ],
-    });
-    // Only updateOperations lives on the Loki-shaped fake above (update-operation.ts hasn't
-    // moved to SQLite); containers moved to SQLite in roadmap 7-STORE slice 8, so this needs
-    // a real migrated in-memory database, the same way AgentClient.container-reconcile.test.ts
-    // and registry/index.container-reconcile.test.ts do.
-    containerDb = createMigratedMemoryDatabase();
-    containerStore.createCollections(containerDb);
+    db = createMigratedMemoryDatabase();
+    containerStore.createCollections(db);
     containerStore.insertContainer(container);
+    seedUpdateOperations(db, [
+      {
+        id: operationId,
+        containerId: container.id,
+        containerName: container.name,
+        status: 'in-progress',
+        phase: 'pulling',
+        createdAt: '2026-02-23T01:00:00.000Z',
+        updatedAt: '2026-02-23T01:00:00.000Z',
+      },
+    ]);
     updateOperationStore.createCollections(db);
 
     expect(updateOperationStore.getOperationById(operationId)).toMatchObject({
@@ -342,22 +286,21 @@ describe('startup recovery lock and cancel integration', () => {
     let maxActiveRecoveryCount = 0;
     let completedCount = 0;
 
-    const db = createDb({
-      updateOperations: operationIds.map((operationId, index) => ({
-        data: {
-          id: operationId,
-          containerId: containers[index].id,
-          containerName: containers[index].name,
-          status: 'queued',
-          phase: 'queued',
-          createdAt: recoveredAt,
-          updatedAt: recoveredAt,
-        },
-      })),
-    });
-    containerDb = createMigratedMemoryDatabase();
-    containerStore.createCollections(containerDb);
+    db = createMigratedMemoryDatabase();
+    containerStore.createCollections(db);
     containers.forEach((container) => containerStore.insertContainer(container));
+    seedUpdateOperations(
+      db,
+      operationIds.map((operationId, index) => ({
+        id: operationId,
+        containerId: containers[index].id,
+        containerName: containers[index].name,
+        status: 'queued',
+        phase: 'queued',
+        createdAt: recoveredAt,
+        updatedAt: recoveredAt,
+      })),
+    );
     updateOperationStore.createCollections(db);
 
     registry.getState().trigger = {
@@ -446,24 +389,20 @@ describe('startup recovery lock and cancel integration', () => {
     const containerKey = buildContainerLockKey(container);
     const recoveryCompleted = deferred();
 
-    const db = createDb({
-      updateOperations: [
-        {
-          data: {
-            id: operationId,
-            containerId: container.id,
-            containerName: operationContainerName,
-            status: 'queued',
-            phase: 'queued',
-            createdAt: recoveredAt,
-            updatedAt: recoveredAt,
-          },
-        },
-      ],
-    });
-    containerDb = createMigratedMemoryDatabase();
-    containerStore.createCollections(containerDb);
+    db = createMigratedMemoryDatabase();
+    containerStore.createCollections(db);
     containerStore.insertContainer(container);
+    seedUpdateOperations(db, [
+      {
+        id: operationId,
+        containerId: container.id,
+        containerName: operationContainerName,
+        status: 'queued',
+        phase: 'queued',
+        createdAt: recoveredAt,
+        updatedAt: recoveredAt,
+      },
+    ]);
     updateOperationStore.createCollections(db);
     outboxDb = createMigratedMemoryDatabase();
     notificationOutboxStore.createCollections(outboxDb);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const {
   mockEmitBatchUpdateCompleted,
@@ -19,46 +19,22 @@ vi.mock('../event/index.js', () => ({
   emitUpdateOperationChanged: mockEmitUpdateOperationChanged,
 }));
 
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import * as updateOperation from './update-operation.js';
 
-function createDb() {
-  function getByPath(object: unknown, path: string) {
-    return path.split('.').reduce<unknown>((acc, key) => {
-      if (!acc || typeof acc !== 'object') {
-        return undefined;
-      }
-      return (acc as Record<string, unknown>)[key];
-    }, object);
-  }
+const openDatabases: Database[] = [];
 
-  function matchesQuery(doc: unknown, query: Record<string, unknown> = {}) {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+afterEach(() => {
+  for (const database of openDatabases.splice(0)) {
+    database.close();
   }
+});
 
-  const collections: Record<string, unknown> = {};
-  return {
-    getCollection: (name: string) => collections[name] || null,
-    addCollection: (name: string) => {
-      const docs: unknown[] = [];
-      const collection = {
-        insert: (doc: unknown) => {
-          docs.push(doc);
-        },
-        find: (query: Record<string, unknown> = {}) =>
-          docs.filter((doc) => matchesQuery(doc, query)),
-        findOne: (query: Record<string, unknown> = {}) =>
-          docs.find((doc) => matchesQuery(doc, query)) || null,
-        remove: (doc: unknown) => {
-          const idx = docs.indexOf(doc);
-          if (idx >= 0) {
-            docs.splice(idx, 1);
-          }
-        },
-      };
-      collections[name] = collection;
-      return collection;
-    },
-  };
+function createDb(): Database {
+  const database = createMigratedMemoryDatabase();
+  openDatabases.push(database);
+  return database;
 }
 
 async function flushAsyncLifecycleEvents() {

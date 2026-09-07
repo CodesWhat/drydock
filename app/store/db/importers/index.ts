@@ -21,6 +21,7 @@ import { secretsImporter } from './secrets.js';
 import { settingsImporter } from './settings.js';
 import { uiPreferencesImporter } from './ui-preferences.js';
 import { updateLifecycleCacheImporter } from './update-lifecycle-cache.js';
+import { updateOperationsImporter } from './update-operations.js';
 import { updatePolicyRetentionCacheImporter } from './update-policy-retention-cache.js';
 
 export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
@@ -36,7 +37,6 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   // roadmap 7-STORE slice 5: append-only tables, independent of each other
   // and of everything above.
   auditImporter,
-  backupsImporter,
   notificationHistoryImporter,
   notificationOutboxImporter,
   // roadmap 7-STORE slice 6: rules and the approval queue, independent of
@@ -50,4 +50,13 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   updatePolicyRetentionCacheImporter,
   // roadmap 7-STORE slice 8: containers, independent of everything above.
   containersImporter,
+  // roadmap 7-STORE slice 10: update operations. No foreign-key dependency on
+  // the containers table (identity is recomputed from each operation's own
+  // container snapshot), but ordered after it to read naturally alongside
+  // the entity it tracks.
+  updateOperationsImporter,
+  // roadmap 7-STORE slice 10: backups, moved here (out of the slice 5 group
+  // above) because its identity backfill queries the containers table this
+  // import already wrote — it must run after containersImporter.
+  backupsImporter,
 ];

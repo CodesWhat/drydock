@@ -22,6 +22,7 @@ import * as approval from './approval.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
+import * as mqttHass from './mqtt-hass.js';
 import * as nameBindings from './name-bindings.js';
 import * as notification from './notification.js';
 import * as notificationHistory from './notification-history.js';
@@ -206,7 +207,10 @@ function createCollections(): boolean {
   secrets.createCollections(sqliteDb as Database);
   uiPreferences.createCollections(sqliteDb as Database);
   settings.createCollections(sqliteDb as Database);
-  updateOperation.createCollections(db);
+  // roadmap 7-STORE slice 10.
+  updateOperation.createCollections(sqliteDb as Database);
+  // roadmap 7-STORE slice 10 — MQTT identity cut one-shot marker.
+  mqttHass.createCollections(sqliteDb as Database);
   app.completeStartupInitialization();
   return droppedLegacySessionsCollection;
 }

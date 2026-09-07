@@ -1,5 +1,6 @@
 import {
   getCanonicalContainerName,
+  getContainerIdentitySlug,
   getSanitizedCanonicalContainerName,
   getSanitizedRawContainerName,
   getStaleSanitizedContainerNameCandidates,
@@ -107,6 +108,104 @@ describe('naming', () => {
       expect(result).toEqual(['7ea6b8a42686_termix']);
       // Should not contain duplicates
       expect(new Set(result).size).toBe(result.length);
+    });
+  });
+
+  describe('getContainerIdentitySlug', () => {
+    test('returns the project.service pair when both compose labels are present', () => {
+      expect(
+        getContainerIdentitySlug({
+          id: 'abc123',
+          name: 'app_web_1',
+          labels: {
+            'com.docker.compose.project': 'myapp',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+      ).toBe('myapp.web');
+    });
+
+    test('sanitizes dots to dashes in the compose project.service pair', () => {
+      expect(
+        getContainerIdentitySlug({
+          id: 'abc123',
+          name: 'app_web_1',
+          labels: {
+            'com.docker.compose.project': 'my.app',
+            'com.docker.compose.service': 'web.one',
+          },
+        }),
+      ).toBe('my-app.web-one');
+    });
+
+    /**
+     * Review finding 4 (roadmap 7-STORE slice 10): before
+     * `encodeIdentitySlugComponent` escaped a literal `-` distinctly from a
+     * `.`, project `a.b` and project `a-b` both sanitised their dots/dashes
+     * to the same `a-b`, so pairing either with service `c` produced the
+     * identical slug `a-b-c` — two different Compose stacks colliding on one
+     * state topic and one discovery topic.
+     */
+    test('does not collide a dotted project name with a dashed one that sanitizes the same way', () => {
+      const dottedProject = getContainerIdentitySlug({
+        id: 'abc123',
+        name: 'app_web_1',
+        labels: {
+          'com.docker.compose.project': 'a.b',
+          'com.docker.compose.service': 'c',
+        },
+      });
+      const dashedProject = getContainerIdentitySlug({
+        id: 'def456',
+        name: 'app_web_2',
+        labels: {
+          'com.docker.compose.project': 'a-b',
+          'com.docker.compose.service': 'c',
+        },
+      });
+
+      expect(dottedProject).toBe('a-b.c');
+      expect(dashedProject).toBe('a--b.c');
+      expect(dottedProject).not.toBe(dashedProject);
+    });
+
+    test('falls back to the sanitized canonical name when compose labels are absent', () => {
+      expect(
+        getContainerIdentitySlug({
+          id: 'abc123',
+          name: 'my.container',
+        }),
+      ).toBe('my-container');
+    });
+
+    test('falls back to the sanitized canonical name when only one compose label is present', () => {
+      expect(
+        getContainerIdentitySlug({
+          id: 'abc123',
+          name: 'my-container',
+          labels: { 'com.docker.compose.project': 'myapp' },
+        }),
+      ).toBe('my-container');
+    });
+
+    test('does not change across a rename when compose labels are present', () => {
+      const before = getContainerIdentitySlug({
+        id: 'abc123',
+        name: 'app_web_1',
+        labels: {
+          'com.docker.compose.project': 'myapp',
+          'com.docker.compose.service': 'web',
+        },
+      });
+      const afterRename = getContainerIdentitySlug({
+        id: 'abc123',
+        name: 'app_web_renamed',
+        labels: {
+          'com.docker.compose.project': 'myapp',
+          'com.docker.compose.service': 'web',
+        },
+      });
+      expect(afterRename).toBe(before);
     });
   });
 });

@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const {
   mockGetOperationById,
   mockGetActiveOperationByContainerId,
-  mockGetActiveOperationByContainerName,
-  mockGetRecentTerminalSucceededOperationByContainerName,
-  mockHasOtherActiveOperationByContainerName,
+  mockGetActiveOperationByContainerIdentity,
+  mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  mockHasOtherActiveOperationByContainerIdentity,
   mockInsertOperation,
   mockMarkOperationTerminal,
   mockGetState,
@@ -24,9 +24,9 @@ const {
   return {
     mockGetOperationById: vi.fn(),
     mockGetActiveOperationByContainerId: vi.fn(),
-    mockGetActiveOperationByContainerName: vi.fn(),
-    mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
-    mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
+    mockGetActiveOperationByContainerIdentity: vi.fn(),
+    mockGetRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+    mockHasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
     mockInsertOperation: vi.fn(),
     mockMarkOperationTerminal: vi.fn(),
     mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
@@ -50,10 +50,10 @@ vi.mock('../store/settings.js', () => ({
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: mockGetOperationById,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
-  getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
-  getRecentTerminalSucceededOperationByContainerName:
-    mockGetRecentTerminalSucceededOperationByContainerName,
-  hasOtherActiveOperationByContainerName: mockHasOtherActiveOperationByContainerName,
+  getActiveOperationByContainerIdentity: mockGetActiveOperationByContainerIdentity,
+  getRecentTerminalSucceededOperationByContainerIdentity:
+    mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  hasOtherActiveOperationByContainerIdentity: mockHasOtherActiveOperationByContainerIdentity,
   insertOperation: mockInsertOperation,
   markOperationTerminal: mockMarkOperationTerminal,
 }));
@@ -124,7 +124,7 @@ describe('request-update', () => {
     vi.clearAllMocks();
     mockGetOperationById.mockReturnValue(undefined);
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-    mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+    mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockStatSync.mockReturnValue({ isSocket: () => false });
     mockGetUpdateMode.mockReturnValue('auto');
@@ -2535,7 +2535,7 @@ describe('request-update', () => {
       // The NEW container has a different Docker ID (recreated), so by-id lookup misses.
       // The by-name lookup SHOULD block the enqueue because agent+watcher match.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined); // new ID not found
-      mockGetActiveOperationByContainerName.mockReturnValue({
+      mockGetActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-existing',
         status: 'in-progress',
         containerId: 'old-container-id', // modern op: has containerId
@@ -2558,7 +2558,7 @@ describe('request-update', () => {
     test('allows fresh enqueue when the previously active op is terminal (succeeded)', async () => {
       // After Op1 completes successfully (terminal), Op2 for the same name should be allowed.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // no active op
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined); // no active op
 
       const trigger = {
         type: 'docker',
@@ -2575,7 +2575,7 @@ describe('request-update', () => {
     test('cross-agent non-collision: agent-A does not get 409 when agent-B has active op for same name', async () => {
       // agent-B has an in-progress op for "drydock-agent", agent-A should NOT be blocked.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // scoped call returns undefined
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined); // scoped call returns undefined
 
       const trigger = {
         type: 'docker',
@@ -2599,7 +2599,7 @@ describe('request-update', () => {
     test('cross-watcher non-collision: different watcher does not block enqueue', async () => {
       // watcher-2 has an op for "web", watcher-1 should not be blocked.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // scoped call returns undefined
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined); // scoped call returns undefined
 
       const trigger = {
         type: 'docker',
@@ -2617,7 +2617,7 @@ describe('request-update', () => {
     test('legacy op (no container snapshot) still blocks enqueue', async () => {
       // Legacy row without a container snapshot — backward-compatible block.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue({
+      mockGetActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-legacy',
         status: 'queued',
         // no container snapshot
@@ -2657,7 +2657,7 @@ describe('request-update', () => {
       }));
 
       // A recent succeeded op for the same container name exists
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'nginx',
         status: 'succeeded',
@@ -2697,7 +2697,7 @@ describe('request-update', () => {
       }));
 
       // No recent success
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
         trigger,
@@ -2726,11 +2726,13 @@ describe('request-update', () => {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
-        container: { id: 'c-agent-a', name: 'web', watcher: 'local', agent: 'agent-A' },
+        containerIdentityKey: 'agent-A::local::web',
       }));
-      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
-        (_containerName, _windowMs, identity) =>
-          identity?.agent === 'agent-A'
+      // The identity-scoped lookup naturally excludes agent-B's success — it's a
+      // different identity key, not a filtered-out match.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockImplementation(
+        (identityKey: string | undefined) =>
+          identityKey === 'agent-A::local::web'
             ? undefined
             : { id: 'prev-agent-b', containerName: 'web', status: 'succeeded' },
       );
@@ -2741,10 +2743,9 @@ describe('request-update', () => {
       );
       await flushAsyncWork();
 
-      expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-        'web',
+      expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+        'agent-A::local::web',
         expect.any(Number),
-        { agent: 'agent-A', watcher: 'local' },
       );
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
         accepted.operationId,
@@ -2770,7 +2771,7 @@ describe('request-update', () => {
         phase: 'queued',
       }));
 
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'nginx',
         status: 'succeeded',
@@ -2804,7 +2805,7 @@ describe('request-update', () => {
         phase: 'queued',
       }));
 
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
         trigger,
@@ -2836,13 +2837,13 @@ describe('request-update', () => {
         containerName: 'nginx',
         status: 'queued',
         phase: 'queued',
-        container: { id: 'c-loser', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+        containerIdentityKey: 'agent-A::local::nginx',
       }));
 
       // No recent success yet — the winner is still running
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-      // But another active op exists for the same container+identity
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+      // But another active op exists for the same container identity
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
 
       const accepted = await requestContainerUpdate(
         createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),
@@ -2855,10 +2856,9 @@ describe('request-update', () => {
         expect.objectContaining({ status: 'expired' }),
       );
       // Confirm the operation's own id was forwarded as the exclusion id
-      expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
-        'nginx',
+      expect(mockHasOtherActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+        'agent-A::local::nginx',
         accepted.operationId,
-        { agent: 'agent-A', watcher: 'local' },
       );
     });
 
@@ -2877,7 +2877,7 @@ describe('request-update', () => {
         phase: 'queued',
       }));
 
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'nginx',
         status: 'succeeded',
@@ -2941,7 +2941,7 @@ describe('request-update', () => {
             containerName: 'nginx',
             status: 'queued',
             phase: 'queued',
-            container: { id: 'c-winner', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+            containerIdentityKey: 'agent-A::local::nginx',
           };
         }
         return {
@@ -2949,7 +2949,9 @@ describe('request-update', () => {
           containerName: 'nginx',
           status: 'queued',
           phase: 'queued',
-          container: { id: 'c-loser', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+          // The loser's identity must be present for the has-other-active-op
+          // branch (#421) to fire below.
+          containerIdentityKey: 'agent-A::local::nginx',
         };
       });
 
@@ -2961,11 +2963,11 @@ describe('request-update', () => {
       // Winner is now in-flight (promise unresolved).
 
       // (2) Loser: active-lock 409 arrives while winner is in flight.
-      // hasOtherActiveOperationByContainerName returns true to classify as expired.
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      // hasOtherActiveOperationByContainerIdentity returns true to classify as expired.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
 
       const loserAccepted = await requestContainerUpdate(
         createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),

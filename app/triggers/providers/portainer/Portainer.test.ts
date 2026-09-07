@@ -1920,7 +1920,7 @@ test('reconcileInProgressContainerUpdateOperation returns when there is no pendi
   vi.spyOn(updateOperationStore, 'getInProgressOperationByContainerId').mockReturnValue(
     undefined as never,
   );
-  vi.spyOn(updateOperationStore, 'getInProgressOperationByContainerName').mockReturnValue(
+  vi.spyOn(updateOperationStore, 'getInProgressOperationByContainerIdentity').mockReturnValue(
     undefined as never,
   );
   const getStack = vi.spyOn(trigger, 'getPortainerStack');
