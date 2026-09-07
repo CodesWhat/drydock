@@ -86,8 +86,8 @@ test('fast-xml-parser is pinned to the patched release in app', () => {
   const manifest = readJson('app/package.json');
   const lockfile = readJson('app/package-lock.json');
 
-  assert.equal(manifest.dependencies?.['fast-xml-parser'], '5.10.1');
-  assert.equal(manifest.overrides?.['fast-xml-parser'], '5.10.1');
+  assert.equal(manifest.dependencies?.['fast-xml-parser'], '5.11.1');
+  assert.equal(manifest.overrides?.['fast-xml-parser'], '5.11.1');
   assert.ok(compareSemver(resolvedVersion(lockfile, 'fast-xml-parser'), '5.10.1') >= 0);
 });
 
@@ -95,7 +95,7 @@ test('sharp is pinned to a patched release in the website', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  assert.equal(manifest.overrides?.sharp, '0.35.3');
+  assert.equal(manifest.overrides?.sharp, '0.35.4');
   assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.3') >= 0);
 });
 

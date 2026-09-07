@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           # DAST scanners hit unbounded third-party endpoints (ZAP passive
           # rule callbacks) with no stable upstream-published allowlist —
@@ -64,6 +64,18 @@ jobs:
           rules_file_name: .zap/rules.tsv
           allow_issue_writing: false
           fail_action: true
+          # Bound every phase so the scan finishes inside the job budget.
+          # Unbounded, the spider plus the full active scan against the docs
+          # site outgrew 60 minutes and both weekly runs to date (32948622205,
+          # 33630040351) were cancelled at the job timeout with no report
+          # written. -m caps the spider; the two -config values cap the
+          # active scan overall and per rule (ZAP's "Max scan duration" and
+          # "Max rule duration" options). 10 + 35 leaves ~15 minutes for
+          # startup, the passive scan and the report inside the 60-minute
+          # job. The workflow test pins that arithmetic.
+          cmd_options: >-
+            -m 10
+            -z "-config scanner.maxScanDurationInMins=35 -config scanner.maxRuleDurationInMins=5"
 
       - name: Convert ZAP JSON report to SARIF
         if: always() && hashFiles('report_json.json') != ''
@@ -74,7 +86,7 @@ jobs:
 
       - name: Upload ZAP SARIF
         if: always() && hashFiles('artifacts/zap/zap-web-getdrydock.sarif') != ''
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/zap/zap-web-getdrydock.sarif
           category: zap-web-getdrydock
@@ -145,7 +157,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           # DAST scanners hit unbounded third-party endpoints (Nuclei
           # template fetches) with no stable upstream-published allowlist —
@@ -268,7 +280,7 @@ jobs:
 
       - name: Upload Nuclei SARIF to code scanning
         if: always() && steps.nuclei_sarif.outputs.upload == 'true'
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/dast/nuclei-report.sarif
           category: nuclei-web-getdrydock
@@ -350,7 +362,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           # Same accepted-audit exception as dast-web-zap/dast-web-nuclei
           # above and ci-verify.yml's dast-zap-baseline job (security.md
@@ -380,7 +392,7 @@ jobs:
 
       - name: Upload ZAP SARIF
         if: always() && hashFiles('artifacts/zap/zap-web-demo-baseline.sarif') != ''
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/zap/zap-web-demo-baseline.sarif
           category: zap-web-demo-baseline

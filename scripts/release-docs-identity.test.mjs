@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.12';
-const PREV_RC_VERSION = '1.7.0-rc.11';
-const RC_DATE = '2026-09-06';
-const RC_DISPLAY_DATE = 'September 6, 2026';
+const RC_VERSION = '1.7.0-rc.13';
+const PREV_RC_VERSION = '1.7.0-rc.12';
+const RC_DATE = '2026-09-08';
+const RC_DISPLAY_DATE = 'September 8, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -155,17 +155,14 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const pull of [1042, 1046, 1050, 1063]) {
+  for (const pull of [1080, 1108]) {
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${pull}`;
     assert.ok(updates.includes(pullLink), `updates page must link PR #${pull}`);
   }
 
   for (const fragment of [
-    '`Cross-Origin-Opener-Policy`',
-    '`identityChangeExpected: true`',
-    '`result.coalesced`',
-    '`dd-sessions.json`',
-    '`DD_SERVER_TLS_ENABLED`',
+    '`image.digest.watch`',
+    'caps the spider at 10 minutes and the active scan at 35',
   ]) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);

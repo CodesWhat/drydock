@@ -219,6 +219,16 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.13 亮点</strong></summary>
+
+- **drydock 在 v1.5.0-rc.17 之前首次发现的浮动标签容器，即使镜像仓库中已有更新的 digest，也可能永远被标记为 Current。** `image.digest.watch` 现在会在每次扫描时重新计算，而不是在首次发现时一次性写死，`isLocalImage` 和 `digest.repoDigests` 早已是这样处理的。([#1108](https://github.com/CodesWhat/drydock/pull/1108))
+- **getdrydock.com 每周的完整 ZAP 扫描每次都会触及 60 分钟的任务超时，从未生成过报告。** 扫描步骤现在将爬虫阶段限制在 10 分钟内，主动扫描限制在 35 分钟内，为被动扫描和报告留出任务预算空间。([#1080](https://github.com/CodesWhat/drydock/pull/1080))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc13--2026-09-08)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.12 亮点</strong></summary>
 
 - **演示站点此前没有发送 `Cross-Origin-Opener-Policy`，导致每周的 DAST 扫描每次都在 ZAP 规则 90004 上失败。** `apps/demo/vercel.json` 现在会在已有的 `Cross-Origin-Embedder-Policy` 头旁发送 `same-origin`。([#1050](https://github.com/CodesWhat/drydock/pull/1050))

@@ -219,6 +219,16 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.13</strong></summary>
+
+- **Contêineres em uma tag flutuante que o drydock viu pela primeira vez antes da v1.5.0-rc.17 podiam ficar marcados como Current para sempre, mesmo com um digest mais novo disponível.** `image.digest.watch` agora é recalculado a cada varredura, em vez de ser fixado na primeira descoberta, da mesma forma que `isLocalImage` e `digest.repoDigests` já fazem. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))
+- **A varredura ZAP completa semanal do getdrydock.com atingia seu tempo limite de 60 minutos em toda execução e nunca produzia um relatório.** A etapa de varredura agora limita o spider a 10 minutos e a varredura ativa a 35, deixando espaço para a varredura passiva e o relatório dentro do orçamento do job. ([#1080](https://github.com/CodesWhat/drydock/pull/1080))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc13--2026-09-08).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.12</strong></summary>
 
 - **O site de demonstração não enviava `Cross-Origin-Opener-Policy`, então a varredura DAST semanal falhava na regra 90004 do ZAP em toda execução.** `apps/demo/vercel.json` agora envia `same-origin` ao lado do cabeçalho `Cross-Origin-Embedder-Policy` já existente. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))

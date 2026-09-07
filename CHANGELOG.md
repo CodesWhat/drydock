@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.13] — 2026-09-08
+
+### Fixed
+
+- **Containers on a floating tag that drydock first saw before v1.5.0-rc.17 could stay marked Current forever, even when the registry had a newer digest.** `image.digest.watch` was written once at first discovery and never revisited, so a row discovered before the digest-watch default changed from `!isDockerHubDomain(domain)` to "watch when the tag is meaningful" (v1.5.0-rc.17) kept the old `false` default permanently; only recreating the container picked up the new one. It is now re-derived every scan, the same way `isLocalImage` and `digest.repoDigests` already are, and an explicit `dd.watch.digest` label or imgset override still wins. ([#1070](https://github.com/CodesWhat/drydock/issues/1070))
+- **The weekly ZAP full scan of getdrydock.com ran into its 60-minute job timeout on every run, so it never produced a report.** The scan step now caps the spider at 10 minutes and the active scan at 35 minutes (5 per rule), leaving room for startup, the passive scan and the report inside the job budget; a workflow test pins the arithmetic.
+
 ## [1.7.0-rc.12] — 2026-09-06
 
 ### Fixed
@@ -2724,7 +2731,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.13...HEAD
+[1.7.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...v1.7.0-rc.13
 [1.7.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.11...v1.7.0-rc.12
 [1.7.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...v1.7.0-rc.11
 [1.7.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...v1.7.0-rc.10
