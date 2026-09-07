@@ -626,6 +626,9 @@ describe('Docker Watcher', () => {
         displayName: 'renamed-container',
         tagFamily: 'strict',
         tagPinInfo: true,
+        updatePolicyDeclarative: { env: {}, label: {} },
+        updatePolicyOverrides: {},
+        updatePolicySources: {},
       });
     });
 
@@ -958,6 +961,9 @@ describe('Docker Watcher', () => {
         excludeTags: '^alpha',
         tagFamily: 'loose',
         tagPinInfo: false,
+        updatePolicyDeclarative: { env: {}, label: {} },
+        updatePolicyOverrides: {},
+        updatePolicySources: {},
       });
     });
 
@@ -1035,6 +1041,9 @@ describe('Docker Watcher', () => {
         displayName: 'Custom Name',
         tagFamily: 'strict',
         tagPinInfo: true,
+        updatePolicyDeclarative: { env: {}, label: {} },
+        updatePolicyOverrides: {},
+        updatePolicySources: {},
       });
     });
 

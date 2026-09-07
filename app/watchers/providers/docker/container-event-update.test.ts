@@ -995,4 +995,53 @@ describe('container event update helpers', () => {
       tagFamily: 'loose',
     });
   });
+
+  // #CodeRabbit — LABEL_DERIVED_PATCH_FIELDS omitted the four
+  // updatePolicy*/declarative fields, so a label change that only touches
+  // the declarative update policy (applyEffectiveDockerConfigFromLabels ->
+  // applyDockerDeclarativeUpdatePolicy -> applyDeclarativeUpdatePolicy)
+  // mutated the in-memory container but never made it into the patch this
+  // event path writes.
+  test('updateContainerFromInspect includes declarative update-policy fields in the patch when labels change them', () => {
+    const container = createMockContainer({
+      name: 'my-app',
+      status: 'running',
+      labels: { 'dd.update-policy.skip-tags': 'v1' },
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: {}, label: { skipTags: ['v1'] } },
+      updatePolicyOverrides: {},
+      updatePolicySources: { maturityMode: 'env' },
+    });
+    const updateContainer = vi.fn();
+    // Simulate what applyEffectiveDockerConfigFromLabels really does: mutate
+    // the four declarative update-policy fields on the container in place.
+    const applyDerivedLabelFieldsToContainer = vi.fn((c) => {
+      c.updatePolicy = { maturityMode: 'mature' };
+      c.updatePolicyDeclarative = { env: {}, label: { skipTags: ['v2'] } };
+      c.updatePolicyOverrides = { maturityMode: 'mature' };
+      c.updatePolicySources = { maturityMode: 'label' };
+    });
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/my-app',
+        State: { Status: 'running' },
+        Config: { Labels: { 'dd.update-policy.skip-tags': 'v2' } },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+        applyDerivedLabelFieldsToContainer,
+      },
+    );
+
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      labels: { 'dd.update-policy.skip-tags': 'v2' },
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: {}, label: { skipTags: ['v2'] } },
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      updatePolicySources: { maturityMode: 'label' },
+    });
+  });
 });

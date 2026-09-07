@@ -216,6 +216,10 @@ const LABEL_DERIVED_PATCH_FIELDS = [
   'dependsOn',
   'dependsOnSource',
   'dependsOnAction',
+  'updatePolicy',
+  'updatePolicyDeclarative',
+  'updatePolicyOverrides',
+  'updatePolicySources',
 ] as const satisfies readonly (keyof Container)[];
 
 function pickFields<T extends object, K extends keyof T>(
