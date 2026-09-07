@@ -5,6 +5,7 @@ import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
+import { triggerManualWatch } from '../../watchers/manual-watch.js';
 
 const log = logger.child({ component: 'agent-api-watcher' });
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Internal server error';
@@ -72,8 +73,18 @@ export async function watchWatcher(req: Request, res: Response) {
   }
 
   try {
-    const results = await watcher.watch();
-    res.json(results);
+    // DR-60: route through the same single-flight cron-scan orchestration the
+    // watcher's own schedule uses, rather than calling watch() directly, so a
+    // controller poll landing mid-scan coalesces into that scan's follow-up
+    // instead of running a second, independent handleContainerReports pass.
+    // The response body stays a bare ContainerReport[] (the wire contract
+    // AgentClient.watch() depends on, and a controller may be a different
+    // version than this agent); coalescing is surfaced as a header instead
+    // so an older or newer AgentClient on either side of that skew keeps
+    // working unchanged.
+    const { reports, coalesced } = await triggerManualWatch(watcher, 'agent-poll');
+    res.set('X-Drydock-Watch-Coalesced', String(coalesced));
+    res.json(reports);
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);
     log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(message)}`);

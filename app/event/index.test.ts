@@ -748,6 +748,16 @@ test('setHandlerTimeoutMsForTests and getHandlerTimeoutMsForTests round-trip', (
   expect(event.getHandlerTimeoutMsForTests()).toBe(30_000);
 });
 
+// DR-61: getHandlerTimeoutMs is the production getter Trigger.ts's reserveOnceNotificationSlot
+// sizes its own reservation expiry off; getHandlerTimeoutMsForTests above is test-only.
+test('getHandlerTimeoutMs reflects the configured handler timeout', () => {
+  event.setHandlerTimeoutMsForTests(4321);
+  expect(event.getHandlerTimeoutMs()).toBe(4321);
+
+  event.setHandlerTimeoutMsForTests(undefined);
+  expect(event.getHandlerTimeoutMs()).toBe(30_000);
+});
+
 test('parseHandlerTimeoutMs falls back to default for missing/empty/invalid input', () => {
   expect(event.parseHandlerTimeoutMs(undefined)).toBe(30_000);
   expect(event.parseHandlerTimeoutMs('')).toBe(30_000);

@@ -7,6 +7,8 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 If you want the state to persist after the container removal, you need to mount `/store` as a volume.
 
+Login sessions persist in their own file next to the main store — `dd-sessions.json` by default, derived from `DD_STORE_FILE` — so mounting `/store` covers both.
+
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |

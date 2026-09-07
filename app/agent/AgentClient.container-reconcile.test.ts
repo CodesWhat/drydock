@@ -183,6 +183,40 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
       expect(storeContainer.getContainer('old-id')).toBeUndefined();
       expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
     });
+
+    // DR-115: a container genuinely missing from the report (no name match, so
+    // pruneOldContainers does not flag it as a same-identity replacement) can still be the
+    // same physical container moving to another agent, or back to the controller's own
+    // watcher. That hand-off keeps the Docker id and changes everything else, so only
+    // identityChangeExpected's id-keyed stash can carry the update policy across it.
+    test('stashes the update policy of a genuinely removed container under its Docker id for the next identity that reports it', async () => {
+      storeContainer.insertContainer(
+        createContainerFixture({
+          id: 'stale-id',
+          name: 'redis',
+          watcher: WATCHER_NAME,
+          agent: AGENT_NAME,
+          updatePolicy: MATURITY_POLICY,
+        }),
+      );
+
+      await client.handleContainerSync([buildIncomingContainer()]);
+
+      expect(storeContainer.getContainer('stale-id')).toBeUndefined();
+
+      // Reappears under the same Docker id but a different identity: a different agent,
+      // a different watcher name.
+      const reingested = storeContainer.insertContainer(
+        createContainerFixture({
+          id: 'stale-id',
+          name: 'redis',
+          watcher: 'docker.other',
+          agent: 'other-agent',
+        }),
+      );
+
+      expect(reingested.updatePolicy).toEqual(MATURITY_POLICY);
+    });
   });
 
   describe('handleWatcherSnapshotEvent() via handleEvent', () => {

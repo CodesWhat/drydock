@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import * as event from '../../../event/index.js';
 import type { Container, ContainerReport } from '../../../model/container.js';
 import { toApiUpdateOperation } from '../../../store/update-operation.js';
+import { triggerManualWatch } from '../../../watchers/manual-watch.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import { sanitizePreviewErrorReason } from '../../preview-errors.js';
@@ -173,6 +174,7 @@ export function createWatchContainersHandler(context: CrudHandlerContext) {
 
     const watcherMap = context.getWatchers();
     const containerIds = parsedBody.body?.containerIds;
+    let coalesced = false;
     try {
       if (Array.isArray(containerIds) && containerIds.length > 0) {
         const selected = resolveTargetedWatchTargets(context, containerIds, watcherMap);
@@ -192,12 +194,20 @@ export function createWatchContainersHandler(context: CrudHandlerContext) {
           await event.emitContainerReports(validReports);
         }
       } else {
-        await Promise.all(Object.values(watcherMap).map((watcher) => watcher.watch()));
+        // DR-60: route through the same single-flight cron-scan orchestration the
+        // watcher's own schedule uses, rather than calling watch() directly, so a
+        // manual "check now" landing mid-scan coalesces into that scan's follow-up
+        // instead of running a second, independent handleContainerReports pass.
+        const results = await Promise.all(
+          Object.values(watcherMap).map((watcher) => triggerManualWatch(watcher, 'api')),
+        );
+        coalesced = results.some((result) => result.coalesced);
       }
 
-      res
-        .status(200)
-        .json(buildContainerListResponse(context, req.query, '/api/v1/containers/watch'));
+      res.status(200).json({
+        ...buildContainerListResponse(context, req.query, '/api/v1/containers/watch'),
+        coalesced,
+      });
     } catch (error: unknown) {
       sendErrorResponse(
         res,

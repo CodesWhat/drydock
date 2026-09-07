@@ -219,6 +219,21 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.12 亮点</strong></summary>
+
+- **演示站点此前没有发送 `Cross-Origin-Opener-Policy`，导致每周的 DAST 扫描每次都在 ZAP 规则 90004 上失败。** `apps/demo/vercel.json` 现在会在已有的 `Cross-Origin-Embedder-Policy` 头旁发送 `same-origin`。([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **发布流程中镜像架构检查的 arm64 环节在每次多平台构建中都会因 `docker: cannot overwrite digest` 而失败。** `scripts/check-image-arch.sh` 现在会在探测之前先从多架构索引中解析出每个平台自己的清单摘要，而不是复用同一个索引摘要引用——docker 的经典镜像存储无法在该引用下保存两个平台变体。([#1046](https://github.com/CodesWhat/drydock/pull/1046))
+- **将容器迁移到另一个代理，或从配置中移除某个代理，都不会再重置它的暂停、成熟度模式和跳过的标签。** 代理移除清理以及代理自身的过期容器清理现在也会传入 `identityChangeExpected: true`，并把离开的记录的更新策略保存在其 Docker id 下，做法与启动清理一致。([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **在扫描已在进行时手动"立即检查"可能会把同一条通知发送两次。** 仪表盘、API、webhook 以及控制器轮询代理现在都通过与定时扫描相同的单飞（single-flight）扫描编排来处理，因此重叠的调用会被并入正在运行的扫描的那一次后续处理（JSON 响应体中的 `result.coalesced`，代理端点上的 `X-Drydock-Watch-Coalesced` 头），而不是各自启动一次独立扫描。([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **一个触发器从未响应的 `once=true` 预留会在进程的整个生命周期内一直占用其去重键。** 超过 30 秒超时的处理程序会让其预留在发起它的那次扫描结束后依然存在，从而悄悄跳过该结果之后的每一次发送；现在每个预留都会按自己的计时器过期，如果没有人提前释放，就会记录一条点名该键的警告日志。([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **DR-121：会话存储和主存储此前写入同一个 `/store/dd.json`，谁最后保存就会抹掉另一方的数据。** 会话存储现在会写入自己的同级文件，默认是 `dd-sessions.json`，主存储也会丢弃旧版本遗留下来的过期 `Sessions` 集合，而不是继续保存它。([#1063](https://github.com/CodesWhat/drydock/pull/1063))
+- **代理页面配对的 Gitea registry 示例让控制器以 HTTPS 与只提供纯 HTTP 的代理通信。** 代理侧代码块现在挂载了自己的证书并设置了 `DD_SERVER_TLS_ENABLED`，因此示例可以照原样连接成功。([#1042](https://github.com/CodesWhat/drydock/pull/1042))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc12--2026-09-06)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.11 亮点</strong></summary>
 
 - **OIDC 登录在身份提供方重定向后不会再跳回登录页面。** Service worker 的导航回退此前除 `/api/` 外都会把每次文档导航从缓存的应用外壳中响应，导致 OIDC 回调始终到不了 Express 完成授权码交换；现在它会跳过每个服务器专属路由（`/api`、`/auth/`、`/health`、`/metrics`）。([#1016](https://github.com/CodesWhat/drydock/pull/1016))

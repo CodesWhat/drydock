@@ -219,6 +219,21 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.12</strong></summary>
+
+- **Strona demo nie wysyłała `Cross-Origin-Opener-Policy`, przez co cotygodniowy skan DAST za każdym razem zawodził na regule ZAP 90004.** `apps/demo/vercel.json` wysyła teraz `same-origin` obok istniejącego już nagłówka `Cross-Origin-Embedder-Policy`. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Przebieg arm64 kontroli architektury obrazu wydania kończył się niepowodzeniem przy każdym wieloplatformowym cięciu z `docker: cannot overwrite digest`.** `scripts/check-image-arch.sh` teraz przed sprawdzeniem rozwiązuje własny digest manifestu każdej platformy z indeksu wieloarchitekturowego, zamiast ponownie używać tej samej referencji digestu indeksu, pod którą klasyczny magazyn obrazów dockera nie może przechowywać dwóch wariantów platform. ([#1046](https://github.com/CodesWhat/drydock/pull/1046))
+- **Przeniesienie kontenera do innego agenta albo usunięcie agenta z konfiguracji nie resetuje już jego drzemki, trybu dojrzałości i pominiętych tagów.** Przycinanie przy usuwaniu agenta oraz własne przycinanie przestarzałych kontenerów agenta przekazują teraz również `identityChangeExpected: true` i zapisują politykę aktualizacji odchodzącego wpisu pod jego id Dockera, tak jak robiło to już przycinanie przy starcie. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Ręczne „sprawdź teraz”, które trafiało w momencie, gdy skan już trwał, mogło wysłać to samo powiadomienie dwukrotnie.** Panel, API, webhook oraz kontroler odpytujący agenta przechodzą teraz przez tę samą jednoprzebiegową orkiestrację skanu, której używa harmonogram crona, dzięki czemu nakładające się wywołanie jest włączane w jedno kontynuowanie trwającego skanu (`result.coalesced` w treści JSON, nagłówek `X-Drydock-Watch-Coalesced` na punkcie końcowym agenta), zamiast uruchamiać własny niezależny skan. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **Rezerwacja `once=true`, której wyzwalacz nigdy nie odpowiedział, trzymała swój klucz deduplikacji przez cały czas życia procesu.** Handler, który przekroczył swój 30-sekundowy limit czasu, zachowywał rezerwację poza skanem, który ją założył, po cichu pomijając każdą kolejną wysyłkę tego wyniku; każda rezerwacja wygasa teraz według własnego licznika czasu i zapisuje ostrzeżenie z nazwą klucza, jeśli nikt jej wcześniej nie zwolnił. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))
+- **DR-121: magazyn sesji i magazyn główny zapisywały ten sam plik `/store/dd.json`, a ten, który zapisał jako ostatni, kasował dane drugiego.** Magazyn sesji zapisuje teraz do własnego pliku siostrzanego, domyślnie `dd-sessions.json`, a magazyn główny odrzuca przestarzałą kolekcję `Sessions` pozostawioną przez starszą wersję, zamiast dalej ją zapisywać. ([#1063](https://github.com/CodesWhat/drydock/pull/1063))
+- **Sparowany przykład rejestru Gitea na stronie agentów sprawiał, że kontroler mówił po HTTPS do agenta obsługującego zwykłe HTTP.** Blok agenta montuje teraz własny certyfikat i ustawia `DD_SERVER_TLS_ENABLED`, dzięki czemu przykład łączy się tak, jak jest napisany. ([#1042](https://github.com/CodesWhat/drydock/pull/1042))
+
+Pełne informacje o wydaniu: [CHANGELOG.md](./CHANGELOG.md#170-rc12--2026-09-06).
+
+</details>
+
+<details open>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.11</strong></summary>
 
 - **Logowanie OIDC nie wraca już do strony logowania po przekierowaniu przez dostawcę tożsamości.** Nawigacyjny fallback service workera odpowiadał wcześniej na każdą nawigację dokumentu z buforowanej powłoki aplikacji, z wyjątkiem `/api/`, więc callback OIDC nigdy nie docierał do Expressa po wymianę kodu; teraz pomija każdą trasę należącą do serwera (`/api`, `/auth/`, `/health`, `/metrics`). ([#1016](https://github.com/CodesWhat/drydock/pull/1016))
