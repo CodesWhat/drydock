@@ -13,130 +13,107 @@ import * as updatePolicyRetentionCacheStore from './update-policy-retention-cach
 vi.mock('./migrate');
 vi.mock('../event');
 
+let db: Database;
+
 beforeEach(async () => {
   vi.resetAllMocks();
   container._resetContainerStoreStateForTests();
+  db = createMigratedMemoryDatabase();
+  container.createCollections(db);
 });
 
-function createFilterableCollection(initialDocs) {
-  let docs = [...initialDocs];
+afterEach(() => {
+  db.close();
+});
 
-  const matchesFilter = (doc, filter = {}) =>
-    Object.entries(filter).every(([key, value]) => {
-      const path = key.split('.');
-      let current: Record<string, unknown> | unknown = doc;
-      for (const segment of path) {
-        if (!current || typeof current !== 'object') {
-          return false;
-        }
-        current = (current as Record<string, unknown>)[segment];
-      }
-      return current === value;
-    });
-
-  return {
-    find: vi.fn((filter = {}) => docs.filter((doc) => matchesFilter(doc, filter))),
-    findOne: vi.fn((filter = {}) => docs.find((doc) => matchesFilter(doc, filter)) ?? null),
-    insert: vi.fn((doc) => {
-      docs.push(doc);
-    }),
-    update: vi.fn(),
-    chain: vi.fn(() => ({
-      find: (filter = {}) => ({
-        remove: () => {
-          docs = docs.filter((doc) => !matchesFilter(doc, filter));
-          return {};
-        },
-      }),
-    })),
-  };
+/**
+ * Writes a container straight into the `containers` table the way a document
+ * already on disk at startup arrives, bypassing `insertContainer`'s business
+ * logic (security-state/lifecycle-cache carry-forward, timestamp derivation)
+ * the same way the pre-migration `createFilterableCollection` seed array
+ * bypassed Loki's own `insert`. The row still has to satisfy
+ * `validateContainer` — every read path (`getContainer`/`getContainerRaw`)
+ * re-validates on the way out, in production as well as here.
+ */
+function seedContainer(rawContainer: unknown): void {
+  const row = container.buildImportedContainerRow(rawContainer);
+  if (!row) {
+    throw new Error(`test fixture failed container validation: ${JSON.stringify(rawContainer)}`);
+  }
+  container.insertImportedContainerRow(db, row);
 }
 
-test('createCollections should create collection containers when not exist', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-    ensureIndex: vi.fn(),
-  };
-  const db = {
-    getCollection: () => null,
-    addCollection: () => collection,
-  };
-  const spy = vi.spyOn(db, 'addCollection');
-  container.createCollections(db);
-  expect(spy).toHaveBeenCalledWith('containers', {
-    indices: ['data.id', 'data.watcher', 'data.status', 'data.updateAvailable'],
+describe('createCollections', () => {
+  test('wires the store to the given database', () => {
+    container.insertContainer(createContainerFixture({ id: 'wired' }));
+
+    container.createCollections(db);
+
+    expect(container.getContainer('wired')?.id).toBe('wired');
   });
-  expect(collection.ensureIndex).toHaveBeenCalledWith('data.id');
-  expect(collection.ensureIndex).toHaveBeenCalledWith('data.watcher');
-  expect(collection.ensureIndex).toHaveBeenCalledWith('data.status');
-  expect(collection.ensureIndex).toHaveBeenCalledWith('data.updateAvailable');
 });
 
-test('createCollections should not create collection containers when already exist', async () => {
-  const existingCollection = {
-    findOne: () => {},
-    insert: () => {},
-    ensureIndex: vi.fn(),
-  };
-  const db = {
-    getCollection: () => existingCollection,
-    addCollection: () => null,
-  };
-  const spy = vi.spyOn(db, 'addCollection');
-  container.createCollections(db);
-  expect(spy).not.toHaveBeenCalled();
-  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.id');
-  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.watcher');
-  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.status');
-  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.updateAvailable');
+describe('buildImportedContainerRow', () => {
+  test('returns undefined for a document that fails validation', () => {
+    expect(container.buildImportedContainerRow({ id: 'missing-required-fields' })).toBeUndefined();
+  });
+});
+
+describe('rowToContainer defensive fallbacks', () => {
+  test('defaults the grouped link/tag/trigger config when their JSON columns are null', () => {
+    // Every real write path (insertContainer/updateContainer/the containers
+    // importer) always stores an object for these three grouped columns, so
+    // a null column only shows up on a row a writer never produced —
+    // exercised here directly since there's no way to reach it through the
+    // public write API.
+    seedContainer(createContainerFixture({ id: 'legacy-null-config' }));
+    db.prepare(
+      'UPDATE containers SET link_config = NULL, tag_config = NULL, trigger_config = NULL WHERE id = ?',
+    ).run('legacy-null-config');
+
+    const containerRead = container.getContainer('legacy-null-config');
+
+    expect(containerRead?.link).toBeUndefined();
+    expect(containerRead?.tagFamily).toBeUndefined();
+    expect(containerRead?.actionTriggerInclude).toBeUndefined();
+  });
+
+  test('preserves a persisted error message', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'errored-container',
+        error: { message: 'connection refused' },
+      }),
+    );
+
+    expect(container.getContainer('errored-container')?.error).toEqual({
+      message: 'connection refused',
+    });
+  });
 });
 
 test('insertContainer should insert doc and emit an event', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const containerToSave = createContainerFixture();
-  const spyInsert = vi.spyOn(collection, 'insert');
   const spyEvent = vi.spyOn(event, 'emitContainerAdded');
-  container.createCollections(db);
+
   container.insertContainer(containerToSave);
-  expect(spyInsert).toHaveBeenCalled();
+
+  expect(container.getContainer(containerToSave.id)?.id).toBe(containerToSave.id);
   expect(spyEvent).toHaveBeenCalled();
 });
 
 test('updateContainer should update doc and emit an event', async () => {
-  const collection = {
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const containerToSave = createContainerFixture();
-  const spyInsert = vi.spyOn(collection, 'insert');
   const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
+
   container.updateContainer(containerToSave);
-  expect(spyInsert).toHaveBeenCalled();
+
+  expect(container.getContainer(containerToSave.id)?.id).toBe(containerToSave.id);
   expect(spyEvent).toHaveBeenCalled();
 });
 
 describe('category-scoped trigger label normalization (#494)', () => {
   function saveAndCapture(overrides) {
-    const collection = { findOne: () => {}, insert: () => {} };
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
     return container.insertContainer({ ...createContainerFixture(), ...overrides });
   }
 
@@ -249,64 +226,34 @@ describe('category-scoped trigger label normalization (#494)', () => {
   });
 });
 
-test('updateContainer should use collection update when available for existing containers', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+test('updateContainer should update the existing row in place for existing containers', async () => {
+  seedContainer(
+    createContainerFixture({
       id: 'container-update-with-update-method',
       status: 'running',
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    update: vi.fn(),
-    insert: vi.fn(),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture({
     id: 'container-update-with-update-method',
     status: 'stopped',
   });
   const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
 
   container.updateContainer(containerToSave);
 
-  expect(collection.update).toHaveBeenCalledTimes(1);
-  expect(collection.insert).not.toHaveBeenCalled();
-  expect(collection.chain).not.toHaveBeenCalled();
+  expect(container.getContainers()).toHaveLength(1);
+  expect(container.getContainer('container-update-with-update-method')?.status).toBe('stopped');
   expect(spyEvent).toHaveBeenCalled();
 });
 
 test('updateContainer should preserve updatePolicy when omitted from payload', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { skipTags: ['2.0.0'] },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture();
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
   expect(updated.updatePolicy).toEqual({
     skipTags: ['2.0.0'],
@@ -314,34 +261,20 @@ test('updateContainer should preserve updatePolicy when omitted from payload', a
 });
 
 test('updateContainer should clear updatePolicy when explicitly set to undefined', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { skipTags: ['2.0.0'] },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture({ updatePolicy: undefined });
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
   expect(updated.updatePolicy).toBeUndefined();
 });
 
 test('updateContainer should preserve controller overrides across declarative refreshes', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { maturityMode: 'all', skipTags: ['ui-tag'] },
       updatePolicyDeclarative: {
         env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
@@ -354,12 +287,7 @@ test('updateContainer should preserve controller overrides across declarative re
         skipTags: 'override',
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    update: vi.fn(),
-  };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -386,19 +314,14 @@ test('updateContainer should preserve controller overrides across declarative re
 });
 
 test('updateContainer should keep overrides when a declarative label is removed', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { skipTags: [] },
       updatePolicyDeclarative: { env: {}, label: { skipTags: ['old-label'] } },
       updatePolicyOverrides: { skipTags: [] },
       updatePolicySources: { skipTags: 'override' },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    update: vi.fn(),
-  };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -414,16 +337,14 @@ test('updateContainer should keep overrides when a declarative label is removed'
 });
 
 test('updateContainer should preserve existing overrides for a non-authoritative empty override layer', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { maturityMode: 'all' },
       updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
       updatePolicyOverrides: { maturityMode: 'all' },
       updatePolicySources: { maturityMode: 'override' },
     }),
-  };
-  const collection = { findOne: () => existingContainer, update: vi.fn() };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -440,16 +361,14 @@ test('updateContainer should preserve existing overrides for a non-authoritative
 });
 
 test('updateContainer should clear overrides for an authoritative empty override layer', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { maturityMode: 'all' },
       updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
       updatePolicyOverrides: { maturityMode: 'all' },
       updatePolicySources: { maturityMode: 'override' },
     }),
-  };
-  const collection = { findOne: () => existingContainer, update: vi.fn() };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -467,16 +386,14 @@ test('updateContainer should clear overrides for an authoritative empty override
 });
 
 test('updateContainer should normalize an authoritative undefined override layer to empty', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { maturityMode: 'all' },
       updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
       updatePolicyOverrides: { maturityMode: 'all' },
       updatePolicySources: { maturityMode: 'override' },
     }),
-  };
-  const collection = { findOne: () => existingContainer, update: vi.fn() };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -494,8 +411,8 @@ test('updateContainer should normalize an authoritative undefined override layer
 });
 
 test('updateContainer should honor a non-empty incoming override layer without an authority flag', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7 },
       updatePolicyDeclarative: {
         env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
@@ -507,9 +424,7 @@ test('updateContainer should honor a non-empty incoming override layer without a
         maturityMinAgeDays: 'env',
       },
     }),
-  };
-  const collection = { findOne: () => existingContainer, update: vi.fn() };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -535,16 +450,14 @@ test('updateContainer should honor a non-empty incoming override layer without a
 });
 
 test('updateContainer should preserve overrides when an empty layer omits declarative policy', () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updatePolicy: { maturityMode: 'all' },
       updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
       updatePolicyOverrides: { maturityMode: 'all' },
       updatePolicySources: { maturityMode: 'override' },
     }),
-  };
-  const collection = { findOne: () => existingContainer, update: vi.fn() };
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+  );
 
   const updated = container.updateContainer(
     createContainerFixture({
@@ -562,9 +475,6 @@ test('updateContainer should preserve overrides when an empty layer omits declar
 });
 
 test('updateContainer should keep an empty override layer on the first write', () => {
-  const collection = createFilterableCollection([]);
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
   const updated = container.updateContainer(
     createContainerFixture({
       updatePolicy: { maturityMode: 'mature' },
@@ -580,9 +490,6 @@ test('updateContainer should keep an empty override layer on the first write', (
 });
 
 test('updateContainer should resolve a declarative policy without a current stored container', () => {
-  const collection = createFilterableCollection([]);
-  container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
   const updated = container.updateContainer(
     createContainerFixture({
       updatePolicy: { maturityMode: 'mature' },
@@ -596,8 +503,8 @@ test('updateContainer should resolve a declarative policy without a current stor
 });
 
 test('updateContainer should preserve updateRollback when omitted from payload', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updateRollback: {
         recordedAt: '2026-04-01T00:00:00.000Z',
         targetDigest: '3.13.7-alpine',
@@ -605,23 +512,9 @@ test('updateContainer should preserve updateRollback when omitted from payload',
         lastError: 'container exited',
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture();
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
   expect(updated.updateRollback).toEqual({
     recordedAt: '2026-04-01T00:00:00.000Z',
@@ -632,8 +525,8 @@ test('updateContainer should preserve updateRollback when omitted from payload',
 });
 
 test('updateContainer should clear updateRollback when explicitly set to undefined', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       updateRollback: {
         recordedAt: '2026-04-01T00:00:00.000Z',
         targetDigest: '3.13.7-alpine',
@@ -641,78 +534,47 @@ test('updateContainer should clear updateRollback when explicitly set to undefin
         lastError: 'container exited',
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture({ updateRollback: undefined });
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
   expect(updated.updateRollback).toBeUndefined();
 });
 
 test('updateContainer should preserve security scan when omitted from payload', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
-      security: {
-        scan: {
-          scanner: 'trivy',
-          image: 'registry/image:1.2.3',
-          scannedAt: new Date().toISOString(),
-          status: 'blocked',
-          blockSeverities: ['CRITICAL', 'HIGH'],
-          blockingCount: 1,
-          summary: {
-            unknown: 0,
-            low: 0,
-            medium: 0,
-            high: 1,
-            critical: 0,
-          },
-          vulnerabilities: [
-            {
-              id: 'CVE-123',
-              severity: 'HIGH',
-            },
-          ],
-        },
+  const existingSecurity = {
+    scan: {
+      scanner: 'trivy',
+      image: 'registry/image:1.2.3',
+      scannedAt: new Date().toISOString(),
+      status: 'blocked',
+      blockSeverities: ['CRITICAL', 'HIGH'],
+      blockingCount: 1,
+      summary: {
+        unknown: 0,
+        low: 0,
+        medium: 0,
+        high: 1,
+        critical: 0,
       },
-    }),
+      vulnerabilities: [
+        {
+          id: 'CVE-123',
+          severity: 'HIGH',
+        },
+      ],
+    },
   };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  seedContainer(createContainerFixture({ security: existingSecurity }));
   const containerToSave = createContainerFixture();
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
-  expect(updated.security).toEqual(existingContainer.data.security);
+  expect(updated.security).toEqual(existingSecurity);
 });
 
 test('updateContainer should clear security when explicitly set to undefined', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       security: {
         scan: {
           scanner: 'trivy',
@@ -726,30 +588,16 @@ test('updateContainer should clear security when explicitly set to undefined', a
         },
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture({ security: undefined });
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
   expect(updated.security).toBeUndefined();
 });
 
 test('updateContainer should preserve raw runtime env values when payload contains classified values', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       id: 'container-runtime-classification',
       details: {
         ports: [],
@@ -757,22 +605,7 @@ test('updateContainer should preserve raw runtime env values when payload contai
         env: [{ key: 'DB_PASSWORD', value: 'super-secret-password' }],
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: vi.fn((doc) => {
-      existingContainer.data = doc.data;
-    }),
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const containerToSave = createContainerFixture({
     id: 'container-runtime-classification',
     details: {
@@ -782,22 +615,21 @@ test('updateContainer should preserve raw runtime env values when payload contai
     },
   });
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: 'super-secret-password',
   });
-  expect(existingContainer.data.details.env[0]).toEqual({
+  expect(container.getContainerRaw('container-runtime-classification').details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: 'super-secret-password',
   });
 });
 
 test('updateContainer should reject incoming details when env is missing', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       id: 'container-details-non-array',
       details: {
         ports: [],
@@ -805,23 +637,7 @@ test('updateContainer should reject incoming details when env is missing', async
         env: [{ key: 'DB_PASSWORD', value: 'super-secret-password' }],
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: vi.fn((doc) => {
-      existingContainer.data = doc.data;
-    }),
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  );
   expect(() =>
     container.updateContainer(
       createContainerFixture({
@@ -836,8 +652,8 @@ test('updateContainer should reject incoming details when env is missing', async
 });
 
 test('updateContainer should keep incoming details when classified env list is empty', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       id: 'container-details-empty-env',
       details: {
         ports: [],
@@ -845,23 +661,7 @@ test('updateContainer should keep incoming details when classified env list is e
         env: [{ key: 'DB_PASSWORD', value: 'super-secret-password' }],
       },
     }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: vi.fn((doc) => {
-      existingContainer.data = doc.data;
-    }),
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  );
   const updated = container.updateContainer(
     createContainerFixture({
       id: 'container-details-empty-env',
@@ -877,14 +677,6 @@ test('updateContainer should keep incoming details when classified env list is e
 });
 
 test('insertContainer should redact sensitive env values in SSE event payload', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const containerToSave = createContainerFixture({
     details: {
       ports: [],
@@ -896,7 +688,6 @@ test('insertContainer should redact sensitive env values in SSE event payload', 
     },
   });
   const spyEvent = vi.spyOn(event, 'emitContainerAdded');
-  container.createCollections(db);
   container.insertContainer(containerToSave);
 
   const emittedPayload = spyEvent.mock.calls[0][0];
@@ -913,19 +704,6 @@ test('insertContainer should redact sensitive env values in SSE event payload', 
 });
 
 test('updateContainer should redact sensitive env values in SSE event payload', async () => {
-  const collection = {
-    insert: () => {},
-    findOne: () => undefined,
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const containerToSave = createContainerFixture({
     details: {
       ports: [],
@@ -937,7 +715,6 @@ test('updateContainer should redact sensitive env values in SSE event payload', 
     },
   });
   const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
   container.updateContainer(containerToSave);
 
   const emittedPayload = spyEvent.mock.calls[0][0];
@@ -954,14 +731,6 @@ test('updateContainer should redact sensitive env values in SSE event payload', 
 });
 
 test('insertContainer should stamp updateDetectedAt when update is available', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const base = createContainerFixture();
   const containerWithUpdate = {
     ...base,
@@ -972,21 +741,12 @@ test('insertContainer should stamp updateDetectedAt when update is available', a
     result: { tag: '2.0.0' },
   };
 
-  container.createCollections(db);
   const inserted = container.insertContainer(containerWithUpdate);
 
   expect(typeof inserted.updateDetectedAt).toBe('string');
 });
 
 test('insertContainer should stamp firstSeenAt when update is available', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const base = createContainerFixture();
   const containerWithUpdate = {
     ...base,
@@ -997,7 +757,6 @@ test('insertContainer should stamp firstSeenAt when update is available', async 
     result: { tag: '2.0.0' },
   };
 
-  container.createCollections(db);
   const inserted = container.insertContainer(containerWithUpdate);
 
   expect(typeof inserted.firstSeenAt).toBe('string');
@@ -1006,30 +765,15 @@ test('insertContainer should stamp firstSeenAt when update is available', async 
 test('updateContainer should preserve updateDetectedAt when update has not changed', async () => {
   const existingDetectedAt = '2026-02-24T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      updateDetectedAt: existingDetectedAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    updateDetectedAt: existingDetectedAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1040,7 +784,6 @@ test('updateContainer should preserve updateDetectedAt when update has not chang
     result: { tag: '2.0.0' },
   };
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBe(existingDetectedAt);
@@ -1049,30 +792,15 @@ test('updateContainer should preserve updateDetectedAt when update has not chang
 test('updateContainer should preserve firstSeenAt when update has not changed', async () => {
   const existingFirstSeenAt = '2026-02-24T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      firstSeenAt: existingFirstSeenAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    firstSeenAt: existingFirstSeenAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1083,7 +811,6 @@ test('updateContainer should preserve firstSeenAt when update has not changed', 
     result: { tag: '2.0.0' },
   };
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.firstSeenAt).toBe(existingFirstSeenAt);
@@ -1091,30 +818,15 @@ test('updateContainer should preserve firstSeenAt when update has not changed', 
 
 test('updateContainer should preserve explicit incoming updateDetectedAt when provided', async () => {
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      updateDetectedAt: '2026-02-24T09:15:00.000Z',
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    updateDetectedAt: '2026-02-24T09:15:00.000Z',
+  });
   const nextFixture = createContainerFixture();
   const explicitDetectedAt = '2026-02-24T10:00:00.000Z';
   const containerToSave = {
@@ -1127,7 +839,6 @@ test('updateContainer should preserve explicit incoming updateDetectedAt when pr
     updateDetectedAt: explicitDetectedAt,
   };
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBe(explicitDetectedAt);
@@ -1135,30 +846,15 @@ test('updateContainer should preserve explicit incoming updateDetectedAt when pr
 
 test('updateContainer should set updateDetectedAt when previous update lacks timestamp', async () => {
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      updateDetectedAt: undefined,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    updateDetectedAt: undefined,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1169,7 +865,6 @@ test('updateContainer should set updateDetectedAt when previous update lacks tim
     result: { tag: '2.0.0' },
   };
 
-  container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
 
   expect(typeof updated.updateDetectedAt).toBe('string');
@@ -1178,30 +873,15 @@ test('updateContainer should set updateDetectedAt when previous update lacks tim
 test('updateContainer should refresh updateDetectedAt when update result changes', async () => {
   const existingDetectedAt = '2026-02-24T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      updateDetectedAt: existingDetectedAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    updateDetectedAt: existingDetectedAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1222,30 +902,15 @@ test('updateContainer should refresh updateDetectedAt when update result changes
 test('updateContainer should refresh firstSeenAt when update result changes', async () => {
   const existingFirstSeenAt = '2026-02-24T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      firstSeenAt: existingFirstSeenAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    firstSeenAt: existingFirstSeenAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1274,30 +939,15 @@ test('updateContainer should reset updateDetectedAt when candidate update change
     vi.setSystemTime(frozenNow);
     const oldDetectedAt = '2026-05-31T09:15:00.000Z';
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: {
-          ...existingFixture.image,
-          tag: { ...existingFixture.image.tag, value: '1.0.0' },
-        },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: oldDetectedAt,
+    seedContainer({
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
       },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({
-        find: () => ({
-          remove: () => ({}),
-        }),
-      }),
-    };
-    const db = {
-      getCollection: () => collection,
-      addCollection: () => null,
-    };
+      result: { tag: '2.0.0' },
+      updateDetectedAt: oldDetectedAt,
+    });
     const nextFixture = createContainerFixture();
     // containerToSave simulates the local watch path: the old updateDetectedAt is
     // carried forward from the previous store record, but the result tag changed.
@@ -1311,7 +961,6 @@ test('updateContainer should reset updateDetectedAt when candidate update change
       updateDetectedAt: oldDetectedAt,
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     // Result changed (2.0.0 → 2.1.0), so the clock must reset to now even
@@ -1330,30 +979,15 @@ test('updateContainer should reset firstSeenAt when candidate update changes mid
     vi.setSystemTime(frozenNow);
     const oldFirstSeenAt = '2026-05-31T09:15:00.000Z';
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: {
-          ...existingFixture.image,
-          tag: { ...existingFixture.image.tag, value: '1.0.0' },
-        },
-        result: { tag: '2.0.0' },
-        firstSeenAt: oldFirstSeenAt,
+    seedContainer({
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
       },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({
-        find: () => ({
-          remove: () => ({}),
-        }),
-      }),
-    };
-    const db = {
-      getCollection: () => collection,
-      addCollection: () => null,
-    };
+      result: { tag: '2.0.0' },
+      firstSeenAt: oldFirstSeenAt,
+    });
     const nextFixture = createContainerFixture();
     // containerToSave simulates the local watch path: the old firstSeenAt is
     // carried forward from the previous store record, but the result tag changed.
@@ -1367,7 +1001,6 @@ test('updateContainer should reset firstSeenAt when candidate update changes mid
       firstSeenAt: oldFirstSeenAt,
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     // Result changed (2.0.0 → 2.1.0), so firstSeenAt must reset to now even
@@ -1385,36 +1018,21 @@ test('updateContainer should preserve updateDetectedAt when a recheck only chang
   // maturity soak.
   const existingDetectedAt = '2026-02-20T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-        digest: { watch: true, value: 'sha256:aaa' },
-      },
-      result: {
-        tag: '2.0.0',
-        suggestedTag: '2.0.0-alpine',
-        digest: 'sha256:bbb',
-        created: '2024-01-01T00:00:00.000Z',
-      },
-      updateDetectedAt: existingDetectedAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      digest: { watch: true, value: 'sha256:aaa' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: {
+      tag: '2.0.0',
+      suggestedTag: '2.0.0-alpine',
+      digest: 'sha256:bbb',
+      created: '2024-01-01T00:00:00.000Z',
+    },
+    updateDetectedAt: existingDetectedAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1445,25 +1063,14 @@ test('updateContainer should reset updateDetectedAt when a created-only candidat
     vi.setSystemTime(frozenNow);
     const existingDetectedAt = '2026-06-01T12:00:00.000Z';
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        result: {
-          tag: 'version',
-          created: '2026-06-01T00:00:00.000Z',
-        },
-        updateDetectedAt: existingDetectedAt,
+    seedContainer({
+      ...existingFixture,
+      result: {
+        tag: 'version',
+        created: '2026-06-01T00:00:00.000Z',
       },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({
-        find: () => ({
-          remove: () => ({}),
-        }),
-      }),
-    };
+      updateDetectedAt: existingDetectedAt,
+    });
     const nextFixture = createContainerFixture();
     const containerToSave = {
       ...nextFixture,
@@ -1474,10 +1081,6 @@ test('updateContainer should reset updateDetectedAt when a created-only candidat
       updateDetectedAt: existingDetectedAt,
     };
 
-    container.createCollections({
-      getCollection: () => collection,
-      addCollection: () => null,
-    });
     const updated = container.updateContainer(containerToSave);
 
     expect(updated.updateDetectedAt).toBe(frozenNow.toISOString());
@@ -1489,34 +1092,19 @@ test('updateContainer should reset updateDetectedAt when a created-only candidat
 test('updateContainer should reset updateDetectedAt when the candidate tag genuinely changes (#565)', async () => {
   const existingDetectedAt = '2026-02-20T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-        digest: { watch: true, value: 'sha256:aaa' },
-      },
-      result: {
-        tag: '2.0.0',
-        digest: 'sha256:bbb',
-      },
-      updateDetectedAt: existingDetectedAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      digest: { watch: true, value: 'sha256:aaa' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: {
+      tag: '2.0.0',
+      digest: 'sha256:bbb',
+    },
+    updateDetectedAt: existingDetectedAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1542,34 +1130,19 @@ test('updateContainer should reset updateDetectedAt when the candidate tag genui
 test('updateContainer should reset updateDetectedAt when the candidate digest genuinely changes (#565)', async () => {
   const existingDetectedAt = '2026-02-20T09:15:00.000Z';
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-        digest: { watch: true, value: 'sha256:aaa' },
-      },
-      result: {
-        tag: '2.0.0',
-        digest: 'sha256:bbb',
-      },
-      updateDetectedAt: existingDetectedAt,
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      digest: { watch: true, value: 'sha256:aaa' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: {
+      tag: '2.0.0',
+      digest: 'sha256:bbb',
+    },
+    updateDetectedAt: existingDetectedAt,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1595,25 +1168,10 @@ test('updateContainer should reset updateDetectedAt when the candidate digest ge
 test('updateContainer should stamp updateDetectedAt when containerCurrent had no raw update', async () => {
   // Covers the path where a container transitions from no-update to having one.
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      // Default fixture: image tag === result tag → no raw update
-      ...existingFixture,
-    },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  seedContainer({
+    // Default fixture: image tag === result tag → no raw update
+    ...existingFixture,
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1633,30 +1191,15 @@ test('updateContainer should stamp updateDetectedAt when containerCurrent had no
 
 test('updateContainer should clear updateDetectedAt when update is no longer available', async () => {
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      updateDetectedAt: '2026-02-24T09:15:00.000Z',
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    updateDetectedAt: '2026-02-24T09:15:00.000Z',
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1675,30 +1218,15 @@ test('updateContainer should clear updateDetectedAt when update is no longer ava
 
 test('updateContainer should clear firstSeenAt when update is no longer available', async () => {
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      firstSeenAt: '2026-02-24T09:15:00.000Z',
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    firstSeenAt: '2026-02-24T09:15:00.000Z',
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1716,14 +1244,6 @@ test('updateContainer should clear firstSeenAt when update is no longer availabl
 });
 
 test('insertContainer should stamp updateDetectedAt when raw update exists under mature mode', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const base = createContainerFixture();
   const containerWithUpdate = {
     ...base,
@@ -1735,7 +1255,6 @@ test('insertContainer should stamp updateDetectedAt when raw update exists under
     updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
   };
 
-  container.createCollections(db);
   const inserted = container.insertContainer(containerWithUpdate);
 
   // Raw update exists (1.0.0 → 2.0.0) so updateDetectedAt must be stamped,
@@ -1746,31 +1265,16 @@ test('insertContainer should stamp updateDetectedAt when raw update exists under
 test('updateContainer should preserve updateDetectedAt while update is suppressed by mature mode', async () => {
   const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
   const existingFixture = createContainerFixture();
-  const existingContainer = {
-    data: {
-      ...existingFixture,
-      image: {
-        ...existingFixture.image,
-        tag: { ...existingFixture.image.tag, value: '1.0.0' },
-      },
-      result: { tag: '2.0.0' },
-      updateDetectedAt: twelveHoursAgo,
-      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+  seedContainer({
+    ...existingFixture,
+    image: {
+      ...existingFixture.image,
+      tag: { ...existingFixture.image.tag, value: '1.0.0' },
     },
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+    result: { tag: '2.0.0' },
+    updateDetectedAt: twelveHoursAgo,
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+  });
   const nextFixture = createContainerFixture();
   const containerToSave = {
     ...nextFixture,
@@ -1793,8 +1297,6 @@ test('updateContainer should preserve updateDetectedAt while update is suppresse
 
 describe('maturityGatePendingSince stamping', () => {
   test('insertContainer stamps maturityGatePendingSince when raw update exists under mature mode and the clock has not elapsed', async () => {
-    const collection = { findOne: () => {}, insert: () => {} };
-    const db = { getCollection: () => collection, addCollection: () => null };
     const base = createContainerFixture();
     const containerWithUpdate = {
       ...base,
@@ -1803,15 +1305,12 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const inserted = container.insertContainer(containerWithUpdate);
 
     expect(typeof inserted.maturityGatePendingSince).toBe('string');
   });
 
   test('insertContainer does not stamp maturityGatePendingSince in all mode', async () => {
-    const collection = { findOne: () => {}, insert: () => {} };
-    const db = { getCollection: () => collection, addCollection: () => null };
     const base = createContainerFixture();
     const containerWithUpdate = {
       ...base,
@@ -1820,20 +1319,16 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'all' },
     };
 
-    container.createCollections(db);
     const inserted = container.insertContainer(containerWithUpdate);
 
     expect(inserted.maturityGatePendingSince).toBeUndefined();
   });
 
   test('insertContainer does not stamp maturityGatePendingSince when there is no raw update', async () => {
-    const collection = { findOne: () => {}, insert: () => {} };
-    const db = { getCollection: () => collection, addCollection: () => null };
     const containerToSave = createContainerFixture({
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     });
 
-    container.createCollections(db);
     const inserted = container.insertContainer(containerToSave);
 
     expect(inserted.maturityGatePendingSince).toBeUndefined();
@@ -1842,22 +1337,14 @@ describe('maturityGatePendingSince stamping', () => {
   test('updateContainer preserves maturityGatePendingSince while still soaking', async () => {
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: twelveHoursAgo,
-        maturityGatePendingSince: twelveHoursAgo,
-        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
-      },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-    };
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer({
+      ...existingFixture,
+      image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    });
     const nextFixture = createContainerFixture();
     const containerToSave = {
       ...nextFixture,
@@ -1866,7 +1353,6 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     expect(updated.maturityGatePendingSince).toBe(twelveHoursAgo);
@@ -1875,22 +1361,14 @@ describe('maturityGatePendingSince stamping', () => {
   test('updateContainer keeps maturityGatePendingSince set even after the maturity clock elapses (write path never auto-clears on gate-open)', async () => {
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: eightDaysAgo,
-        maturityGatePendingSince: eightDaysAgo,
-        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
-      },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-    };
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer({
+      ...existingFixture,
+      image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: eightDaysAgo,
+      maturityGatePendingSince: eightDaysAgo,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    });
     const nextFixture = createContainerFixture();
     const containerToSave = {
       ...nextFixture,
@@ -1899,7 +1377,6 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     // The clock has elapsed, so the update is applicable again...
@@ -1913,22 +1390,14 @@ describe('maturityGatePendingSince stamping', () => {
   test('updateContainer clears maturityGatePendingSince when update is no longer available', async () => {
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: twelveHoursAgo,
-        maturityGatePendingSince: twelveHoursAgo,
-        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
-      },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-    };
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer({
+      ...existingFixture,
+      image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    });
     const nextFixture = createContainerFixture();
     const containerToSave = {
       ...nextFixture,
@@ -1937,7 +1406,6 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     expect(updated.maturityGatePendingSince).toBeUndefined();
@@ -1950,25 +1418,17 @@ describe('maturityGatePendingSince stamping', () => {
       vi.setSystemTime(frozenNow);
       const oldPendingSince = '2026-05-31T09:15:00.000Z';
       const existingFixture = createContainerFixture();
-      const existingContainer = {
-        data: {
-          ...existingFixture,
-          image: {
-            ...existingFixture.image,
-            tag: { ...existingFixture.image.tag, value: '1.0.0' },
-          },
-          result: { tag: '2.0.0' },
-          updateDetectedAt: oldPendingSince,
-          maturityGatePendingSince: oldPendingSince,
-          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      seedContainer({
+        ...existingFixture,
+        image: {
+          ...existingFixture.image,
+          tag: { ...existingFixture.image.tag, value: '1.0.0' },
         },
-      };
-      const collection = {
-        findOne: () => existingContainer,
-        insert: () => {},
-        chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-      };
-      const db = { getCollection: () => collection, addCollection: () => null };
+        result: { tag: '2.0.0' },
+        updateDetectedAt: oldPendingSince,
+        maturityGatePendingSince: oldPendingSince,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
       const nextFixture = createContainerFixture();
       // containerToSave simulates the local watch path: the old timestamps are
       // carried forward from the previous store record, but the candidate changed.
@@ -1981,7 +1441,6 @@ describe('maturityGatePendingSince stamping', () => {
         updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
       };
 
-      container.createCollections(db);
       const updated = container.updateContainer(containerToSave);
 
       expect(updated.maturityGatePendingSince).toBe(frozenNow.toISOString());
@@ -1995,22 +1454,14 @@ describe('maturityGatePendingSince stamping', () => {
     const oldPendingSince = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
     const veryOldDetectedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const existingFixture = createContainerFixture();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: oldPendingSince,
-        maturityGatePendingSince: oldPendingSince,
-        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
-      },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-    };
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer({
+      ...existingFixture,
+      image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: oldPendingSince,
+      maturityGatePendingSince: oldPendingSince,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    });
     const nextFixture = createContainerFixture();
     // A trusted publishedAt far in the past means the new candidate clears the
     // maturity gate immediately, even though the previous candidate's marker
@@ -2024,7 +1475,6 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     expect(updated.maturityGatePendingSince).toBeUndefined();
@@ -2033,21 +1483,13 @@ describe('maturityGatePendingSince stamping', () => {
   test('updateContainer stamps a fresh maturityGatePendingSince when a container newly switches into mature mode mid-soak', () => {
     const existingFixture = createContainerFixture();
     const oldDetectedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: oldDetectedAt,
-        updatePolicy: { maturityMode: 'all' },
-      },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-    };
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer({
+      ...existingFixture,
+      image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: oldDetectedAt,
+      updatePolicy: { maturityMode: 'all' },
+    });
     const nextFixture = createContainerFixture();
     const containerToSave = {
       ...nextFixture,
@@ -2056,7 +1498,6 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     expect(typeof updated.maturityGatePendingSince).toBe('string');
@@ -2065,21 +1506,13 @@ describe('maturityGatePendingSince stamping', () => {
   test('updateContainer does not stamp maturityGatePendingSince when a container switches into mature mode but the clock already cleared the window', () => {
     const existingFixture = createContainerFixture();
     const oldDetectedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const existingContainer = {
-      data: {
-        ...existingFixture,
-        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
-        result: { tag: '2.0.0' },
-        updateDetectedAt: oldDetectedAt,
-        updatePolicy: { maturityMode: 'all' },
-      },
-    };
-    const collection = {
-      findOne: () => existingContainer,
-      insert: () => {},
-      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
-    };
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer({
+      ...existingFixture,
+      image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: oldDetectedAt,
+      updatePolicy: { maturityMode: 'all' },
+    });
     const nextFixture = createContainerFixture();
     const containerToSave = {
       ...nextFixture,
@@ -2088,7 +1521,6 @@ describe('maturityGatePendingSince stamping', () => {
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
     };
 
-    container.createCollections(db);
     const updated = container.updateContainer(containerToSave);
 
     expect(updated.maturityGatePendingSince).toBeUndefined();
@@ -2097,27 +1529,22 @@ describe('maturityGatePendingSince stamping', () => {
 
 describe('clearMaturityGatePendingSince', () => {
   test('returns false and does nothing when the container does not exist', () => {
-    const collection = createFilterableCollection([]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
     expect(container.clearMaturityGatePendingSince('missing-id')).toBe(false);
   });
 
   test('returns false and does nothing when the marker is not set', () => {
-    const fixture = createContainerFixture({ id: 'no-marker' });
-    const collection = createFilterableCollection([{ data: fixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(createContainerFixture({ id: 'no-marker' }));
 
     expect(container.clearMaturityGatePendingSince('no-marker')).toBe(false);
   });
 
   test('clears the marker and returns true when set', () => {
-    const fixture = createContainerFixture({
-      id: 'has-marker',
-      maturityGatePendingSince: '2026-05-31T09:15:00.000Z',
-    });
-    const collection = createFilterableCollection([{ data: fixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(
+      createContainerFixture({
+        id: 'has-marker',
+        maturityGatePendingSince: '2026-05-31T09:15:00.000Z',
+      }),
+    );
 
     expect(container.clearMaturityGatePendingSince('has-marker')).toBe(true);
     expect(container.getContainerRaw('has-marker').maturityGatePendingSince).toBeUndefined();
@@ -2126,22 +1553,10 @@ describe('clearMaturityGatePendingSince', () => {
 
 test('getContainers should return all containers sorted by name', async () => {
   const containerExample = createContainerFixture();
-  const containers = [
-    { data: { ...containerExample, name: 'container3' } },
-    { data: { ...containerExample, name: 'container2' } },
-    { data: { ...containerExample, name: 'container1' } },
-  ];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer({ ...containerExample, id: 'container-3', name: 'container3' });
+  seedContainer({ ...containerExample, id: 'container-2', name: 'container2' });
+  seedContainer({ ...containerExample, id: 'container-1', name: 'container1' });
+
   const results = container.getContainers();
   expect(results[0].name).toEqual('container1');
   expect(results[1].name).toEqual('container2');
@@ -2150,41 +1565,27 @@ test('getContainers should return all containers sorted by name', async () => {
 
 test('getContainers should sort by tag when watcher and name are equal', async () => {
   const containerExample = createContainerFixture();
-  const containers = [
-    {
-      data: {
-        ...containerExample,
-        watcher: 'same-watcher',
-        name: 'same-name',
-        image: {
-          ...containerExample.image,
-          tag: { ...containerExample.image.tag, value: '2.0.0' },
-        },
-      },
+  seedContainer({
+    ...containerExample,
+    id: 'tag-sort-a',
+    watcher: 'same-watcher',
+    name: 'same-name',
+    image: {
+      ...containerExample.image,
+      tag: { ...containerExample.image.tag, value: '2.0.0' },
     },
-    {
-      data: {
-        ...containerExample,
-        watcher: 'same-watcher',
-        name: 'same-name',
-        image: {
-          ...containerExample.image,
-          tag: { ...containerExample.image.tag, value: '1.0.0' },
-        },
-      },
+  });
+  seedContainer({
+    ...containerExample,
+    id: 'tag-sort-b',
+    watcher: 'same-watcher',
+    name: 'same-name',
+    image: {
+      ...containerExample.image,
+      tag: { ...containerExample.image.tag, value: '1.0.0' },
     },
-  ];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  });
+
   const results = container.getContainers();
   expect(results[0].image.tag.value).toEqual('1.0.0');
   expect(results[1].image.tag.value).toEqual('2.0.0');
@@ -2192,22 +1593,9 @@ test('getContainers should sort by tag when watcher and name are equal', async (
 
 test('getContainers should apply pagination options', async () => {
   const containerExample = createContainerFixture();
-  const containers = [
-    { data: { ...containerExample, name: 'container3' } },
-    { data: { ...containerExample, name: 'container2' } },
-    { data: { ...containerExample, name: 'container1' } },
-  ];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer({ ...containerExample, id: 'container-3', name: 'container3' });
+  seedContainer({ ...containerExample, id: 'container-2', name: 'container2' });
+  seedContainer({ ...containerExample, id: 'container-1', name: 'container1' });
 
   const results = container.getContainers({}, { limit: 1, offset: 1 });
 
@@ -2217,22 +1605,9 @@ test('getContainers should apply pagination options', async () => {
 
 test('getContainers should apply a caller sort before pagination and cloning', async () => {
   const containerExample = createContainerFixture();
-  const containers = [
-    { data: { ...containerExample, name: 'container3' } },
-    { data: { ...containerExample, name: 'container2' } },
-    { data: { ...containerExample, name: 'container1' } },
-  ];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer({ ...containerExample, id: 'container-3', name: 'container3' });
+  seedContainer({ ...containerExample, id: 'container-2', name: 'container2' });
+  seedContainer({ ...containerExample, id: 'container-1', name: 'container1' });
 
   const results = container.getContainers(
     {},
@@ -2249,22 +1624,9 @@ test('getContainers should apply a caller sort before pagination and cloning', a
 
 test('getContainers should support offset-only pagination when limit is zero', async () => {
   const containerExample = createContainerFixture();
-  const containers = [
-    { data: { ...containerExample, name: 'container3' } },
-    { data: { ...containerExample, name: 'container2' } },
-    { data: { ...containerExample, name: 'container1' } },
-  ];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer({ ...containerExample, id: 'container-3', name: 'container3' });
+  seedContainer({ ...containerExample, id: 'container-2', name: 'container2' });
+  seedContainer({ ...containerExample, id: 'container-1', name: 'container1' });
 
   const results = container.getContainers({}, { limit: 0, offset: 1 });
 
@@ -2274,46 +1636,31 @@ test('getContainers should support offset-only pagination when limit is zero', a
 });
 
 test('getContainerCount should return filtered totals and reuse cached query results', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'watcher-a-1',
-        name: 'watcher-a-1',
-        watcher: 'watcher-a',
-      }),
-    },
-    {
-      data: createContainerFixture({
-        id: 'watcher-a-2',
-        name: 'watcher-a-2',
-        watcher: 'watcher-a',
-      }),
-    },
-    {
-      data: createContainerFixture({
-        id: 'watcher-b-1',
-        name: 'watcher-b-1',
-        watcher: 'watcher-b',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({ id: 'watcher-a-1', name: 'watcher-a-1', watcher: 'watcher-a' }),
+  );
+  seedContainer(
+    createContainerFixture({ id: 'watcher-a-2', name: 'watcher-a-2', watcher: 'watcher-a' }),
+  );
+  seedContainer(
+    createContainerFixture({ id: 'watcher-b-1', name: 'watcher-b-1', watcher: 'watcher-b' }),
+  );
+  // A cache hit never calls db.prepare again — spying on the real driver
+  // stands in for the old assertion that the (now-retired) LokiJS collection's
+  // find() was not called a second time for the same query.
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   const total = container.getContainerCount({ watcher: 'watcher-a' });
   expect(total).toBe(2);
-  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(prepareSpy).toHaveBeenCalledTimes(1);
 
   const pagedResults = container.getContainers({ watcher: 'watcher-a' }, { limit: 1, offset: 0 });
   expect(pagedResults).toHaveLength(1);
-  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(prepareSpy).toHaveBeenCalledTimes(1);
 
   const cachedTotal = container.getContainerCount({ watcher: 'watcher-a' });
   expect(cachedTotal).toBe(2);
-  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(prepareSpy).toHaveBeenCalledTimes(1);
 });
 
 test('getContainers should redact sensitive env values by default', async () => {
@@ -2327,18 +1674,7 @@ test('getContainers should redact sensitive env values by default', async () => 
       ],
     },
   });
-  const containers = [{ data: containerExample }];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainers();
 
@@ -2352,7 +1688,7 @@ test('getContainers should redact sensitive env values by default', async () => 
     value: '/usr/local/bin',
     sensitive: false,
   });
-  expect(containers[0].data.details.env[0].value).toBe('super-secret');
+  expect(container.getContainerRaw(containerExample.id)?.details.env[0].value).toBe('super-secret');
 });
 
 test('store/container should not define duplicate runtime env classification logic', () => {
@@ -2372,18 +1708,7 @@ test('getContainers should always redact sensitive env values', async () => {
       ],
     },
   });
-  const containers = [{ data: containerExample }];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainers({});
 
@@ -2410,18 +1735,7 @@ test('getContainersRaw should return unredacted env values', async () => {
       ],
     },
   });
-  const containers = [{ data: containerExample }];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainersRaw({});
 
@@ -2436,27 +1750,24 @@ test('getContainersRaw should return unredacted env values', async () => {
 });
 
 test('getContainersRaw should reuse cached raw objects without cloning after cache hit', async () => {
-  const containerExample = createContainerFixture();
-  const collection = {
-    find: vi.fn(() => [{ data: containerExample }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
+  seedContainer(createContainerFixture());
+  // A cache hit never calls db.prepare again — spying on the real driver
+  // stands in for the old assertion that the (now-retired) LokiJS
+  // collection's find() was not called a second time.
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   const firstResult = container.getContainersRaw({});
   const secondResult = container.getContainersRaw({});
 
-  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(prepareSpy).toHaveBeenCalledTimes(1);
   expect(secondResult[0]).toBe(firstResult[0]);
 });
 
-test('getContainersRaw should preserve Date and RegExp values', async () => {
+test('cloneContainer should preserve Date and RegExp values', () => {
+  // Date and RegExp do not survive the JSON TEXT column labels are stored
+  // in (a RegExp flattens to '{}'), so this exercises cloneContainer's own
+  // structuredClone-based copy directly rather than a stored-and-reread
+  // round trip — the guarantee under test is cloning, not persistence.
   const buildDate = new Date('2026-03-05T09:00:00.000Z');
   const namePattern = /^drydock-container$/i;
   const containerExample = createContainerFixture();
@@ -2464,28 +1775,16 @@ test('getContainersRaw should preserve Date and RegExp values', async () => {
     buildDate,
     namePattern,
   } as unknown as Record<string, string>;
-  const containers = [{ data: containerExample }];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
 
-  const result = container.getContainersRaw({});
+  const cloned = container.cloneContainer(containerExample);
 
-  expect(result[0].labels.buildDate).toBeInstanceOf(Date);
-  expect((result[0].labels.buildDate as unknown as Date).toISOString()).toBe(
+  expect(cloned.labels.buildDate).toBeInstanceOf(Date);
+  expect((cloned.labels.buildDate as unknown as Date).toISOString()).toBe(
     '2026-03-05T09:00:00.000Z',
   );
-  expect(result[0].labels.namePattern).toBeInstanceOf(RegExp);
-  expect((result[0].labels.namePattern as unknown as RegExp).source).toBe('^drydock-container$');
-  expect((result[0].labels.namePattern as unknown as RegExp).flags).toBe('i');
+  expect(cloned.labels.namePattern).toBeInstanceOf(RegExp);
+  expect((cloned.labels.namePattern as unknown as RegExp).source).toBe('^drydock-container$');
+  expect((cloned.labels.namePattern as unknown as RegExp).flags).toBe('i');
 });
 
 test('getContainersForStats should return projected stat fields only', async () => {
@@ -2517,13 +1816,7 @@ test('getContainersForStats should return projected stat fields only', async () 
       env: [{ key: 'SECRET', value: 'my-secret' }],
     },
   });
-  const containers = [{ data: containerExample }];
-  const collection = { find: () => containers };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainersForStats({});
 
@@ -2556,13 +1849,7 @@ test('getContainersForStats should reflect live updateAvailable from stored cont
     result: { tag: 'newer-tag' },
   });
   // image.tag.value is 'version', result.tag is 'newer-tag' => updateAvailable true
-  const containers = [{ data: containerExample }];
-  const collection = { find: () => containers };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainersForStats({});
 
@@ -2578,16 +1865,7 @@ test('getContainersForStats should return empty array when collection is not ini
 
 test('getContainersForStats mutation isolation: mutating projection does not affect store', async () => {
   const containerExample = createContainerFixture();
-  const containers = [{ data: containerExample }];
-  const collection = {
-    find: vi.fn(() => containers),
-    findOne: vi.fn(() => null),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainersForStats({});
   const projection = result[0];
@@ -2607,108 +1885,74 @@ test('getContainersForStats mutation isolation: mutating projection does not aff
 test('getContainersForStats should return undefined agent for containers without agent field', async () => {
   const containerExample = createContainerFixture();
   // No agent field
-  const containers = [{ data: containerExample }];
-  const collection = { find: () => containers };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
-  };
-  container.createCollections(db);
+  seedContainer(containerExample);
 
   const result = container.getContainersForStats({});
 
   expect(result[0].agent).toBeUndefined();
 });
 
-test('getContainers should preserve Map values when cloning', async () => {
+test('cloneContainer should preserve Map values', () => {
+  // A Map does not survive the JSON TEXT column labels are stored in (it
+  // would flatten to '{}'), so this exercises cloneContainer's own
+  // structuredClone-based copy directly rather than a stored-and-reread
+  // round trip — the guarantee under test is cloning, not persistence.
   const metadataByKey = new Map([['release', '2026.03.05']]);
   const containerExample = createContainerFixture();
   containerExample.labels = {
     metadataByKey,
   } as unknown as Record<string, string>;
-  const containers = [{ data: containerExample }];
-  const collection = {
-    find: () => containers,
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
-  };
-  container.createCollections(db);
 
-  const result = container.getContainers({});
+  const cloned = container.cloneContainer(containerExample);
 
-  expect(result[0].labels.metadataByKey).toBeInstanceOf(Map);
-  expect((result[0].labels.metadataByKey as unknown as Map<string, string>).get('release')).toBe(
+  expect(cloned.labels.metadataByKey).toBeInstanceOf(Map);
+  expect((cloned.labels.metadataByKey as unknown as Map<string, string>).get('release')).toBe(
     '2026.03.05',
   );
 });
 
 test('getContainer should return 1 container by id', async () => {
-  const containerExample = { data: createContainerFixture() };
-  const collection = {
-    findOne: () => containerExample,
-  };
-  const db = {
-    getCollection: () => collection,
-  };
-  container.createCollections(db);
+  const containerExample = createContainerFixture({ id: '132456789' });
+  seedContainer(containerExample);
   const result = container.getContainer('132456789');
-  expect(result.name).toEqual(containerExample.data.name);
+  expect(result?.name).toEqual(containerExample.name);
 });
 
 test('getContainer should redact sensitive env values by default', async () => {
-  const containerExample = {
-    data: createContainerFixture({
-      details: {
-        ports: [],
-        volumes: [],
-        env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
-      },
-    }),
-  };
-  const collection = {
-    findOne: () => containerExample,
-  };
-  const db = {
-    getCollection: () => collection,
-  };
-  container.createCollections(db);
+  const containerExample = createContainerFixture({
+    id: '132456789',
+    details: {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
+    },
+  });
+  seedContainer(containerExample);
 
   const result = container.getContainer('132456789');
 
-  expect(result.details.env[0]).toEqual({
+  expect(result?.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: '[REDACTED]',
     sensitive: true,
   });
-  expect(containerExample.data.details.env[0].value).toBe('raw-secret');
+  expect(container.getContainerRaw('132456789')?.details.env[0].value).toBe('raw-secret');
 });
 
 test('getContainer should always redact sensitive env values', async () => {
-  const containerExample = {
-    data: createContainerFixture({
-      details: {
-        ports: [],
-        volumes: [],
-        env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
-      },
-    }),
-  };
-  const collection = {
-    findOne: () => containerExample,
-  };
-  const db = {
-    getCollection: () => collection,
-  };
-  container.createCollections(db);
+  const containerExample = createContainerFixture({
+    id: '132456789',
+    details: {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
+    },
+  });
+  seedContainer(containerExample);
 
   const result = container.getContainer('132456789');
 
-  expect(result.details.env[0]).toEqual({
+  expect(result?.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: '[REDACTED]',
     sensitive: true,
@@ -2716,51 +1960,30 @@ test('getContainer should always redact sensitive env values', async () => {
 });
 
 test('getContainerRaw should return unredacted env values', async () => {
-  const containerExample = {
-    data: createContainerFixture({
-      details: {
-        ports: [],
-        volumes: [],
-        env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
-      },
-    }),
-  };
-  const collection = {
-    findOne: () => containerExample,
-  };
-  const db = {
-    getCollection: () => collection,
-  };
-  container.createCollections(db);
+  const containerExample = createContainerFixture({
+    id: '132456789',
+    details: {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
+    },
+  });
+  seedContainer(containerExample);
 
   const result = container.getContainerRaw('132456789');
 
-  expect(result.details.env[0]).toEqual({
+  expect(result?.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: 'raw-secret',
   });
 });
 
 test('getContainerRaw should return undefined when not found', async () => {
-  const collection = {
-    findOne: () => null,
-  };
-  const db = {
-    getCollection: () => collection,
-  };
-  container.createCollections(db);
   const result = container.getContainerRaw('nonexistent');
   expect(result).toBeUndefined();
 });
 
 test('getContainer should return undefined when not found', async () => {
-  const collection = {
-    findOne: () => null,
-  };
-  const db = {
-    getCollection: () => collection,
-  };
-  container.createCollections(db);
   const result = container.getContainer('123456789');
   expect(result).toEqual(undefined);
 });
@@ -2773,107 +1996,78 @@ test('getContainers should return empty array when collection is not initialized
 });
 
 test('getContainers should filter by query parameters', async () => {
-  const containerExample = createContainerFixture();
-  const collection = {
-    find: vi.fn(() => [{ data: containerExample }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  container.getContainers({ watcher: 'test' });
-  expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'test' });
+  const containerExample = createContainerFixture({ id: 'c1', watcher: 'test' });
+  seedContainer(containerExample);
+  const result = container.getContainers({ watcher: 'test' });
+  expect(result).toHaveLength(1);
+  expect(result[0].id).toBe('c1');
 });
 
 test('getContainers should ignore unsafe prototype-related query keys', async () => {
-  const containerExample = createContainerFixture();
-  const collection = {
-    find: vi.fn(() => [{ data: containerExample }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  const containerExample = createContainerFixture({ id: 'c1', watcher: 'safe-watcher' });
+  seedContainer(containerExample);
 
-  container.getContainers({
+  const result = container.getContainers({
     watcher: 'safe-watcher',
     '__proto__.polluted': 'x',
     'constructor.prototype.bad': 'x',
     prototype: 'x',
   } as Record<string, unknown>);
-
-  expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'safe-watcher' });
+  expect(result).toHaveLength(1);
+  expect(result[0].id).toBe('c1');
 });
 
 test('getContainers should reuse cache for equivalent queries with different key order', async () => {
-  const containerExample = createContainerFixture();
-  const collection = {
-    find: vi.fn(() => [{ data: containerExample }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  collection.find.mockClear();
+  seedContainer(createContainerFixture());
+  // A cache hit never calls db.prepare again — spying on the real driver
+  // stands in for the old assertion that the (now-retired) LokiJS
+  // collection's find() was not called a second time.
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   container.getContainers({ watcher: 'watcher-1', status: 'running' });
   container.getContainers({ status: 'running', watcher: 'watcher-1' });
 
-  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(prepareSpy).toHaveBeenCalledTimes(1);
 });
 
 test('getContainers should exclude temporary rollback containers when requested by internal query flag', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'visible-container',
-        name: 'service',
-      }),
-    },
-    {
-      data: createContainerFixture({
-        id: 'rollback-container',
-        name: 'service-old-1773933154786',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({
+      id: 'visible-container',
+      name: 'service',
+    }),
+  );
+  seedContainer(
+    createContainerFixture({
+      id: 'rollback-container',
+      name: 'service-old-1773933154786',
+    }),
+  );
 
   const results = container.getContainers({ excludeRollbackContainers: true });
   const total = container.getContainerCount({ excludeRollbackContainers: true });
 
-  expect(collection.find).toHaveBeenCalledWith({});
   expect(results.map((item) => item.name)).toEqual(['service']);
   expect(total).toBe(1);
 });
 
 test('getContainers should invalidate excludeRollbackContainers query caches after rollback-name transitions', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'transitioning-container',
-        name: 'service',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({
+      id: 'transitioning-container',
+      name: 'service',
+    }),
+  );
+  // A cache hit never calls db.prepare again — spying on the real driver
+  // stands in for the old assertion that the (now-retired) LokiJS
+  // collection's find() was not called a second time.
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   expect(container.getContainerCount({ excludeRollbackContainers: true })).toBe(1);
-  const readCountAfterWarm = collection.find.mock.calls.length;
+  const readCountAfterWarm = prepareSpy.mock.calls.length;
 
   expect(container.getContainerCount({ excludeRollbackContainers: true })).toBe(1);
-  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterWarm);
 
   container.updateContainer(
     createContainerFixture({
@@ -2883,29 +2077,27 @@ test('getContainers should invalidate excludeRollbackContainers query caches aft
   );
 
   expect(container.getContainerCount({ excludeRollbackContainers: true })).toBe(0);
-  expect(collection.find.mock.calls.length).toBeGreaterThan(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBeGreaterThan(readCountAfterWarm);
 });
 
 test('getContainers cache invalidation should safely handle query paths that traverse non-objects', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'container-path-traversal',
-        name: 'container-path-traversal',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({
+      id: 'container-path-traversal',
+      name: 'container-path-traversal',
+    }),
+  );
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   container.getContainers({ 'name.value': 'never-matches' });
-  const readCountAfterWarm = collection.find.mock.calls.length;
+  const readCountAfterWarm = prepareSpy.mock.calls.length;
   container.getContainers({ 'name.value': 'never-matches' });
-  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterWarm);
 
+  // updateContainer issues its own db.prepare calls (a SELECT by id plus an
+  // UPDATE) that share the same spy as getContainers's full-table scan, so
+  // the read-count baseline has to be retaken here rather than reusing
+  // readCountAfterWarm from before the write.
   container.updateContainer(
     createContainerFixture({
       id: 'container-path-traversal',
@@ -2913,104 +2105,47 @@ test('getContainers cache invalidation should safely handle query paths that tra
       status: 'running',
     }),
   );
+  const readCountAfterUpdate = prepareSpy.mock.calls.length;
 
   container.getContainers({ 'name.value': 'never-matches' });
-  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterUpdate);
 });
 
 test('deleteContainer should do nothing when container is not found', async () => {
-  const collection = {
-    findOne: () => null,
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const spyEvent = vi.spyOn(event, 'emitContainerRemoved');
-  container.createCollections(db);
   container.deleteContainer('nonexistent-id');
   expect(spyEvent).not.toHaveBeenCalled();
 });
 
 test('deleteContainer should delete doc and emit an event', async () => {
-  const containerExample = { data: createContainerFixture() };
-  const collection = {
-    findOne: () => containerExample,
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  const containerExample = createContainerFixture();
+  seedContainer(containerExample);
   const spyEvent = vi.spyOn(event, 'emitContainerRemoved');
-  container.createCollections(db);
-  container.deleteContainer(containerExample);
+  container.deleteContainer(containerExample.id);
   expect(spyEvent).toHaveBeenCalled();
+  expect(container.getContainer(containerExample.id)).toBeUndefined();
 });
 
 test('deleteContainer should forward replacementExpected on the remove event payload', async () => {
-  const containerExample = { data: createContainerFixture() };
-  const collection = {
-    findOne: () => containerExample,
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  const containerExample = createContainerFixture();
+  seedContainer(containerExample);
   const spyEvent = vi.spyOn(event, 'emitContainerRemoved');
-  container.createCollections(db);
-  container.deleteContainer(containerExample, { replacementExpected: true });
+  container.deleteContainer(containerExample.id, { replacementExpected: true });
   expect(spyEvent).toHaveBeenCalledWith(
     expect.objectContaining({
-      id: containerExample.data.id,
+      id: containerExample.id,
       replacementExpected: true,
     }),
   );
 });
 
 test('updateContainer should default security to undefined when container and store both lack it', async () => {
-  const collection = {
-    findOne: () => undefined,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
   const containerToSave = createContainerFixture();
   const updated = container.updateContainer(containerToSave);
   expect(updated.security).toBeUndefined();
 });
 
 test('insertContainer should pick up cached security state when container has none', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const securityData = {
     scan: {
       scanner: 'trivy',
@@ -3023,21 +2158,12 @@ test('insertContainer should pick up cached security state when container has no
       vulnerabilities: [],
     },
   };
-  container.createCollections(db);
   container.cacheSecurityState('test', 'test', securityData);
   const result = container.insertContainer(createContainerFixture());
   expect(result.security).toEqual(securityData);
 });
 
 test('insertContainer should clear cached security state after consuming it', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const securityData = {
     scan: {
       scanner: 'trivy',
@@ -3050,7 +2176,6 @@ test('insertContainer should clear cached security state after consuming it', as
       vulnerabilities: [],
     },
   };
-  container.createCollections(db);
   container.cacheSecurityState('test', 'test', securityData);
   container.insertContainer(createContainerFixture());
   expect(container.getCachedSecurityState('test', 'test')).toBeUndefined();
@@ -3119,14 +2244,6 @@ test('cacheSecurityState should prune expired entries before adding fresh entrie
 });
 
 test('insertContainer should not overwrite explicit security state with cache', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const cachedSecurity = {
     scan: {
       scanner: 'trivy',
@@ -3151,7 +2268,6 @@ test('insertContainer should not overwrite explicit security state with cache', 
       vulnerabilities: [{ id: 'CVE-999', severity: 'CRITICAL' }],
     },
   };
-  container.createCollections(db);
   container.cacheSecurityState('test', 'test', cachedSecurity);
   const result = container.insertContainer(createContainerFixture({ security: explicitSecurity }));
   expect(result.security).toEqual(explicitSecurity);
@@ -3159,14 +2275,6 @@ test('insertContainer should not overwrite explicit security state with cache', 
 
 // #386: security-state cache must not cross-contaminate between controller-local and agent containers
 test('insertContainer local container (no agent) should still consume cached security state', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const securityData = {
     scan: {
       scanner: 'trivy',
@@ -3179,7 +2287,6 @@ test('insertContainer local container (no agent) should still consume cached sec
       vulnerabilities: [],
     },
   };
-  container.createCollections(db);
   container.cacheSecurityState('local', 'nginx', securityData);
   const result = container.insertContainer(
     createContainerFixture({ watcher: 'local', name: 'nginx', agent: undefined }),
@@ -3189,14 +2296,6 @@ test('insertContainer local container (no agent) should still consume cached sec
 });
 
 test('insertContainer agent container should NOT consume or clear cached security state for same watcher+name', async () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const securityData = {
     scan: {
       scanner: 'trivy',
@@ -3209,7 +2308,6 @@ test('insertContainer agent container should NOT consume or clear cached securit
       vulnerabilities: [],
     },
   };
-  container.createCollections(db);
   container.cacheSecurityState('local', 'nginx', securityData);
   const result = container.insertContainer(
     createContainerFixture({ watcher: 'local', name: 'nginx', agent: 'ml' }),
@@ -3269,37 +2367,21 @@ test('cacheSecurityState should evict oldest entries when max size is exceeded',
 });
 
 test('getContainers should evict oldest query cache entries when size cap is exceeded', async () => {
-  const containerExample = createContainerFixture();
-  const collection = {
-    find: vi.fn(() => [{ data: containerExample }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  collection.find.mockClear();
+  seedContainer(createContainerFixture());
+  const prepareSpy = vi.spyOn(db, 'prepare');
   const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
 
   for (let index = 0; index <= maxEntries; index += 1) {
     container.getContainers({ watcher: `watcher-${index}` });
   }
-  const readCountAfterUniqueQueries = collection.find.mock.calls.length;
+  const readCountAfterUniqueQueries = prepareSpy.mock.calls.length;
 
   container.getContainers({ watcher: 'watcher-0' });
-  expect(collection.find.mock.calls.length).toBe(readCountAfterUniqueQueries + 1);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterUniqueQueries + 1);
 });
 
 test('getContainers query cache eviction should happen before inserting new entries at capacity', () => {
-  const collection = {
-    find: vi.fn(() => [{ data: createContainerFixture() }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  collection.find.mockClear();
+  seedContainer(createContainerFixture());
 
   const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
   for (let index = 0; index < maxEntries; index += 1) {
@@ -3323,33 +2405,27 @@ test('getContainers query cache eviction should happen before inserting new entr
 });
 
 test('getContainers should retain unaffected query caches across inserts', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'watcher-a-1',
-        name: 'watcher-a-1',
-        watcher: 'watcher-a',
-      }),
-    },
-    {
-      data: createContainerFixture({
-        id: 'watcher-b-1',
-        name: 'watcher-b-1',
-        watcher: 'watcher-b',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({
+      id: 'watcher-a-1',
+      name: 'watcher-a-1',
+      watcher: 'watcher-a',
+    }),
+  );
+  seedContainer(
+    createContainerFixture({
+      id: 'watcher-b-1',
+      name: 'watcher-b-1',
+      watcher: 'watcher-b',
+    }),
+  );
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   container.getContainers({ watcher: 'watcher-a' });
   container.getContainers({ watcher: 'watcher-b' });
-  const readCountAfterWarm = collection.find.mock.calls.length;
+  const readCountAfterWarm = prepareSpy.mock.calls.length;
   container.getContainers({ watcher: 'watcher-b' });
-  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterWarm);
 
   container.insertContainer(
     createContainerFixture({
@@ -3358,43 +2434,37 @@ test('getContainers should retain unaffected query caches across inserts', async
       watcher: 'watcher-a',
     }),
   );
-  const readCountBeforeAffectedAndUnaffectedReads = collection.find.mock.calls.length;
+  const readCountBeforeAffectedAndUnaffectedReads = prepareSpy.mock.calls.length;
 
   container.getContainers({ watcher: 'watcher-b' });
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
 
   container.getContainers({ watcher: 'watcher-a' });
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
 });
 
 test('getContainers should retain unaffected query caches across updates', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'watcher-a-1',
-        name: 'watcher-a-1',
-        watcher: 'watcher-a',
-      }),
-    },
-    {
-      data: createContainerFixture({
-        id: 'watcher-b-1',
-        name: 'watcher-b-1',
-        watcher: 'watcher-b',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({
+      id: 'watcher-a-1',
+      name: 'watcher-a-1',
+      watcher: 'watcher-a',
+    }),
+  );
+  seedContainer(
+    createContainerFixture({
+      id: 'watcher-b-1',
+      name: 'watcher-b-1',
+      watcher: 'watcher-b',
+    }),
+  );
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   container.getContainers({ watcher: 'watcher-a' });
   container.getContainers({ watcher: 'watcher-b' });
-  const readCountAfterWarm = collection.find.mock.calls.length;
+  const readCountAfterWarm = prepareSpy.mock.calls.length;
   container.getContainers({ watcher: 'watcher-b' });
-  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterWarm);
 
   container.updateContainer(
     createContainerFixture({
@@ -3404,80 +2474,56 @@ test('getContainers should retain unaffected query caches across updates', async
       status: 'running',
     }),
   );
-  const readCountBeforeAffectedAndUnaffectedReads = collection.find.mock.calls.length;
+  const readCountBeforeAffectedAndUnaffectedReads = prepareSpy.mock.calls.length;
 
   container.getContainers({ watcher: 'watcher-b' });
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
 
   container.getContainers({ watcher: 'watcher-a' });
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
 });
 
 test('getContainers should retain unaffected query caches across deletes', async () => {
-  const collection = createFilterableCollection([
-    {
-      data: createContainerFixture({
-        id: 'watcher-a-1',
-        name: 'watcher-a-1',
-        watcher: 'watcher-a',
-      }),
-    },
-    {
-      data: createContainerFixture({
-        id: 'watcher-b-1',
-        name: 'watcher-b-1',
-        watcher: 'watcher-b',
-      }),
-    },
-  ]);
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(
+    createContainerFixture({
+      id: 'watcher-a-1',
+      name: 'watcher-a-1',
+      watcher: 'watcher-a',
+    }),
+  );
+  seedContainer(
+    createContainerFixture({
+      id: 'watcher-b-1',
+      name: 'watcher-b-1',
+      watcher: 'watcher-b',
+    }),
+  );
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   container.getContainers({ watcher: 'watcher-a' });
   container.getContainers({ watcher: 'watcher-b' });
-  const readCountAfterWarm = collection.find.mock.calls.length;
+  const readCountAfterWarm = prepareSpy.mock.calls.length;
   container.getContainers({ watcher: 'watcher-b' });
-  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterWarm);
 
   container.deleteContainer('watcher-a-1');
-  const readCountBeforeAffectedAndUnaffectedReads = collection.find.mock.calls.length;
+  const readCountBeforeAffectedAndUnaffectedReads = prepareSpy.mock.calls.length;
 
   container.getContainers({ watcher: 'watcher-b' });
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
 
   container.getContainers({ watcher: 'watcher-a' });
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
 });
 
 test('getContainers should cache validated results and invalidate cache after writes', async () => {
-  const containerExample = createContainerFixture();
-  const docs = [{ data: containerExample }];
-  const collection = {
-    find: vi.fn(() => [...docs]),
-    insert: vi.fn((doc) => {
-      docs.push(doc);
-    }),
-    findOne: vi.fn(() => undefined),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  collection.find.mockClear();
+  seedContainer(createContainerFixture());
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   container.getContainers();
-  const readCountAfterFirstGet = collection.find.mock.calls.length;
+  const readCountAfterFirstGet = prepareSpy.mock.calls.length;
   container.getContainers();
-  expect(collection.find.mock.calls.length).toBe(readCountAfterFirstGet);
+  expect(prepareSpy.mock.calls.length).toBe(readCountAfterFirstGet);
 
   container.insertContainer(
     createContainerFixture({
@@ -3485,28 +2531,21 @@ test('getContainers should cache validated results and invalidate cache after wr
       name: 'cache-test-insert',
     }),
   );
-  const readCountBeforeGetAfterWrite = collection.find.mock.calls.length;
+  const readCountBeforeGetAfterWrite = prepareSpy.mock.calls.length;
   container.getContainers();
-  expect(collection.find.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
+  expect(prepareSpy.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
 });
 
 test('getContainers should isolate nested objects from cached query results', async () => {
-  const containerExample = createContainerFixture();
-  const collection = {
-    find: vi.fn(() => [{ data: containerExample }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
+  seedContainer(createContainerFixture());
+  const prepareSpy = vi.spyOn(db, 'prepare');
 
   const firstRead = container.getContainers();
   firstRead[0].image.tag.value = 'tampered';
 
   const secondRead = container.getContainers();
 
-  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(prepareSpy).toHaveBeenCalledTimes(1);
   expect(secondRead[0].image.tag.value).toBe('version');
 });
 
@@ -3516,14 +2555,6 @@ test('getContainers should clone cached cyclic structures without throwing', () 
   cyclicLabels.self = cyclicLabels;
   containerExample.labels = cyclicLabels as Record<string, string>;
 
-  const collection = {
-    find: vi.fn(() => []),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
   container._setContainersQueryCacheEntriesForTests([['[]', [containerExample]]]);
 
   let result: ReturnType<typeof container.getContainers> = [];
@@ -3723,15 +2754,7 @@ test('container query cache invalidation should evict candidate keys with missin
 });
 
 test('getContainers query cache eviction should stop when iterator returns undefined keys', () => {
-  const collection = {
-    find: vi.fn(() => [{ data: createContainerFixture() }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  collection.find.mockClear();
+  seedContainer(createContainerFixture());
 
   const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
   for (let index = 0; index <= maxEntries; index += 1) {
@@ -3757,15 +2780,7 @@ test('getContainers query cache eviction should stop when iterator returns undef
 });
 
 test('getContainers defensive cache eviction should remove oldest key after a transient iterator miss', () => {
-  const collection = {
-    find: vi.fn(() => [{ data: createContainerFixture() }]),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
-  container.createCollections(db);
-  collection.find.mockClear();
+  seedContainer(createContainerFixture());
 
   const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
   for (let index = 0; index < maxEntries; index += 1) {
@@ -4005,11 +3020,6 @@ describe('hasContainerChanged', () => {
   });
 
   test('updateContainer should reuse the stored security hash when the next payload omits security', () => {
-    const collection = createFilterableCollection([]);
-    const db = {
-      getCollection: () => collection,
-      addCollection: () => null,
-    };
     container.createCollections(db);
 
     let securityOwnKeysCount = 0;
@@ -4076,38 +3086,21 @@ describe('hasContainerChanged', () => {
 });
 
 test('updateContainer should not emit when container data is unchanged', async () => {
-  const existingContainer = {
-    data: createContainerFixture({
-      id: 'unchanged-container',
-      status: 'running',
-      updateAvailable: false,
-    }),
-  };
-  const collection = {
-    findOne: () => existingContainer,
-    update: vi.fn(),
-    insert: vi.fn(),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const containerToSave = createContainerFixture({
     id: 'unchanged-container',
     status: 'running',
     updateAvailable: false,
   });
+  seedContainer(containerToSave);
   const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
 
   container.updateContainer(containerToSave);
 
-  expect(collection.update).toHaveBeenCalledTimes(1);
+  // updateContainerRow always writes the current row regardless of whether
+  // anything changed — there's no SQL equivalent of "was collection.update
+  // called"; the behavior this test actually guards is that an unchanged
+  // write doesn't emit a spurious update event.
+  expect(container.getContainer('unchanged-container')?.status).toBe('running');
   expect(spyEvent).not.toHaveBeenCalled();
 });
 
@@ -4159,78 +3152,32 @@ test('pending fresh state helpers should store and clear agent-qualified keys', 
 // Rollback container SSE suppression tests
 
 test('insertContainer with a rollback-named container should NOT emit emitContainerAdded', () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const spyAdded = vi.spyOn(event, 'emitContainerAdded');
-  container.createCollections(db);
   container.insertContainer(createContainerFixture({ name: 'service-old-1773933154786' }));
   expect(spyAdded).not.toHaveBeenCalled();
 });
 
 test('insertContainer with a normal container name DOES emit emitContainerAdded', () => {
-  const collection = {
-    findOne: () => {},
-    insert: () => {},
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const spyAdded = vi.spyOn(event, 'emitContainerAdded');
-  container.createCollections(db);
   container.insertContainer(createContainerFixture({ name: 'service' }));
   expect(spyAdded).toHaveBeenCalledTimes(1);
 });
 
 test('updateContainer where the resulting name matches the rollback pattern does NOT emit emitContainerUpdated', () => {
-  const collection = {
-    findOne: () => undefined,
-    insert: () => {},
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
   const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
   container.updateContainer(createContainerFixture({ name: 'api-old-1773933154786' }));
   expect(spyUpdated).not.toHaveBeenCalled();
 });
 
 test('updateContainer where a rollback-named container is renamed back to a normal name DOES emit emitContainerUpdated', () => {
-  const rollbackFixture = createContainerFixture({
-    id: 'un-rollback-container',
-    name: 'service-old-1773933154786',
-    status: 'running',
-  });
-  const existingDoc = { data: rollbackFixture };
-  const collection = {
-    findOne: () => existingDoc,
-    update: vi.fn(),
-    insert: vi.fn(),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  seedContainer(
+    createContainerFixture({
+      id: 'un-rollback-container',
+      name: 'service-old-1773933154786',
+      status: 'running',
+    }),
+  );
   const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
 
   // Simulate rollback monitor restoring the original name — the final name is no longer rollback-patterned
   container.updateContainer(
@@ -4246,25 +3193,10 @@ test('updateContainer where a rollback-named container is renamed back to a norm
 });
 
 test('updateContainer with a name-only delta (docker rename) DOES emit emitContainerUpdated', () => {
-  const existingDoc = {
-    data: createContainerFixture({ id: 'renamed-container', name: 'old-name', status: 'running' }),
-  };
-  const collection = {
-    findOne: () => existingDoc,
-    update: vi.fn(),
-    insert: vi.fn(),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  seedContainer(
+    createContainerFixture({ id: 'renamed-container', name: 'old-name', status: 'running' }),
+  );
   const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
 
   container.updateContainer(
     createContainerFixture({ id: 'renamed-container', name: 'new-name', status: 'running' }),
@@ -4275,30 +3207,15 @@ test('updateContainer with a name-only delta (docker rename) DOES emit emitConta
 });
 
 test('updateContainer with a displayName-only delta DOES emit emitContainerUpdated', () => {
-  const existingDoc = {
-    data: createContainerFixture({
+  seedContainer(
+    createContainerFixture({
       id: 'redisplayed-container',
       name: 'same-name',
       displayName: 'Old Display Name',
       status: 'running',
     }),
-  };
-  const collection = {
-    findOne: () => existingDoc,
-    update: vi.fn(),
-    insert: vi.fn(),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
 
   container.updateContainer(
     createContainerFixture({
@@ -4314,25 +3231,10 @@ test('updateContainer with a displayName-only delta DOES emit emitContainerUpdat
 });
 
 test('updateContainer with no delta at all does NOT emit emitContainerUpdated', () => {
-  const existingDoc = {
-    data: createContainerFixture({ id: 'unchanged-container', name: 'steady', status: 'running' }),
-  };
-  const collection = {
-    findOne: () => existingDoc,
-    update: vi.fn(),
-    insert: vi.fn(),
-    chain: vi.fn(() => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
-    })),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  seedContainer(
+    createContainerFixture({ id: 'unchanged-container', name: 'steady', status: 'running' }),
+  );
   const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
-  container.createCollections(db);
 
   container.updateContainer(
     createContainerFixture({ id: 'unchanged-container', name: 'steady', status: 'running' }),
@@ -4356,15 +3258,9 @@ describe('container unhealthy transition emission', () => {
     };
   }
   function initialize(existing?: any) {
-    const doc = existing ? { data: existing } : undefined;
-    const collection = {
-      findOne: vi.fn(() => doc),
-      update: vi.fn(),
-      insert: vi.fn(),
-      chain: vi.fn(() => ({ find: () => ({ remove: () => ({}) }) })),
-    };
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
-    return collection;
+    if (existing) {
+      seedContainer(existing);
+    }
   }
 
   test('fresh unhealthy insert has no previous baseline and does not emit', () => {
@@ -4375,14 +3271,17 @@ describe('container unhealthy transition emission', () => {
   });
 
   test('update fallback stores first-observation unhealthy without emitting a transition', () => {
-    const collection = initialize();
+    initialize();
     const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
     const incoming = healthFixture({ id: 'unknown-unhealthy', health: 'unhealthy' });
 
     const result = container.updateContainer(incoming);
 
     expect(result).toMatchObject({ id: 'unknown-unhealthy', health: 'unhealthy' });
-    expect(collection.insert).toHaveBeenCalledWith({ data: result });
+    expect(container.getContainer('unknown-unhealthy')).toMatchObject({
+      id: 'unknown-unhealthy',
+      health: 'unhealthy',
+    });
     expect(emitted).not.toHaveBeenCalled();
   });
 
@@ -4501,47 +3400,25 @@ describe('container unhealthy transition emission', () => {
 });
 
 test('deleteContainer with a rollback-named container does NOT emit emitContainerRemoved', () => {
-  const rollbackFixture = createContainerFixture({
-    id: 'rollback-to-delete',
-    name: 'worker-old-1773933154786',
-  });
-  const collection = {
-    findOne: () => ({ data: rollbackFixture }),
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
+  seedContainer(
+    createContainerFixture({
+      id: 'rollback-to-delete',
+      name: 'worker-old-1773933154786',
     }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const spyRemoved = vi.spyOn(event, 'emitContainerRemoved');
-  container.createCollections(db);
   container.deleteContainer('rollback-to-delete');
   expect(spyRemoved).not.toHaveBeenCalled();
 });
 
 test('deleteContainer with a normal container name DOES emit emitContainerRemoved', () => {
-  const normalFixture = createContainerFixture({
-    id: 'normal-to-delete',
-    name: 'worker',
-  });
-  const collection = {
-    findOne: () => ({ data: normalFixture }),
-    chain: () => ({
-      find: () => ({
-        remove: () => ({}),
-      }),
+  seedContainer(
+    createContainerFixture({
+      id: 'normal-to-delete',
+      name: 'worker',
     }),
-  };
-  const db = {
-    getCollection: () => collection,
-    addCollection: () => null,
-  };
+  );
   const spyRemoved = vi.spyOn(event, 'emitContainerRemoved');
-  container.createCollections(db);
   container.deleteContainer('normal-to-delete');
   expect(spyRemoved).toHaveBeenCalledTimes(1);
 });
@@ -4550,48 +3427,42 @@ test('deleteContainer with a normal container name DOES emit emitContainerRemove
 
 describe('getSafeContainerQueryEntries / operator injection guard', () => {
   test('drops entry whose value is an operator object ($regex)', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
-    // A $regex operator object must not reach LokiJS
-    container.getContainers({ watcher: { $regex: '.*' } } as Record<string, unknown>);
-    // No filter was applied — collection.find was called with an empty filter (only the
-    // operator-bearing entry was dropped). The important guarantee is that the
-    // operator object was NOT forwarded to LokiJS, so re2js's ReDoS guarantee holds.
-    expect(collection.find).toHaveBeenCalledWith({});
+    // A $regex operator object must not reach the SQL scan's exact-match filter.
+    const result = container.getContainers({ watcher: { $regex: '.*' } } as Record<
+      string,
+      unknown
+    >);
+    // No filter was applied — the operator-bearing entry was dropped, so every
+    // stored container comes back. The important guarantee is that the operator
+    // object was never turned into a match condition, so re2js's ReDoS
+    // guarantee holds regardless of storage engine.
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
   });
 
   test('drops entry whose value is an operator object ($ne)', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', status: 'running' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', status: 'running' }));
 
-    container.getContainers({ status: { $ne: null } } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({});
+    const result = container.getContainers({ status: { $ne: null } } as Record<string, unknown>);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
   });
 
   test('drops entry whose value is an array', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
-    container.getContainers({ watcher: ['docker', 'podman'] } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({});
+    const result = container.getContainers({ watcher: ['docker', 'podman'] } as Record<
+      string,
+      unknown
+    >);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
   });
 
   test('operator-object entry does NOT appear in cache key', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
     // First call with operator value
     container.getContainers({ watcher: { $regex: 'dock.*' } } as Record<string, unknown>);
@@ -4602,133 +3473,128 @@ describe('getSafeContainerQueryEntries / operator injection guard', () => {
   });
 
   test('string value passes through and filters correctly', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-      { data: createContainerFixture({ id: 'c2', watcher: 'podman' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
+    seedContainer(createContainerFixture({ id: 'c2', watcher: 'podman' }));
 
     const result = container.getContainers({ watcher: 'docker' });
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('c1');
-    expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['watcher', 'docker']])),
+    ).toBe(true);
   });
 
   test('boolean value passes through and filters correctly', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', updateAvailable: true }) },
-      { data: createContainerFixture({ id: 'c2', updateAvailable: false }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    // updateAvailable is derived from image/result at validation time (see
+    // model/container.ts), so a literal override on the raw fixture cannot
+    // survive a real write the way it could on a raw, never-validated Loki
+    // document — give c1 a genuine tag mismatch instead so updateAvailable
+    // computes to true on its own.
+    const base = createContainerFixture({ id: 'c1' });
+    seedContainer({
+      ...base,
+      image: { ...base.image, tag: { ...base.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+    });
+    seedContainer(createContainerFixture({ id: 'c2' }));
 
     const result = container.getContainers({ updateAvailable: true });
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('c1');
-    expect(collection.find).toHaveBeenCalledWith({ 'data.updateAvailable': true });
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['updateAvailable', true]])),
+    ).toBe(true);
   });
 
   test('number value passes through', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
     container.getContainers({ someNumericField: 42 } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({ 'data.someNumericField': 42 });
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['someNumericField', 42]])),
+    ).toBe(true);
   });
 
   test('null value passes through (literal null match)', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
     container.getContainers({ someField: null } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({ 'data.someField': null });
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['someField', null]])),
+    ).toBe(true);
   });
 
   test('undefined value passes through (literal undefined match)', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
     container.getContainers({ someField: undefined } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({ 'data.someField': undefined });
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['someField', undefined]])),
+    ).toBe(true);
   });
 
   test('proto-pollution key guard still drops __proto__ keys', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
     // JSON.parse creates an own enumerable '__proto__' data property without
     // mutating Object.prototype (it bypasses the __proto__ setter).
     const query = JSON.parse('{"watcher":"docker","__proto__":"bad"}') as Record<string, unknown>;
-    container.getContainers(query);
-    // Only the safe 'watcher' key should appear in the filter
-    expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });
+    const result = container.getContainers(query);
+    // Only the safe 'watcher' key should have been applied as a filter.
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['watcher', 'docker']])),
+    ).toBe(true);
   });
 
   test('proto-pollution key guard still drops prototype and constructor keys', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
-    container.getContainers({
+    const result = container.getContainers({
       'foo.prototype.bar': 'x',
       'baz.constructor.qux': 'y',
       watcher: 'docker',
     } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
+    expect(
+      container._getContainersQueryCacheForTests().has(JSON.stringify([['watcher', 'docker']])),
+    ).toBe(true);
   });
 
   test('getContainersRaw with operator value does not forward the operator', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
-    container.getContainersRaw({ watcher: { $regex: 'dock.*' } } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({});
+    const result = container.getContainersRaw({ watcher: { $regex: 'dock.*' } } as Record<
+      string,
+      unknown
+    >);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
   });
 
   test('getContainerCount with operator value counts all (operator neutralised)', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-      { data: createContainerFixture({ id: 'c2', watcher: 'podman' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
+    seedContainer(createContainerFixture({ id: 'c2', watcher: 'podman' }));
 
-    // Operator is dropped → filter is empty → all containers returned
+    // Operator is dropped → filter is empty → all containers counted
     const count = container.getContainerCount({ watcher: { $regex: '.*' } } as Record<
       string,
       unknown
     >);
     expect(count).toBe(2);
-    expect(collection.find).toHaveBeenCalledWith({});
   });
 
   test('getContainersForStats with operator value does not forward the operator', () => {
-    const collection = createFilterableCollection([
-      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
-    ]);
-    const db = { getCollection: () => collection, addCollection: () => null };
-    container.createCollections(db);
+    seedContainer(createContainerFixture({ id: 'c1', watcher: 'docker' }));
 
-    container.getContainersForStats({ watcher: { $ne: 'docker' } } as Record<string, unknown>);
-    expect(collection.find).toHaveBeenCalledWith({});
+    const result = container.getContainersForStats({ watcher: { $ne: 'docker' } } as Record<
+      string,
+      unknown
+    >);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
   });
 });
 
@@ -4755,8 +3621,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-1', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-1' });
@@ -4773,8 +3638,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       maturityGatePendingSince: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-maturity-1', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-maturity-1' });
@@ -4789,8 +3653,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-maturity-2', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-maturity-2' });
@@ -4807,8 +3670,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       maturityGatePendingSince: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-maturity-3', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -4829,8 +3691,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       maturityGatePendingSince: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-maturity-4', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -4848,8 +3709,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-2', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -4868,8 +3728,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-3');
     const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-3' });
@@ -4884,8 +3743,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-4', { replacementExpected: true });
     const base = createContainerFixture();
@@ -4914,8 +3772,7 @@ describe('updateLifecycleCache carry-forward', () => {
         updateDetectedAt: twelveHoursAgo,
         firstSeenAt: twelveHoursAgo,
       });
-      const collection = createFilterableCollection([{ data: oldFixture }]);
-      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      seedContainer(oldFixture);
       container.deleteContainer('lifecycle-old-5', { replacementExpected: true });
       vi.advanceTimersByTime(container.UPDATE_LIFECYCLE_CACHE_TTL_MS + 1);
       const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-5' });
@@ -4929,8 +3786,7 @@ describe('updateLifecycleCache carry-forward', () => {
 
   test('does not write cache when old container has no updateDetectedAt', () => {
     const oldFixture = makeDigestUpdateFixture({ id: 'lifecycle-old-6' });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-6', { replacementExpected: true });
     // No updateDetectedAt on the old container → no cache entry written
@@ -4947,8 +3803,7 @@ describe('updateLifecycleCache carry-forward', () => {
       id: 'lifecycle-old-7',
       updateDetectedAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-7', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-7' });
@@ -4965,8 +3820,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-old-8', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -4991,8 +3845,9 @@ describe('updateLifecycleCache carry-forward', () => {
         }),
       });
     }
-    const collection = createFilterableCollection(fixtures);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    for (const fixture of fixtures) {
+      seedContainer(fixture.data);
+    }
     for (let i = 0; i <= maxEntries; i++) {
       container.deleteContainer(`lifecycle-evict-${i}`, { replacementExpected: true });
     }
@@ -5018,8 +3873,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: oldTimestamp,
       firstSeenAt: oldTimestamp,
     };
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(oldFixture);
     container.deleteContainer('lifecycle-sig-old', { replacementExpected: true });
     // Insert new fixture with same result signature (no tag field, same digest)
     const newFixture = {
@@ -5053,8 +3907,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: oldTimestamp,
       firstSeenAt: oldTimestamp,
     };
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(oldFixture);
     container.deleteContainer('lifecycle-sig-digest-old', { replacementExpected: true });
     const newFixture = {
       ...base,
@@ -5097,8 +3950,9 @@ describe('updateLifecycleCache carry-forward', () => {
         }),
       });
     }
-    const collection = createFilterableCollection(fixtures);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    for (const fixture of fixtures) {
+      seedContainer(fixture.data);
+    }
     for (let i = 0; i <= maxEntries; i++) {
       container.deleteContainer(`lifecycle-overflow-${i}`, { replacementExpected: true });
     }
@@ -5114,8 +3968,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-a-old', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -5136,8 +3989,7 @@ describe('updateLifecycleCache carry-forward', () => {
         updateDetectedAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
         firstSeenAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
       });
-      const collection = createFilterableCollection([{ data: oldFixture }]);
-      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      seedContainer(oldFixture);
       container.deleteContainer('lifecycle-b-old', { replacementExpected: true });
       // Insert with a DIFFERENT digest — signature mismatch → fresh stamp
       const newFixture = makeDigestUpdateFixture({
@@ -5166,8 +4018,7 @@ describe('updateLifecycleCache carry-forward', () => {
         updateDetectedAt: oldDetectedAt,
         firstSeenAt: oldDetectedAt,
       });
-      const collection = createFilterableCollection([{ data: oldFixture }]);
-      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      seedContainer(oldFixture);
       container.deleteContainer('lifecycle-created-old', { replacementExpected: true });
 
       const newFixture = makeDigestUpdateFixture({
@@ -5195,8 +4046,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-c-old', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -5223,8 +4073,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       maturityGatePendingSince: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-created-drift-old', { replacementExpected: true });
 
@@ -5250,8 +4099,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       maturityGatePendingSince: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-tag-change-old', { replacementExpected: true });
 
@@ -5274,8 +4122,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('blocker1-old', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -5299,8 +4146,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: fixture1 }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(fixture1);
     container.createCollections(db);
     container.deleteContainer('collision-old', { replacementExpected: true });
 
@@ -5329,8 +4175,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: agentFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(agentFixture);
     const lifecycleCache = container._getUpdateLifecycleCacheForTests();
     const cacheSizeBefore = lifecycleCache.size;
     container.deleteContainer('lifecycle-agent-guard', { replacementExpected: true });
@@ -5345,8 +4190,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: rollbackFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(rollbackFixture);
     const lifecycleCache = container._getUpdateLifecycleCacheForTests();
     const cacheSizeBefore = lifecycleCache.size;
     container.deleteContainer('lifecycle-rollback-guard', { replacementExpected: true });
@@ -5372,9 +4216,9 @@ describe('updateLifecycleCache carry-forward', () => {
           }),
         });
       }
-      const collection = createFilterableCollection(fixtures);
-      container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
+      for (const fixture of fixtures) {
+        seedContainer(fixture.data);
+      }
       // Delete the first maxEntries containers → fill cache exactly to the limit
       for (let i = 0; i < maxEntries; i++) {
         container.deleteContainer(`lifecycle-expfirst-${i}`, { replacementExpected: true });
@@ -5407,8 +4251,7 @@ describe('updateLifecycleCache carry-forward', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    const db = { getCollection: () => collection, addCollection: () => null };
+    seedContainer(oldFixture);
     container.createCollections(db);
     container.deleteContainer('lifecycle-fseat-old', { replacementExpected: true });
     const newFixture = makeDigestUpdateFixture({
@@ -5441,8 +4284,7 @@ describe('updateLifecycleCache carry-forward', () => {
       firstSeenAt: twelveHoursAgo,
       maturityGatePendingSince: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(oldFixture);
     container.deleteContainer('lifecycle-compose-old', { replacementExpected: true });
 
     const newFixture = makeDigestUpdateFixture({
@@ -5508,9 +4350,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
+    seedContainer(oldFixture);
     container.deleteContainer('lifecycle-persist-old-1', { replacementExpected: true });
 
     const [record] = updateLifecycleCacheStore.listRecords();
@@ -5529,8 +4369,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(oldFixture);
     container.deleteContainer('lifecycle-persist-old-2', { replacementExpected: true });
     expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
 
@@ -5550,8 +4389,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
         updateDetectedAt: twelveHoursAgo,
         firstSeenAt: twelveHoursAgo,
       });
-      const collection = createFilterableCollection([{ data: oldFixture }]);
-      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      seedContainer(oldFixture);
       container.deleteContainer('lifecycle-persist-old-3', { replacementExpected: true });
       expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
       vi.advanceTimersByTime(container.UPDATE_LIFECYCLE_CACHE_TTL_MS + 1);
@@ -5573,8 +4411,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
       firstSeenAt: twelveHoursAgo,
       result: { tag: 'version', digest: 'sha256:new' },
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(oldFixture);
     container.deleteContainer('lifecycle-persist-old-4', { replacementExpected: true });
     expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
 
@@ -5603,9 +4440,9 @@ describe('updateLifecycleCache store persistence (#556)', () => {
         }),
       });
     }
-    const collection = createFilterableCollection(fixtures);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
+    for (const fixture of fixtures) {
+      seedContainer(fixture.data);
+    }
     for (let i = 0; i <= maxEntries; i++) {
       container.deleteContainer(`lifecycle-persist-evict-${i}`, { replacementExpected: true });
     }
@@ -5719,9 +4556,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
-    const collection = createFilterableCollection([{ data: oldFixture }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
-
+    seedContainer(oldFixture);
     // 1. Self-update fires: the old container is torn down and its lifecycle entry is
     //    stashed into both the in-memory Map and (write-through) the durable store.
     container.deleteContainer('lifecycle-persist-restart-old', { replacementExpected: true });
@@ -5764,9 +4599,9 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
   }
 
   function mountWith(docs: Array<{ data: unknown }>) {
-    const collection = createFilterableCollection(docs);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
-    return collection;
+    for (const doc of docs) {
+      seedContainer(doc.data);
+    }
   }
 
   let policyDb: Database;
@@ -6555,8 +5390,7 @@ describe('rollback rename policy retention regression (#535)', () => {
       details: { ports: [], volumes: [], env: [] },
       updatePolicy,
     });
-    const collection = createFilterableCollection([{ data: oldContainer }]);
-    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    seedContainer(oldContainer);
     const liveContainer = container.getContainer('rename-policy-old');
 
     updateContainerFromInspect(

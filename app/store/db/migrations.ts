@@ -53,6 +53,20 @@ ALTER TABLE update_lifecycle_cache ADD COLUMN refresh_order INTEGER NOT NULL DEF
 ALTER TABLE update_policy_retention_cache ADD COLUMN refresh_order INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    version: 4,
+    // The initial schema (slice 1) planned the containers table ahead of the
+    // collection actually moving onto it, and missed two Container fields
+    // that are neither queried/filtered/sorted/patched (so a promoted column)
+    // nor part of an existing grouped JSON column: `sourceRepo` (a plain
+    // string) and `currentReleaseNotes` (a ContainerReleaseNotes object).
+    // Both are nullable, so a plain ADD COLUMN needs no backfill.
+    note: 'add containers.source_repo and containers.current_release_notes (roadmap 7-STORE slice 8)',
+    sql: `
+ALTER TABLE containers ADD COLUMN source_repo TEXT;
+ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
+`,
+  },
 ];
 
 /** Versions already recorded in `schema_migrations`, ascending. */

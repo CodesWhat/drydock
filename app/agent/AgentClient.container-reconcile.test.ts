@@ -9,13 +9,14 @@
  *
  * This file deliberately does NOT mock ../store/container.js (unlike AgentClient.test.ts,
  * which mocks it wholesale and therefore cannot see this class of bug at all). It drives the
- * real store module against a real in-memory Loki collection so the stash/restore contract
- * in app/store/container.ts is actually exercised.
+ * real store module against a real in-memory SQLite database (roadmap 7-STORE slice 8) so
+ * the stash/restore contract in app/store/container.ts is actually exercised.
  */
 
 import axios from 'axios';
-import Loki from 'lokijs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Database } from '../store/db/driver.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 
 vi.mock('axios');
 
@@ -107,13 +108,14 @@ function buildIncomingContainer(overrides: Record<string, unknown> = {}) {
 
 describe('AgentClient container-reconcile ordering (real store/container.js)', () => {
   let client: AgentClient;
+  let db: Database;
 
   beforeEach(() => {
     vi.clearAllMocks();
     for (const watcherId of Object.keys(mockRegistryState.watcher)) {
       delete mockRegistryState.watcher[watcherId];
     }
-    const db = new Loki('test.db', { autosave: false });
+    db = createMigratedMemoryDatabase();
     storeContainer.createCollections(db);
     storeContainer._resetContainerStoreStateForTests();
     vi.useFakeTimers();
@@ -123,6 +125,7 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
   afterEach(() => {
     client.stop();
     vi.useRealTimers();
+    db.close();
   });
 
   describe('_doHandshake() via handshake()', () => {
