@@ -89,9 +89,13 @@ test('the ZAP full scan bounds its spider and active scan inside the job budget'
   const scanMinutes = Number(cmdOptions.match(/scanner\.maxScanDurationInMins=(\d+)/u)?.[1]);
   const ruleMinutes = Number(cmdOptions.match(/scanner\.maxRuleDurationInMins=(\d+)/u)?.[1]);
 
-  expect(spiderMinutes).toBeGreaterThan(0);
-  expect(scanMinutes).toBeGreaterThan(0);
-  expect(ruleMinutes).toBeGreaterThan(0);
+  // Floors, not pins: the caps may move as the site grows, but a cap small
+  // enough to skip most of the scan would pass the budget check below while
+  // gutting the gate. 5 minutes of spidering and 20 of active scanning are
+  // the least that still covers the docs site's route set.
+  expect(spiderMinutes).toBeGreaterThanOrEqual(5);
+  expect(scanMinutes).toBeGreaterThanOrEqual(20);
+  expect(ruleMinutes).toBeGreaterThanOrEqual(1);
   expect(ruleMinutes).toBeLessThanOrEqual(scanMinutes);
   // 15 minutes of headroom for ZAP startup, the passive scan and the report.
   expect(spiderMinutes + scanMinutes).toBeLessThanOrEqual(Number(zapTimeout) - 15);
