@@ -5,42 +5,19 @@ import { getErrorMessage } from './error.js';
 export interface ContainerBackupScope {
   containerName: string;
   containerIdentityKey?: string;
-  includeLegacy: boolean;
 }
 
 /**
- * Build the ownership scope used to select backups for a container.
- * Legacy backups without an identity are safe only while one active identity
- * owns the container name.
+ * Build the ownership scope used to select backups for a container: its
+ * durable identity key, so a rename or a recreate still resolves to the same
+ * backups. Backups carrying no identity (pre-migration legacy rows an import
+ * could not resolve unambiguously) are never in scope — see
+ * `app/store/db/importers/backups.ts`.
  */
-export function createContainerBackupScope(
-  container: Container,
-  sameNamedContainers: Container[],
-): ContainerBackupScope {
-  const containerIdentityKey = container.identityKey ?? deriveContainerIdentityKey(container);
-  const activeIdentityKeys = new Set<string>();
-  let hasUnknownIdentity = false;
-
-  for (const candidate of sameNamedContainers) {
-    if (candidate.name !== container.name) {
-      continue;
-    }
-    const candidateIdentityKey = candidate.identityKey ?? deriveContainerIdentityKey(candidate);
-    if (candidateIdentityKey) {
-      activeIdentityKeys.add(candidateIdentityKey);
-    } else {
-      hasUnknownIdentity = true;
-    }
-  }
-
+export function createContainerBackupScope(container: Container): ContainerBackupScope {
   return {
     containerName: container.name,
-    containerIdentityKey,
-    includeLegacy:
-      Boolean(containerIdentityKey) &&
-      !hasUnknownIdentity &&
-      activeIdentityKeys.size === 1 &&
-      activeIdentityKeys.has(containerIdentityKey as string),
+    containerIdentityKey: container.identityKey ?? deriveContainerIdentityKey(container),
   };
 }
 

@@ -2350,10 +2350,7 @@ class Docker<
   }
 
   resolveContainerBackupScope(container) {
-    return createContainerBackupScope(
-      container,
-      storeContainer.getContainers({ name: container.name }) ?? [],
-    );
+    return createContainerBackupScope(container);
   }
 
   async runPreRuntimeUpdateLifecycle(context, container, logContainer, _runtimeContext?: unknown) {

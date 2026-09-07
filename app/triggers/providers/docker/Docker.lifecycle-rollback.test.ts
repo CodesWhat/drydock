@@ -621,7 +621,6 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     const backupStore = await import('../../../store/backup.js');
-    const storeContainer = await import('../../../store/container.js');
     docker.configuration.prune = true;
     vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
@@ -646,14 +645,11 @@ describe('additional docker trigger coverage', () => {
         kind: 'tag',
       },
     };
-    vi.mocked(storeContainer.getContainers).mockReturnValue([container] as any);
-
     await docker.cleanupOldImages({}, registryProvider, container, logContainer);
 
     expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
       containerName: 'container-name',
       containerIdentityKey: '::test::container-name',
-      includeLegacy: true,
     });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();

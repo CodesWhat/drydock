@@ -246,6 +246,40 @@
             "version": 0
           },
           "$loki": 1
+        },
+        {
+          "data": {
+            "id": "backup-fixture-legacy-resolvable",
+            "containerId": "container-full-app-old",
+            "containerName": "full-app",
+            "imageName": "library/full-app",
+            "imageTag": "zero",
+            "timestamp": "2026-01-02T00:00:00.000Z",
+            "triggerName": "docker.default"
+          },
+          "meta": {
+            "revision": 0,
+            "created": 1751000000000,
+            "version": 0
+          },
+          "$loki": 2
+        },
+        {
+          "data": {
+            "id": "backup-fixture-legacy-ambiguous",
+            "containerId": "container-shared-svc-old",
+            "containerName": "shared-svc",
+            "imageName": "library/shared",
+            "imageTag": "zero",
+            "timestamp": "2026-01-03T00:00:00.000Z",
+            "triggerName": "docker.default"
+          },
+          "meta": {
+            "revision": 0,
+            "created": 1751000000000,
+            "version": 0
+          },
+          "$loki": 3
         }
       ],
       "idIndex": null,
@@ -481,6 +515,66 @@
             "version": 0
           },
           "$loki": 2
+        },
+        {
+          "data": {
+            "id": "container-shared-svc-a",
+            "name": "shared-svc",
+            "watcher": "watcher-a",
+            "image": {
+              "id": "image-id-shared-svc-a",
+              "registry": {
+                "name": "hub",
+                "url": "https://registry-fixture.test"
+              },
+              "name": "library/shared",
+              "tag": {
+                "value": "one"
+              },
+              "digest": {},
+              "architecture": "amd64",
+              "os": "linux"
+            },
+            "result": {
+              "tag": "one"
+            }
+          },
+          "meta": {
+            "revision": 0,
+            "created": 1751000000000,
+            "version": 0
+          },
+          "$loki": 3
+        },
+        {
+          "data": {
+            "id": "container-shared-svc-b",
+            "name": "shared-svc",
+            "watcher": "watcher-b",
+            "image": {
+              "id": "image-id-shared-svc-b",
+              "registry": {
+                "name": "hub",
+                "url": "https://registry-fixture.test"
+              },
+              "name": "library/shared",
+              "tag": {
+                "value": "one"
+              },
+              "digest": {},
+              "architecture": "amd64",
+              "os": "linux"
+            },
+            "result": {
+              "tag": "one"
+            }
+          },
+          "meta": {
+            "revision": 0,
+            "created": 1751000000000,
+            "version": 0
+          },
+          "$loki": 4
         }
       ],
       "idIndex": null,

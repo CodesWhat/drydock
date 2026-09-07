@@ -195,6 +195,27 @@ describe('store first-start import from a v1.7 dd.json', () => {
         expect.objectContaining({ id: 'backup-fixture-one', containerName: 'web' }),
       ]);
 
+      // backups identity backfill (roadmap 7-STORE slice 10): a legacy row
+      // with no recorded identity, whose containerName matches exactly one
+      // imported container ('full-app'), is backfilled to that container's
+      // identity key — so it is found by identity even though nothing wrote
+      // containerIdentityKey pre-migration.
+      expect(
+        backup
+          .getBackupsForContainer({
+            containerName: 'full-app',
+            containerIdentityKey: 'edge-one::local::full-app',
+          })
+          .map((entry) => entry.id),
+      ).toEqual(['backup-fixture-legacy-resolvable']);
+      // A legacy row whose containerName ('shared-svc') matches two imported
+      // containers under different watchers is genuinely ambiguous: the
+      // import leaves it unowned (NULL identity) rather than guessing.
+      const ambiguousBackup = backup
+        .getBackupsByName('shared-svc')
+        .find((entry) => entry.id === 'backup-fixture-legacy-ambiguous');
+      expect(ambiguousBackup?.containerIdentityKey).toBeUndefined();
+
       // notification rules (roadmap 7-STORE slice 6): the imported rule
       // survives with its trigger allow-list and template overrides intact —
       // both the join-table read path and the normalization pass that runs
@@ -266,7 +287,12 @@ describe('store first-start import from a v1.7 dd.json', () => {
           .getContainers()
           .map((entry) => entry.id)
           .sort(),
-      ).toEqual(['container-cache-web', 'container-full-app']);
+      ).toEqual([
+        'container-cache-web',
+        'container-full-app',
+        'container-shared-svc-a',
+        'container-shared-svc-b',
+      ]);
 
       // update operations (roadmap 7-STORE slice 10): the terminal fixture row's
       // container_identity_key round-trips through the import, derived from its

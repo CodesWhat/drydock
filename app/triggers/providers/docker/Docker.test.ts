@@ -2663,7 +2663,6 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     docker.configuration.prune = true;
-    const storeContainer = await import('../../../store/container.js');
     const container = {
       name: 'container-name',
       watcher: 'local',
@@ -2677,7 +2676,6 @@ describe('additional docker trigger coverage', () => {
         kind: 'tag',
       },
     };
-    vi.mocked(storeContainer.getContainers).mockReturnValueOnce([container] as any);
     vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
         imageTag: '1.0.0',
@@ -2694,7 +2692,6 @@ describe('additional docker trigger coverage', () => {
     expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
       containerName: 'container-name',
       containerIdentityKey: '::local::container-name',
-      includeLegacy: true,
     });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();

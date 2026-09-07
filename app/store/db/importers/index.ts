@@ -37,7 +37,6 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   // roadmap 7-STORE slice 5: append-only tables, independent of each other
   // and of everything above.
   auditImporter,
-  backupsImporter,
   notificationHistoryImporter,
   notificationOutboxImporter,
   // roadmap 7-STORE slice 6: rules and the approval queue, independent of
@@ -56,4 +55,8 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   // container snapshot), but ordered after it to read naturally alongside
   // the entity it tracks.
   updateOperationsImporter,
+  // roadmap 7-STORE slice 10: backups, moved here (out of the slice 5 group
+  // above) because its identity backfill queries the containers table this
+  // import already wrote — it must run after containersImporter.
+  backupsImporter,
 ];

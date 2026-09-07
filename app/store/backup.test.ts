@@ -121,13 +121,14 @@ describe('Backup Store', () => {
     expect(result).toEqual([]);
   });
 
-  test('isBackupInScope rejects a backup with a different container name', () => {
+  test('isBackupInScope rejects a backup with a different identity key', () => {
     expect(
       backup.isBackupInScope(
         {
           id: 'backup-other',
           containerId: 'c-other',
           containerName: 'other',
+          containerIdentityKey: '::local::other',
           imageName: 'library/nginx',
           imageTag: '1.24',
           triggerName: 'docker.default',
@@ -136,22 +137,70 @@ describe('Backup Store', () => {
         {
           containerName: 'nginx',
           containerIdentityKey: '::local::nginx',
-          includeLegacy: true,
         },
       ),
     ).toBe(false);
   });
 
-  test('createContainerBackupScope ignores other names and rejects ambiguous unknown identities', () => {
+  test('isBackupInScope rejects a legacy backup with no identity key', () => {
+    expect(
+      backup.isBackupInScope(
+        {
+          id: 'backup-legacy',
+          containerId: 'c-legacy',
+          containerName: 'nginx',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+          triggerName: 'docker.default',
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
+        {
+          containerName: 'nginx',
+          containerIdentityKey: '::local::nginx',
+        },
+      ),
+    ).toBe(false);
+  });
+
+  test('isBackupInScope rejects when the scope itself carries no identity key', () => {
+    expect(
+      backup.isBackupInScope(
+        {
+          id: 'backup-a',
+          containerId: 'c-a',
+          containerName: 'web',
+          containerIdentityKey: '::local::web',
+          imageName: 'library/web',
+          imageTag: '1.0',
+          triggerName: 'docker.default',
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
+        { containerName: 'web' },
+      ),
+    ).toBe(false);
+  });
+
+  test('createContainerBackupScope derives the identity key from watcher and name', () => {
     const container = { id: 'target', name: 'web', watcher: 'local' } as any;
 
-    expect(
-      createContainerBackupScope(container, [
-        container,
-        { id: 'other-name', name: 'db' } as any,
-        { id: 'unknown-web', name: 'web' } as any,
-      ]),
-    ).toMatchObject({ containerName: 'web', includeLegacy: false });
+    expect(createContainerBackupScope(container)).toEqual({
+      containerName: 'web',
+      containerIdentityKey: '::local::web',
+    });
+  });
+
+  test('createContainerBackupScope prefers an already-computed identityKey', () => {
+    const container = {
+      id: 'target',
+      name: 'web',
+      watcher: 'local',
+      identityKey: '::local::compose:proj/web',
+    } as any;
+
+    expect(createContainerBackupScope(container)).toEqual({
+      containerName: 'web',
+      containerIdentityKey: '::local::compose:proj/web',
+    });
   });
 
   test('buildRollbackImageReference falls back to a tag when no digest was recorded', () => {
@@ -531,13 +580,12 @@ describe('Backup Store', () => {
     const result = backup.getBackupsForContainer({
       containerName: 'web',
       containerIdentityKey: '::watcher-a::web',
-      includeLegacy: false,
     });
 
     expect(result.map((entry) => entry.imageTag)).toEqual(['1.1.0', '1.0.0']);
   });
 
-  test('getBackupsForContainer includes legacy records only for an unambiguous scope', () => {
+  test('getBackupsForContainer never returns a legacy record with no identity key', () => {
     backup.insertBackup({
       containerId: 'legacy-id',
       containerName: 'web',
@@ -546,20 +594,43 @@ describe('Backup Store', () => {
       triggerName: 'docker.update',
     } as never);
 
-    const ambiguous = backup.getBackupsForContainer({
+    const result = backup.getBackupsForContainer({
       containerName: 'web',
       containerIdentityKey: '::watcher-a::web',
-      includeLegacy: false,
-    });
-    const unambiguous = backup.getBackupsForContainer({
-      containerName: 'web',
-      containerIdentityKey: '::watcher-a::web',
-      includeLegacy: true,
     });
 
-    expect(ambiguous).toEqual([]);
-    expect(unambiguous).toHaveLength(1);
-    expect(unambiguous[0].imageTag).toBe('0.9.0');
+    expect(result).toEqual([]);
+  });
+
+  test('getBackupsForContainer returns nothing for a scope with no identity key', () => {
+    backup.insertBackup({
+      containerId: 'c1',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      imageName: 'registry.example/a-web',
+      imageTag: '1.0.0',
+      triggerName: 'docker.update',
+    } as never);
+
+    expect(backup.getBackupsForContainer({ containerName: 'web' })).toEqual([]);
+  });
+
+  test('getBackupsForContainer still finds a backup after the container was renamed', () => {
+    backup.insertBackup({
+      containerId: 'c1',
+      containerName: 'web-old-name',
+      containerIdentityKey: '::watcher-a::web',
+      imageName: 'registry.example/a-web',
+      imageTag: '1.0.0',
+      triggerName: 'docker.update',
+    } as never);
+
+    const result = backup.getBackupsForContainer({
+      containerName: 'web-new-name',
+      containerIdentityKey: '::watcher-a::web',
+    });
+
+    expect(result.map((entry) => entry.imageTag)).toEqual(['1.0.0']);
   });
 
   test('getAllBackups should return all backups sorted by timestamp desc', () => {
@@ -632,6 +703,7 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.20',
       triggerName: 'docker.default',
@@ -640,6 +712,7 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.21',
       triggerName: 'docker.default',
@@ -648,6 +721,7 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.22',
       triggerName: 'docker.default',
@@ -656,13 +730,17 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.23',
       triggerName: 'docker.default',
       timestamp: '2024-09-01T00:00:00.000Z',
     } as never);
 
-    const pruned = backup.pruneOldBackups('nginx', 2);
+    const pruned = backup.pruneOldBackups(
+      { containerName: 'nginx', containerIdentityKey: '::local::nginx' },
+      2,
+    );
     expect(pruned).toBe(2);
 
     const remaining = backup.getBackupsByName('nginx');
@@ -675,6 +753,7 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.20',
       triggerName: 'docker.default',
@@ -683,13 +762,14 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c2',
       containerName: 'redis',
+      containerIdentityKey: '::local::redis',
       imageName: 'library/redis',
       imageTag: '7.0',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
     } as never);
 
-    backup.pruneOldBackups('nginx', 0);
+    backup.pruneOldBackups({ containerName: 'nginx', containerIdentityKey: '::local::nginx' }, 0);
 
     expect(backup.getBackupsByName('nginx')).toHaveLength(0);
     expect(backup.getBackupsByName('redis')).toHaveLength(1);
@@ -728,7 +808,6 @@ describe('Backup Store', () => {
       {
         containerName: 'web',
         containerIdentityKey: '::watcher-a::web',
-        includeLegacy: false,
       },
       1,
     );
@@ -739,7 +818,6 @@ describe('Backup Store', () => {
         .getBackupsForContainer({
           containerName: 'web',
           containerIdentityKey: '::watcher-a::web',
-          includeLegacy: false,
         })
         .map((entry) => entry.imageTag),
     ).toEqual(['1.1.0']);
@@ -748,16 +826,35 @@ describe('Backup Store', () => {
         .getBackupsForContainer({
           containerName: 'web',
           containerIdentityKey: '::watcher-b::web',
-          includeLegacy: false,
         })
         .map((entry) => entry.imageTag),
     ).toEqual(['9.0.0']);
+  });
+
+  test('pruneOldBackups does not prune a legacy backup with no identity key', () => {
+    backup.insertBackup({
+      containerId: 'legacy-id',
+      containerName: 'web',
+      imageName: 'registry.example/legacy-web',
+      imageTag: '0.9.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-01-01T00:00:00.000Z',
+    } as never);
+
+    const pruned = backup.pruneOldBackups(
+      { containerName: 'web', containerIdentityKey: '::watcher-a::web' },
+      0,
+    );
+
+    expect(pruned).toBe(0);
+    expect(backup.getBackupsByName('web')).toHaveLength(1);
   });
 
   test('pruneOldBackups should not remove backups when maxCount is undefined', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.20',
       triggerName: 'docker.default',
@@ -766,13 +863,17 @@ describe('Backup Store', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
       imageName: 'library/nginx',
       imageTag: '1.21',
       triggerName: 'docker.default',
       timestamp: '2024-03-01T00:00:00.000Z',
     } as never);
 
-    const pruned = backup.pruneOldBackups('nginx', undefined as any);
+    const pruned = backup.pruneOldBackups(
+      { containerName: 'nginx', containerIdentityKey: '::local::nginx' },
+      undefined as any,
+    );
 
     expect(pruned).toBe(0);
     expect(backup.getBackupsByName('nginx')).toHaveLength(2);
@@ -781,7 +882,10 @@ describe('Backup Store', () => {
   test('pruneOldBackups should return 0 when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
-    const count = freshBackup.pruneOldBackups('c1', 3);
+    const count = freshBackup.pruneOldBackups(
+      { containerName: 'c1', containerIdentityKey: '::local::c1' },
+      3,
+    );
     expect(count).toBe(0);
   });
 

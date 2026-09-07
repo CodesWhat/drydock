@@ -4507,7 +4507,6 @@ describe('Dockercompose Trigger', () => {
       {
         containerName: 'nginx',
         containerIdentityKey: '::local::nginx',
-        includeLegacy: false,
       },
       undefined,
     );
