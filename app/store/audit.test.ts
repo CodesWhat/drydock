@@ -74,6 +74,41 @@ describe('insertAudit', () => {
     expect(result.id).toBe('custom-id');
   });
 
+  test('round-trips every optional field through getAuditEntries', () => {
+    const inserted = audit.insertAudit({
+      id: 'full-entry',
+      action: 'update-applied',
+      containerName: 'web',
+      containerIdentityKey: 'watcher-web',
+      containerImage: 'library/web',
+      fromVersion: 'one',
+      toVersion: 'two',
+      updateKind: 'tag',
+      semverDiff: 'minor',
+      triggerName: 'docker.default',
+      status: 'success',
+      details: 'plain details text',
+    } as never);
+
+    const result = audit.getAuditEntries({ container: 'web' });
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toEqual({
+      id: inserted.id,
+      timestamp: inserted.timestamp,
+      action: 'update-applied',
+      containerName: 'web',
+      containerIdentityKey: 'watcher-web',
+      containerImage: 'library/web',
+      fromVersion: 'one',
+      toVersion: 'two',
+      updateKind: 'tag',
+      semverDiff: 'minor',
+      triggerName: 'docker.default',
+      status: 'success',
+      details: 'plain details text',
+    });
+  });
+
   test('pre-parses and stores timestampMs for indexed date queries', () => {
     const timestamp = '2024-06-01T12:34:56.000Z';
     const result = audit.insertAudit({
@@ -229,6 +264,42 @@ describe('getAuditEntries', () => {
     expect(actionTypes).toContain('security-alert');
     expect(actionTypes).not.toContain('container-update');
     expect(actionTypes).not.toContain('update-applied');
+  });
+
+  test('dedupes repeated actions in the actions filter to a single placeholder', () => {
+    audit.insertAudit({
+      action: 'update-available',
+      containerName: 'nginx',
+      status: 'info',
+    } as never);
+    audit.insertAudit({
+      action: 'update-applied',
+      containerName: 'redis',
+      status: 'success',
+    } as never);
+
+    const prepareSpy = vi.spyOn(db, 'prepare');
+    try {
+      const repeated = audit.getAuditEntries({
+        actions: ['update-available', 'update-available', 'update-available'],
+      });
+      const single = audit.getAuditEntries({ actions: ['update-available'] });
+
+      expect(repeated).toEqual(single);
+      expect(repeated.total).toBe(1);
+
+      const inClausePlaceholderCounts = prepareSpy.mock.calls
+        .map(([sql]) => sql as string)
+        .map((sql) => /action IN \(([^)]*)\)/.exec(sql))
+        .filter((match): match is RegExpExecArray => match !== null)
+        .map((match) => (match[1].match(/\?/g) ?? []).length);
+      expect(inClausePlaceholderCounts.length).toBeGreaterThan(0);
+      for (const count of inClausePlaceholderCounts) {
+        expect(count).toBe(1);
+      }
+    } finally {
+      prepareSpy.mockRestore();
+    }
   });
 
   test('prefers action over actions when both provided', () => {

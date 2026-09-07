@@ -86,8 +86,15 @@ function buildWhereClause(
     conditions.push('action = ?');
     params.push(query.action);
   } else if (query.actions && query.actions.length > 0) {
-    conditions.push(`action IN (${query.actions.map(() => '?').join(', ')})`);
-    params.push(...query.actions);
+    // Deduped, preserving first-seen order: a repeated action would
+    // otherwise inflate the placeholder count without bound, and each
+    // distinct length becomes its own cached prepared statement. The
+    // caller (app/api/audit.ts) already validates every value against the
+    // fixed AuditEntry action union, so deduping here bounds both the
+    // placeholders and the statement variants by the size of that set.
+    const actions = [...new Set(query.actions)];
+    conditions.push(`action IN (${actions.map(() => '?').join(', ')})`);
+    params.push(...actions);
   }
   if (query.container) {
     conditions.push('container_name = ?');

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { openDatabase } from './db/driver.js';
 
 /**
  * End-to-end coverage for the roadmap 7-STORE slice 3 first-start import: a
@@ -59,7 +60,12 @@ describe('store first-start import from a v1.7 dd.json', () => {
       // point of the test is the import's timestampMs backfill, not the
       // prune timer, and a row that had NOT been backfilled would still be
       // pruned here (an unfilled timestamp_ms falls back to 0, which is far
-      // older than the retention window).
+      // older than the retention window). Neither row keeps an explicit
+      // timestampMs sibling: both exercise the importer's backfill-from-
+      // `timestamp` path end to end, which the assertions below check
+      // directly against the SQLite row rather than inferring it from
+      // pruning survival alone. The explicit-timestampMs pass-through path
+      // is covered separately by store/db/importers/audit.test.ts.
       const auditCollection = fixture.collections.find(
         (collection: { name: string }) => collection.name === 'audit',
       );
@@ -67,7 +73,7 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const auditFirstTimestamp = new Date(auditNow - 60 * 60 * 1000).toISOString();
       const auditSecondTimestamp = new Date(auditNow - 2 * 60 * 60 * 1000).toISOString();
       auditCollection.data[0].data.timestamp = auditFirstTimestamp;
-      auditCollection.data[0].timestampMs = Date.parse(auditFirstTimestamp);
+      delete auditCollection.data[0].timestampMs;
       auditCollection.data[1].data.timestamp = auditSecondTimestamp;
 
       fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
@@ -126,6 +132,23 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const auditPage = audit.getAuditEntries();
       expect(auditPage.total).toBe(2);
       expect(auditPage.entries.map((entry) => entry.containerName)).toEqual(['web', 'app']);
+
+      // Both rows arrived without an explicit timestampMs sibling, so this
+      // checks the importer's backfill-from-timestamp path directly against
+      // the raw column rather than only inferring it from pruning survival.
+      const auditDb = openDatabase(path.join(tempDir, 'dd.sqlite'), { readOnly: true });
+      try {
+        const firstRow = auditDb
+          .prepare('SELECT timestamp_ms FROM audit WHERE id = ?')
+          .get('audit-fixture-first');
+        const secondRow = auditDb
+          .prepare('SELECT timestamp_ms FROM audit WHERE id = ?')
+          .get('audit-fixture-second');
+        expect(firstRow?.timestamp_ms).toBe(Date.parse(auditFirstTimestamp));
+        expect(secondRow?.timestamp_ms).toBe(Date.parse(auditSecondTimestamp));
+      } finally {
+        auditDb.close();
+      }
 
       // notification outbox (roadmap 7-STORE slice 5): the pending fixture
       // entry is ready for delivery (its nextAttemptAt is in the past); the
