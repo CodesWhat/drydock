@@ -9,7 +9,11 @@ import type { CollectionImporter } from '../import.js';
 import { agentKeysImporter } from './agent-keys.js';
 import { apiKeysImporter } from './api-keys.js';
 import { appImporter } from './app.js';
+import { auditImporter } from './audit.js';
+import { backupsImporter } from './backups.js';
 import { nameBindingsImporter } from './name-bindings.js';
+import { notificationHistoryImporter } from './notification-history.js';
+import { notificationOutboxImporter } from './notification-outbox.js';
 import { secretsImporter } from './secrets.js';
 import { settingsImporter } from './settings.js';
 import { uiPreferencesImporter } from './ui-preferences.js';
@@ -24,4 +28,10 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   agentKeysImporter,
   nameBindingsImporter,
   apiKeysImporter,
+  // roadmap 7-STORE slice 5: append-only tables, independent of each other
+  // and of everything above.
+  auditImporter,
+  backupsImporter,
+  notificationHistoryImporter,
+  notificationOutboxImporter,
 ];

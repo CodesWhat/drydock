@@ -126,6 +126,10 @@ describe('store/db/import', () => {
           agent_keys: 0,
           name_bindings: 0,
           api_keys: 0,
+          audit: 0,
+          backups: 0,
+          notification_history: 0,
+          notification_outbox: 0,
         },
       });
       expect(JSON.parse(String(readStoreMetadata(db, IMPORT_MARKER_KEY)))).toMatchObject({
@@ -138,6 +142,10 @@ describe('store/db/import', () => {
           agent_keys: 0,
           name_bindings: 0,
           api_keys: 0,
+          audit: 0,
+          backups: 0,
+          notification_history: 0,
+          notification_outbox: 0,
         },
       });
     });
@@ -208,6 +216,10 @@ describe('store/db/import', () => {
           agent_keys: 0,
           name_bindings: 0,
           api_keys: 0,
+          audit: 0,
+          backups: 0,
+          notification_history: 0,
+          notification_outbox: 0,
         },
       });
       expect(fs.existsSync(legacyStorePath)).toBe(false);

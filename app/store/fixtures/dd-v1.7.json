@@ -141,6 +141,138 @@
       "transactional": false,
       "cloneObjects": false,
       "disableChangesApi": true
+    },
+    {
+      "name": "audit",
+      "data": [
+        {
+          "data": {
+            "id": "audit-fixture-first",
+            "timestamp": "2026-01-10T00:00:00.000Z",
+            "action": "update-applied",
+            "containerName": "web",
+            "containerIdentityKey": "watcher-web",
+            "containerImage": "library/web",
+            "fromVersion": "one",
+            "toVersion": "two",
+            "updateKind": "tag",
+            "semverDiff": "minor",
+            "triggerName": "docker.default",
+            "status": "success",
+            "details": "plain details text"
+          },
+          "timestampMs": 1768003200000,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        },
+        {
+          "data": {
+            "id": "audit-fixture-second",
+            "timestamp": "2026-01-09T00:00:00.000Z",
+            "action": "update-available",
+            "containerName": "app",
+            "status": "info"
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 2
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "backups",
+      "data": [
+        {
+          "data": {
+            "id": "backup-fixture-one",
+            "containerId": "container-web",
+            "containerName": "web",
+            "containerIdentityKey": "watcher-web",
+            "imageName": "library/web",
+            "imageTag": "one",
+            "imageDigest": "digest-placeholder",
+            "timestamp": "2026-01-09T00:00:00.000Z",
+            "triggerName": "docker.default"
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "notifications_history",
+      "data": [
+        {
+          "data": {
+            "key": "trigger-one::watcher-web::update-available",
+            "triggerId": "trigger-one",
+            "containerId": "watcher-web",
+            "eventKind": "update-available",
+            "resultHash": "hash-placeholder",
+            "notifiedAt": "2026-01-08T00:00:00.000Z"
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "notificationOutbox",
+      "data": [
+        {
+          "data": {
+            "id": "outbox-fixture-pending",
+            "eventName": "update-available",
+            "triggerId": "trigger-one",
+            "containerId": "watcher-web",
+            "attempts": 0,
+            "maxAttempts": 5,
+            "nextAttemptAt": "2026-01-08T00:00:00.000Z",
+            "status": "pending",
+            "createdAt": "2026-01-08T00:00:00.000Z",
+            "payload": { "eventName": "update-available", "containerName": "web" }
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        },
+        {
+          "data": {
+            "id": "outbox-fixture-dead-letter",
+            "eventName": "update-failed",
+            "triggerId": "trigger-two",
+            "containerId": "watcher-app",
+            "attempts": 5,
+            "maxAttempts": 5,
+            "nextAttemptAt": "2026-01-07T00:00:00.000Z",
+            "status": "dead-letter",
+            "lastError": "plain delivery error",
+            "createdAt": "2026-01-06T00:00:00.000Z",
+            "failedAt": "2026-01-07T00:00:00.000Z",
+            "payload": { "eventName": "update-failed", "containerName": "app" }
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 2
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
     }
   ],
   "databaseVersion": 1.5,

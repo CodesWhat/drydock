@@ -36,6 +36,9 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const agentKeys = await import('./agent-keys.js');
       const nameBindings = await import('./name-bindings.js');
       const apiKey = await import('./api-key.js');
+      const audit = await import('./audit.js');
+      const backup = await import('./backup.js');
+      const notificationOutbox = await import('./notification-outbox.js');
 
       // The fixture stores a placeholder secretHash for its api-keys rows
       // (a real hash is a high-entropy string gitleaks flags as an API key
@@ -48,6 +51,25 @@ describe('store first-start import from a v1.7 dd.json', () => {
         (collection: { name: string }) => collection.name === 'api-keys',
       );
       apiKeysCollection.data[0].secretHash = apiKey.hashApiKeySecret(v17Secret);
+
+      // The audit fixture rows carry fixed 2026-01 timestamps for
+      // readability, but `audit.createCollections()` prunes anything older
+      // than the 30-day retention window the moment `store.init()` wires it
+      // up. Move both rows to "just now" so they survive that prune — the
+      // point of the test is the import's timestampMs backfill, not the
+      // prune timer, and a row that had NOT been backfilled would still be
+      // pruned here (an unfilled timestamp_ms falls back to 0, which is far
+      // older than the retention window).
+      const auditCollection = fixture.collections.find(
+        (collection: { name: string }) => collection.name === 'audit',
+      );
+      const auditNow = Date.now();
+      const auditFirstTimestamp = new Date(auditNow - 60 * 60 * 1000).toISOString();
+      const auditSecondTimestamp = new Date(auditNow - 2 * 60 * 60 * 1000).toISOString();
+      auditCollection.data[0].data.timestamp = auditFirstTimestamp;
+      auditCollection.data[0].timestampMs = Date.parse(auditFirstTimestamp);
+      auditCollection.data[1].data.timestamp = auditSecondTimestamp;
+
       fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
 
       await store.init();
@@ -97,6 +119,25 @@ describe('store first-start import from a v1.7 dd.json', () => {
       expect(verified?.scopes).toEqual(['read', 'write']);
       // The minted child key's parent link survived the import too.
       expect(apiKey.findApiKeyById('bbbbbbbbbbbb')?.parentKeyId).toBe('aaaaaaaaaaaa');
+
+      // audit (roadmap 7-STORE slice 5): both fixture rows survive the
+      // retention prune above, newest first — proving the importer
+      // backfilled timestamp_ms for the row that arrived without one.
+      const auditPage = audit.getAuditEntries();
+      expect(auditPage.total).toBe(2);
+      expect(auditPage.entries.map((entry) => entry.containerName)).toEqual(['web', 'app']);
+
+      // notification outbox (roadmap 7-STORE slice 5): the pending fixture
+      // entry is ready for delivery (its nextAttemptAt is in the past); the
+      // dead-letter entry is excluded from the ready-for-delivery scan.
+      const readyOutboxEntries = notificationOutbox.findReadyForDelivery();
+      expect(readyOutboxEntries.map((entry) => entry.id)).toEqual(['outbox-fixture-pending']);
+
+      // backups (roadmap 7-STORE slice 5): the by-name reader still finds
+      // the imported backup, keyed on container name as it was pre-import.
+      expect(backup.getBackupsByName('web')).toEqual([
+        expect.objectContaining({ id: 'backup-fixture-one', containerName: 'web' }),
+      ]);
 
       // The untouched pre-1.8 backup is the whole rollback story, and the
       // SQLite database now exists alongside it.
