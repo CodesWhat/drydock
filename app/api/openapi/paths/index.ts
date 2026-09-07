@@ -13,6 +13,7 @@ import { apiKeyPaths } from './api-keys.js';
 import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
+import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
 import { dependencyGroupPaths } from './dependency-groups.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
@@ -353,6 +354,7 @@ export const openApiPaths = {
       },
     },
   },
+  ...configPaths,
   '/api/v1/server': {
     get: {
       tags: ['System'],

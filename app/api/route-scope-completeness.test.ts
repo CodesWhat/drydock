@@ -43,6 +43,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/authentications → read',
   'GET /api/v1/authentications/:type/:name → read',
   'GET /api/v1/authentications/:type/:name/:agent → read',
+  'GET /api/v1/config → session-only',
+  'GET /api/v1/config/:section → session-only',
   'GET /api/v1/containers → read',
   'GET /api/v1/containers/:id → read',
   'GET /api/v1/containers/:id/backups → read',

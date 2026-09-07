@@ -6,7 +6,7 @@ import { logWarn } from '../../log/warn.js';
 import { resolveConfiguredPath } from '../../runtime/paths.js';
 import { flattenConfigTree } from './flatten.js';
 import { interpolateConfigTree } from './interpolate.js';
-import { setConfigFileLayer } from './layer.js';
+import { type ConfigFileInfo, setConfigFileLayer } from './layer.js';
 
 /**
  * Discover, parse and flatten a `drydock.yml` beneath `/config`, then hand
@@ -44,6 +44,15 @@ export interface LoadConfigFileOptions {
    * itself stays the flat `DD_*` map either way.
    */
   interpolatedKeys?: Set<string>;
+  /**
+   * Out-param: when provided, its `.current` is set to the resolved file's
+   * path and modification time once a file is found (left `undefined` when
+   * none is). `GET /api/v1/config`'s `file` field (roadmap 7.1 slice 4)
+   * reads this back off `./layer.ts` rather than re-discovering the file
+   * itself, since `loadConfigFileIntoLayer` is the only place that already
+   * did the discovery `stat` and has the answer for free.
+   */
+  fileInfo?: { current?: ConfigFileInfo };
 }
 
 interface ResolvedConfigFile {
@@ -144,6 +153,10 @@ export async function loadConfigFile(
   try {
     const stats = await handle.stat();
 
+    if (options.fileInfo) {
+      options.fileInfo.current = { path: resolvedPath, modifiedAt: stats.mtime.toISOString() };
+    }
+
     if (!stats.isFile()) {
       throw configFileError(`Config file "${resolvedPath}" must be a regular file`);
     }
@@ -205,6 +218,7 @@ export async function loadConfigFileIntoLayer(
   options: LoadConfigFileOptions = {},
 ): Promise<void> {
   const interpolatedKeys = new Set<string>();
-  const layer = await loadConfigFile(env, { ...options, interpolatedKeys });
-  setConfigFileLayer(layer, interpolatedKeys);
+  const fileInfo: { current?: ConfigFileInfo } = {};
+  const layer = await loadConfigFile(env, { ...options, interpolatedKeys, fileInfo });
+  setConfigFileLayer(layer, interpolatedKeys, fileInfo.current);
 }

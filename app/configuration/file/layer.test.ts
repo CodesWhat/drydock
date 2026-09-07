@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import {
+  getConfigFileInfo,
   getConfigFileInterpolatedKeys,
   getConfigFileLayer,
   resetConfigFileLayer,
@@ -44,5 +45,34 @@ describe('file/layer', () => {
     setConfigFileLayer({ DD_SERVER_NAME: 'resolved-from-env' }, new Set(['DD_SERVER_NAME']));
     resetConfigFileLayer();
     expect(getConfigFileInterpolatedKeys()).toStrictEqual(new Set());
+  });
+
+  test('file info defaults to undefined before anything sets it', () => {
+    expect(getConfigFileInfo()).toBeUndefined();
+  });
+
+  test('setConfigFileLayer without a third argument still defaults file info to undefined', () => {
+    setConfigFileLayer({ DD_SERVER_NAME: 'from-file' });
+    expect(getConfigFileInfo()).toBeUndefined();
+  });
+
+  test('setConfigFileLayer records the file info passed alongside the layer', () => {
+    setConfigFileLayer({ DD_SERVER_NAME: 'from-file' }, new Set(), {
+      path: '/config/drydock.yml',
+      modifiedAt: '2026-09-07T00:00:00.000Z',
+    });
+    expect(getConfigFileInfo()).toStrictEqual({
+      path: '/config/drydock.yml',
+      modifiedAt: '2026-09-07T00:00:00.000Z',
+    });
+  });
+
+  test('resetConfigFileLayer restores file info to undefined too', () => {
+    setConfigFileLayer({ DD_SERVER_NAME: 'from-file' }, new Set(), {
+      path: '/config/drydock.yml',
+      modifiedAt: '2026-09-07T00:00:00.000Z',
+    });
+    resetConfigFileLayer();
+    expect(getConfigFileInfo()).toBeUndefined();
   });
 });

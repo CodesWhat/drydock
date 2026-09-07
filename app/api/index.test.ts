@@ -223,6 +223,7 @@ function mockActualApiRouterStatsLifecycle() {
     './audit.js',
     './authentication.js',
     './backup.js',
+    './config.js',
     './container.js',
     './container-actions.js',
     './container-dependencies.js',
