@@ -51,4 +51,40 @@ describe('mergeConfigLayers', () => {
     mergeConfigLayers(envVars, { DD_LOG_LEVEL: 'debug' });
     expect(envVars.DD_LOG_LEVEL).toBe('debug');
   });
+
+  test('a file-supplied key named in envSourcedFileKeys attributes as "env", not "file"', () => {
+    const envVars: Record<string, string | undefined> = {};
+    const sources = mergeConfigLayers(
+      envVars,
+      { DD_REGISTRY_GHCR_PRIVATE_TOKEN: 'secret-value' },
+      new Set(['DD_REGISTRY_GHCR_PRIVATE_TOKEN']),
+    );
+
+    expect(envVars.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('secret-value');
+    expect(sources.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('env');
+  });
+
+  test('a file-supplied key not named in envSourcedFileKeys still attributes as "file"', () => {
+    const envVars: Record<string, string | undefined> = {};
+    const sources = mergeConfigLayers(
+      envVars,
+      { DD_SERVER_NAME: 'literal', DD_REGISTRY_GHCR_PRIVATE_TOKEN: 'secret-value' },
+      new Set(['DD_REGISTRY_GHCR_PRIVATE_TOKEN']),
+    );
+
+    expect(sources.DD_SERVER_NAME).toBe('file');
+    expect(sources.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('env');
+  });
+
+  test('envSourcedFileKeys naming a key env already wins on has no effect (env already won)', () => {
+    const envVars: Record<string, string | undefined> = { DD_SERVER_PORT: '3000' };
+    const sources = mergeConfigLayers(
+      envVars,
+      { DD_SERVER_PORT: '4000' },
+      new Set(['DD_SERVER_PORT']),
+    );
+
+    expect(envVars.DD_SERVER_PORT).toBe('3000');
+    expect(sources.DD_SERVER_PORT).toBe('env');
+  });
 });

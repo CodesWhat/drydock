@@ -6,7 +6,7 @@ import setValue from 'set-value';
 import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { toPositiveInteger } from '../util/parse.js';
-import { getConfigFileLayer } from './file/layer.js';
+import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './file/layer.js';
 import { type ConfigValueSource, mergeConfigLayers } from './file/sources.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
@@ -144,17 +144,23 @@ Object.keys(process.env)
 // DD_CONFIG_FILE is absent or the file fails parsing or its own hardening
 // checks — live entirely in file/loader.ts, which this module never imports:
 // that keeps this module free of fs calls at import time, since it's
-// imported by nearly every test file.
+// imported by nearly every test file. `configFileInterpolatedKeys` names
+// the keys whose file value came from `${NAME}` substitution (decision D1)
+// rather than literal file text, so the merge below can attribute them as
+// `env` even though they physically arrived via the file layer.
 const configFileLayer = getConfigFileLayer();
+const configFileInterpolatedKeys = getConfigFileInterpolatedKeys();
 
 // 3. Merge the file layer beneath the real environment: a key already set in
 // step 1 wins, an unset one is filled in from the file, and Joi defaults are
 // untouched either way — the whole env > file > defaults precedence is this
 // one `=== undefined` test, done in mergeConfigLayers. Records which layer
-// supplied each key.
+// supplied each key; an interpolated key attributes as `env` even though it
+// reached ddEnvVars via the file layer.
 export const configFileSources: Record<string, ConfigValueSource> = mergeConfigLayers(
   ddEnvVars,
   configFileLayer,
+  configFileInterpolatedKeys,
 );
 
 // 4. Replace all secret files referenced by their secret values. Runs after

@@ -12,13 +12,25 @@
  * touches `fs`. Tests that want a specific file layer call
  * `setConfigFileLayer` directly instead of writing real files and setting
  * `DD_CONFIG_FILE`.
+ *
+ * `interpolatedKeys` travels alongside the layer for the same reason
+ * (roadmap 7.1 slice 1b, decision D1): a key whose file value came from
+ * `${NAME}` substitution attributes as source `env`, not `file`, once
+ * `../index.ts` merges it — `getConfigFileInterpolatedKeys()` is how that
+ * merge finds out which keys those were, without `../index.ts` needing to
+ * import `loader.ts` (or `interpolate.ts`) itself.
  */
 
 let configFileLayer: Record<string, string> = {};
+let configFileInterpolatedKeys: ReadonlySet<string> = new Set();
 
 /** Set by `loader.ts`'s `loadConfigFileIntoLayer` (production) or directly by tests. */
-export function setConfigFileLayer(layer: Record<string, string>): void {
+export function setConfigFileLayer(
+  layer: Record<string, string>,
+  interpolatedKeys: ReadonlySet<string> = new Set(),
+): void {
   configFileLayer = layer;
+  configFileInterpolatedKeys = interpolatedKeys;
 }
 
 /** Read by `../index.ts` when it merges the file layer beneath the environment. */
@@ -26,7 +38,13 @@ export function getConfigFileLayer(): Record<string, string> {
   return configFileLayer;
 }
 
+/** Read by `../index.ts` so an interpolated key can attribute as `env`. */
+export function getConfigFileInterpolatedKeys(): ReadonlySet<string> {
+  return configFileInterpolatedKeys;
+}
+
 /** Test-only: restores the pre-bootstrap empty layer between cases that don't `vi.resetModules()`. */
 export function resetConfigFileLayer(): void {
   configFileLayer = {};
+  configFileInterpolatedKeys = new Set();
 }
