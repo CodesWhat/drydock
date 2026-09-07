@@ -1199,6 +1199,34 @@ describe('Docker Watcher', () => {
       expect(docker.lastRunAt).toBeDefined();
     });
 
+    // DR-72 review finding #4: watch() awaits emitContainerReport() inside the
+    // per-container fallback loop for a container whose own processing
+    // rejected. A handler on that emit can run long enough for
+    // deregisterComponent() to land before it resolves, and the loop must
+    // discard the scan right there instead of pushing the fallback report and
+    // continuing on to the batch emit and snapshot.
+    test('discards the scan when deregistered from inside the fallback report emitter', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'failed-container', name: 'failed-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.watchContainer = vi.fn().mockRejectedValue(new Error('Processing failed'));
+      event.emitContainerReport.mockImplementationOnce(async () => {
+        await docker.deregisterComponent();
+      });
+
+      const result = await docker.watch();
+
+      expect(result).toEqual([]);
+      expect(event.emitContainerReports).not.toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(docker.log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('emitting a fallback container report'),
+      );
+    });
+
     // DR-72 review finding #4: watch() awaits emitContainerReport() and
     // emitContainerReports() handlers, either of which can run long enough for
     // deregisterComponent() to land before they resolve. Without a recheck after

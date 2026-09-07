@@ -210,6 +210,25 @@ describe('watchFromCronOrchestration', () => {
     );
   });
 
+  // Same stale-scan path, but with no debug logger available (a log shape that
+  // never grew one, or one stripped between the two ensureLogger() calls in
+  // this function) - the discard must not throw trying to call it.
+  test('a stale scan discards cleanly when the logger has no debug method', async () => {
+    const watcher = createWatcher({
+      log: { info: vi.fn(), warn: vi.fn() },
+      watch: vi.fn().mockImplementation(async () => {
+        watcher.scanGeneration++;
+        watcher.isWatcherDeregistered = true;
+        return [];
+      }),
+    });
+
+    const result = await watchFromCronOrchestration(watcher);
+
+    expect(result).toEqual([]);
+    expect(watcher.log?.info).not.toHaveBeenCalledWith(expect.stringContaining('Cron finished'));
+  });
+
   test('the catch-up scan clears the queue it was armed by and announces the opening', async () => {
     const watcher = createWatcher({
       configuration: {
