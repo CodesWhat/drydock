@@ -2751,7 +2751,14 @@ class Trigger<
       if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
         return;
       }
-      if (!this.mustTrigger(container)) {
+      const mustTriggerDecision = this.getMustTriggerDecision(container);
+      if (!mustTriggerDecision.allowed) {
+        // The batch path logs this same exclusion (runUpdateAvailableSimpleTrigger);
+        // the digest path dropped it silently, which left this container's
+        // exclusion invisible to anyone reading the logs (DR-95).
+        this.log.debug(
+          `Trigger conditions not met for ${containerName} => ignore (${mustTriggerDecision.reason})`,
+        );
         return;
       }
       this.bufferContainerForDigest(container);
