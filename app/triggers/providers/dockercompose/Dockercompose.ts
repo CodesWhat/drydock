@@ -2319,6 +2319,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           runtimeContainer,
           logContainer,
         );
+        // Pre-flight guard (DR-41): confirm the bound image runs on this host
+        // before any service in the batch is touched. A single-arch image
+        // that pulls cleanly but targets the wrong platform must fail here,
+        // before the compose file is rewritten or any container recreated,
+        // not partway through the batch's per-container recreate loop.
+        await this.verifyPulledImageCompatibility(
+          dockerApi as DockerApiLike,
+          identityOutcome.imageIdentity || newImage,
+          logContainer,
+        );
         composeFileOnceRuntimeContextByService.set(service, {
           dockerApi,
           registry,

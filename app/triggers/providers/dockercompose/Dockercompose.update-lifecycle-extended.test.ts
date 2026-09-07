@@ -975,6 +975,65 @@ describe('Dockercompose Trigger', () => {
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
   });
 
+  test('processComposeFile should refuse a compose-file-once service whose bound image fails the platform check (DR-41)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const firstContainer = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // The pull succeeds and the daemon binds it to a digest, but the image is
+    // single-arch and targets the wrong platform for this host.
+    const incompatibleArch = process.arch === 'arm' ? 'amd64' : 'arm';
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:compose-file-once-id',
+        RepoDigests: ['nginx@sha256:abcdef123456'],
+        Architecture: incompatibleArch,
+        Os: 'linux',
+      }),
+    });
+    const scanAndGatePostPullSpy = vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile(composeFile, [firstContainer, secondContainer]),
+    ).rejects.toThrow('is not compatible with Docker daemon architecture');
+
+    // The platform check runs once per service, against the bound identity,
+    // inside the preflight itself (DR-41): a bad image must be refused before
+    // any replica is gated or recreated and before the compose file is
+    // rewritten, not partway through the per-container recreate loop.
+    expect(pullImageSpy).toHaveBeenCalledTimes(1);
+    expect(scanAndGatePostPullSpy).not.toHaveBeenCalled();
+    expect(stopContainerSpy).not.toHaveBeenCalled();
+    expect(removeContainerSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
   test('compose-file-once should record one skipped-scan audit per replica, not one extra for the refreshed service', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
