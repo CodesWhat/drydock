@@ -90,6 +90,13 @@ function hasHassCommandCapableClient(client: HassClient): client is HassCommandC
 
 interface HassConfiguration {
   topic: string;
+  // Optional here because Hass's own unit tests construct a bare
+  // `{ topic, hass }` configuration; a real Hass instance is always
+  // constructed from `Mqtt.ts`'s `MqttConfiguration`, which has this set
+  // (roadmap 7-STORE slice 10 review finding 2 — the one-shot cleanup
+  // marker's route key is built from it, see
+  // `getIdentityTopicCleanupRouteKey`).
+  url?: string;
   hass: {
     prefix: string;
     discovery: boolean;
@@ -1326,19 +1333,43 @@ class Hass {
   }
 
   /**
+   * The route this Hass instance's one-shot legacy-topic cleanup sweep
+   * belongs to (roadmap 7-STORE slice 10 review finding 2). Two
+   * discovery-enabled MQTT triggers sharing one store — different brokers or
+   * topic layouts — must not share one cleanup marker.
+   */
+  private getIdentityTopicCleanupRouteKey(): string {
+    return mqttHassStore.getHassIdentityTopicCleanupRouteKey({
+      brokerUrl: this.configuration.url,
+      baseTopic: this.configuration.topic,
+      discoveryPrefix: this.configuration.hass.prefix,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment ?? false,
+    });
+  }
+
+  /**
    * One-time post-upgrade cleanup (MQTT identity cut): publish an empty
    * retained message on every pre-v1.8 name-based discovery topic the
    * identity-based topic scheme replaces, so Home Assistant prunes the old
    * entity instead of leaving a duplicate "Unknown" ghost beside the new one.
-   * Guarded by a `store_metadata` marker (`app/store/mqtt-hass.ts`) so it runs
-   * at most once ever, not once per restart. A container-level publish
-   * failure is logged and skipped rather than retried forever — the cost of a
-   * missed cleanup is a lingering ghost entity, not a functional break.
+   * Guarded by a `store_metadata` marker (`app/store/mqtt-hass.ts`), scoped
+   * to this trigger's route (broker + base topic + discovery prefix +
+   * agent-topic-segment mode), so it runs at most once ever per route, not
+   * once per restart. A container-level publish failure is logged and
+   * skipped, and — unlike a fully clean sweep — does NOT mark the route's
+   * cleanup complete, so the next resync retries the containers that were
+   * missed instead of leaving a permanent ghost entity behind (roadmap
+   * 7-STORE slice 10 review finding 3).
    */
   private async cleanupLegacyIdentityTopics(containers: Container[]): Promise<void> {
-    if (!this.configuration.hass.discovery || mqttHassStore.hasRunHassIdentityTopicCleanup()) {
+    const routeKey = this.getIdentityTopicCleanupRouteKey();
+    if (
+      !this.configuration.hass.discovery ||
+      mqttHassStore.hasRunHassIdentityTopicCleanup(routeKey)
+    ) {
       return;
     }
+    let sweepFullySucceeded = true;
     for (const container of containers) {
       try {
         const currentStateTopic = this.getContainerStateTopic({ container });
@@ -1347,12 +1378,15 @@ class Hass {
         );
         await this.removeDiscoveryTopics({ kind: 'update', stateTopics: legacyStateTopics });
       } catch (error: unknown) {
+        sweepFullySucceeded = false;
         this.log.warn(
           `Failed to clean up legacy hass discovery topics for container [${container.name}] (${getErrorMessage(error)})`,
         );
       }
     }
-    mqttHassStore.markHassIdentityTopicCleanupComplete();
+    if (sweepFullySucceeded) {
+      mqttHassStore.markHassIdentityTopicCleanupComplete(routeKey);
+    }
   }
 
   /**

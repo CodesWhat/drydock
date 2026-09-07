@@ -2045,6 +2045,123 @@ describe('hass discovery startup resync (#708)', () => {
       { retain: true },
     );
   });
+
+  test('does not mark the sweep complete when a container publish fails, so the next resync retries', async () => {
+    let legacyCleanupAttempts = 0;
+    const retryClient = {
+      publish: vi.fn((topic: string) => {
+        if (topic === 'homeassistant/update/topic_local_myapp_web_1/config') {
+          legacyCleanupAttempts += 1;
+          if (legacyCleanupAttempts === 1) {
+            return Promise.reject(new Error('broker publish failed'));
+          }
+        }
+        return undefined;
+      }),
+    };
+    const retryHass = new Hass({
+      client: retryClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = {
+      id: 'ctr-retry',
+      name: 'myapp_web_1',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(retryHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    vi.spyOn(log, 'warn').mockImplementation(() => {});
+    const markCompleteSpy = vi.spyOn(mqttHassStore, 'markHassIdentityTopicCleanupComplete');
+
+    await getResyncDiscovery(retryHass)();
+
+    expect(legacyCleanupAttempts).toBe(1);
+    expect(markCompleteSpy).not.toHaveBeenCalled();
+
+    await getResyncDiscovery(retryHass)();
+
+    expect(legacyCleanupAttempts).toBe(2);
+    expect(markCompleteSpy).toHaveBeenCalledOnce();
+    markCompleteSpy.mockRestore();
+  });
+
+  test('two triggers on different broker routes each run their own cleanup sweep with independent markers', async () => {
+    const completedRouteKeys = new Set<string>();
+    const hasRunSpy = vi
+      .spyOn(mqttHassStore, 'hasRunHassIdentityTopicCleanup')
+      .mockImplementation((routeKey: string) => completedRouteKeys.has(routeKey));
+    const markCompleteSpy = vi
+      .spyOn(mqttHassStore, 'markHassIdentityTopicCleanupComplete')
+      .mockImplementation((routeKey: string) => {
+        completedRouteKeys.add(routeKey);
+      });
+
+    const clientA = { publish: vi.fn(() => undefined) };
+    const hassA = new Hass({
+      client: clientA,
+      configuration: {
+        url: 'mqtt://broker-a:1883',
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const clientB = { publish: vi.fn(() => undefined) };
+    const hassB = new Hass({
+      client: clientB,
+      configuration: {
+        url: 'mqtt://broker-b:1883',
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = {
+      id: 'ctr-route',
+      name: 'myapp_web_1',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(hassA, 'updateContainerSensors').mockResolvedValue(undefined);
+    vi.spyOn(hassB, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await getResyncDiscovery(hassA)();
+    await getResyncDiscovery(hassB)();
+
+    // Each route's sweep actually published the legacy-topic removal — broker
+    // A having already completed its sweep did not suppress broker B's.
+    expect(clientA.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_myapp_web_1/config',
+      '',
+      { retain: true },
+    );
+    expect(clientB.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_myapp_web_1/config',
+      '',
+      { retain: true },
+    );
+    expect(markCompleteSpy).toHaveBeenCalledTimes(2);
+    const [[routeKeyA], [routeKeyB]] = markCompleteSpy.mock.calls;
+    expect(routeKeyA).not.toBe(routeKeyB);
+
+    hasRunSpy.mockRestore();
+    markCompleteSpy.mockRestore();
+  });
 });
 
 // ── #386: agenttopicsegment flag ─────────────────────────────────────────────
