@@ -19,6 +19,8 @@ import { notificationRulesImporter } from './notification-rules.js';
 import { secretsImporter } from './secrets.js';
 import { settingsImporter } from './settings.js';
 import { uiPreferencesImporter } from './ui-preferences.js';
+import { updateLifecycleCacheImporter } from './update-lifecycle-cache.js';
+import { updatePolicyRetentionCacheImporter } from './update-policy-retention-cache.js';
 
 export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   appImporter,
@@ -40,4 +42,10 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   // each other and of everything above.
   notificationRulesImporter,
   approvalsImporter,
+  // roadmap 7-STORE slice 7: the two caches. The lifecycle cache importer
+  // reads the legacy `containers` LokiJS collection directly (containers
+  // themselves do not move onto SQLite until slice 8), not another importer's
+  // output, so ordering relative to the rest of this list does not matter.
+  updateLifecycleCacheImporter,
+  updatePolicyRetentionCacheImporter,
 ];

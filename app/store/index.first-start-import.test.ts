@@ -42,6 +42,8 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const notificationOutbox = await import('./notification-outbox.js');
       const notification = await import('./notification.js');
       const approval = await import('./approval.js');
+      const updateLifecycleCache = await import('./update-lifecycle-cache.js');
+      const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
 
       // The fixture stores a placeholder secretHash for its api-keys rows
       // (a real hash is a high-entropy string gitleaks flags as an API key
@@ -211,6 +213,28 @@ describe('store first-start import from a v1.7 dd.json', () => {
       expect(approval.findApprovalByOperationId('operation-one')?.id).toBe(
         'approval-fixture-decided',
       );
+
+      // update-lifecycle cache (roadmap 7-STORE slice 7): the fixture's legacy
+      // `watcher::name` row maps forward to the still-present container's
+      // identity key, and the orphaned row (no matching container in the
+      // imported data) is dropped rather than guessed at.
+      const lifecycleCacheRecords = updateLifecycleCache.listRecords();
+      expect(lifecycleCacheRecords).toEqual([
+        expect.objectContaining({
+          cacheKey: '::local::cache-web',
+          updateDetectedAt: '2026-01-05T00:00:00.000Z',
+          firstSeenAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+
+      // update-policy-retention cache (roadmap 7-STORE slice 7): already keyed
+      // on identity before the migration, so it imports unchanged.
+      expect(updatePolicyRetentionCache.listRecords()).toEqual([
+        expect.objectContaining({
+          cacheKey: '::local::cache-web',
+          updatePolicyOverrides: { maturityMode: 'mature', maturityMinAgeDays: 5 },
+        }),
+      ]);
 
       // The untouched pre-1.8 backup is the whole rollback story, and the
       // SQLite database now exists alongside it.

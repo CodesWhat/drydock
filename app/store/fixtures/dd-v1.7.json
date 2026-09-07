@@ -303,6 +303,71 @@
       "disableChangesApi": true
     },
     {
+      "name": "containers",
+      "data": [
+        {
+          "data": {
+            "id": "container-cache-web",
+            "name": "cache-web",
+            "watcher": "local",
+            "image": { "name": "library/web", "tag": { "value": "one" } },
+            "result": { "tag": "one" }
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "update-lifecycle-cache",
+      "data": [
+        {
+          "cacheKey": "local::cache-web",
+          "updateDetectedAt": "2026-01-05T00:00:00.000Z",
+          "firstSeenAt": "2026-01-01T00:00:00.000Z",
+          "resultSignature": "{\"tag\":\"cache-fixture\"}",
+          "expiresAt": 4102444800000,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        },
+        {
+          "cacheKey": "local::ghost-app",
+          "updateDetectedAt": "2026-01-04T00:00:00.000Z",
+          "resultSignature": "{\"tag\":\"ghost-fixture\"}",
+          "expiresAt": 4102444800000,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 2
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "update-policy-retention-cache",
+      "data": [
+        {
+          "cacheKey": "::local::cache-web",
+          "updatePolicyOverrides": { "maturityMode": "mature", "maturityMinAgeDays": 5 },
+          "expiresAt": 4102444800000,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
       "name": "approvals",
       "data": [
         {
