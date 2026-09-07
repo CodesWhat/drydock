@@ -63,6 +63,11 @@ test('maskConfiguration should mask sensitive data', async () => {
   });
 });
 
+test('maskConfiguration should leave auth undefined when it is not configured', async () => {
+  ntfy.configuration = { ...configurationValid };
+  expect(ntfy.maskConfiguration()).toEqual({ ...configurationValid, auth: undefined });
+});
+
 test('trigger should call http client', async () => {
   ntfy.configuration = configurationValid;
   const container = {
@@ -188,4 +193,193 @@ test('sendHttpRequest should reject when Ntfy returns 429', async () => {
   rejectOnceWithHttpStatus(axios, 'Ntfy rate limited', 429);
 
   await expect(ntfy.sendHttpRequest({ message: 'hello' })).rejects.toThrow('Ntfy rate limited');
+});
+
+test('validateConfiguration should accept topics, priorities and actions', async () => {
+  const configuration = {
+    ...configurationValid,
+    topics: { updatefailed: 'failures', securityalert: 'alerts' },
+    priorities: { updatefailed: 5, securityalert: 4 },
+    actions: [
+      {
+        action: 'view',
+        label: 'Open ${container.name}',
+        url: 'https://example.test/${container.name}',
+      },
+    ],
+  };
+  expect(ntfy.validateConfiguration(configuration)).toStrictEqual(configuration);
+});
+
+test('validateConfiguration should reject a fourth action', async () => {
+  const configuration = {
+    ...configurationValid,
+    actions: [
+      { action: 'view', label: 'a', url: 'https://example.test/a' },
+      { action: 'view', label: 'b', url: 'https://example.test/b' },
+      { action: 'view', label: 'c', url: 'https://example.test/c' },
+      { action: 'view', label: 'd', url: 'https://example.test/d' },
+    ],
+  };
+  expect(() => {
+    ntfy.validateConfiguration(configuration);
+  }).toThrowError(joi.ValidationError);
+});
+
+test('validateConfiguration should reject an unknown action type', async () => {
+  const configuration = {
+    ...configurationValid,
+    actions: [{ action: 'broadcast', label: 'a', url: 'https://example.test/a' }],
+  };
+  expect(() => {
+    ntfy.validateConfiguration(configuration);
+  }).toThrowError(joi.ValidationError);
+});
+
+test('trigger should route to the per-event topic and priority when configured', async () => {
+  ntfy.configuration = {
+    ...configurationValid,
+    topics: { updatefailed: 'failures' },
+    priorities: { updatefailed: 5 },
+  };
+  const container = {
+    name: 'container1',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+    notificationEvent: { kind: 'update-failed', error: 'boom' },
+  };
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.trigger(container);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ topic: 'failures', priority: 5 }),
+    }),
+  );
+});
+
+test('trigger should fall back to the static topic and priority for an event kind with no override', async () => {
+  ntfy.configuration = {
+    ...configurationValid,
+    topics: { updatefailed: 'failures' },
+    priorities: { updatefailed: 5 },
+  };
+  const container = {
+    name: 'container1',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+  };
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.trigger(container);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ topic: 'xxx', priority: 2 }),
+    }),
+  );
+});
+
+test('trigger should render action templates with container variables and include them in the body', async () => {
+  ntfy.configuration = {
+    ...configurationValid,
+    actions: [
+      {
+        action: 'view',
+        label: 'Open ${container.name}',
+        url: 'https://example.test/${container.name}',
+      },
+      {
+        action: 'http',
+        label: 'Rollback',
+        url: 'https://example.test/rollback',
+        method: 'POST',
+        body: '${container.name}',
+        clear: true,
+      },
+    ],
+  };
+  const container = {
+    name: 'container1',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+  };
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.trigger(container);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        actions: [
+          { action: 'view', label: 'Open container1', url: 'https://example.test/container1' },
+          {
+            action: 'http',
+            label: 'Rollback',
+            url: 'https://example.test/rollback',
+            method: 'POST',
+            body: 'container1',
+            clear: true,
+          },
+        ],
+      }),
+    }),
+  );
+});
+
+test('trigger should omit actions when none are configured or the array is empty', async () => {
+  ntfy.configuration = { ...configurationValid, actions: [] };
+  const container = {
+    name: 'container1',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+  };
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.trigger(container);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ actions: undefined }),
+    }),
+  );
+});
+
+test('triggerBatch should route topic/priority using the first container in the batch and render its actions', async () => {
+  ntfy.configuration = {
+    ...configurationValid,
+    topics: { updatefailed: 'failures' },
+    priorities: { updatefailed: 5 },
+    actions: [
+      {
+        action: 'view',
+        label: 'Open ${container.name}',
+        url: 'https://example.test/${container.name}',
+      },
+    ],
+  };
+  const containers = [
+    {
+      name: 'container1',
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+      notificationEvent: { kind: 'update-failed', error: 'boom' },
+    },
+    {
+      name: 'container2',
+      updateKind: { kind: 'tag', localValue: '3.0.0', remoteValue: '4.0.0' },
+    },
+  ];
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.triggerBatch(containers);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        topic: 'failures',
+        priority: 5,
+        actions: [
+          { action: 'view', label: 'Open container1', url: 'https://example.test/container1' },
+        ],
+      }),
+    }),
+  );
+});
+
+test('triggerBatch should default to update-available routing and omit actions for an empty batch', async () => {
+  ntfy.configuration = configurationValid;
+  axios.mockResolvedValue({ data: {} });
+  await ntfy.triggerBatch([]);
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ topic: 'xxx', priority: 2, actions: undefined }),
+    }),
+  );
 });
