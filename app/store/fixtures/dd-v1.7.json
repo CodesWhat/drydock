@@ -273,6 +273,87 @@
       "transactional": false,
       "cloneObjects": false,
       "disableChangesApi": true
+    },
+    {
+      "name": "notifications",
+      "data": [
+        {
+          "id": "update-available",
+          "name": "Update Available",
+          "description": "When a container has a new version",
+          "enabled": true,
+          "bellEnabled": true,
+          "bellThreshold": "major",
+          "triggers": ["slack.ops", "smtp.ops"],
+          "templates": {
+            "slack.ops": {
+              "simpleTitle": "title one",
+              "simpleBody": "body one",
+              "batchTitle": "batch one"
+            }
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "approvals",
+      "data": [
+        {
+          "schemaVersion": 1,
+          "id": "approval-fixture-pending",
+          "containerId": "container-web",
+          "containerIdentityKey": "watcher-web",
+          "containerName": "web",
+          "watcher": "local",
+          "image": "library/web",
+          "fromRef": "one",
+          "toRef": "two",
+          "candidateRef": "two",
+          "updateKind": "tag",
+          "semverDiff": "minor",
+          "createdAt": "2026-01-08T00:00:00.000Z",
+          "createdAtMs": 1767830400000,
+          "decision": "pending",
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        },
+        {
+          "schemaVersion": 1,
+          "id": "approval-fixture-decided",
+          "containerId": "container-app",
+          "containerIdentityKey": "watcher-app",
+          "containerName": "app",
+          "watcher": "local",
+          "agent": "edge-one",
+          "image": "library/app",
+          "fromRef": "one",
+          "toRef": "two",
+          "candidateRef": "two",
+          "updateKind": "tag",
+          "semverDiff": "patch",
+          "createdAt": "2026-01-07T00:00:00.000Z",
+          "createdAtMs": 1767744000000,
+          "decision": "approved",
+          "decidedAt": "2026-01-09T00:00:00.000Z",
+          "decidedBy": "operator-one",
+          "operationId": "operation-one",
+          "outcome": "applied",
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 2
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
     }
   ],
   "databaseVersion": 1.5,
