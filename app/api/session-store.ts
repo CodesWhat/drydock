@@ -147,11 +147,13 @@ export class SessionStore extends session.Store {
   ): void {
     try {
       const now = Date.now();
-      const entries = sessionStore
-        .listSessions()
-        .filter((row) => row.expiresAt > now)
-        .map((row) => ({ sid: row.sid, session: JSON.parse(row.data) as session.SessionData }));
-      callback(null, entries as unknown as session.SessionData[]);
+      const sessions: { [sid: string]: session.SessionData } = {};
+      for (const row of sessionStore.listSessions()) {
+        if (row.expiresAt > now) {
+          sessions[row.sid] = JSON.parse(row.data) as session.SessionData;
+        }
+      }
+      callback(null, sessions);
     } catch (error: unknown) {
       callback(error);
     }

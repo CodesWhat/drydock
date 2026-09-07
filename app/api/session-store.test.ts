@@ -178,13 +178,15 @@ describe('SessionStore', () => {
     ).resolves.toBeUndefined();
   });
 
-  test('all returns only unexpired sessions as {sid, session} entries', async () => {
-    await setAsync('live', sessionWithExpiry(new Date(Date.now() + TTL_MS).toISOString()));
+  test('all returns only unexpired sessions as a sid-keyed map', async () => {
+    const liveSession = sessionWithExpiry(new Date(Date.now() + TTL_MS).toISOString());
+    await setAsync('live', liveSession);
     sessionModel.setSession('expired', Date.now() - 1000, JSON.stringify({ cookie: {} }));
 
-    const result = (await allAsync()) as Array<{ sid: string; session: SessionData }>;
+    const result = (await allAsync()) as { [sid: string]: SessionData };
 
-    expect(result.map((entry) => entry.sid)).toEqual(['live']);
+    expect(Object.keys(result)).toEqual(['live']);
+    expect(result.live).toEqual(liveSession);
   });
 
   test('length reports the row count', async () => {
