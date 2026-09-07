@@ -2313,10 +2313,29 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         });
         const auth = await registry.getAuthPull();
         await this.pullImage(dockerApi, auth, newImage, logContainer);
+        // Resolved once for the service, from whichever replica happened to be
+        // first, so this must not apply that replica's own binding policy: a
+        // `required` container would abort every other replica's pull over its
+        // own label, and a `disabled` one would silently drop the failure
+        // before any gated replica ever saw it (DR-42). `optional` gets the
+        // raw `{ imageIdentity | reason }` back either way; each container
+        // applies its own policy to it in runComposeFileOncePostPullGate.
         const identityOutcome = await this.capturePulledImageIdentity(
           dockerApi as DockerApiLike,
           newImage,
           runtimeContainer,
+          logContainer,
+          undefined,
+          'optional',
+        );
+        // Pre-flight guard (DR-41): confirm the bound image runs on this host
+        // before any service in the batch is touched. A single-arch image
+        // that pulls cleanly but targets the wrong platform must fail here,
+        // before the compose file is rewritten or any container recreated,
+        // not partway through the batch's per-container recreate loop.
+        await this.verifyPulledImageCompatibility(
+          dockerApi as DockerApiLike,
+          identityOutcome.imageIdentity || newImage,
           logContainer,
         );
         composeFileOnceRuntimeContextByService.set(service, {
@@ -2330,13 +2349,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           // re-resolving a tag that can move under them (DR-54).
           ...(identityOutcome.imageIdentity
             ? { imageIdentity: identityOutcome.imageIdentity }
-            : { pulledImageId: identityOutcome.localImageId }),
-          ...(identityOutcome.unboundWarn
-            ? {
-                securityGateUnboundWarn: true,
+            : {
+                pulledImageId: identityOutcome.localImageId,
                 securityGateUnboundReason: identityOutcome.reason,
-              }
-            : {}),
+              }),
         });
       } catch (error: unknown) {
         throw tagComposeFileOncePreflightError(error, {
@@ -2368,14 +2384,25 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
 
     const operationId = getRequestedOperationId(container, composeContext.runtimeContext) ?? '';
-    if (composeContext.runtimeContext?.securityGateUnboundWarn) {
-      this.recordUnboundSecurityWarning(
-        container,
-        composeContext.runtimeContext.securityGateUnboundReason,
-      );
-      return true;
-    }
     const imageIdentity = composeContext.runtimeContext?.imageIdentity;
+    const rawUnboundReason = composeContext.runtimeContext?.securityGateUnboundReason;
+    if (!imageIdentity && rawUnboundReason !== undefined) {
+      // The service-level capture never applied a binding policy (DR-42), so a
+      // bind failure is judged here against this container's own policy, not
+      // whichever replica the service happened to resolve identity from: a
+      // service mixing `dd.security.gate=off` replicas with gated ones must
+      // not let one replica's label decide the others' outcome.
+      const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+      const policyOutcome = this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        rawUnboundReason,
+      );
+      if (policyOutcome.unboundWarn) {
+        this.recordUnboundSecurityWarning(container, policyOutcome.reason);
+        return true;
+      }
+    }
     const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
     try {
       await this.verifySignaturePreUpdate(gateContext, container, logContainer);

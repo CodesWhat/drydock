@@ -734,15 +734,12 @@ describe('Dockercompose Trigger', () => {
     ).toEqual({ imageIdentity });
   });
 
-  test('compose-file-once preflight should carry an unbound-image warning into its runtime context', async () => {
+  test('compose-file-once preflight should carry a raw unbound-image reason into its runtime context', async () => {
     trigger.configuration.dryrun = false;
-    const securityGate = trigger.getSecurityGate();
-    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
-      enabled: true,
-      availabilityPolicy: 'warn',
-      signature: { verify: false },
-      gate: { mode: 'on' },
-    } as any);
+    // The service-level capture never applies a binding policy (DR-42): it
+    // always resolves as if `optional`, regardless of what security config
+    // any one replica would otherwise apply, so a bind failure comes back as
+    // a raw reason for runComposeFileOncePostPullGate to judge per container.
     mockDockerApi.getImage.mockReturnValue({
       inspect: vi.fn().mockResolvedValue({ Id: 'sha256:local-image', RepoDigests: [] }),
     });
@@ -754,10 +751,12 @@ describe('Dockercompose Trigger', () => {
 
     expect(result.get('nginx')).toEqual(
       expect.objectContaining({
-        securityGateUnboundWarn: true,
+        pulledImageId: 'sha256:local-image',
         securityGateUnboundReason: expect.any(String),
       }),
     );
+    expect(result.get('nginx')).not.toHaveProperty('securityGateUnboundWarn');
+    expect(result.get('nginx')).not.toHaveProperty('imageIdentity');
   });
 
   test('compose-file-once post-pull gate should fail when its update context cannot be created', async () => {
@@ -772,13 +771,19 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('compose-file-once post-pull gate should record an allowed unbound security warning', async () => {
+    const securityGate = trigger.getSecurityGate();
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    } as any);
     const recordWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
     vi.spyOn(trigger, 'createTriggerContext').mockResolvedValue({} as any);
 
     await (trigger as any).runComposeFileOncePostPullGate(makeContainer(), {
       service: 'nginx',
       runtimeContext: {
-        securityGateUnboundWarn: true,
         securityGateUnboundReason: 'manifest unavailable',
       },
     });

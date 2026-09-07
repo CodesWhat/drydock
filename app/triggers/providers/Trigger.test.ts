@@ -4106,6 +4106,37 @@ test('flushDigestBuffer sends once when a report for the same result lands mid-f
   expect(trigger.inFlightOnceNotificationKeys.size).toBe(0);
 });
 
+// DR-95: the digest path used to drop an excluded container with no log at
+// all, while the equivalent simple/batch path
+// (runUpdateAvailableSimpleTrigger) already logs the same exclusion.
+test('handleContainerReportDigest should debug log the container name and reason when mustTrigger returns false', async () => {
+  trigger.configuration = {
+    ...configurationValid,
+    mode: 'digest',
+  };
+  trigger.type = 'pushover';
+  trigger.name = 'mobile';
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReportDigest({
+    changed: true,
+    container: {
+      id: 'c1',
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      notificationTriggerExclude: 'mobile',
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Trigger conditions not met for c1 => ignore (category=notification, triggerInclude=<none>, triggerExclude=mobile, included=true, excluded=true)',
+  );
+  expect(trigger.digestBuffer.size).toBe(0);
+});
+
 // Regression test for the flush's own revalidation substituting the CURRENT
 // store container for the buffered one. When that substitute is a result an
 // earlier flush already digested, sending it repeats the digest AND the
