@@ -1,3 +1,4 @@
+import { runConfigCommandIfRequested } from './configuration/config-cli.js';
 import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
 
 /**
@@ -34,8 +35,26 @@ import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
  * top-level entrypoint isn't one of them. With no pending handles or timers,
  * Node exits on its own once this module finishes, after the stderr write
  * has drained.
+ *
+ * `config validate` and `config export` (roadmap 7.1 slice 3) are checked
+ * for and dispatched *before* the load above, via `runConfigCommandIfRequested`
+ * — see `configuration/config-cli.ts`'s module doc comment for the full
+ * reasoning. In short: both build their own candidate file (`--file` for
+ * validate, `--out` for export's write target) independently of whatever
+ * this bootstrap's own auto-discovery would load, and — the load-bearing
+ * reason — a broken *default* drydock.yml must not crash the process before
+ * `config validate` gets a chance to report on exactly that breakage itself.
+ * `config migrate` isn't part of that dispatch (`runConfigCommandIfRequested`
+ * returns `null` for it): it doesn't touch drydock.yml, so it keeps its
+ * existing dispatch site in `main.js`, after the load below, unchanged.
  */
 async function bootstrap(): Promise<void> {
+  const commandExitCode = await runConfigCommandIfRequested(process.argv.slice(2));
+  if (commandExitCode !== null) {
+    process.exitCode = commandExitCode;
+    return;
+  }
+
   try {
     await loadConfigFileIntoLayer();
   } catch (error) {

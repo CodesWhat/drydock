@@ -54,7 +54,12 @@ interface MigrateCliOptions {
   source: MigrationSource;
 }
 
-interface MigrateCliIo {
+/**
+ * Exported so `config-cli.ts`'s `validate` and `export` handlers accept the
+ * same injected-io shape `migrate` always has, instead of declaring their
+ * own structurally-identical interface.
+ */
+export interface MigrateCliIo {
   out(message: string): void;
   err(message: string): void;
 }
@@ -399,11 +404,24 @@ function writeContentToOpenFile(fileDescriptor: number, content: string) {
   }
 }
 
-function isConfigMigrateCommand(argv: string[]) {
-  return argv[0] === 'config' && argv[1] === 'migrate';
+/**
+ * Shared `argv[0] === 'config' && argv[1] === subcommand` matcher (roadmap
+ * 7.1 slice 3, spec-7.1-config-file.md section 6): `isConfigMigrateCommand`
+ * generalised so `config-cli.ts`'s `validate` and `export` handlers use the
+ * same check `migrate` always has, rather than each re-deriving it. `migrate`
+ * itself is untouched — same dispatch site (`main.ts`, after the file layer
+ * loads), same behaviour, same test file.
+ */
+export function isConfigSubcommand(argv: string[], subcommand: string): boolean {
+  return argv[0] === 'config' && argv[1] === subcommand;
 }
 
-function resolveCliIo(io?: MigrateCliIo): MigrateCliIo {
+function isConfigMigrateCommand(argv: string[]) {
+  return isConfigSubcommand(argv, 'migrate');
+}
+
+/** Exported for the same reason `MigrateCliIo` is: shared by `config-cli.ts`. */
+export function resolveCliIo(io?: MigrateCliIo): MigrateCliIo {
   return (
     io || {
       out: (message) => process.stdout.write(`${message}\n`),
