@@ -132,6 +132,20 @@ export function updateSettings(settingsToUpdate: Partial<Settings> = {}): Settin
 }
 
 /**
+ * The key names this schema accepts, derived from the schema itself rather
+ * than a hand-kept list so the two can never drift. Roadmap 7.1 slice 4's
+ * `GET /api/v1/config` disjointness test uses this to assert its own section
+ * keys never overlap with what this DB-backed store owns (section 3 of
+ * spec-7.1-config-file.md: the file and this table are disjoint by design).
+ */
+export function getSettingsSchemaKeys(): string[] {
+  // `.object({...})` always describes with a `keys` map; no fallback branch
+  // to cover for a shape this schema can never produce.
+  const described = settingsSchema.describe() as { keys: Record<string, unknown> };
+  return Object.keys(described.keys);
+}
+
+/**
  * Check whether internetless mode is enabled.
  */
 export function isInternetlessModeEnabled(): boolean {

@@ -10,6 +10,7 @@ import * as auditRouter from './audit.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
+import * as configRouter from './config.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
 import * as containerDependenciesRouter from './container-dependencies.js';
@@ -187,6 +188,10 @@ export function init(): express.Router {
 
   // Mount debug dump router
   mountRouter(router, '/debug', debugRouter.init());
+
+  // Mount config router (effective configuration, redacted, session-only —
+  // roadmap 7.1 slice 4)
+  mountRouter(router, '/config', configRouter.init());
 
   // Mount server router
   mountRouter(router, '/server', serverRouter.init());

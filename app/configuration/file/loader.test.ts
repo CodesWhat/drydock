@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import log from '../../log/index.js';
-import { getConfigFileLayer, resetConfigFileLayer } from './layer.js';
+import { getConfigFileInfo, getConfigFileLayer, resetConfigFileLayer } from './layer.js';
 import { loadConfigFile, loadConfigFileIntoLayer } from './loader.js';
 
 function makeTempDir(prefix: string): string {
@@ -563,22 +563,27 @@ describe('loadConfigFileIntoLayer', () => {
       const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  name: from-file\n');
       await loadConfigFileIntoLayer({ DD_CONFIG_FILE: filePath });
       expect(getConfigFileLayer()).toStrictEqual({ DD_SERVER_NAME: 'from-file' });
+      expect(getConfigFileInfo()).toStrictEqual({
+        path: filePath,
+        modifiedAt: expect.any(String),
+      });
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  test('with no config file present, publishes an empty layer', async () => {
+  test('with no config file present, publishes an empty layer and no file info', async () => {
     const tempDir = makeTempDir('drydock-config-into-layer-absent-');
     try {
       await loadConfigFileIntoLayer({}, { defaultPaths: defaultPathsIn(tempDir) });
       expect(getConfigFileLayer()).toStrictEqual({});
+      expect(getConfigFileInfo()).toBeUndefined();
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  test('a load failure rejects and never publishes a layer', async () => {
+  test('a load failure rejects and never publishes a layer or file info', async () => {
     const tempDir = makeTempDir('drydock-config-into-layer-missing-');
     const missingPath = path.join(tempDir, 'missing.yml');
     try {
@@ -586,6 +591,7 @@ describe('loadConfigFileIntoLayer', () => {
         new RegExp(`DD_CONFIG_FILE points at "${missingPath.replace(/[/\\]/g, '\\$&')}"`),
       );
       expect(getConfigFileLayer()).toStrictEqual({});
+      expect(getConfigFileInfo()).toBeUndefined();
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

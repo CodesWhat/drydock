@@ -38,6 +38,8 @@ export interface AuditEntry {
     | 'auth-login'
     | 'env-reveal'
     | 'debug-dump'
+    | 'config-read'
+    | 'config-validated'
     | 'auto-update-blocked'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'

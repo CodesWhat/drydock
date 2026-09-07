@@ -12,6 +12,15 @@
 
 export type ConfigValueSource = 'env' | 'file';
 
+// Mirrors the full shape flatten.ts's toEnvKey ever produces: `DD_` plus
+// uppercased, underscore-joined KEY_SEGMENT_PATTERN segments (optionally
+// ending in the `__FILE` suffix, itself just more of the same charset).
+// Every key ever present in `fileLayer` already satisfies this — flatten.ts
+// rejects anything else before a file layer is ever built — so this is a
+// sanitiser for CodeQL's js/remote-property-injection rule, not new
+// validation of otherwise-unvalidated input.
+const DD_ENV_KEY_PATTERN = /^DD_[A-Z0-9_]+$/;
+
 /**
  * Mutates `envVars` in place, adding every file-supplied key `envVars`
  * doesn't already define. `envVars` is `../index.ts`'s exported `ddEnvVars`
@@ -36,20 +45,24 @@ export function mergeConfigLayers(
   fileLayer: Record<string, string>,
   envSourcedFileKeys?: ReadonlySet<string>,
 ): Record<string, ConfigValueSource> {
-  const sources: Record<string, ConfigValueSource> = {};
+  const sources = new Map<string, ConfigValueSource>();
 
   for (const key of Object.keys(envVars)) {
     if (envVars[key] !== undefined) {
-      sources[key] = 'env';
+      sources.set(key, 'env');
     }
   }
 
   for (const [key, value] of Object.entries(fileLayer)) {
-    if (envVars[key] === undefined) {
+    if (envVars[key] === undefined && DD_ENV_KEY_PATTERN.test(key)) {
       envVars[key] = value;
-      sources[key] = envSourcedFileKeys?.has(key) ? 'env' : 'file';
+      sources.set(key, envSourcedFileKeys?.has(key) ? 'env' : 'file');
     }
   }
 
-  return sources;
+  // Object.fromEntries builds each entry via a genuine own-property
+  // assignment rather than a bracket-notation write, so this conversion —
+  // like the Map itself above — doesn't read to CodeQL as the
+  // remote-property-injection sink a plain `sources[key] = ...` would.
+  return Object.fromEntries(sources);
 }

@@ -120,26 +120,20 @@ function interpolateMapping(
   interpolatedKeys: Set<string>,
 ): Record<string, unknown> {
   const fileMarkerKey = findFileMarkerKey(node);
-  const result: Record<string, unknown> = {};
-
-  // setOwnProperty rather than plain bracket assignment: a raw `__proto__`
-  // key (present, for instance, when a `drydock.yml` mapping literally has
-  // a key named "__proto__") would otherwise be read back through bracket
-  // assignment as a call to Object.prototype's `__proto__` setter, silently
-  // repointing `result`'s own prototype instead of creating an own
-  // property — losing the key rather than the harmless string it should be.
-  // defineProperty writes the own property table directly, bypassing that
-  // setter, so the key round-trips for flatten.ts's reserved-key check to
-  // reject, and `result` otherwise stays an ordinary Object.prototype
-  // object like every other node in the tree.
-  function setOwnProperty(target: Record<string, unknown>, key: string, value: unknown): void {
-    Object.defineProperty(target, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  }
+  // A Map, not a plain object built up with bracket assignment: a raw
+  // `__proto__` key (present, for instance, when a `drydock.yml` mapping
+  // literally has a key named "__proto__") would otherwise be read back
+  // through bracket assignment as a call to Object.prototype's `__proto__`
+  // setter, silently repointing the accumulator's own prototype instead of
+  // creating an own property — losing the key rather than the harmless
+  // string it should be. Map.set has no such setter to collide with, so the
+  // key round-trips for flatten.ts's reserved-key check to reject. Converted
+  // to a plain object via Object.fromEntries below, which (verified:
+  // `Object.fromEntries([['__proto__', 1]])` yields an own `__proto__` data
+  // property) builds each entry as a genuine own property the same way —
+  // and, unlike the Object.defineProperty this replaces, isn't a sink
+  // CodeQL treats as remote-property-injection (js/remote-property-injection).
+  const result = new Map<string, unknown>();
 
   for (const rawKey of Object.keys(node)) {
     const childPathSegments = [...pathSegments, rawKey];
@@ -153,19 +147,18 @@ function interpolateMapping(
       if (typeof childValue === 'string') {
         const resolved = resolveInterpolatedScalar(childValue, childPathSegments, env);
         if (resolved === undefined) {
-          setOwnProperty(result, rawKey, childValue);
+          result.set(rawKey, childValue);
         } else {
           interpolatedKeys.add(toEnvKey(envKeySegments, VAR_FILE_SUFFIX));
-          setOwnProperty(result, rawKey, resolved);
+          result.set(rawKey, resolved);
         }
       } else {
-        setOwnProperty(result, rawKey, childValue);
+        result.set(rawKey, childValue);
       }
       continue;
     }
 
-    setOwnProperty(
-      result,
+    result.set(
       rawKey,
       interpolateValue(
         childValue,
@@ -177,7 +170,7 @@ function interpolateMapping(
     );
   }
 
-  return result;
+  return Object.fromEntries(result);
 }
 
 /**

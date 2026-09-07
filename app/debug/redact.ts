@@ -164,3 +164,17 @@ function redactNode(node: unknown, nodeKey?: string): unknown {
 export function redactDebugDump<T>(payload: T): T {
   return redactNode(payload) as T;
 }
+
+/**
+ * `GET /api/v1/config`'s redaction for its flat sections and its `sources`
+ * map (roadmap 7.1 slice 4, spec-7.1-config-file.md section 4.2). Reuses the
+ * exact key-name rules above rather than a second list that could drift from
+ * this one: the tuned substring set, whole-segment set, env-only set and the
+ * four provider-specific fields all apply unchanged. Component sections
+ * (watcher, registry, action, notification) are redacted separately, through
+ * each provider's own `maskConfiguration()` allowlist via
+ * `app/api/component.ts`'s `mapComponentToItem`.
+ */
+export function redactConfigurationTree<T>(payload: T): T {
+  return redactNode(payload) as T;
+}

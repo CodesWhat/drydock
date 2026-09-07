@@ -91,6 +91,12 @@ describe('Settings Store', () => {
     expect(settings.isInternetlessModeEnabled()).toBe(true);
   });
 
+  test('getSettingsSchemaKeys returns the schema-described key names', () => {
+    const keys = settings.getSettingsSchemaKeys();
+    expect(keys).toEqual(expect.arrayContaining(['internetlessMode', 'updateMode']));
+    expect(keys.length).toBeGreaterThan(0);
+  });
+
   test('updateSettings throws when value is invalid', () => {
     settings.createCollections(db);
     expect(() =>
