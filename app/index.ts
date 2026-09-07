@@ -15,19 +15,32 @@ import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
  * reaches it, which is after the file layer is set.
  *
  * A load failure (a missing explicit `DD_CONFIG_FILE`, invalid YAML, or a
- * world-writable file) is fatal: print the loader's own message — already
- * written to name the offending path — to stderr and exit 1, rather than
+ * group-/world-writable file) is fatal: print the loader's own message —
+ * already written to name the offending path — to stderr, rather than
  * letting the rejection surface as an unhandled-rejection stack trace.
  * `process.stderr.write` runs before `log/index.ts` could: that module
  * itself imports `configuration/index.ts`, so using it here would reintroduce
  * the same ordering bug this file exists to prevent.
+ *
+ * This sets `process.exitCode` rather than calling `process.exit(1)`. A
+ * `process.exit()` right after `stderr.write()` can truncate the message
+ * when stderr is a pipe (the write is async under the hood; exit tears the
+ * process down before it's guaranteed to have flushed). Setting the exit
+ * code and simply returning avoids the race, and it's safe here specifically
+ * because nothing on this failure path keeps the event loop alive: this
+ * module never imports `./main.js` (the only thing that would), and nothing
+ * else in the app imports `./index.js` (this file) — `agent/index.ts` and
+ * `tag/index.ts` have same-named modules other files import, but this
+ * top-level entrypoint isn't one of them. With no pending handles or timers,
+ * Node exits on its own once this module finishes, after the stderr write
+ * has drained.
  */
 async function bootstrap(): Promise<void> {
   try {
     await loadConfigFileIntoLayer();
   } catch (error) {
     process.stderr.write(`${(error as Error).message}\n`);
-    process.exit(1);
+    process.exitCode = 1;
     return;
   }
 
