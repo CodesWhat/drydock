@@ -440,7 +440,7 @@ test('getAuthenticator should enforce OIDC route rate limiting in express integr
   oidc.getAuthenticator(integrationApp);
 
   const server = await new Promise<any>((resolve) => {
-    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+    const startedServer = integrationApp.listen(0, '127.0.0.1', () => resolve(startedServer));
   });
   const address = server.address();
   if (!address || typeof address === 'string') {
@@ -489,7 +489,7 @@ async function runOidcRememberFlow(remember: boolean): Promise<Response> {
   oidc.getAuthenticator(integrationApp);
 
   const server = await new Promise<any>((resolve) => {
-    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+    const startedServer = integrationApp.listen(0, '127.0.0.1', () => resolve(startedServer));
   });
   const address = server.address();
   if (!address || typeof address === 'string') {
@@ -555,7 +555,7 @@ test('OIDC remember route rejects malformed preferences before creating a sessio
   integrationApp.post('/auth/remember', requireSameOriginForMutations, setRememberMe);
 
   const server = await new Promise<any>((resolve) => {
-    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+    const startedServer = integrationApp.listen(0, '127.0.0.1', () => resolve(startedServer));
   });
   const address = server.address();
   if (!address || typeof address === 'string') {

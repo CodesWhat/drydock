@@ -69,7 +69,7 @@ describe('api/webhooks/registry E2E', () => {
     app.use('/api/webhooks/registry', registryWebhookRouter.init());
 
     const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
-      const startedServer = app.listen(0, () => resolve(startedServer));
+      const startedServer = app.listen(0, '127.0.0.1', () => resolve(startedServer));
     });
 
     try {
