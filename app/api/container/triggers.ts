@@ -119,12 +119,9 @@ function isDefined<T>(value: T | undefined): value is T {
  *   `dd.notification.*` equivalents) labels exclude this trigger, or omit it from a
  *   configured include list.
  */
-export type TriggerAssociationReason =
-  | 'agentOwnership'
-  | 'structuralIncompatibility'
-  | 'labelScope';
+type TriggerAssociationReason = 'agentOwnership' | 'structuralIncompatibility' | 'labelScope';
 
-export interface UnassociatedContainerTrigger {
+interface UnassociatedContainerTrigger {
   id: string;
   type: string;
   name: string;
