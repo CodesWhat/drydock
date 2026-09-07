@@ -12,6 +12,7 @@ import { appImporter } from './app.js';
 import { approvalsImporter } from './approvals.js';
 import { auditImporter } from './audit.js';
 import { backupsImporter } from './backups.js';
+import { containersImporter } from './containers.js';
 import { nameBindingsImporter } from './name-bindings.js';
 import { notificationHistoryImporter } from './notification-history.js';
 import { notificationOutboxImporter } from './notification-outbox.js';
@@ -42,10 +43,11 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   // each other and of everything above.
   notificationRulesImporter,
   approvalsImporter,
-  // roadmap 7-STORE slice 7: the two caches. The lifecycle cache importer
-  // reads the legacy `containers` LokiJS collection directly (containers
-  // themselves do not move onto SQLite until slice 8), not another importer's
-  // output, so ordering relative to the rest of this list does not matter.
+  // roadmap 7-STORE slice 7: the two caches. Both read the legacy
+  // `containers` LokiJS collection directly rather than the containers
+  // importer's output below, so ordering relative to it does not matter.
   updateLifecycleCacheImporter,
   updatePolicyRetentionCacheImporter,
+  // roadmap 7-STORE slice 8: containers, independent of everything above.
+  containersImporter,
 ];

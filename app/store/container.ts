@@ -33,11 +33,11 @@ import {
 } from '../model/update-policy.js';
 import { ddActionAuto } from '../watchers/providers/docker/label.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
+import type { Database, Row } from './db/driver.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
-import { initCollection } from './util.js';
 
-let containers: ReturnType<typeof initCollection> | undefined;
+let db: Database | undefined;
 const containersQueryCache = new Map<string, container.Container[]>();
 const containersQueryCacheReverseIndex = new Map<string, Map<string, Set<string>>>();
 const containersQueryCacheAlwaysInvalidateKeys = new Set<string>();
@@ -55,12 +55,6 @@ const DEFAULT_UPDATE_LIFECYCLE_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_UPDATE_POLICY_RETENTION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
-const CONTAINER_COLLECTION_INDICES = [
-  'data.id',
-  'data.watcher',
-  'data.status',
-  'data.updateAvailable',
-];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 const CONTAINER_QUERY_CONTROL_KEYS = new Set(['excludeRollbackContainers']);
 const STABLE_UNDEFINED_SENTINEL = '__undefined__';
@@ -950,14 +944,279 @@ function getMaturityGatePendingSince(containerCurrent, containerNext) {
 }
 
 /**
- * Create container collections.
- * @param db
+ * The `containers` table's columns, in the fixed order every INSERT/UPDATE
+ * binds its parameters in (roadmap 7-STORE, slice 8). `id` is first because
+ * it is also the row-identity WHERE-clause parameter; callers that build an
+ * UPDATE slice it off before appending it back at the end.
  */
-export function createCollections(db) {
-  containers = initCollection(db, 'containers', {
-    indices: CONTAINER_COLLECTION_INDICES,
-  });
+const CONTAINER_COLUMNS = [
+  'id',
+  'identity_key',
+  'name',
+  'display_name',
+  'display_icon',
+  'status',
+  'health',
+  'watcher',
+  'agent',
+  'update_available',
+  'update_kind',
+  'update_detected_at',
+  'first_seen_at',
+  'maturity_gate_pending_since',
+  'image_name',
+  'image_tag_value',
+  'image_digest_value',
+  'error_message',
+  'security_state_hash',
+  'image',
+  'result',
+  'update_kind_detail',
+  'security',
+  'update_policy',
+  'update_policy_declarative',
+  'update_policy_overrides',
+  'update_policy_sources',
+  'update_rollback',
+  'details',
+  'labels',
+  'link_config',
+  'tag_config',
+  'trigger_config',
+  'source_repo',
+  'current_release_notes',
+] as const;
+
+type ContainerColumn = (typeof CONTAINER_COLUMNS)[number];
+type ContainerRow = Record<ContainerColumn, string | number | null>;
+
+const CONTAINER_UPDATE_COLUMNS = CONTAINER_COLUMNS.filter(
+  (column): column is Exclude<ContainerColumn, 'id'> => column !== 'id',
+);
+
+const CONTAINER_INSERT_SQL = `INSERT INTO containers (${CONTAINER_COLUMNS.join(', ')}) VALUES (${CONTAINER_COLUMNS.map(() => '?').join(', ')})`;
+const CONTAINER_UPDATE_SQL = `UPDATE containers SET ${CONTAINER_UPDATE_COLUMNS.map((column) => `${column} = ?`).join(', ')} WHERE id = ?`;
+const CONTAINER_SELECT_ALL_SQL = 'SELECT * FROM containers';
+const CONTAINER_SELECT_BY_ID_SQL = 'SELECT * FROM containers WHERE id = ?';
+const CONTAINER_DELETE_BY_ID_SQL = 'DELETE FROM containers WHERE id = ?';
+
+function toStoredJson(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+function fromStoredJson<T>(value: string | number | null): T | undefined {
+  return value === null || value === undefined ? undefined : (JSON.parse(String(value)) as T);
+}
+
+function toOptionalStoredString(value: string | number | null): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+/**
+ * Build the parameter values for one INSERT/UPDATE, in `CONTAINER_COLUMNS`
+ * order. Called with an already-`validateContainer()`-d container, so every
+ * getter-backed derived field (`updateAvailable`, `updateKind`, `link`,
+ * `tagPinned`/`tagPinGated`, `updateAge`, `updateMaturityLevel`) has already
+ * been recomputed from the canonical fields this function reads. Those
+ * derived fields are never read back out of the row: `rowToContainer` below
+ * reconstructs only the canonical inputs and lets `validateContainer`
+ * recompute them again on the way out, so their storage here exists purely
+ * to satisfy the promoted `update_available`/`update_kind` columns' role as
+ * SQL filter targets (see `getCachedOrComputedContainersByQuery`).
+ *
+ * `securityHash` is threaded in rather than recomputed here because the
+ * caller already knows whether the incoming write carries a security update
+ * or must keep reusing the cached hash of the previously stored value (see
+ * `getStoredContainerSecurityStateHash`/`storeContainerSecurityStateHash`).
+ */
+function containerToRow(c: container.Container, securityHash: string): ContainerRow {
+  const linkConfig = {
+    link: c.link,
+    linkTemplate: c.linkTemplate,
+    portLabel: c.portLabel,
+  };
+  const tagConfig = {
+    includeTags: c.includeTags,
+    excludeTags: c.excludeTags,
+    transformTags: c.transformTags,
+    tagFamily: c.tagFamily,
+    tagPinInfo: c.tagPinInfo,
+  };
+  const triggerConfig = {
+    actionTriggerInclude: c.actionTriggerInclude,
+    actionTriggerExclude: c.actionTriggerExclude,
+    notificationTriggerInclude: c.notificationTriggerInclude,
+    notificationTriggerExclude: c.notificationTriggerExclude,
+    actionTriggerAuto: c.actionTriggerAuto,
+    triggerInclude: c.triggerInclude,
+    triggerExclude: c.triggerExclude,
+  };
+
+  return {
+    id: c.id,
+    identity_key: c.identityKey as string,
+    name: c.name,
+    display_name: c.displayName,
+    display_icon: c.displayIcon,
+    status: c.status,
+    health: c.health ?? null,
+    watcher: c.watcher,
+    agent: c.agent ?? null,
+    update_available: c.updateAvailable ? 1 : 0,
+    update_kind: c.updateKind.kind,
+    update_detected_at: c.updateDetectedAt ?? null,
+    first_seen_at: c.firstSeenAt ?? null,
+    maturity_gate_pending_since: c.maturityGatePendingSince ?? null,
+    image_name: c.image.name,
+    image_tag_value: c.image.tag.value,
+    image_digest_value: c.image.digest?.value ?? null,
+    error_message: c.error?.message ?? null,
+    security_state_hash: securityHash,
+    image: JSON.stringify(c.image),
+    result: toStoredJson(c.result),
+    update_kind_detail: JSON.stringify(c.updateKind),
+    security: toStoredJson(c.security),
+    update_policy: toStoredJson(c.updatePolicy),
+    update_policy_declarative: toStoredJson(c.updatePolicyDeclarative),
+    update_policy_overrides: toStoredJson(c.updatePolicyOverrides),
+    update_policy_sources: toStoredJson(c.updatePolicySources),
+    update_rollback: toStoredJson(c.updateRollback),
+    details: toStoredJson(c.details),
+    labels: toStoredJson(c.labels),
+    link_config: toStoredJson(linkConfig),
+    tag_config: toStoredJson(tagConfig),
+    trigger_config: toStoredJson(triggerConfig),
+    source_repo: c.sourceRepo ?? null,
+    current_release_notes: toStoredJson(c.currentReleaseNotes),
+  };
+}
+
+function insertContainerRow(c: container.Container, securityHash: string): void {
+  const row = containerToRow(c, securityHash);
+  db.prepare(CONTAINER_INSERT_SQL).run(...CONTAINER_COLUMNS.map((column) => row[column]));
+}
+
+function updateContainerRow(c: container.Container, securityHash: string): void {
+  const row = containerToRow(c, securityHash);
+  db.prepare(CONTAINER_UPDATE_SQL).run(
+    ...CONTAINER_UPDATE_COLUMNS.map((column) => row[column]),
+    row.id,
+  );
+}
+
+/**
+ * Reconstruct the pre-`validate()` shape of a container from a stored row:
+ * every canonical (non-derived) field the row carries, with the three
+ * grouped JSON columns unpacked back onto their individual fields. Passed
+ * straight to `validateContainer`, which recomputes every derived field
+ * (`identityKey`, `updateAvailable`, `updateKind`, `link`, `tagPinned`,
+ * `tagPinGated`, `updateAge`, `updateMaturityLevel`, `resultChanged`) from
+ * these inputs exactly as it does on every write, so a value merely reflects
+ * what was last computed rather than being read back literally.
+ */
+function rowToContainer(row: Row): container.Container {
+  const typedRow = row as unknown as ContainerRow;
+  const linkConfig =
+    fromStoredJson<{ link?: string; linkTemplate?: string; portLabel?: string }>(
+      typedRow.link_config,
+    ) ?? {};
+  const tagConfig =
+    fromStoredJson<{
+      includeTags?: string;
+      excludeTags?: string;
+      transformTags?: string;
+      tagFamily?: string;
+      tagPinInfo?: boolean;
+    }>(typedRow.tag_config) ?? {};
+  const triggerConfig =
+    fromStoredJson<{
+      actionTriggerInclude?: string;
+      actionTriggerExclude?: string;
+      notificationTriggerInclude?: string;
+      notificationTriggerExclude?: string;
+      actionTriggerAuto?: string;
+      triggerInclude?: string;
+      triggerExclude?: string;
+    }>(typedRow.trigger_config) ?? {};
+  const errorMessage = toOptionalStoredString(typedRow.error_message);
+
+  const raw: Record<string, unknown> = {
+    id: String(typedRow.id),
+    name: String(typedRow.name),
+    displayName: String(typedRow.display_name),
+    displayIcon: toOptionalStoredString(typedRow.display_icon),
+    status: String(typedRow.status),
+    health: toOptionalStoredString(typedRow.health),
+    watcher: String(typedRow.watcher),
+    agent: toOptionalStoredString(typedRow.agent),
+    identityKey: String(typedRow.identity_key),
+    updateDetectedAt: toOptionalStoredString(typedRow.update_detected_at),
+    firstSeenAt: toOptionalStoredString(typedRow.first_seen_at),
+    maturityGatePendingSince: toOptionalStoredString(typedRow.maturity_gate_pending_since),
+    image: fromStoredJson(typedRow.image),
+    result: fromStoredJson(typedRow.result),
+    security: fromStoredJson(typedRow.security),
+    updatePolicy: fromStoredJson(typedRow.update_policy),
+    updatePolicyDeclarative: fromStoredJson(typedRow.update_policy_declarative),
+    updatePolicyOverrides: fromStoredJson(typedRow.update_policy_overrides),
+    updatePolicySources: fromStoredJson(typedRow.update_policy_sources),
+    updateRollback: fromStoredJson(typedRow.update_rollback),
+    details: fromStoredJson(typedRow.details),
+    labels: fromStoredJson(typedRow.labels),
+    sourceRepo: toOptionalStoredString(typedRow.source_repo),
+    currentReleaseNotes: fromStoredJson(typedRow.current_release_notes),
+    error: errorMessage === undefined ? undefined : { message: errorMessage },
+    link: linkConfig.link,
+    linkTemplate: linkConfig.linkTemplate,
+    portLabel: linkConfig.portLabel,
+    includeTags: tagConfig.includeTags,
+    excludeTags: tagConfig.excludeTags,
+    transformTags: tagConfig.transformTags,
+    tagFamily: tagConfig.tagFamily,
+    tagPinInfo: tagConfig.tagPinInfo,
+    actionTriggerInclude: triggerConfig.actionTriggerInclude,
+    actionTriggerExclude: triggerConfig.actionTriggerExclude,
+    notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
+    notificationTriggerExclude: triggerConfig.notificationTriggerExclude,
+    actionTriggerAuto: triggerConfig.actionTriggerAuto,
+    triggerInclude: triggerConfig.triggerInclude,
+    triggerExclude: triggerConfig.triggerExclude,
+  };
+
+  return validateContainer(raw);
+}
+
+/**
+ * Create container collections.
+ * @param database
+ */
+export function createCollections(database: Database) {
+  db = database;
   invalidateContainersCache();
+}
+
+/**
+ * Build the full parameter row for an imported legacy container document
+ * (roadmap 7-STORE slice 8's importer, `store/db/importers/containers.ts`).
+ * Runs the same `validateContainer()` every write already runs, so an import
+ * produces exactly the row a fresh `insertContainer()` of the same document
+ * would, including every derived field. Returns undefined for a document
+ * that fails validation (missing a field the current schema requires) rather
+ * than guessing at a default, matching every other importer's
+ * skip-rather-than-guess convention.
+ */
+export function buildImportedContainerRow(rawContainer: unknown): ContainerRow | undefined {
+  try {
+    const validated = validateContainer(rawContainer);
+    return containerToRow(validated, getSecurityStateHash(validated.security));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Insert one row built by `buildImportedContainerRow` into `database`. */
+export function insertImportedContainerRow(database: Database, row: ContainerRow): void {
+  database.prepare(CONTAINER_INSERT_SQL).run(...CONTAINER_COLUMNS.map((column) => row[column]));
 }
 
 /**
@@ -1203,10 +1462,8 @@ export function insertContainer(container) {
     undefined,
     containerToSave,
   );
-  storeContainerSecurityStateHash(containerToSave);
-  containers.insert({
-    data: containerToSave,
-  });
+  const securityHash = storeContainerSecurityStateHash(containerToSave);
+  insertContainerRow(containerToSave, securityHash);
   invalidateContainersCacheForMutation(undefined, containerToSave);
   if (!isRollbackContainerName(containerToSave.name)) {
     const containerAddedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
@@ -1239,13 +1496,8 @@ export function updateContainer(
   const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');
-  const containerCurrentDoc =
-    typeof containers?.findOne === 'function'
-      ? containers.findOne({ 'data.id': container.id })
-      : undefined;
-  const containerCurrent = containerCurrentDoc
-    ? validateContainer(containerCurrentDoc.data)
-    : undefined;
+  const containerCurrentRow = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(container.id);
+  const containerCurrent = containerCurrentRow ? rowToContainer(containerCurrentRow) : undefined;
   const shouldRestoreCurrentDetails =
     hasDetails && hasClassifiedRuntimeEnvValues(container.details) && containerCurrent?.details;
   const containerMerged = {
@@ -1296,22 +1548,10 @@ export function updateContainer(
       ? containerCurrentSecurityHash
       : storeContainerSecurityStateHash(containerToReturn);
 
-  if (containerCurrentDoc && typeof containers?.update === 'function') {
-    containerCurrentDoc.data = containerToReturn;
-    containers.update(containerCurrentDoc);
+  if (containerCurrentRow) {
+    updateContainerRow(containerToReturn, containerNextSecurityHash);
   } else {
-    // Remove existing container
-    containers
-      .chain()
-      .find({
-        'data.id': container.id,
-      })
-      .remove();
-
-    // Insert new one
-    containers.insert({
-      data: containerToReturn,
-    });
+    insertContainerRow(containerToReturn, containerNextSecurityHash);
   }
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
   const wasRollback = isRollbackContainerName(containerCurrent?.name);
@@ -1354,7 +1594,7 @@ export function updateContainer(
 }
 
 function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {}) {
-  if (!containers) {
+  if (!db) {
     return [];
   }
 
@@ -1372,11 +1612,23 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
   const exactMatchEntries = queryEntries.filter(
     ([queryPath]) => !isContainerQueryControlKey(queryPath),
   );
-  const filter = {};
-  exactMatchEntries.forEach(([queryKeyEntry, queryValue]) => {
-    filter[`data.${queryKeyEntry}`] = queryValue;
-  });
-  let containerList = containers.find(filter).map((item) => validateContainer(item.data));
+  // No SQL WHERE translation: exact-match filtering runs in JS via the same
+  // getValueByPath the query cache's reverse index already uses, so a dot
+  // path like the ones LokiJS's `{'data.foo.bar': value}` filters used to
+  // accept keeps matching identically instead of drifting from a
+  // hand-written SQL equivalent.
+  let containerList = db
+    .prepare(CONTAINER_SELECT_ALL_SQL)
+    .all()
+    .map((row) => rowToContainer(row));
+  if (exactMatchEntries.length > 0) {
+    containerList = containerList.filter((containerItem) =>
+      exactMatchEntries.every(
+        ([queryKeyEntry, queryValue]) =>
+          getValueByPath(containerItem, queryKeyEntry) === queryValue,
+      ),
+    );
+  }
   if (excludeRollbackContainers) {
     containerList = containerList.filter(
       (containerItem) => !container.isRollbackContainer(containerItem),
@@ -1508,12 +1760,9 @@ export function getContainers(
  * @returns {null|Image}
  */
 export function getContainer(id: string) {
-  const container = containers.findOne({
-    'data.id': id,
-  });
-
-  if (container !== null) {
-    return redactContainerRuntimeEnv(validateContainer(container.data));
+  const row = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
+  if (row !== undefined) {
+    return redactContainerRuntimeEnv(rowToContainer(row));
   }
   return undefined;
 }
@@ -1530,12 +1779,9 @@ export function getContainer(id: string) {
  * @param id
  */
 export function getContainerRaw(id: string) {
-  const container = containers.findOne({
-    'data.id': id,
-  });
-
-  if (container !== null) {
-    return validateContainer(container.data);
+  const row = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
+  if (row !== undefined) {
+    return rowToContainer(row);
   }
   return undefined;
 }
@@ -1553,22 +1799,20 @@ export function getContainerRaw(id: string) {
  * cleared.
  */
 export function clearMaturityGatePendingSince(id: string): boolean {
-  const containerDoc = containers.findOne({
-    'data.id': id,
-  });
+  const row = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
   if (
-    !containerDoc ||
+    !row ||
     !(
-      typeof containerDoc.data.maturityGatePendingSince === 'string' &&
-      containerDoc.data.maturityGatePendingSince.length > 0
+      typeof row.maturity_gate_pending_since === 'string' &&
+      row.maturity_gate_pending_since.length > 0
     )
   ) {
     return false;
   }
-  const containerBefore = containerDoc.data;
-  containerDoc.data = { ...containerBefore, maturityGatePendingSince: undefined };
-  containers.update(containerDoc);
-  invalidateContainersCacheForMutation(containerBefore, containerDoc.data);
+  const containerBefore = rowToContainer(row);
+  db.prepare('UPDATE containers SET maturity_gate_pending_since = NULL WHERE id = ?').run(id);
+  const containerAfter = { ...containerBefore, maturityGatePendingSince: undefined };
+  invalidateContainersCacheForMutation(containerBefore, containerAfter);
   return true;
 }
 
@@ -1594,12 +1838,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
   const containerRaw = getContainerRaw(id);
   if (container) {
     clearPendingFreshStateAfterManualUpdate(containerRaw);
-    containers
-      .chain()
-      .find({
-        'data.id': id,
-      })
-      .remove();
+    db.prepare(CONTAINER_DELETE_BY_ID_SQL).run(id);
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
     if (options.replacementExpected === true) {

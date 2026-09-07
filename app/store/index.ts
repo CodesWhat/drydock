@@ -55,8 +55,8 @@ let db: LokiDatabase | undefined;
 // directly as of slice 3, joined by `agent-keys`, `name-bindings` and
 // `api-key` in slice 4, `audit`, `backups`, `notification-history` and the
 // notification outbox in slice 5, `approval` and `notification` in slice 6,
-// and the update-lifecycle and update-policy-retention caches in slice 7;
-// every other collection still lives in Loki.
+// the update-lifecycle and update-policy-retention caches in slice 7, and
+// `container` in slice 8; every other collection still lives in Loki.
 let sqliteDb: Database | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
@@ -186,7 +186,8 @@ function createCollections(): boolean {
   // (roadmap 7-STORE, slice 5) read and write sqliteDb directly.
   audit.createCollections(sqliteDb as Database);
   backup.createCollections(sqliteDb as Database);
-  container.createCollections(db);
+  // roadmap 7-STORE slice 8.
+  container.createCollections(sqliteDb as Database);
   // #556: the update-lifecycle-cache collection must exist before rehydration
   // repopulates container.ts's in-memory Map from it. roadmap 7-STORE slice 7
   // moved it onto sqliteDb.

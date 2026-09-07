@@ -134,6 +134,7 @@ describe('store/db/import', () => {
           notification_rules: 0,
           update_lifecycle_cache: 0,
           update_policy_retention_cache: 0,
+          containers: 0,
         },
       });
       expect(JSON.parse(String(readStoreMetadata(db, IMPORT_MARKER_KEY)))).toMatchObject({
@@ -154,6 +155,7 @@ describe('store/db/import', () => {
           notification_rules: 0,
           update_lifecycle_cache: 0,
           update_policy_retention_cache: 0,
+          containers: 0,
         },
       });
     });
@@ -232,6 +234,7 @@ describe('store/db/import', () => {
           notification_rules: 0,
           update_lifecycle_cache: 0,
           update_policy_retention_cache: 0,
+          containers: 0,
         },
       });
       expect(fs.existsSync(legacyStorePath)).toBe(false);

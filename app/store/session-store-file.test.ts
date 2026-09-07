@@ -10,6 +10,13 @@
  * collection left behind in dd.json by an older build. These tests assert
  * the two stores use different files and that saving one never erases what
  * the other wrote, including the touch-driven case and a restart reload.
+ *
+ * Containers moved off dd.json onto the SQLite database next to it (roadmap
+ * 7-STORE slice 8), so surviving-container assertions go through
+ * app/store/container.js's public functions rather than reading dd.json's
+ * `containers` collection directly — dd.json still holds every other Loki
+ * collection, which is what the Sessions-collection assertions below keep
+ * checking.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -82,8 +89,9 @@ function readPersistedCollections(file: string): Record<string, any[]> {
   return collections;
 }
 
-function persistedContainerIds(file: string): string[] {
-  return (readPersistedCollections(file).containers ?? []).map((row: any) => row.data.id);
+/** Read container names back through the public store API, not dd.json — containers live in SQLite now. */
+function liveContainerNames(containerModule: typeof import('./container.js')): string[] {
+  return containerModule.getContainers().map((containerItem: any) => containerItem.name);
 }
 
 describe('DR-121 session store owns its own file', () => {
@@ -151,12 +159,12 @@ describe('DR-121 session store owns its own file', () => {
 
     storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
     await store.save();
-    expect(persistedContainerIds(mainStoreFile)).toEqual(['seed', 'watched']);
+    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
 
     await writeSession(sessionStore, 'sid-login');
     await saveSessionInstance(sessionStore);
 
-    expect(persistedContainerIds(mainStoreFile)).toEqual(['seed', 'watched']);
+    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
     expect(fs.existsSync(mainStoreFile)).toBe(true);
     const sessionsFile = readPersistedCollections(store.getSessionStorePath());
     expect(sessionsFile.Sessions.map((row: any) => row.sid)).toEqual(['sid-login']);
@@ -183,7 +191,7 @@ describe('DR-121 session store owns its own file', () => {
     storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
     await store.save();
 
-    expect(persistedContainerIds(path.join(tempDir, 'dd.json'))).toEqual(['seed', 'watched']);
+    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
     expect(
       readPersistedCollections(store.getSessionStorePath()).Sessions.map((row: any) => row.sid),
     ).toEqual(['sid-login']);
@@ -194,7 +202,6 @@ describe('DR-121 session store owns its own file', () => {
     vi.resetModules();
     const store = await import('./index.js');
     const storeContainer = await import('./container.js');
-    const mainStoreFile = path.join(tempDir, 'dd.json');
 
     await store.init();
     storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
@@ -221,7 +228,7 @@ describe('DR-121 session store owns its own file', () => {
     // ...which is all connect-loki's 5-second autosave needs.
     await saveSessionInstance(sessionStore);
 
-    expect(persistedContainerIds(mainStoreFile)).toEqual(['seed', 'watched']);
+    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
     expect(
       readPersistedCollections(store.getSessionStorePath()).Sessions.map((row: any) => row.sid),
     ).toEqual(['sid-login']);
@@ -232,7 +239,6 @@ describe('DR-121 session store owns its own file', () => {
     vi.resetModules();
     const store = await import('./index.js');
     const storeContainer = await import('./container.js');
-    const mainStoreFile = path.join(tempDir, 'dd.json');
 
     await store.init();
     storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
@@ -248,7 +254,7 @@ describe('DR-121 session store owns its own file', () => {
     stopSessionStore(sessionStore);
     sessionStore = undefined;
 
-    expect(persistedContainerIds(mainStoreFile)).toEqual(['seed', 'watched']);
+    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
     expect(readPersistedCollections(sessionStorePath).Sessions.map((row: any) => row.sid)).toEqual([
       'sid-login',
     ]);
@@ -261,6 +267,7 @@ describe('DR-121 session store owns its own file', () => {
 
     expect(restartedContainer.getContainerRaw('watched')).toBeDefined();
     expect(restartedContainer.getContainerRaw('seed')).toBeDefined();
+    expect(liveContainerNames(restartedContainer)).toEqual(['seed', 'watched']);
     expect(
       readPersistedCollections(restartedStore.getSessionStorePath()).Sessions.map(
         (row: any) => row.sid,

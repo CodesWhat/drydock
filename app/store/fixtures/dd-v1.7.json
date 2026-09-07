@@ -310,11 +310,72 @@
             "id": "container-cache-web",
             "name": "cache-web",
             "watcher": "local",
-            "image": { "name": "library/web", "tag": { "value": "one" } },
+            "image": {
+              "id": "image-id-cache-web",
+              "registry": { "name": "hub", "url": "https://registry-fixture.test" },
+              "name": "library/web",
+              "tag": { "value": "one" },
+              "digest": {},
+              "architecture": "amd64",
+              "os": "linux"
+            },
             "result": { "tag": "one" }
           },
           "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
           "$loki": 1
+        },
+        {
+          "data": {
+            "id": "container-full-app",
+            "name": "full-app",
+            "displayName": "Full App",
+            "status": "running",
+            "health": "healthy",
+            "watcher": "local",
+            "agent": "edge-one",
+            "image": {
+              "id": "image-id-full-app",
+              "registry": { "name": "hub", "url": "https://registry-fixture.test" },
+              "name": "library/full-app",
+              "tag": { "value": "1.0.0", "semver": true },
+              "digest": {
+                "watch": true,
+                "value": "digest-placeholder-full-app-one",
+                "repo": "library/full-app"
+              },
+              "architecture": "amd64",
+              "os": "linux"
+            },
+            "result": {
+              "tag": "1.1.0",
+              "digest": "digest-placeholder-full-app-two",
+              "created": "2026-01-11T00:00:00.000Z"
+            },
+            "updatePolicy": { "maturityMode": "mature", "maturityMinAgeDays": 3 },
+            "security": {
+              "scan": {
+                "scanner": "trivy",
+                "image": "library/full-app:1.0.0",
+                "scannedAt": "2026-01-08T00:00:00.000Z",
+                "status": "passed",
+                "blockSeverities": ["CRITICAL"],
+                "blockingCount": 0,
+                "summary": { "unknown": 0, "low": 1, "medium": 0, "high": 0, "critical": 0 },
+                "vulnerabilities": []
+              }
+            },
+            "details": {
+              "ports": ["8080/tcp"],
+              "volumes": ["/data"],
+              "env": [{ "key": "NODE_ENV", "value": "production" }]
+            },
+            "labels": { "dd.watch": "true" },
+            "linkTemplate": "https://links-fixture.test/full-app",
+            "portLabel": "8080",
+            "sourceRepo": "library/full-app-source"
+          },
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 2
         }
       ],
       "idIndex": null,
