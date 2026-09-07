@@ -74,6 +74,33 @@ test("ZAP's own budget exceeds the measured full-scan duration", () => {
   expect(typeof nucleiTimeout).toBe('number');
 });
 
+test('the ZAP full scan bounds its spider and active scan inside the job budget', () => {
+  // Both weekly runs to date (32948622205, 33630040351) were cancelled at the
+  // 60-minute job timeout: unbounded, the spider plus the full active scan
+  // against the docs site outgrows the budget and no report is written, so
+  // the gate never fires. The scan step caps each phase and the caps have to
+  // leave room for startup, the passive scan and the report.
+  const workflow = loadWorkflow();
+  const zapTimeout = workflow.jobs?.[ZAP_JOB]?.['timeout-minutes'];
+  const scanStep = getWorkflowStep(ZAP_JOB, 'Run ZAP full scan');
+  const cmdOptions = scanStep?.with?.cmd_options?.toString() ?? '';
+
+  const spiderMinutes = Number(cmdOptions.match(/(?:^|\s)-m\s+(\d+)/u)?.[1]);
+  const scanMinutes = Number(cmdOptions.match(/scanner\.maxScanDurationInMins=(\d+)/u)?.[1]);
+  const ruleMinutes = Number(cmdOptions.match(/scanner\.maxRuleDurationInMins=(\d+)/u)?.[1]);
+
+  // Floors, not pins: the caps may move as the site grows, but a cap small
+  // enough to skip most of the scan would pass the budget check below while
+  // gutting the gate. 5 minutes of spidering and 20 of active scanning are
+  // the least that still covers the docs site's route set.
+  expect(spiderMinutes).toBeGreaterThanOrEqual(5);
+  expect(scanMinutes).toBeGreaterThanOrEqual(20);
+  expect(ruleMinutes).toBeGreaterThanOrEqual(1);
+  expect(ruleMinutes).toBeLessThanOrEqual(scanMinutes);
+  // 15 minutes of headroom for ZAP startup, the passive scan and the report.
+  expect(spiderMinutes + scanMinutes).toBeLessThanOrEqual(Number(zapTimeout) - 15);
+});
+
 test('Nuclei steps live in the Nuclei job, not the ZAP job', () => {
   const nucleiScanStep = getWorkflowStep(NUCLEI_JOB, 'Run Nuclei scan');
   expect(nucleiScanStep?.uses).toContain('projectdiscovery/nuclei-action');
