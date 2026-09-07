@@ -502,7 +502,13 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   watcher.ensureLogger();
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
+  const nameBeforeRefresh = containerInStore.name;
+  const displayNameBeforeRefresh = containerInStore.displayName;
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
+  const identityChanged =
+    containerInStore.name !== nameBeforeRefresh ||
+    containerInStore.displayName !== displayNameBeforeRefresh;
+
   applyDockerDeclarativeUpdatePolicy(
     containerInStore,
     container.Labels || {},
@@ -524,6 +530,7 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   // the inspect actually succeeded — a failed inspect degrades gracefully by
   // leaving the previously stored health value untouched.
   const containerInspect = await inspectDiscoveredContainer(watcher, container.Id);
+  const healthObserved = containerInspect !== undefined;
   if (containerInspect) {
     containerInStore.health = normalizeContainerHealth(containerInspect.State?.Health?.Status);
   }
@@ -533,12 +540,17 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore.details,
     containerInspect,
   );
+  let detailsChanged = false;
   if (!areRuntimeDetailsEqual(containerInStore.details, runtimeDetailsToApply)) {
     containerInStore.details = runtimeDetailsToApply;
+    detailsChanged = true;
   }
 
   // Reconcile container status from Docker summary (covers events missed during reconnect gaps)
+  const statusBeforeReconcile = containerInStore.status;
   reconcileStoredContainerStatus(containerInStore, container.State);
+  const statusChanged = containerInStore.status !== statusBeforeReconcile;
+
   await refreshStoredContainerImageFields({
     watcher,
     container,
@@ -548,6 +560,33 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore,
     containerInspect,
   });
+
+  // Persist the runtime observations this discovery pass owns (name,
+  // displayName, health, details, status) the moment they're observed —
+  // before the registry lookup that follows in the watch cycle, which can
+  // run long enough that a whole-record write at the end would carry a
+  // stale copy of whatever this block just refreshed (roadmap 7-STORE,
+  // slice 9 / spec 4.3). `image` is deliberately left out here: it's still
+  // being resolved by `refreshStoredContainerImageFields` above and by the
+  // registry lookup that follows, and lands in the store via the scan
+  // patch in `mapContainerToContainerReport` once that settles.
+  const runtimeObservationPatch: Partial<Container> = {};
+  if (identityChanged) {
+    runtimeObservationPatch.name = containerInStore.name;
+    runtimeObservationPatch.displayName = containerInStore.displayName;
+  }
+  if (healthObserved) {
+    runtimeObservationPatch.health = containerInStore.health;
+  }
+  if (detailsChanged) {
+    runtimeObservationPatch.details = containerInStore.details;
+  }
+  if (statusChanged) {
+    runtimeObservationPatch.status = containerInStore.status;
+  }
+  if (Object.keys(runtimeObservationPatch).length > 0) {
+    storeContainer.updateContainerFields(containerInStore.id, runtimeObservationPatch);
+  }
 
   return containerInStore;
 }
