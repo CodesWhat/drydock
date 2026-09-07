@@ -53,7 +53,9 @@ let db: LokiDatabase | undefined;
 // The SQLite database opened alongside Loki (roadmap 7-STORE, slice 2).
 // `app`, `secrets`, `settings` and `ui-preferences` read and write it
 // directly as of slice 3, joined by `agent-keys`, `name-bindings` and
-// `api-key` in slice 4; every other collection still lives in Loki.
+// `api-key` in slice 4, `audit`, `backups`, `notification-history` and the
+// notification outbox in slice 5, and `approval` and `notification` in
+// slice 6; every other collection still lives in Loki.
 let sqliteDb: Database | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
@@ -177,7 +179,8 @@ function createCollections(): boolean {
   agentKeys.createCollections(sqliteDb as Database);
   apiKey.createCollections(sqliteDb as Database);
   app.createCollections(sqliteDb as Database);
-  approval.createCollections(db);
+  // roadmap 7-STORE slice 6.
+  approval.createCollections(sqliteDb as Database);
   // audit, backups, notification-history and the notification outbox
   // (roadmap 7-STORE, slice 5) read and write sqliteDb directly.
   audit.createCollections(sqliteDb as Database);
@@ -193,7 +196,8 @@ function createCollections(): boolean {
   updatePolicyRetentionCacheStore.createCollections(db);
   container.rehydrateUpdatePolicyRetentionCacheFromStore();
   nameBindings.createCollections(sqliteDb as Database);
-  notification.createCollections(db);
+  // roadmap 7-STORE slice 6.
+  notification.createCollections(sqliteDb as Database);
   notificationHistory.createCollections(sqliteDb as Database);
   notificationOutbox.createCollections(sqliteDb as Database);
   secrets.createCollections(sqliteDb as Database);

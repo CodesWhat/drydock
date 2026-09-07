@@ -27,6 +27,15 @@ export const MIGRATIONS: readonly Migration[] = [
     note: 'initial schema',
     sql: INITIAL_SCHEMA_SQL,
   },
+  {
+    version: 2,
+    // findApprovalByOperationId (app/store/approval.ts) has always queried this
+    // column; the initial schema (slice 1) shipped without an index for it,
+    // deferred to slice 6, the point the approvals store actually moves onto
+    // this table.
+    note: 'index approvals.operation_id (roadmap 7-STORE slice 6)',
+    sql: 'CREATE INDEX approvals_operation_id ON approvals(operation_id);',
+  },
 ];
 
 /** Versions already recorded in `schema_migrations`, ascending. */
