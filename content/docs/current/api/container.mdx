@@ -805,7 +805,7 @@ curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d
   -d '{"backupId": "abc123"}'
 ```
 
-Returns 200 on success, 404 if the container/backup/trigger is not found, or 428 if confirmation is missing.
+Returns 200 on success, 404 if the container, the requested backup, or a matching Docker/Docker Compose trigger is not found, 409 if the backup was recorded by a Portainer action trigger (manual rollback needs a Docker or Docker Compose action instead) or the rollback would otherwise require an immutable digest reference that cannot be established, 428 if confirmation is missing, 501 if the container's agent connection does not support lifecycle actions, or 500 if the rollback fails.
 
 ## Get update/rollback history
 
