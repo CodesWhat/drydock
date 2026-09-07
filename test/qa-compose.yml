@@ -50,9 +50,13 @@ services:
       - DD_SESSION_SECRET=qa-test-session-secret
       - DD_PUBLIC_URL=http://localhost:${DD_PLAYWRIGHT_PORT:-3333}
       # --- OIDC (Dex) ---
-      - DD_AUTH_OIDC_DEX_DISCOVERY=http://dex:5556/dex/.well-known/openid-configuration
-      - DD_AUTH_OIDC_DEX_CLIENTID=drydock
-      - DD_AUTH_OIDC_DEX_CLIENTSECRET=drydock-qa-secret
+      # Not wired: the OIDC schema only accepts an https discovery URL and
+      # the Dex service below serves plain http, so a DD_AUTH_OIDC_DEX_*
+      # block here never registered (the registry logged the schema error
+      # and carried on). With a config file mounted, startup validation is
+      # strict across the merged configuration and that same error is fatal,
+      # which is how the dead block was caught. Point it at an https Dex
+      # before re-adding it.
       # --- Slack notification ---
       - DD_NOTIFICATION_SLACK_MYSLACK_TOKEN=xoxb-fake-slack-token-for-testing
       - DD_NOTIFICATION_SLACK_MYSLACK_CHANNEL=C01FAKECHANNEL

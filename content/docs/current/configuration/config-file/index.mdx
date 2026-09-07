@@ -76,6 +76,10 @@ Only a scalar whose **whole value** matches the pattern is substituted — `pref
 
 **Environment > file > Joi schema default.** The file is the deployment's committed baseline; the environment is the per-instance override an operator reaches for when something is on fire. Compose sets environment variables from `.env` files and from the shell at `docker compose up` time, so an operator who exports `DD_LOG_LEVEL=debug` to chase a bug expects it to win over a file they didn't touch — the reverse ordering would make that export a silent no-op, the worst possible failure mode for a debugging aid. It also means every existing environment-only deployment upgrades to v1.8 unchanged: with no file mounted, nothing about behavior differs from v1.7.
 
+### Strict validation once a file is present
+
+With no file, drydock keeps its historical tolerance: a component whose variables fail its schema is logged and skipped, and the rest of the process starts. The moment a file contributes at least one value, startup validates the **whole merged configuration** (environment included) against every component schema and exits with the failing YAML path, variable name and Joi message. Adding a one-line file to a deployment that has been running with a silently skipped component therefore turns that component's error into a startup failure. Check `node dist/index.js config validate` before mounting a file for the first time.
+
 ## Discovery and `DD_CONFIG_FILE`
 
 | Setting | Value |
