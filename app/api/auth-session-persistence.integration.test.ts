@@ -7,19 +7,19 @@
  * every Basic-authenticated API call. The authenticator chain makes it
  * structural instead: Basic declares `persistsSession: false`, and the chain has
  * no path that writes a session for an authenticator that declares it. This test
- * holds that guarantee against the real express-session + connect-loki store,
- * the real Basic provider with a real argon2id hash, and the real
+ * holds that guarantee against the real express-session + SessionStore
+ * (roadmap 7-STORE slice 11, backed by a real SQLite database), the real
+ * Basic provider with a real argon2id hash, and the real
  * `requireAuthentication`.
  */
 import { argon2Sync, randomBytes } from 'node:crypto';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import ConnectLoki from 'connect-loki';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import Basic from '../authentications/providers/basic/Basic.js';
+import * as sessionModel from '../store/session.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { requireAuthentication } from './auth.js';
 import type { AuthRequest } from './auth-types.js';
 import {
@@ -32,14 +32,12 @@ import {
   sessionAuthenticator,
   writeSessionPrincipal,
 } from './session-principal.js';
+import { SessionStore } from './session-store.js';
 
-const LokiStore = ConnectLoki(session);
 const TEST_USER = 'wud-card';
 const TEST_PASSWORD = 'correct-horse-battery-staple';
 const BASIC_AUTH_HEADER = `Basic ${Buffer.from(`${TEST_USER}:${TEST_PASSWORD}`).toString('base64')}`;
 const HTTPS_HEADERS = { 'X-Forwarded-Proto': 'https' };
-
-type LokiSessionStore = InstanceType<typeof LokiStore>;
 
 interface RunningServer {
   server: http.Server;
@@ -59,21 +57,14 @@ function createArgon2Hash(password: string): string {
   return `argon2id$19456$2$4$${salt.toString('base64')}$${derived.toString('base64')}`;
 }
 
-function createStore(): LokiSessionStore {
-  return new LokiStore({
-    path: path.join(os.tmpdir(), `drydock-auth-session-test-${randomBytes(8).toString('hex')}.db`),
-    autosave: false,
-    ttl: 60,
-  });
+/** Each test gets its own throwaway SQLite database — real writes, no shared state across tests. */
+function createStore(): SessionStore {
+  const db = createMigratedMemoryDatabase();
+  sessionModel.createCollections(db);
+  return new SessionStore({ ttlMs: 60_000 });
 }
 
-function waitForStoreReady(store: LokiSessionStore): Promise<void> {
-  return new Promise((resolve) => {
-    store.once('connect', resolve);
-  });
-}
-
-function storeLength(store: LokiSessionStore): Promise<number> {
+function storeLength(store: SessionStore): Promise<number> {
   return new Promise((resolve, reject) => {
     store.length((error: unknown, count?: number) => {
       if (error) {
@@ -85,7 +76,7 @@ function storeLength(store: LokiSessionStore): Promise<number> {
   });
 }
 
-async function createTestApp(store: LokiSessionStore): Promise<Application> {
+async function createTestApp(store: SessionStore): Promise<Application> {
   const basic = new Basic();
   await basic.register('authentication', 'basic', 'default', {
     user: TEST_USER,
@@ -180,6 +171,7 @@ function extractCookie(response: Awaited<ReturnType<typeof fetch>>): string | un
 
 describe('DR-7: header-authenticated requests do not persist sessions', () => {
   const openServers: http.Server[] = [];
+  const openStores: SessionStore[] = [];
 
   beforeEach(() => {
     clearAuthenticators();
@@ -187,12 +179,13 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
   afterEach(async () => {
     await Promise.all(openServers.splice(0).map((server) => closeServer(server)));
+    openStores.splice(0).forEach((store) => store.stop());
     clearAuthenticators();
   });
 
   test('repeated Authorization: Basic requests to a protected route leave the session store empty', async () => {
     const store = createStore();
-    await waitForStoreReady(store);
+    openStores.push(store);
     const app = await createTestApp(store);
     const { server, port } = await startServer(app);
     openServers.push(server);
@@ -210,7 +203,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
   test('a cookie login persists exactly one session that later header-less requests reuse', async () => {
     const store = createStore();
-    await waitForStoreReady(store);
+    openStores.push(store);
     const app = await createTestApp(store);
     const { server, port } = await startServer(app);
     openServers.push(server);
@@ -236,7 +229,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
   test('a higher-priority header identity wins over an eagerly restored cookie identity', async () => {
     const store = createStore();
-    await waitForStoreReady(store);
+    openStores.push(store);
     const app = await createTestApp(store);
     const { server, port } = await startServer(app);
     openServers.push(server);
@@ -263,7 +256,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
   test('an invalid header does not displace a valid cookie session', async () => {
     const store = createStore();
-    await waitForStoreReady(store);
+    openStores.push(store);
     const app = await createTestApp(store);
     const { server, port } = await startServer(app);
     openServers.push(server);
@@ -288,7 +281,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
   test('a wrong password is rejected with a bare 401 and still writes nothing', async () => {
     const store = createStore();
-    await waitForStoreReady(store);
+    openStores.push(store);
     const app = await createTestApp(store);
     const { server, port } = await startServer(app);
     openServers.push(server);
@@ -307,7 +300,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
   test('a syntactically broken Authorization header is rejected with 400, as passport-http was', async () => {
     const store = createStore();
-    await waitForStoreReady(store);
+    openStores.push(store);
     const app = await createTestApp(store);
     const { server, port } = await startServer(app);
     openServers.push(server);

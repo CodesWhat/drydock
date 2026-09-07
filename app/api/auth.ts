@@ -1,11 +1,9 @@
 import { STATUS_CODES } from 'node:http';
-import ConnectLoki from 'connect-loki';
 import express, { type Application, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
-import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
@@ -58,8 +56,8 @@ import {
   restoreSessionPrincipal,
   writeSessionPrincipal,
 } from './session-principal.js';
+import { SessionStore } from './session-store.js';
 
-const LokiStore = ConnectLoki(session);
 const router = express.Router();
 
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
@@ -415,13 +413,13 @@ export function init(app: Application): void {
   // Init express session
   sessionMiddleware = session({
     name: SESSION_COOKIE_NAME,
-    store: new LokiStore({
-      // DR-121: this must be a sibling file, never the main store's own file —
-      // two independent LokiJS instances autosaving the same file clobber
-      // each other's writes.
-      path: store.getSessionStorePath(),
+    // roadmap 7-STORE slice 11: sessions live in the same SQLite database as
+    // everything else now, so there is exactly one writer and the DR-121
+    // mutual-clobber hazard (two independent LokiJS instances autosaving the
+    // same file) cannot recur.
+    store: new SessionStore({
       // Keep store retention >= longest auth cookie lifespan (remember-me).
-      ttl: getCookieMaxAge(REMEMBER_ME_DAYS) / 1000,
+      ttlMs: getCookieMaxAge(REMEMBER_ME_DAYS),
     }),
     secret: getSessionSecretKey(),
     resave: false,

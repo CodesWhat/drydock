@@ -28,6 +28,7 @@ import * as notification from './notification.js';
 import * as notificationHistory from './notification-history.js';
 import * as notificationOutbox from './notification-outbox.js';
 import * as secrets from './secrets.js';
+import * as sessionStore from './session.js';
 import * as settings from './settings.js';
 import * as uiPreferences from './ui-preferences.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
@@ -205,6 +206,8 @@ function createCollections(): boolean {
   notificationHistory.createCollections(sqliteDb as Database);
   notificationOutbox.createCollections(sqliteDb as Database);
   secrets.createCollections(sqliteDb as Database);
+  // roadmap 7-STORE slice 11.
+  sessionStore.createCollections(sqliteDb as Database);
   uiPreferences.createCollections(sqliteDb as Database);
   settings.createCollections(sqliteDb as Database);
   // roadmap 7-STORE slice 10.
