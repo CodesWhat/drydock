@@ -150,6 +150,70 @@ const reloadConfigurationResponseSchema = {
   additionalProperties: false,
 } as const;
 
+const writeConfigurationSectionRequestBody = {
+  required: true,
+  content: {
+    'application/json': {
+      schema: {
+        ...genericObjectSchema,
+        description:
+          'The section tree to write, the same shape one entry of GET /api/v1/config\'s "sections" map has.',
+      },
+    },
+  },
+} as const;
+
+const writeConfigurationReloadSummarySchema = {
+  type: 'object',
+  description: 'The reload this write triggers (roadmap 7.1 slice 6) — same engine, same shape.',
+  properties: {
+    applied: { type: 'boolean' },
+    diff: {
+      type: 'object',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+    reconcile: { ...reconcileSummarySchema },
+    orphanedRules: {
+      type: 'array',
+      items: { ...orphanedNotificationRuleReferenceSchema },
+    },
+  },
+  required: ['applied', 'diff'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationSectionResponseSchema = {
+  type: 'object',
+  properties: {
+    applied: { type: 'boolean' },
+    section: { type: 'string' },
+    changedKeys: { type: 'array', items: { type: 'string' } },
+    restartRequired: {
+      type: 'boolean',
+      description:
+        'True when this section only takes effect after a restart (spec-7.1-config-file.md section 4.3) — the file was still written.',
+    },
+    reload: { ...writeConfigurationReloadSummarySchema },
+  },
+  required: ['applied', 'section', 'changedKeys', 'restartRequired', 'reload'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationInvalidResponseSchema = {
+  type: 'object',
+  properties: {
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+  },
+  required: ['errors'],
+  additionalProperties: false,
+} as const;
+
 export const configPaths = {
   '/api/v1/config': {
     get: {
@@ -182,6 +246,31 @@ export const configPaths = {
         404: errorResponse('Unknown configuration section'),
         429: errorResponse('Config read rate limit exceeded'),
         500: errorResponse('Unable to build the effective configuration'),
+      },
+    },
+    put: {
+      tags: ['System'],
+      summary: 'Write a configuration section through the file',
+      description:
+        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched.',
+      operationId: 'writeConfigurationSection',
+      parameters: [configSectionPathParam],
+      requestBody: writeConfigurationSectionRequestBody,
+      responses: {
+        200: jsonResponse('Write result', { ...writeConfigurationSectionResponseSchema }),
+        400: jsonResponse('Invalid candidate section', {
+          ...writeConfigurationInvalidResponseSchema,
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        409: errorResponse(
+          'No configuration file exists, a key in this section is sourced from the environment, or this section is DB-owned',
+        ),
+        413: errorResponse(
+          'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
+        ),
+        429: errorResponse('Config write rate limit exceeded'),
+        500: errorResponse('Unable to write the configuration section'),
       },
     },
   },

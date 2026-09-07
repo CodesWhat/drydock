@@ -132,6 +132,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/webhook/watch → session-only',
   'POST /api/v1/webhook/watch/:containerName → session-only',
   'POST /api/v1/webhooks/registry → session-only',
+  'PUT /api/v1/config/:section → admin',
   'PUT /api/v1/settings → admin',
 ];
 

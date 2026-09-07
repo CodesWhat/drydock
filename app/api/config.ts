@@ -5,6 +5,10 @@ import nocache from 'nocache';
 import setValue from 'set-value';
 import { getConfigFileInfo } from '../configuration/file/layer.js';
 import { reloadConfiguration } from '../configuration/file/reload.js';
+import {
+  type ConfigWriteOutcome,
+  writeConfigurationSection as writeConfigurationSectionToFile,
+} from '../configuration/file/write.js';
 import { configFileSources, ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import { redactConfigurationTree } from '../debug/redact.js';
 import { recordAuditEvent } from './audit-events.js';
@@ -243,6 +247,104 @@ async function reloadEffectiveConfiguration(_req: Request, res: Response): Promi
   }
 }
 
+/**
+ * `PUT /api/v1/config/:section` — write a configuration section through the
+ * file (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). The
+ * engine (`configuration/file/write.ts`'s `writeConfigurationSection`) owns
+ * every I/O, validation, and mutation step, exactly as `reload.ts` does for
+ * `/reload`; this handler is the same HTTP/audit wrapping.
+ *
+ * `admin`, same reasoning as `/validate` and `/reload`: never returns a raw
+ * configuration value, only a section name, key names, counts, and error
+ * text. The audit `details` built below follow the same rule — key *names*
+ * only, never a value — even for the refusal branches, none of which
+ * include anything a caller supplied.
+ */
+function describeWrite(section: string, outcome: ConfigWriteOutcome): string {
+  switch (outcome.kind) {
+    case 'written':
+      return (
+        `Wrote configuration section "${section}": ${outcome.changedKeys.length} key(s) changed` +
+        (outcome.restartRequired ? ' (restart required)' : '')
+      );
+    case 'no-file':
+      return `Wrote configuration section "${section}": refused (no configuration file exists)`;
+    case 'invalid':
+      return `Wrote configuration section "${section}": refused (${outcome.errors.length} error(s))`;
+    case 'env-sourced':
+      return (
+        `Wrote configuration section "${section}": refused ` +
+        `(env-sourced keys: ${outcome.keys.join(', ')})`
+      );
+    case 'db-owned':
+      return `Wrote configuration section "${section}": refused (DB-owned section)`;
+  }
+}
+
+async function writeConfigurationSection(
+  req: Request<{ section: string }>,
+  res: Response,
+): Promise<void> {
+  const { section } = req.params;
+  try {
+    const outcome = await writeConfigurationSectionToFile(section, req.body);
+    // Audited before the body is sent, matching every other route in this
+    // file, and unconditionally — a refusal is as much an "attempt" as a
+    // success, exactly as `/reload` audits both `applied` and refused.
+    recordAuditEvent({
+      action: 'config-written',
+      containerName: 'diagnostics',
+      status: outcome.kind === 'written' ? 'info' : 'error',
+      details: describeWrite(section, outcome),
+    });
+
+    switch (outcome.kind) {
+      case 'written':
+        res.status(200).json({
+          applied: true,
+          section,
+          changedKeys: outcome.changedKeys,
+          restartRequired: outcome.restartRequired,
+          reload: {
+            applied: outcome.reload.applied,
+            diff: outcome.reload.diff,
+            reconcile: summarizeReconcile(outcome.reload.reconcile),
+            orphanedRules: outcome.reload.orphanedRules,
+          },
+        });
+        return;
+      case 'no-file':
+        sendErrorResponse(
+          res,
+          409,
+          'No configuration file exists to write to. Mount one at /config/drydock.yml ' +
+            '(or wherever DD_CONFIG_FILE points) before writing a section through this endpoint.',
+        );
+        return;
+      case 'invalid':
+        res.status(400).json({ errors: outcome.errors });
+        return;
+      case 'env-sourced':
+        sendErrorResponse(
+          res,
+          409,
+          `Cannot write section "${section}": the following keys are set by the environment ` +
+            `and would not take effect: ${outcome.keys.join(', ')}`,
+        );
+        return;
+      case 'db-owned':
+        sendErrorResponse(
+          res,
+          409,
+          `Section "${section}" is managed through PATCH /api/v1/settings, not the configuration file.`,
+        );
+        return;
+    }
+  } catch {
+    sendErrorResponse(res, 500, 'Unable to write the configuration section');
+  }
+}
+
 export function init() {
   const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
   const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
@@ -286,6 +388,17 @@ export function init() {
     message: 'Config reload rate limit exceeded. Max 5 per 60 seconds.',
     ...identityAwareRateLimitOptions,
   });
+  // Same shape again: a write does everything reload does, plus a disk
+  // write, so it is at least as expensive and no reason to diverge either.
+  const configWriteRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: 'Config write rate limit exceeded. Max 5 per 60 seconds.',
+    ...identityAwareRateLimitOptions,
+  });
 
   router.use(nocache());
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
@@ -303,5 +416,9 @@ export function init() {
   // same paths/env-key-names/error-text/counts shape, never a raw
   // configuration value.
   router.post('/reload', configReloadRateLimit, scoped('admin', reloadEffectiveConfiguration));
+  // `admin`, same reasoning again: the response is a section name, key
+  // names, counts and error text — never a raw configuration value, so this
+  // never widens past what `/validate` and `/reload` already allow.
+  router.put('/:section', configWriteRateLimit, scoped('admin', writeConfigurationSection));
   return router;
 }
