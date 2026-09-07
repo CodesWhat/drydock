@@ -1,14 +1,13 @@
 /**
  * Tests for the approval reconciler (spec-ca-2-approval-queue.md, slice 2).
  *
- * Driven through the real event bus and a real LokiJS store, so the wiring is exercised
- * rather than described. The trigger registry, the global update mode and self-update
- * availability are the only doubles.
+ * Driven through the real event bus and a real in-memory SQLite store, so the wiring is
+ * exercised rather than described. The trigger registry, the global update mode and
+ * self-update availability are the only doubles.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Loki from 'lokijs';
 import * as events from '../event/index.js';
 import {
   clearAllListenersForTests,
@@ -21,6 +20,8 @@ import {
 import type { ActionPolicyTrigger } from '../model/action-policy.js';
 import type { Container } from '../model/container.js';
 import * as approvalStore from '../store/approval.js';
+import type { Database } from '../store/db/driver.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as reconcile from './reconcile.js';
 
 const { getStateMock, getUpdateModeMock, isSelfUpdateAvailableMock, warnMock } = vi.hoisted(() => ({
@@ -87,8 +88,11 @@ function allRows() {
   return approvalStore.listApprovals({ status: 'all' }).records;
 }
 
+let db: Database;
+
 beforeEach(() => {
-  approvalStore.createCollections(new Loki('reconcile-test.db'));
+  db = createMigratedMemoryDatabase();
+  approvalStore.createCollections(db);
   getStateMock.mockReturnValue({ trigger: createTrigger('none') });
   getUpdateModeMock.mockReturnValue('manual');
   isSelfUpdateAvailableMock.mockReturnValue(true);
@@ -100,6 +104,7 @@ afterEach(() => {
   approvalStore.resetApprovalStoreForTests();
   clearAllListenersForTests();
   vi.clearAllMocks();
+  db.close();
 });
 
 describe('init', () => {
