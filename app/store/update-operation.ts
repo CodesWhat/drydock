@@ -392,6 +392,16 @@ const UPDATE_OPERATION_UPDATE_COLUMNS = UPDATE_OPERATION_COLUMNS.filter(
 );
 
 const UPDATE_OPERATION_INSERT_SQL = `INSERT INTO update_operations (${UPDATE_OPERATION_COLUMNS.join(', ')}) VALUES (${UPDATE_OPERATION_COLUMNS.map(() => '?').join(', ')})`;
+/**
+ * Upsert variant of `UPDATE_OPERATION_INSERT_SQL`, used only by
+ * `insertImportedUpdateOperationRow` (roadmap 7-STORE slice 10 review
+ * finding 1). A first-start import can see the same snapshot twice (a
+ * restarted import, a re-run migration), and a plain INSERT keyed on `id`
+ * throws a UNIQUE constraint error on the second pass. `ON CONFLICT(id) DO
+ * UPDATE` makes the import idempotent, same shape as the retention-cache
+ * importer's upsert (`app/store/db/importers/update-policy-retention-cache.ts`).
+ */
+const UPDATE_OPERATION_UPSERT_SQL = `INSERT INTO update_operations (${UPDATE_OPERATION_COLUMNS.join(', ')}) VALUES (${UPDATE_OPERATION_COLUMNS.map(() => '?').join(', ')}) ON CONFLICT(id) DO UPDATE SET ${UPDATE_OPERATION_UPDATE_COLUMNS.map((column) => `${column} = excluded.${column}`).join(', ')}`;
 const UPDATE_OPERATION_UPDATE_SQL = `UPDATE update_operations SET ${UPDATE_OPERATION_UPDATE_COLUMNS.map((column) => `${column} = ?`).join(', ')} WHERE id = ?`;
 const UPDATE_OPERATION_SELECT_BY_ID_SQL = 'SELECT * FROM update_operations WHERE id = ?';
 const UPDATE_OPERATION_SELECT_BY_STATUS_SQL = 'SELECT * FROM update_operations WHERE status = ?';
@@ -618,13 +628,19 @@ export function buildImportedUpdateOperationRow(
   return operationToRow({ ...operation, containerIdentityKey } as UpdateOperation);
 }
 
-/** Insert one row built by `buildImportedUpdateOperationRow` into `database`. */
+/**
+ * Insert one row built by `buildImportedUpdateOperationRow` into `database`,
+ * upserting on `id` so importing the same legacy document twice (a
+ * restarted first-start import) updates the existing row instead of
+ * throwing a UNIQUE constraint error (roadmap 7-STORE slice 10 review
+ * finding 1).
+ */
 export function insertImportedUpdateOperationRow(
   database: Database,
   row: UpdateOperationRow,
 ): void {
   database
-    .prepare(UPDATE_OPERATION_INSERT_SQL)
+    .prepare(UPDATE_OPERATION_UPSERT_SQL)
     .run(...UPDATE_OPERATION_COLUMNS.map((column) => row[column]));
 }
 

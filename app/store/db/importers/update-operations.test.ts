@@ -162,4 +162,26 @@ describe('store/db/importers/update-operations', () => {
   test('writes no rows when the store never had this collection', () => {
     expect(run([])).toBe(0);
   });
+
+  test('re-importing the same snapshot upserts instead of throwing a UNIQUE constraint error', () => {
+    const document = {
+      id: 'op-repeat',
+      containerName: 'web',
+      status: 'succeeded',
+      phase: 'completed',
+      agent: 'agent-a',
+      watcher: 'watcher-a',
+      createdAt: '2026-01-09T00:00:00.000Z',
+      updatedAt: '2026-01-09T00:05:00.000Z',
+    };
+
+    expect(run([document])).toBe(1);
+    expect(run([document])).toBe(1);
+
+    expect(db.prepare('SELECT COUNT(*) AS n FROM update_operations').get()).toEqual({ n: 1 });
+    const row = db
+      .prepare('SELECT id, container_identity_key FROM update_operations WHERE id = ?')
+      .get('op-repeat');
+    expect(row).toEqual({ id: 'op-repeat', container_identity_key: 'agent-a::watcher-a::web' });
+  });
 });
