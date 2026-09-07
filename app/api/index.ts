@@ -209,6 +209,19 @@ function sendUnversionedApiTombstone(req, res, next) {
   });
 }
 
+// Mounted at '/' only when DD_SERVER_UI_ENABLED=false, after the /health,
+// /api/v1, /api, and /metrics mounts — so it only ever answers requests none
+// of those matched (i.e. UI paths). Returns a JSON 404 instead of Express's
+// bare HTML 404 so headless deployments get a machine-readable body instead
+// of a dead end, for any method (GET/HEAD included).
+function sendUiDisabledResponse(_req, res) {
+  sendErrorResponse(
+    res,
+    404,
+    'The web UI is disabled (DD_SERVER_UI_ENABLED=false); the API remains available under /api/v1',
+  );
+}
+
 function registerRoutes(app) {
   // Wire the health readiness gate before auth.init() so that /health
   // returns 503 if somehow a request arrives before the authenticator chain
@@ -238,6 +251,7 @@ function registerRoutes(app) {
     return;
   }
   log.info('UI router disabled by DD_SERVER_UI_ENABLED=false');
+  app.use('/', sendUiDisabledResponse);
 }
 
 function registerErrorHandler(app) {
