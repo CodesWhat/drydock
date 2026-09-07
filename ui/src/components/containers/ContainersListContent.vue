@@ -6,6 +6,7 @@ import AppIconButton from '../AppIconButton.vue';
 import DataSortControl from '../DataSortControl.vue';
 import DataTableColumnPicker from '../DataTableColumnPicker.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
+import FleetUpdateProgressBanner from './FleetUpdateProgressBanner.vue';
 import {
   type ContainersViewTemplateContext,
   useContainersViewTemplateContext,
@@ -156,6 +157,8 @@ const activeFilterChips = computed(() => {
     </div>
 
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('containerComponents.listContent.loadingContainers') }}</div>
+
+    <FleetUpdateProgressBanner />
 
     <DataFilterBar
       v-model="containerViewMode"

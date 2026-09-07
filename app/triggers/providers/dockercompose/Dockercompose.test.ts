@@ -3226,6 +3226,110 @@ describe('Dockercompose Trigger', () => {
     expect(processComposeFileSpy).toHaveBeenCalledWith('/opt/drydock/test/b.yml', [container2]);
   });
 
+  test('triggerBatch processes independent compose-file groups one at a time by default', async () => {
+    trigger.configuration.file = undefined;
+    fs.access.mockResolvedValue(undefined);
+
+    const container1 = {
+      name: 'app1',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/a.yml' },
+    };
+    const container2 = {
+      name: 'app2',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/b.yml' },
+    };
+    const container3 = {
+      name: 'app3',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/c.yml' },
+    };
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.spyOn(trigger, 'processComposeFile').mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return false;
+    });
+
+    await trigger.triggerBatch([container1, container2, container3]);
+
+    expect(maxInFlight).toBe(1);
+  });
+
+  test('triggerBatch runs independent compose-file groups concurrently up to the configured limit', async () => {
+    trigger.configuration.file = undefined;
+    trigger.configuration.concurrency = 2;
+    fs.access.mockResolvedValue(undefined);
+
+    const container1 = {
+      name: 'app1',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/a.yml' },
+    };
+    const container2 = {
+      name: 'app2',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/b.yml' },
+    };
+    const container3 = {
+      name: 'app3',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/c.yml' },
+    };
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.spyOn(trigger, 'processComposeFile').mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+      return false;
+    });
+
+    await trigger.triggerBatch([container1, container2, container3]);
+
+    expect(maxInFlight).toBe(2);
+  });
+
+  test('trigger() bounds concurrency across independent calls, not just within one triggerBatch() call', async () => {
+    // trigger() delegates to triggerBatch([container]) for a single
+    // container — runAcceptedContainerUpdates() (manual bulk "Update All",
+    // dependency chains, startup recovery) calls trigger() once per
+    // container from its own wave-worker pool, with no shared batch call
+    // for a per-call limiter to bound. Confirm the configured concurrency
+    // still caps how many run at once across those independent calls.
+    trigger.configuration.file = undefined;
+    trigger.configuration.concurrency = 2;
+    fs.access.mockResolvedValue(undefined);
+
+    const containers = Array.from({ length: 4 }, (_, index) => ({
+      name: `app${index}`,
+      watcher: 'local',
+      labels: { 'dd.compose.file': `/opt/drydock/test/${index}.yml` },
+    }));
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.spyOn(trigger, 'processComposeFile').mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+      return true;
+    });
+
+    await Promise.all(containers.map((container) => trigger.trigger(container)));
+
+    expect(maxInFlight).toBeLessThanOrEqual(2);
+    expect(maxInFlight).toBeGreaterThan(0);
+  });
+
   test('triggerBatch should group multiple containers under the same compose file', async () => {
     trigger.configuration.file = undefined;
     fs.access.mockResolvedValue(undefined);

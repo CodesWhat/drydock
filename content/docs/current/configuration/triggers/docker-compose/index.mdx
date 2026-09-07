@@ -38,6 +38,7 @@ The trigger will:
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Pull, gate, and rewrite the compose file once per service instead of once per container, then recreate every container of that service individually | `true`, `false` | `false` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_MOUNTPREFIXFALLBACK` | ⚪ | Allow compose file matching by trailing project-directory/file path when the Docker label/inspect path and trigger `FILE` differ only by host/container mount prefix | `true`, `false` | `false` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_CONCURRENCY` | ⚪ | Max simultaneous compose-file groups updated through this trigger; overrides the global [`DD_UPDATE_CONCURRENCY`](/docs/configuration/actions#update-concurrency). Bounds how many independent compose files update at once — every container sharing one compose file still updates together as a single unit, in the same order it always has. | Positive integer | inherits the global value (`1`) |
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration), but only supports the `batch` mode.
 

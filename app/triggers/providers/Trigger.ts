@@ -685,6 +685,14 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   securitymode?: string;
   securitydigesttitle?: string;
   securitydigestbody?: string;
+  /**
+   * Per-action DD_ACTION_<TYPE>_<NAME>_CONCURRENCY override for how many
+   * update operations this action instance runs at once. Only declared in
+   * the Joi schema of action-type triggers (docker, dockercompose, command);
+   * notification triggers' schemas don't expose this key, so setting it on
+   * one is a config validation error, not a silent no-op.
+   */
+  concurrency?: number;
 }
 
 interface ContainerReport {

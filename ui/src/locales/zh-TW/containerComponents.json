@@ -273,6 +273,9 @@
     },
     "listContent": {
       "loadingContainers": "正在載入容器……",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "搜尋名稱或映像檔……",
       "allStatuses": "所有狀態",
       "running": "執行中",

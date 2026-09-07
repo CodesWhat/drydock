@@ -2240,38 +2240,56 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       this.log.warn('No containers matched any compose file for this trigger');
     }
 
-    // Process each compose file group
-    const batchResults: boolean[] = [];
-    for (const {
-      composeFile,
-      composeFiles,
-      containers: containersInFile,
-    } of containersByComposeFile.values()) {
-      if (composeFiles.length > 1) {
-        batchResults.push(
-          sanitizedRuntimeContext === undefined
-            ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
-            : await this.processComposeFile(
-                composeFile,
-                containersInFile,
-                composeFiles,
-                sanitizedRuntimeContext,
-              ),
-        );
-      } else {
-        batchResults.push(
-          sanitizedRuntimeContext === undefined
-            ? await this.processComposeFile(composeFile, containersInFile)
-            : await this.processComposeFile(
-                composeFile,
-                containersInFile,
-                undefined,
-                sanitizedRuntimeContext,
-              ),
-        );
-      }
-    }
-    return batchResults;
+    // Process each compose file group, up to DD_UPDATE_CONCURRENCY (or this
+    // action's own DD_ACTION_DOCKERCOMPOSE_<NAME>_CONCURRENCY override)
+    // groups at once. This only unlocks concurrency ACROSS independent
+    // compose files/projects: each group still runs processComposeFile()
+    // to completion as one unit — a single withContainerUpdateLocks()
+    // critical section, one docker-compose invocation, one write to the
+    // group's compose file(s) — so a compose-file-once batch keeps its
+    // existing serial ordering guarantees inside that unit. Concurrent
+    // groups never collide because their lock keys and compose object/
+    // document caches are both keyed by file path (see
+    // buildComposeFileLockKeys() and _composeObjectCache).
+    //
+    // getUpdateSemaphore() (inherited from Docker) is a persistent
+    // per-instance permit pool, not a limiter scoped to this call: trigger()
+    // delegates to triggerBatch([container]) for a single container, so a
+    // fresh per-call limiter would never see sibling calls made by
+    // runAcceptedContainerUpdates()'s per-container dispatch (manual bulk
+    // updates, dependency chains, startup recovery) and would bound
+    // nothing. The shared semaphore does, because every group here, and
+    // every single-container call routed through it, draws from the same
+    // pool of permits.
+    const semaphore = this.getUpdateSemaphore();
+    return Promise.all(
+      Array.from(containersByComposeFile.values()).map(
+        async ({ composeFile, composeFiles, containers: containersInFile }) => {
+          const release = await semaphore.acquire();
+          try {
+            return composeFiles.length > 1
+              ? sanitizedRuntimeContext === undefined
+                ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
+                : await this.processComposeFile(
+                    composeFile,
+                    containersInFile,
+                    composeFiles,
+                    sanitizedRuntimeContext,
+                  )
+              : sanitizedRuntimeContext === undefined
+                ? await this.processComposeFile(composeFile, containersInFile)
+                : await this.processComposeFile(
+                    composeFile,
+                    containersInFile,
+                    undefined,
+                    sanitizedRuntimeContext,
+                  );
+          } finally {
+            release();
+          }
+        },
+      ),
+    );
   }
 
   /**

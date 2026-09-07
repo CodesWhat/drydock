@@ -444,6 +444,12 @@ export function registerCommonDockerBeforeEach() {
     vi.resetAllMocks();
     mockGetState.mockImplementation(createDefaultRegistryState);
     docker.configuration = configurationValid;
+    // The update-concurrency semaphore is created lazily and cached per
+    // instance (so it can bound concurrency across separate trigger() calls,
+    // not just within one triggerBatch()) — reset it whenever configuration
+    // is reset so a test that sets `concurrency` doesn't inherit a semaphore
+    // sized by whatever ran before it against this shared `docker` instance.
+    docker.updateSemaphore = undefined;
     docker.log = log;
     docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
       id: '123456789',
