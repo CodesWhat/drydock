@@ -1206,7 +1206,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     updateContainerFromInspectState(containerFound, containerInspect, {
       getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName),
-      updateContainer: (container) => storeContainer.updateContainer(container),
+      updateContainer: (id, patch) => storeContainer.updateContainerFields(id, patch),
       logInfo: (message) => logContainer.info(message),
       applyDerivedLabelFieldsToContainer: (container, labels) =>
         applyEffectiveDockerConfigFromLabels(
