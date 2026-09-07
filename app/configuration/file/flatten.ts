@@ -134,9 +134,17 @@ function processValue(value: unknown, pathSegments: string[], entries: FlattenEn
     return;
   }
 
+  const key = toEnvKey(pathSegments);
+  if (key.endsWith(VAR_FILE_SUFFIX)) {
+    throw new Error(
+      `${describePath(pathSegments)}: flattens to ${key}, but the "${VAR_FILE_SUFFIX}" suffix ` +
+        'is reserved for a "_file" mapping (e.g. `{ _file: /run/secrets/x }`), not a scalar value',
+    );
+  }
+
   const coerced = coerceScalar(value as string | number | boolean, pathSegments);
   entries.push({
-    key: toEnvKey(pathSegments),
+    key,
     value: coerced,
     yamlPath: describePath(pathSegments),
   });

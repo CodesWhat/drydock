@@ -182,4 +182,27 @@ describe('flattenConfigTree', () => {
       expect(result).toStrictEqual({ DD_TOKEN__FILE: '/run/secrets/x' });
     });
   });
+
+  describe('a scalar key that flattens to the __FILE suffix', () => {
+    test('rejects a scalar whose key segment ends in __FILE', () => {
+      // `secret__file: /tmp/x` would flatten to DD_SECRET__FILE, which
+      // replaceSecrets in ../index.ts treats as a secret-file pointer and
+      // reads from disk — the __FILE suffix is reserved for a real "_file"
+      // mapping, not a scalar an operator happened to name that way.
+      expect(() => flattenConfigTree({ secret__file: '/tmp/x' })).toThrow(
+        /secret__file: flattens to DD_SECRET__FILE.*reserved for a "_file" mapping/s,
+      );
+    });
+
+    test('a _file node still produces the __FILE-suffixed key', () => {
+      const result = flattenConfigTree({ secret: { _file: '/run/secrets/x' } });
+      expect(result).toStrictEqual({ DD_SECRET__FILE: '/run/secrets/x' });
+    });
+  });
+
+  test('accepts a null-prototype mapping (e.g. Object.create(null))', () => {
+    const tree = Object.create(null);
+    tree.dnsMode = 'hostgateway';
+    expect(flattenConfigTree(tree)).toStrictEqual({ DD_DNSMODE: 'hostgateway' });
+  });
 });
