@@ -1,118 +1,37 @@
-import dns from 'node:dns';
-import * as agentServer from './agent/api/index.js';
-import * as agentManager from './agent/index.js';
-import * as api from './api/index.js';
-import * as approvalReconciler from './approvals/reconcile.js';
-import { renderBanner } from './banner/index.js';
-import { getDnsMode } from './configuration/index.js';
-import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
-import log from './log/index.js';
-import * as maturityScheduler from './maturity/scheduler.js';
-import type { NotificationOutboxEntry } from './model/notification-outbox.js';
-import { startOutboxWorker } from './notifications/outbox-worker.js';
-import * as prometheus from './prometheus/index.js';
-import * as registry from './registry/index.js';
-import { warmTrivyDatabase } from './security/scan.js';
-import * as securityScheduler from './security/scheduler.js';
-import * as store from './store/index.js';
-import {
-  recoverInProgressOperationsOnStartup,
-  recoverQueuedOperationsOnStartup,
-} from './updates/recovery.js';
+import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
 
-// Configure DNS result ordering (DD_DNS_MODE, default: ipv4first).
-// Defaults to IPv4-first to work around musl libc (Alpine) resolver issues
-// that cause getaddrinfo EAI_AGAIN errors (#161).
-dns.setDefaultResultOrder(getDnsMode());
-
-const commandExitCode = runConfigMigrateCommandIfRequested(process.argv.slice(2));
-
-if (commandExitCode !== null) {
-  if (commandExitCode !== 0) {
-    process.exitCode = commandExitCode;
-  }
-} else {
-  const isAgent = process.argv.includes('--agent');
-  const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
-  const runAsRootEnabled = process.env.DD_RUN_AS_ROOT === 'true';
-  const insecureRootAcknowledged = process.env.DD_ALLOW_INSECURE_ROOT === 'true';
-  renderBanner({ mode: isAgent ? 'agent' : 'controller' });
-  log.info('drydock is starting');
-
-  if (runningAsRoot && runAsRootEnabled && !insecureRootAcknowledged) {
-    throw new Error(
-      'DD_RUN_AS_ROOT=true requires DD_ALLOW_INSECURE_ROOT=true (break-glass). Prefer socket-proxy mode for least privilege.',
-    );
+/**
+ * Loads `drydock.yml` (if present) into `configuration/file/layer.ts` before
+ * anything that transitively imports `configuration/index.ts` is evaluated.
+ *
+ * `./main.js` carries the real startup sequence (agent mode, the `config
+ * migrate` CLI, store/registry/api init, ...) and imports
+ * `configuration/index.ts` near the top of its own module graph. Importing
+ * `./main.js` at the top of this file — even statically, without calling
+ * anything — would let that import chain reach `configuration/index.ts`
+ * before `loadConfigFileIntoLayer` runs, since import statements evaluate
+ * before any of this file's own top-level code. The dynamic `import()`
+ * below is what guarantees ordering: it can't start until `bootstrap()`
+ * reaches it, which is after the file layer is set.
+ *
+ * A load failure (a missing explicit `DD_CONFIG_FILE`, invalid YAML, or a
+ * world-writable file) is fatal: print the loader's own message — already
+ * written to name the offending path — to stderr and exit 1, rather than
+ * letting the rejection surface as an unhandled-rejection stack trace.
+ * `process.stderr.write` runs before `log/index.ts` could: that module
+ * itself imports `configuration/index.ts`, so using it here would reintroduce
+ * the same ordering bug this file exists to prevent.
+ */
+async function bootstrap(): Promise<void> {
+  try {
+    await loadConfigFileIntoLayer();
+  } catch (error) {
+    process.stderr.write(`${(error as Error).message}\n`);
+    process.exit(1);
+    return;
   }
 
-  if (runningAsRoot && runAsRootEnabled && insecureRootAcknowledged) {
-    log.warn(
-      'Running in insecure root mode (DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true); use socket-proxy mode when possible.',
-    );
-  }
-
-  // Init store
-  await store.init({ memory: isAgent });
-
-  // Start local Trivy database warm-up early in both controller and agent mode.
-  // The first scan shares and awaits this best-effort single-flight operation.
-  void warmTrivyDatabase();
-
-  if (!isAgent) {
-    // Start Prometheus registry
-    prometheus.init();
-  }
-
-  // Init registry
-  await registry.init({ agent: isAgent });
-
-  if (isAgent) {
-    // Start Agent Server
-    await agentServer.init();
-  } else {
-    // Init Agent Manager (Controller mode)
-    await agentManager.init();
-
-    // Docker-mutating operations must be reconciled only after triggers,
-    // watchers, and remote-agent identities are available.
-    await recoverInProgressOperationsOnStartup();
-
-    // Init api
-    await api.init();
-
-    // Init scheduled security scanning
-    securityScheduler.init();
-
-    // Init scheduled maturity gate sweep
-    maturityScheduler.init();
-
-    // Reconcile the approval queue from watch results. Controller-only: the ledger is
-    // never written by ingestion, so an enrolled agent can neither mint nor resolve a row.
-    approvalReconciler.init();
-
-    // Drain the notification outbox in the background. The deliver callback
-    // resolves the destination trigger by id and lets it handle the entry;
-    // failures are retried with exponential backoff and eventually moved to
-    // dead-letter by the worker.
-    type DeliverableTrigger = {
-      dispatchOutboxEntry?: (entry: NotificationOutboxEntry) => Promise<void>;
-    };
-    startOutboxWorker({
-      deliver: async (entry: NotificationOutboxEntry) => {
-        const triggers = registry.getState().trigger as
-          | Record<string, DeliverableTrigger>
-          | undefined;
-        const trigger = triggers?.[entry.triggerId];
-        if (!trigger?.dispatchOutboxEntry) {
-          throw new Error(`Trigger ${entry.triggerId} not registered for outbox delivery`);
-        }
-        await trigger.dispatchOutboxEntry(entry);
-      },
-    });
-
-    // Recover queued update operations from a previous process run.
-    // Pulling operations were reset to queued during store init; dispatch all
-    // queued operations through the standard fire-and-forget pipeline.
-    recoverQueuedOperationsOnStartup();
-  }
+  await import('./main.js');
 }
+
+await bootstrap();
