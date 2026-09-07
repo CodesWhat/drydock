@@ -102,7 +102,7 @@ CREATE TABLE containers (
   link_config                 TEXT,
   tag_config                  TEXT,
   trigger_config              TEXT
-  -- source_repo, current_release_notes: added by migration 3 (roadmap
+  -- source_repo, current_release_notes: added by migration 4 (roadmap
   -- 7-STORE slice 8) rather than here, since this table's rows already
   -- existed under this initial migration's version by the time the gap was
   -- found. See db/migrations.ts.
