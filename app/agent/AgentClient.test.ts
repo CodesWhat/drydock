@@ -9438,6 +9438,95 @@ describe('AgentClient', () => {
       );
     });
 
+    test('pins dd.watch.digest=true across two Portwing reports and keeps the container eligible for digest comparison (DR-38 regression guard)', async () => {
+      // Independent confirmation of DR-38, driven end to end through two
+      // real handleContainerSync calls rather than a pre-seeded `existing`
+      // mock: report 1 is the first-ever sighting (dd.watch.digest=true,
+      // watcher-side digest.repo already resolved); report 2 is Portwing's
+      // next "live runtime state" push, which hardcodes digest.watch: false
+      // on the wire but still carries the same digest.repo. The gate
+      // `image-comparison.ts` reads before comparing a pinned digest against
+      // the registry is `container.image.digest.watch && container.image.digest.repo`
+      // (image-comparison.ts:376) — so this asserts both fields survive the
+      // second report, not just `watch` in isolation.
+      await registerAnonymousHub();
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      // buildContainerReport() and preserveControllerDockerEnrichment() each
+      // call storeContainer.getContainer() once per report, so the store
+      // stub must persist across both calls within a report rather than
+      // being consumed after the first (mockReturnValueOnce would starve
+      // the second call and silently fall through the insert path).
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementationOnce((value) => value);
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: true, repo: 'sha256:current' },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      const firstStored = vi.mocked(storeContainer.insertContainer).mock.calls[0][0];
+      expect(firstStored.image?.digest).toEqual(
+        expect.objectContaining({ watch: true, repo: 'sha256:current' }),
+      );
+
+      vi.mocked(storeContainer.getContainer).mockReturnValue(firstStored as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementationOnce((value) => value);
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false, repo: 'sha256:current' },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      const secondStored = vi.mocked(storeContainer.updateContainer).mock.calls[0][0];
+      expect(secondStored.image?.digest.watch).toBe(true);
+      expect(secondStored.image?.digest.repo).toBe('sha256:current');
+      expect(Boolean(secondStored.image?.digest.watch && secondStored.image?.digest.repo)).toBe(
+        true,
+      );
+    });
+
     test('marker-mode inventory normalizes a raw Portwing Docker Hub image through the configured provider', async () => {
       await registerAnonymousHub();
       vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
