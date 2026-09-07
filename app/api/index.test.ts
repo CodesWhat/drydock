@@ -856,7 +856,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -898,7 +898,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -967,7 +967,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -1024,7 +1024,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -1069,7 +1069,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -1122,7 +1122,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -1165,7 +1165,7 @@ describe('API Index', () => {
 
     const server = http.createServer(app);
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;

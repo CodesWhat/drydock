@@ -38,7 +38,7 @@ function createTestApp(): Application {
 function startServer(app: Application): Promise<RunningServer> {
   return new Promise((resolve) => {
     const server = http.createServer(app);
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
       resolve({ server, port });
