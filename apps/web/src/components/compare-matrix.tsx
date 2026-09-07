@@ -48,6 +48,21 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "Arcane",
+    slug: "arcane",
+    cells: {
+      webui: "yes",
+      notifications: "yes",
+      autoupdate: "yes",
+      rollback: "no",
+      vulnscan: "yes",
+      multiregistry: "partial",
+      agents: "yes",
+      maintained: "yes",
+      opensource: "yes",
+    },
+  },
+  {
     name: "Portainer",
     slug: "portainer",
     cells: {

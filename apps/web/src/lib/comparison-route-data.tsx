@@ -1,6 +1,7 @@
 import type { ComparisonRouteConfig } from "@/lib/comparison-route";
 import { highlightsFromPipeTable, rowsFromPipeTable } from "@/lib/comparison-route";
 import type { ComparisonRouteRawConfig } from "@/lib/comparison-route-data/types";
+import { arcaneComparisonRouteData } from "./comparison-route-data/arcane";
 import { diunComparisonRouteData } from "./comparison-route-data/diun";
 import { dockgeComparisonRouteData } from "./comparison-route-data/dockge";
 import { dockhandComparisonRouteData } from "./comparison-route-data/dockhand";
@@ -12,6 +13,7 @@ import { watchtowerComparisonRouteData } from "./comparison-route-data/watchtowe
 import { wudComparisonRouteData } from "./comparison-route-data/wud";
 
 const comparisonRouteDataBySlug = {
+  arcane: arcaneComparisonRouteData,
   komodo: komodoComparisonRouteData,
   portainer: portainerComparisonRouteData,
   watchtower: watchtowerComparisonRouteData,
