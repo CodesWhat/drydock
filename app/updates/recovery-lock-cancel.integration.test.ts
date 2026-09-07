@@ -173,6 +173,7 @@ class FlakyNotificationTrigger extends Trigger {
 
 describe('startup recovery lock and cancel integration', () => {
   let outboxDb: Database | undefined;
+  let containerDb: Database | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -200,6 +201,8 @@ describe('startup recovery lock and cancel integration', () => {
     notificationOutboxStore._resetOutboxStoreForTests();
     outboxDb?.close();
     outboxDb = undefined;
+    containerDb?.close();
+    containerDb = undefined;
   });
 
   test('recovers a queued compose update through keyed FIFO locks and honours mid-flight cancellation before a solo container update', async () => {
@@ -228,7 +231,12 @@ describe('startup recovery lock and cancel integration', () => {
         },
       ],
     });
-    containerStore.createCollections(db);
+    // Only updateOperations lives on the Loki-shaped fake above (update-operation.ts hasn't
+    // moved to SQLite); containers moved to SQLite in roadmap 7-STORE slice 8, so this needs
+    // a real migrated in-memory database, the same way AgentClient.container-reconcile.test.ts
+    // and registry/index.container-reconcile.test.ts do.
+    containerDb = createMigratedMemoryDatabase();
+    containerStore.createCollections(containerDb);
     containerStore.insertContainer(container);
     updateOperationStore.createCollections(db);
 
@@ -347,7 +355,8 @@ describe('startup recovery lock and cancel integration', () => {
         },
       })),
     });
-    containerStore.createCollections(db);
+    containerDb = createMigratedMemoryDatabase();
+    containerStore.createCollections(containerDb);
     containers.forEach((container) => containerStore.insertContainer(container));
     updateOperationStore.createCollections(db);
 
@@ -452,7 +461,8 @@ describe('startup recovery lock and cancel integration', () => {
         },
       ],
     });
-    containerStore.createCollections(db);
+    containerDb = createMigratedMemoryDatabase();
+    containerStore.createCollections(containerDb);
     containerStore.insertContainer(container);
     updateOperationStore.createCollections(db);
     outboxDb = createMigratedMemoryDatabase();
