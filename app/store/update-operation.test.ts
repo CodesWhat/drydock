@@ -423,13 +423,19 @@ describe('Update Operation Store', () => {
   test('createCollections should use targeted indexed status queries for startup repair', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    const statusQuerySql = 'SELECT * FROM update_operations WHERE status = ?';
+    // Active-status startup repair still hydrates full rows via `SELECT *`;
+    // the terminal-status retention sweep (roadmap 7-STORE slice 10 review
+    // finding 5) instead projects only id/created_at/updated_at, so both
+    // query shapes are tracked here.
+    const activeStatusQuerySql = 'SELECT * FROM update_operations WHERE status = ?';
+    const retentionStatusQuerySql =
+      'SELECT id, created_at, updated_at FROM update_operations WHERE status = ?';
     const statusesQueried: string[] = [];
     const database = createDb();
     const realPrepare = database.prepare.bind(database);
     database.prepare = ((sql: string) => {
       const statement = realPrepare(sql);
-      if (sql !== statusQuerySql) {
+      if (sql !== activeStatusQuerySql && sql !== retentionStatusQuerySql) {
         return statement;
       }
       return {
@@ -1899,6 +1905,151 @@ describe('Update Operation Store', () => {
       expect(terminalOperations.find((operation) => operation.id === first.id)).toBeUndefined();
     } finally {
       vi.useRealTimers();
+      if (previousMaxEntries === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+      } else {
+        process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = previousMaxEntries;
+      }
+      if (previousRetentionDays === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = previousRetentionDays;
+      }
+    }
+  });
+
+  test('retention pruning selects only id/created_at/updated_at for the sweep, not the JSON columns, and keeps the same ids as a full-row scan would', async () => {
+    vi.resetModules();
+    const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+    const previousRetentionDays = process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+    process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = '2';
+    process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = '365';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      const database = createDb();
+      fresh.createCollections(database);
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+      const first = insertOp(fresh, {
+        containerName: 'web',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
+      const second = insertOp(fresh, {
+        containerName: 'web',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:02.000Z'));
+      const third = insertOp(fresh, {
+        containerName: 'web',
+        status: 'failed',
+        phase: 'rollback-failed',
+      });
+      const active = insertOp(fresh, {
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      // Attach the spy only after startup's own status scan
+      // (reconcileStaleActiveOperationsOnStartup, a legitimate `SELECT *`
+      // over the active statuses) so it only observes what the retention
+      // sweep itself prepares.
+      const prepareSpy = vi.spyOn(database, 'prepare');
+
+      for (let i = 0; i < 97; i += 1) {
+        vi.setSystemTime(new Date(2026, 2, 1, 0, 1, i));
+        fresh.updateOperation(active.id, {
+          phase: i % 2 === 0 ? 'prepare' : 'health-gate',
+        });
+      }
+
+      const operations = fresh.getOperationsByContainerIdentity(identity('web'));
+      const terminalOperations = operations.filter(
+        (operation) => operation.status !== 'queued' && operation.status !== 'in-progress',
+      );
+
+      // Same retained/pruned ids as the full-row-scan version of this sweep.
+      expect(terminalOperations).toHaveLength(2);
+      expect(terminalOperations.map((operation) => operation.id)).toEqual([third.id, second.id]);
+      expect(terminalOperations.find((operation) => operation.id === first.id)).toBeUndefined();
+
+      const statusScanSql = prepareSpy.mock.calls
+        .map(([sql]) => sql as string)
+        .filter((sql) => sql.includes('FROM update_operations WHERE status = ?'));
+      expect(statusScanSql.length).toBeGreaterThan(0);
+      for (const sql of statusScanSql) {
+        expect(sql).toBe(
+          'SELECT id, created_at, updated_at FROM update_operations WHERE status = ?',
+        );
+        expect(sql).not.toContain('SELECT *');
+        expect(sql).not.toContain('container_snapshot');
+        expect(sql).not.toContain('portainer_recovery');
+      }
+    } finally {
+      vi.useRealTimers();
+      if (previousMaxEntries === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+      } else {
+        process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = previousMaxEntries;
+      }
+      if (previousRetentionDays === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = previousRetentionDays;
+      }
+    }
+  });
+
+  test('retention pruning falls back to created_at when updated_at is blank, and treats an invalid timestamp as zero', async () => {
+    vi.resetModules();
+    const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+    const previousRetentionDays = process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+    process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = '1';
+    process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = '365';
+
+    try {
+      const fresh = await import('./update-operation.js');
+      const database = createDb();
+      fresh.createCollections(database);
+
+      const fallsBackToCreatedAt = insertOp(fresh, {
+        containerName: 'web',
+        status: 'succeeded',
+        phase: 'succeeded',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      const invalidTimestamp = insertOp(fresh, {
+        containerName: 'web',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      });
+
+      // Corrupt both rows directly, the same way a hand-edited store or a
+      // legacy import could: one has a blank updated_at (falls back to a
+      // valid created_at), the other has a blank updated_at AND an invalid
+      // created_at (Date.parse gives NaN, treated as timestamp zero).
+      database
+        .prepare("UPDATE update_operations SET updated_at = '' WHERE id = ?")
+        .run(fallsBackToCreatedAt.id);
+      database
+        .prepare("UPDATE update_operations SET updated_at = '', created_at = ? WHERE id = ?")
+        .run('not-a-date', invalidTimestamp.id);
+
+      // Re-running createCollections re-triggers the startup retention
+      // sweep against the now-corrupted rows.
+      fresh.createCollections(database);
+
+      expect(fresh.getOperationById(fallsBackToCreatedAt.id)).toBeDefined();
+      expect(fresh.getOperationById(invalidTimestamp.id)).toBeUndefined();
+    } finally {
       if (previousMaxEntries === undefined) {
         delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
       } else {

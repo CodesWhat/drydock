@@ -405,6 +405,18 @@ const UPDATE_OPERATION_UPSERT_SQL = `INSERT INTO update_operations (${UPDATE_OPE
 const UPDATE_OPERATION_UPDATE_SQL = `UPDATE update_operations SET ${UPDATE_OPERATION_UPDATE_COLUMNS.map((column) => `${column} = ?`).join(', ')} WHERE id = ?`;
 const UPDATE_OPERATION_SELECT_BY_ID_SQL = 'SELECT * FROM update_operations WHERE id = ?';
 const UPDATE_OPERATION_SELECT_BY_STATUS_SQL = 'SELECT * FROM update_operations WHERE status = ?';
+/**
+ * Retention-prune projection (roadmap 7-STORE slice 10 review finding 5).
+ * The retention sweep in `pruneOperationsForRetention` only needs `id` and
+ * the two timestamp columns to decide what to keep, but the plain
+ * `SELECT *` behind `selectOperationsByStatus` hydrated every terminal
+ * row's full 35 columns — including both JSON columns
+ * (`container_snapshot`, `portainer_recovery`) — through `rowToOperation`
+ * just to throw the rest away. This selects only the three columns the
+ * sweep actually reads.
+ */
+const UPDATE_OPERATION_SELECT_RETENTION_BY_STATUS_SQL =
+  'SELECT id, created_at, updated_at FROM update_operations WHERE status = ?';
 const UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL =
   'SELECT * FROM update_operations WHERE container_identity_key = ?';
 const UPDATE_OPERATION_SELECT_BY_IDENTITY_STATUS_SQL =
@@ -559,6 +571,37 @@ function selectOperationsByStatus(
   status: ContainerUpdateOperationStatus,
 ): UpdateOperation[] {
   return database.prepare(UPDATE_OPERATION_SELECT_BY_STATUS_SQL).all(status).map(rowToOperation);
+}
+
+/** Projection row for the retention sweep (see `UPDATE_OPERATION_SELECT_RETENTION_BY_STATUS_SQL`). */
+interface OperationRetentionRow {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function rowToOperationRetentionRow(row: Row): OperationRetentionRow {
+  const typedRow = row as unknown as { id: string; created_at: string; updated_at: string };
+  return {
+    id: String(typedRow.id),
+    createdAt: String(typedRow.created_at),
+    updatedAt: String(typedRow.updated_at),
+  };
+}
+
+function selectOperationRetentionRowsByStatus(
+  database: Database,
+  status: ContainerUpdateOperationStatus,
+): OperationRetentionRow[] {
+  return database
+    .prepare(UPDATE_OPERATION_SELECT_RETENTION_BY_STATUS_SQL)
+    .all(status)
+    .map(rowToOperationRetentionRow);
+}
+
+function getRetentionRowTimestamp(row: OperationRetentionRow): number {
+  const timestamp = Date.parse(row.updatedAt || row.createdAt);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 /**
@@ -834,11 +877,16 @@ function pruneOperationsForRetention(nowMs = Date.now()): number {
   const database = db;
   // Query only terminal rows per status using the existing status index,
   // avoiding a full-table materialisation that would load active ops too.
-  const terminalOperations = TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
-    selectOperationsByStatus(database, status),
+  // Also project only id/created_at/updated_at (roadmap 7-STORE slice 10
+  // review finding 5): the sweep only needs those three columns to decide
+  // what to keep, so a `SELECT *` that hydrates all 35 columns — including
+  // both JSON columns — for every terminal row just to discard the rest is
+  // wasted work.
+  const terminalRows = TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
+    selectOperationRetentionRowsByStatus(database, status),
   );
 
-  if (terminalOperations.length === 0) {
+  if (terminalRows.length === 0) {
     return 0;
   }
 
@@ -846,22 +894,22 @@ function pruneOperationsForRetention(nowMs = Date.now()): number {
   const cutoffTimestamp = nowMs - retentionWindowMs;
 
   const retainedTerminalIds = new Set(
-    terminalOperations
-      .filter((operation) => getOperationTimestamp(operation) >= cutoffTimestamp)
-      .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a))
+    terminalRows
+      .filter((row) => getRetentionRowTimestamp(row) >= cutoffTimestamp)
+      .sort((a, b) => getRetentionRowTimestamp(b) - getRetentionRowTimestamp(a))
       .slice(0, UPDATE_OPERATION_MAX_ENTRIES)
-      .map((operation) => operation.id),
+      .map((row) => row.id),
   );
 
-  const toRemove = terminalOperations.filter((operation) => !retainedTerminalIds.has(operation.id));
+  const toRemove = terminalRows.filter((row) => !retainedTerminalIds.has(row.id));
 
   if (toRemove.length === 0) {
     return 0;
   }
 
   const deleteStatement = database.prepare(UPDATE_OPERATION_DELETE_BY_ID_SQL);
-  for (const operation of toRemove) {
-    deleteStatement.run(operation.id);
+  for (const row of toRemove) {
+    deleteStatement.run(row.id);
   }
 
   return toRemove.length;
