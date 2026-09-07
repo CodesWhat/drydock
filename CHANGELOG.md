@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.13] — 2026-09-08
+
 ### Fixed
 
 - **Containers on a floating tag that drydock first saw before v1.5.0-rc.17 could stay marked Current forever, even when the registry had a newer digest.** `image.digest.watch` was written once at first discovery and never revisited, so a row discovered before the digest-watch default changed from `!isDockerHubDomain(domain)` to "watch when the tag is meaningful" (v1.5.0-rc.17) kept the old `false` default permanently; only recreating the container picked up the new one. It is now re-derived every scan, the same way `isLocalImage` and `digest.repoDigests` already are, and an explicit `dd.watch.digest` label or imgset override still wins. ([#1070](https://github.com/CodesWhat/drydock/issues/1070))
@@ -2729,7 +2731,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.13...HEAD
+[1.7.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...v1.7.0-rc.13
 [1.7.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.11...v1.7.0-rc.12
 [1.7.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...v1.7.0-rc.11
 [1.7.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...v1.7.0-rc.10

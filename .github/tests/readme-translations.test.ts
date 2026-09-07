@@ -66,123 +66,90 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.12</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.13</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.12</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.13</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.12</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.13</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.12</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.13</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.12</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.13</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.12 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.13 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    coopHeader: string;
-    embedderHeader: string;
-    archDigestProbe: string;
-    sessionStoreSplit: string;
-    sessionsCollectionMention: string;
-    agentsTlsMismatch: string;
+    digestWatchHeader: string;
+    dastTimeoutHeader: string;
+    dastBudgetMention: string;
   }
 > = {
   'README.de.md': {
-    coopHeader:
-      '**Die Demo-Site sendete kein `Cross-Origin-Opener-Policy`, sodass der wöchentliche DAST-Scan bei jeder Ausführung an ZAP-Regel 90004 scheiterte.**',
-    embedderHeader: 'bereits vorhandenen `Cross-Origin-Embedder-Policy`-Header',
-    archDigestProbe:
-      '**Der arm64-Durchlauf der Image-Arch-Prüfung im Release schlug bei jedem Multi-Plattform-Cut mit `docker: cannot overwrite digest` fehl.**',
-    sessionStoreSplit:
-      '**DR-121: Der Session-Store und der Haupt-Store schrieben dieselbe `/store/dd.json`, und wer zuletzt speicherte, löschte die Daten des anderen.**',
-    sessionsCollectionMention: 'verwirft eine veraltete `Sessions`-Collection',
-    agentsTlsMismatch:
-      '**Das gepaarte Gitea-Registry-Beispiel der Agents-Seite ließ den Controller HTTPS mit einem Agent sprechen, der nur HTTP anbot.**',
+    digestWatchHeader:
+      '**Container auf einem Floating-Tag, die Drydock erstmals vor v1.5.0-rc.17 gesehen hat, konnten für immer als Current markiert bleiben, selbst wenn die Registry einen neueren Digest hatte.**',
+    dastTimeoutHeader:
+      '**Der wöchentliche vollständige ZAP-Scan von getdrydock.com lief bei jedem Durchlauf in sein 60-Minuten-Job-Timeout und lieferte nie einen Bericht.**',
+    dastBudgetMention: 'im Job-Budget',
   },
   'README.es.md': {
-    coopHeader:
-      '**El sitio de demostración no enviaba `Cross-Origin-Opener-Policy`, por lo que el escaneo DAST semanal fallaba en la regla 90004 de ZAP en cada ejecución.**',
-    embedderHeader: 'cabecera `Cross-Origin-Embedder-Policy` ya existente',
-    archDigestProbe:
-      '**El paso arm64 de la comprobación de arquitectura de imagen del release fallaba en cada corte multiplataforma con `docker: cannot overwrite digest`.**',
-    sessionStoreSplit:
-      '**DR-121: el almacén de sesiones y el almacén principal escribían el mismo `/store/dd.json`, y el que guardaba último borraba los datos del otro.**',
-    sessionsCollectionMention: 'descarta una colección `Sessions` obsoleta',
-    agentsTlsMismatch:
-      '**El ejemplo emparejado de registry de Gitea de la página de agentes hacía que el controlador hablara HTTPS con un agente que servía HTTP simple.**',
+    digestWatchHeader:
+      '**Los contenedores en una etiqueta flotante que drydock vio por primera vez antes de v1.5.0-rc.17 podían quedar marcados como Actuales para siempre, incluso con un digest más reciente disponible.**',
+    dastTimeoutHeader:
+      '**El escaneo ZAP completo semanal de getdrydock.com llegaba a su tiempo de espera de 60 minutos en cada ejecución y nunca producía un informe.**',
+    dastBudgetMention: 'presupuesto del job',
   },
   'README.fr.md': {
-    coopHeader:
-      "**Le site de démonstration n'envoyait pas `Cross-Origin-Opener-Policy`, si bien que le scan DAST hebdomadaire échouait sur la règle ZAP 90004 à chaque exécution.**",
-    embedderHeader: "l'en-tête `Cross-Origin-Embedder-Policy` déjà présent",
-    archDigestProbe:
-      "**Le passage arm64 du contrôle d'architecture d'image du release échouait à chaque coupe multiplateforme avec `docker: cannot overwrite digest`.**",
-    sessionStoreSplit:
-      "**DR-121 : le magasin de sessions et le magasin principal écrivaient dans le même `/store/dd.json`, et celui qui enregistrait en dernier effaçait les données de l'autre.**",
-    sessionsCollectionMention: 'abandonne une collection `Sessions` obsolète',
-    agentsTlsMismatch:
-      "**L'exemple apparié de registre Gitea de la page des agents faisait parler HTTPS au contrôleur avec un agent servant du HTTP simple.**",
+    digestWatchHeader:
+      '**Les conteneurs sur un tag flottant que drydock avait vu pour la première fois avant v1.5.0-rc.17 pouvaient rester marqués Current pour toujours, même avec un digest plus récent disponible.**',
+    dastTimeoutHeader:
+      "**Le scan ZAP complet hebdomadaire de getdrydock.com atteignait son délai d'expiration de 60 minutes à chaque exécution et ne produisait jamais de rapport.**",
+    dastBudgetMention: 'budget du job',
   },
   'README.pl.md': {
-    coopHeader:
-      '**Strona demo nie wysyłała `Cross-Origin-Opener-Policy`, przez co cotygodniowy skan DAST za każdym razem zawodził na regule ZAP 90004.**',
-    embedderHeader: 'istniejącego już nagłówka `Cross-Origin-Embedder-Policy`',
-    archDigestProbe:
-      '**Przebieg arm64 kontroli architektury obrazu wydania kończył się niepowodzeniem przy każdym wieloplatformowym cięciu z `docker: cannot overwrite digest`.**',
-    sessionStoreSplit:
-      '**DR-121: magazyn sesji i magazyn główny zapisywały ten sam plik `/store/dd.json`, a ten, który zapisał jako ostatni, kasował dane drugiego.**',
-    sessionsCollectionMention: 'odrzuca przestarzałą kolekcję `Sessions`',
-    agentsTlsMismatch:
-      '**Sparowany przykład rejestru Gitea na stronie agentów sprawiał, że kontroler mówił po HTTPS do agenta obsługującego zwykłe HTTP.**',
+    digestWatchHeader:
+      '**Kontenery na płynnym tagu, które drydock po raz pierwszy zobaczył przed v1.5.0-rc.17, mogły zostać oznaczone jako Current na zawsze, nawet gdy registry miało nowszy digest.**',
+    dastTimeoutHeader:
+      '**Cotygodniowy pełny skan ZAP dla getdrydock.com za każdym razem trafiał w swój 60-minutowy limit czasu zadania i nigdy nie tworzył raportu.**',
+    dastBudgetMention: 'budżecie zadania',
   },
   'README.pt-BR.md': {
-    coopHeader:
-      '**O site de demonstração não enviava `Cross-Origin-Opener-Policy`, então a varredura DAST semanal falhava na regra 90004 do ZAP em toda execução.**',
-    embedderHeader: 'cabeçalho `Cross-Origin-Embedder-Policy` já existente',
-    archDigestProbe:
-      '**A etapa arm64 da verificação de arquitetura de imagem do release falhava em todo corte multiplataforma com `docker: cannot overwrite digest`.**',
-    sessionStoreSplit:
-      '**DR-121: o armazenamento de sessões e o armazenamento principal escreviam no mesmo `/store/dd.json`, e quem salvasse por último apagava os dados do outro.**',
-    sessionsCollectionMention: 'descarta uma coleção `Sessions` obsoleta',
-    agentsTlsMismatch:
-      '**O exemplo pareado de registry do Gitea na página de agentes fazia o controlador falar HTTPS com um agente servindo HTTP simples.**',
+    digestWatchHeader:
+      '**Contêineres em uma tag flutuante que o drydock viu pela primeira vez antes da v1.5.0-rc.17 podiam ficar marcados como Current para sempre, mesmo com um digest mais novo disponível.**',
+    dastTimeoutHeader:
+      '**A varredura ZAP completa semanal do getdrydock.com atingia seu tempo limite de 60 minutos em toda execução e nunca produzia um relatório.**',
+    dastBudgetMention: 'orçamento do job',
   },
   'README.zh-CN.md': {
-    coopHeader:
-      '**演示站点此前没有发送 `Cross-Origin-Opener-Policy`，导致每周的 DAST 扫描每次都在 ZAP 规则 90004 上失败。**',
-    embedderHeader: '已有的 `Cross-Origin-Embedder-Policy` 头',
-    archDigestProbe:
-      '**发布流程中镜像架构检查的 arm64 环节在每次多平台构建中都会因 `docker: cannot overwrite digest` 而失败。**',
-    sessionStoreSplit:
-      '**DR-121：会话存储和主存储此前写入同一个 `/store/dd.json`，谁最后保存就会抹掉另一方的数据。**',
-    sessionsCollectionMention: '丢弃旧版本遗留下来的过期 `Sessions` 集合',
-    agentsTlsMismatch:
-      '**代理页面配对的 Gitea registry 示例让控制器以 HTTPS 与只提供纯 HTTP 的代理通信。**',
+    digestWatchHeader:
+      '**drydock 在 v1.5.0-rc.17 之前首次发现的浮动标签容器，即使镜像仓库中已有更新的 digest，也可能永远被标记为 Current。**',
+    dastTimeoutHeader:
+      '**getdrydock.com 每周的完整 ZAP 扫描每次都会触及 60 分钟的任务超时，从未生成过报告。**',
+    dastBudgetMention: '任务预算',
   },
 };
 
@@ -243,6 +210,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc10--2026-09-04',
   './CHANGELOG.md#170-rc11--2026-09-05',
   './CHANGELOG.md#170-rc12--2026-09-06',
+  './CHANGELOG.md#170-rc13--2026-09-08',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -296,26 +264,21 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const releaseBullets = [
-      release.coopHeader,
-      release.archDigestProbe,
-      release.sessionStoreSplit,
-      release.agentsTlsMismatch,
-    ].map((fragment) => getBullet(releaseBlock, fragment));
+    const releaseBullets = [release.digestWatchHeader, release.dastTimeoutHeader].map((fragment) =>
+      getBullet(releaseBlock, fragment),
+    );
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
     expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[0]).toContain(release.embedderHeader);
-    expect(releaseBullets[2]).toContain(release.sessionsCollectionMention);
+    expect(releaseBullets[0]).toContain('`isLocalImage`');
+    expect(releaseBullets[1]).toContain(release.dastBudgetMention);
     expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/1042',
-      'https://github.com/CodesWhat/drydock/pull/1046',
-      'https://github.com/CodesWhat/drydock/pull/1050',
-      'https://github.com/CodesWhat/drydock/pull/1063',
+      'https://github.com/CodesWhat/drydock/pull/1080',
+      'https://github.com/CodesWhat/drydock/pull/1108',
     ]);
     expect(getUrls(releaseBullets[0]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/1050',
+      'https://github.com/CodesWhat/drydock/pull/1108',
     ]);
   });
 

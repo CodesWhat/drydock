@@ -219,6 +219,16 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.13</strong></summary>
+
+- **Los contenedores en una etiqueta flotante que drydock vio por primera vez antes de v1.5.0-rc.17 podían quedar marcados como Actuales para siempre, incluso con un digest más reciente disponible.** `image.digest.watch` ahora se vuelve a derivar en cada escaneo en lugar de fijarse en el primer descubrimiento, igual que ya hacen `isLocalImage` y `digest.repoDigests`. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))
+- **El escaneo ZAP completo semanal de getdrydock.com llegaba a su tiempo de espera de 60 minutos en cada ejecución y nunca producía un informe.** El paso de escaneo ahora limita el spider a 10 minutos y el escaneo activo a 35, dejando espacio para el escaneo pasivo y el informe dentro del presupuesto del job. ([#1080](https://github.com/CodesWhat/drydock/pull/1080))
+
+Notas completas de la versión en [CHANGELOG.md](./CHANGELOG.md#170-rc13--2026-09-08).
+
+</details>
+
+<details open>
 <summary><strong>Aspectos destacados de v1.7.0-rc.12</strong></summary>
 
 - **El sitio de demostración no enviaba `Cross-Origin-Opener-Policy`, por lo que el escaneo DAST semanal fallaba en la regla 90004 de ZAP en cada ejecución.** `apps/demo/vercel.json` ahora envía `same-origin` junto a la cabecera `Cross-Origin-Embedder-Policy` ya existente. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))

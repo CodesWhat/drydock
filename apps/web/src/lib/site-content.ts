@@ -294,7 +294,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.7.0-rc.12",
+    version: "v1.7.0-rc.13",
     title: "Smart Updates & UX",
     emoji: "\u{1F680}",
     status: "next",
