@@ -128,17 +128,14 @@ export class SessionStore extends session.Store {
     }
   }
 
-  touch(sid: string, sessionData: session.SessionData, callback?: () => void): void {
-    // touch()'s callback carries no error parameter (unlike get/set/destroy),
-    // so a failure here is logged and swallowed rather than thrown — a
-    // missed idle-timer refresh is not worth failing the request over.
+  touch(sid: string, sessionData: session.SessionData, callback?: (err?: unknown) => void): void {
     try {
       const expiresAt = resolveExpiresAt(sessionData, this.ttlMs);
       sessionStore.touchSession(sid, expiresAt);
+      callback?.();
     } catch (error: unknown) {
       log.warn(`Failed to touch session ${sid}: ${String(error)}`);
-    } finally {
-      callback?.();
+      callback?.(error);
     }
   }
 

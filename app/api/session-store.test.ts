@@ -38,8 +38,8 @@ function destroyAsync(sid: string): Promise<void> {
 }
 
 function touchAsync(sid: string, session: SessionData): Promise<void> {
-  return new Promise((resolve) => {
-    store?.touch(sid, session, () => resolve());
+  return new Promise((resolve, reject) => {
+    store?.touch(sid, session, (error) => (error ? reject(error) : resolve()));
   });
 }
 
@@ -286,14 +286,14 @@ describe('SessionStore', () => {
       await expect(destroyAsync('sid-1')).rejects.toThrow('boom');
     });
 
-    test('touch logs and still calls back on a store failure instead of throwing', async () => {
+    test('touch logs and propagates a store failure through the callback rather than swallowing it', async () => {
       vi.spyOn(sessionModel, 'touchSession').mockImplementationOnce(() => {
         throw new Error('boom');
       });
 
       await expect(
         touchAsync('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS).toISOString())),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow('boom');
     });
 
     test('all reports a store failure through the callback rather than throwing', async () => {
@@ -330,12 +330,19 @@ describe('SessionStore', () => {
       expect(() => store?.destroy('sid-1')).not.toThrow();
     });
 
-    test('set and destroy tolerate no callback on failure', () => {
+    test('set, touch and destroy tolerate no callback on failure', () => {
       vi.spyOn(sessionModel, 'setSession').mockImplementationOnce(() => {
         throw new Error('boom');
       });
       expect(() =>
         store?.set('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS).toISOString())),
+      ).not.toThrow();
+
+      vi.spyOn(sessionModel, 'touchSession').mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+      expect(() =>
+        store?.touch('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS).toISOString())),
       ).not.toThrow();
 
       vi.spyOn(sessionModel, 'destroySession').mockImplementationOnce(() => {
