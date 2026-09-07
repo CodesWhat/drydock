@@ -341,14 +341,16 @@ async function runConfigExportCommand(
     return 0;
   }
 
-  const resolvedPath = resolveConfiguredPath(parsed.options.out, {
-    label: '--out path',
-    baseDir: options.cwd ?? process.cwd(),
-  });
+  let resolvedPath: string | undefined;
   try {
+    resolvedPath = resolveConfiguredPath(parsed.options.out, {
+      label: '--out path',
+      baseDir: options.cwd ?? process.cwd(),
+    });
     await writeFile(resolvedPath, documentText, { mode: 0o600 });
   } catch (error) {
-    io.err(`Error: failed to write "${resolvedPath}": ${getErrorMessage(error)}`);
+    const target = resolvedPath ?? parsed.options.out;
+    io.err(`Error: failed to write "${target}": ${getErrorMessage(error)}`);
     return 1;
   }
   io.out(`Wrote ${resolvedPath}`);

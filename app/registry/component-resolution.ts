@@ -99,7 +99,7 @@ export async function constructComponent(
   const componentFileByConvention = path.join(
     componentRoot,
     providerLowercase,
-    capitalize(provider),
+    capitalize(providerLowercase),
   );
   const componentFileLowercase = path.join(componentRoot, providerLowercase, providerLowercase);
   const componentFileByConventionExists = ['.js', '.ts'].some((extension) =>

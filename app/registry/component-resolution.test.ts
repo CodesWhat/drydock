@@ -126,4 +126,12 @@ describe('component-resolution', () => {
       /ghcr/,
     );
   });
+
+  test('constructComponent should capitalize the lowercased provider, not the raw one, so an unnormalized caller still finds the convention file', async () => {
+    fs.existsSync.mockImplementation((candidate) => `${candidate}`.endsWith('Ghcr.ts'));
+
+    await expect(constructComponent('registry', 'GHCR', 'registries/providers')).rejects.toThrow(
+      /Ghcr/,
+    );
+  });
 });

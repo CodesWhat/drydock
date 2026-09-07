@@ -417,6 +417,17 @@ describe('config export', () => {
     expect(collector.err.join('\n')).toContain('failed to write');
   });
 
+  test('a whitespace-only --out value fails to resolve and is reported, not thrown', async () => {
+    const collector = createIoCollector();
+    const result = await runConfigCommandIfRequested(['config', 'export', '--out', '   '], {
+      io: collector.io,
+      env: { DD_SERVER_PORT: '3000' },
+    });
+    expect(result).toBe(1);
+    expect(collector.err.join('\n')).toContain('Error:');
+    expect(collector.out).toStrictEqual([]);
+  });
+
   test('round trip: export accepts the same values back through validate, secrets excluded', async () => {
     const tempDir = makeTempDir('drydock-export-roundtrip-');
     const outPath = path.join(tempDir, 'roundtrip.yml');
