@@ -113,4 +113,27 @@ describe('store/db/importers/update-policy-retention-cache', () => {
       expires_at: 2_000,
     });
   });
+
+  // Finding 2 (roadmap 7-STORE slice 7): refresh_order is assigned in legacy
+  // document order so a fresh install's eviction order at least reflects the
+  // order the legacy store held the documents in.
+  test('assigns refresh_order in legacy document order', () => {
+    expect(
+      run([
+        cacheDocument({ cacheKey: '::local::app-1' }),
+        cacheDocument({ cacheKey: '::local::app-2' }),
+      ]),
+    ).toBe(2);
+
+    expect(
+      db
+        .prepare(
+          'SELECT cache_key, refresh_order FROM update_policy_retention_cache ORDER BY refresh_order ASC',
+        )
+        .all(),
+    ).toEqual([
+      { cache_key: '::local::app-1', refresh_order: 1 },
+      { cache_key: '::local::app-2', refresh_order: 2 },
+    ]);
+  });
 });

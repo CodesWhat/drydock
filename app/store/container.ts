@@ -1676,6 +1676,13 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
  * after both the containers collection and the update-lifecycle-cache collection
  * have been created. Drops any record whose TTL already lapsed while the process
  * was down rather than resurrecting a stale stash (#556).
+ *
+ * listRecords() returns rows oldest-refreshed first (ORDER BY refresh_order),
+ * so inserting straight from it in order reproduces the Map insertion order
+ * the stash path's size-cap eviction reads as an LRU. Before finding 2
+ * (roadmap 7-STORE slice 7 review) this iterated the SELECT's undefined
+ * order instead, so a just-refreshed entry could resurface ahead of the row
+ * it should have outlived.
  */
 export function rehydrateUpdateLifecycleCacheFromStore(): void {
   const nowMs = Date.now();
@@ -1703,6 +1710,15 @@ export function rehydrateUpdateLifecycleCacheFromStore(): void {
  * after both the containers collection and the update-policy-retention-cache
  * collection have been created. Drops any record whose TTL already lapsed while
  * the process was down rather than resurrecting a stale stash (#565).
+ *
+ * listRecords() returns rows oldest-refreshed first (ORDER BY refresh_order),
+ * which is the order the stash path's Map-insertion-order eviction reads as
+ * an LRU. This used to be reconstructed here by re-sorting on expiresAt —
+ * every stash uses the same TTL, so ascending expiresAt approximated
+ * ascending stash time — but that ties on equal timestamps and stops
+ * approximating anything the moment the TTL changes between two stashes
+ * (finding 2, roadmap 7-STORE slice 7 review). refresh_order is exact, so
+ * the extra sort is gone and `surviving` is used in listRecords() order.
  */
 export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
   const nowMs = Date.now();
@@ -1717,12 +1733,6 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
     }
     surviving.push(record);
   }
-  // Oldest first. Every stash uses the same TTL, so ascending expiresAt is
-  // ascending stash time, which is the order the stash path's Map-insertion-order
-  // eviction assumes. listRecords() returns LokiJS document order, so inserting
-  // straight from it would leave the next eviction dropping an arbitrary entry
-  // instead of the oldest one.
-  surviving.sort((a, b) => a.expiresAt - b.expiresAt);
   // Re-apply the cap here rather than leaving it to the next stash: lowering
   // DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
   // store holding more rows than the new limit allows, and the stash path only

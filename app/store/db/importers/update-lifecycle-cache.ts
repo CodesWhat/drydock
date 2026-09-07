@@ -70,8 +70,8 @@ export const updateLifecycleCacheImporter: CollectionImporter = {
     // finding 1, roadmap 7-STORE slice 7 — checked, not applicable here).
     const insert = db.prepare(
       `INSERT INTO update_lifecycle_cache
-         (cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at, refresh_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
 
     let rows = 0;
@@ -96,6 +96,11 @@ export const updateLifecycleCacheImporter: CollectionImporter = {
       }
       seenNewKeys.add(newKey);
 
+      rows += 1;
+      // refresh_order is assigned in legacy document order — the only ordering
+      // evidence a first-start import has — so eviction (app/store/container.ts)
+      // reflects the legacy store's document order until the next real refresh
+      // (finding 2, same review).
       insert.run(
         newKey,
         doc.updateDetectedAt,
@@ -103,8 +108,8 @@ export const updateLifecycleCacheImporter: CollectionImporter = {
         optionalString(doc.maturityGatePendingSince),
         doc.resultSignature,
         doc.expiresAt,
+        rows,
       );
-      rows += 1;
     }
     return rows;
   },

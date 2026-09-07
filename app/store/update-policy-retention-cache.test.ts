@@ -151,6 +151,47 @@ describe('listRecords', () => {
 
     expect(updatePolicyRetentionCache.listRecords()).toHaveLength(2);
   });
+
+  // Finding 2 (roadmap 7-STORE slice 7 review): container.ts's eviction reads
+  // Map insertion order as its LRU, and rehydration inserts into that Map in
+  // listRecords() order. A refresh (upsertRecord on an existing cacheKey)
+  // does not move the row's rowid, so without an explicit refresh_order
+  // column and ORDER BY, a just-refreshed entry could sort ahead of a row it
+  // should have outlived. This also proves the ordering is not merely an
+  // expiresAt proxy: A's expiresAt stays lower than B's throughout, yet A
+  // still lists last once refreshed.
+  test('orders by refresh, not by expiresAt or original insertion: insert A, insert B, refresh A, and B lists first', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'A',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 1_000,
+    });
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'B',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 5_000,
+    });
+    // Refresh A: same cacheKey, later call, still a lower expiresAt than B.
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'A',
+      updatePolicyOverrides: { maturityMode: 'all' },
+      expiresAt: 2_000,
+    });
+
+    // Reopen: simulate a restart by clearing the module's wiring and
+    // re-wiring it to the SAME underlying database, the way
+    // rehydrateUpdatePolicyRetentionCacheFromStore() consumes listRecords()
+    // after a real process restart.
+    updatePolicyRetentionCache.clearCollectionForTesting();
+    updatePolicyRetentionCache.createCollections(db);
+
+    const keysInOrder = updatePolicyRetentionCache.listRecords().map((record) => record.cacheKey);
+    // B was never refreshed again, so it is the least-recently-refreshed
+    // entry and must sort first — the Map-insertion-order eviction in
+    // container.ts evicts index 0 first, which must be B, not A.
+    expect(keysInOrder).toEqual(['B', 'A']);
+  });
 });
 
 describe('clearCollectionForTesting', () => {

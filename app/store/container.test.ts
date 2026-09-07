@@ -5671,6 +5671,46 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     expect(persistedKeys).toEqual(['::local::live-app-2']);
   });
 
+  // Finding 2 (roadmap 7-STORE slice 7 review): rehydration used to iterate
+  // listRecords() in whatever order the SELECT with no ORDER BY happened to
+  // return, so a just-refreshed entry could resurface ahead of the row it
+  // should have outlived. refresh_order fixes the order; this pins it down
+  // end to end through container.ts's own rehydrate function.
+  test('rehydrateUpdateLifecycleCacheFromStore restores refresh order: insert A, insert B, refresh A, and B lists first', () => {
+    mountLifecycleStore([
+      {
+        cacheKey: 'A',
+        updateDetectedAt: '2026-01-01T00:00:00.000Z',
+        resultSignature: '{}',
+        expiresAt: Date.now() + 90_000,
+      },
+      {
+        cacheKey: 'B',
+        updateDetectedAt: '2026-01-01T00:00:00.000Z',
+        resultSignature: '{}',
+        expiresAt: Date.now() + 90_000,
+      },
+    ]);
+    updateLifecycleCacheStore.upsertRecord({
+      cacheKey: 'A',
+      updateDetectedAt: '2026-01-02T00:00:00.000Z',
+      resultSignature: '{"tag":"refreshed"}',
+      expiresAt: Date.now() + 90_000,
+    });
+
+    // Reopen: simulate a restart the way store/index.ts's createCollections()
+    // does — rewire the module to the same durable database and rehydrate.
+    container._resetContainerStoreStateForTests();
+    updateLifecycleCacheStore.clearCollectionForTesting();
+    updateLifecycleCacheStore.createCollections(lifecycleDb);
+    container.rehydrateUpdateLifecycleCacheFromStore();
+
+    // B was never refreshed again, so it is the least-recently-refreshed
+    // entry and must sort first — the Map-insertion-order eviction in
+    // container.ts evicts index 0 first, which must be B, not A.
+    expect([...container._getUpdateLifecycleCacheForTests().keys()]).toEqual(['B', 'A']);
+  });
+
   test('end-to-end: a simulated process restart still carries updateDetectedAt/firstSeenAt forward', () => {
     mountLifecycleStore();
     const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
@@ -6255,26 +6295,32 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     expect(persistedKeys).not.toContain('::local::overcap-app-0');
   });
 
-  test('rehydrateUpdatePolicyRetentionCacheFromStore restores oldest-first so the stash path still evicts the oldest', () => {
-    // listRecords() returns LokiJS document order. Inserting straight from it would leave
-    // the Map's insertion order unrelated to stash age, and the stash path's eviction
-    // reads that order as its LRU.
+  test('rehydrateUpdatePolicyRetentionCacheFromStore restores refresh order so the stash path still evicts the least-recently-refreshed entry (finding 2, roadmap 7-STORE slice 7 review)', () => {
+    // listRecords() orders by refresh_order, a monotonic counter bumped on every
+    // upsertRecord() call — not by expiresAt, which only approximates refresh
+    // order (every stash uses the same TTL) and ties on equal timestamps, and
+    // not by LokiJS/SQL document order, which an upsert never moves. Inserting
+    // straight from listRecords() reproduces the Map's true refresh order, which
+    // is the order the stash path's eviction reads as its LRU.
     const nowMs = Date.now();
     mountPolicyRetentionStore([
       {
-        cacheKey: '::local::order-newest',
-        updatePolicyOverrides: MATURITY_POLICY,
-        expiresAt: nowMs + 90_000,
-      },
-      {
+        // Refreshed first (oldest), yet given the highest expiresAt — proves
+        // ordering follows refresh_order, not expiresAt.
         cacheKey: '::local::order-oldest',
         updatePolicyOverrides: MATURITY_POLICY,
-        expiresAt: nowMs + 30_000,
+        expiresAt: nowMs + 90_000,
       },
       {
         cacheKey: '::local::order-middle',
         updatePolicyOverrides: MATURITY_POLICY,
         expiresAt: nowMs + 60_000,
+      },
+      {
+        // Refreshed last (newest), yet given the lowest expiresAt.
+        cacheKey: '::local::order-newest',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 30_000,
       },
     ]);
 
@@ -6285,6 +6331,31 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       '::local::order-middle',
       '::local::order-newest',
     ]);
+  });
+
+  test('rehydrateUpdatePolicyRetentionCacheFromStore: refreshing an entry moves it to the back, so a later reopen evicts the other entry first', () => {
+    // insert A, insert B, refresh A, reopen — B never got refreshed again, so
+    // it is the least-recently-refreshed entry and must come first: the
+    // stash path's Map-insertion-order eviction (deleteContainer's while
+    // loop) evicts index 0 first.
+    mountPolicyRetentionStore([
+      { cacheKey: 'A', updatePolicyOverrides: MATURITY_POLICY, expiresAt: Date.now() + 90_000 },
+      { cacheKey: 'B', updatePolicyOverrides: MATURITY_POLICY, expiresAt: Date.now() + 90_000 },
+    ]);
+    updatePolicyRetentionCacheStore.upsertRecord({
+      cacheKey: 'A',
+      updatePolicyOverrides: MATURITY_POLICY,
+      expiresAt: Date.now() + 90_000,
+    });
+
+    // Reopen: simulate a restart the way store/index.ts's createCollections()
+    // does — rewire the module to the same durable database and rehydrate.
+    container._resetContainerStoreStateForTests();
+    updatePolicyRetentionCacheStore.clearCollectionForTesting();
+    updatePolicyRetentionCacheStore.createCollections(policyDb);
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual(['B', 'A']);
   });
 
   // #565: unlike the lifecycle/clock cache (#556), updatePolicyRetentionCache never got a

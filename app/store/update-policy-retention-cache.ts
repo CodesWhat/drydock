@@ -25,6 +25,18 @@ export interface UpdatePolicyRetentionCacheRecord {
 }
 
 let db: Database | undefined;
+/**
+ * Monotonic per-database counter, bumped on every insert/refresh. Backs the
+ * `refresh_order` column: a SELECT with no ORDER BY does not reproduce Map
+ * insertion order across a restart, and an upsert never moves a row's
+ * rowid, so listRecords() orders by this column instead of the expires_at
+ * proxy it used to sort by in container.ts, which only approximated refresh
+ * order and ties on equal timestamps (finding 2, roadmap 7-STORE slice 7
+ * review). Seeded from the table's current max on createCollections() so it
+ * keeps counting up rather than restarting at 0 and colliding with rows
+ * already on disk.
+ */
+let refreshOrderCounter = 0;
 
 function rowToRecord(row: Row): UpdatePolicyRetentionCacheRecord {
   return {
@@ -43,6 +55,14 @@ function rowToRecord(row: Row): UpdatePolicyRetentionCacheRecord {
  */
 export function createCollections(database: Database): void {
   db = database;
+  // COALESCE guarantees exactly one row with a non-null maxOrder, even on an
+  // empty table, so the aggregate query never actually returns undefined.
+  const row = db
+    .prepare(
+      'SELECT COALESCE(MAX(refresh_order), 0) AS maxOrder FROM update_policy_retention_cache',
+    )
+    .get()!;
+  refreshOrderCounter = Number(row.maxOrder);
 }
 
 /**
@@ -60,13 +80,15 @@ export function upsertRecord(record: UpdatePolicyRetentionCacheRecord): void {
     record.updatePolicyOverrides === undefined
       ? null
       : JSON.stringify(record.updatePolicyOverrides);
+  refreshOrderCounter += 1;
   db.prepare(
-    `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at)
-     VALUES (?, ?, ?)
+    `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT(cache_key) DO UPDATE SET
        update_policy_overrides = excluded.update_policy_overrides,
-       expires_at = excluded.expires_at`,
-  ).run(record.cacheKey, overridesJson, record.expiresAt);
+       expires_at = excluded.expires_at,
+       refresh_order = excluded.refresh_order`,
+  ).run(record.cacheKey, overridesJson, record.expiresAt, refreshOrderCounter);
 }
 
 /**
@@ -80,9 +102,11 @@ export function deleteRecord(cacheKey: string): void {
 }
 
 /**
- * List every persisted record. Used once at startup to rehydrate the in-memory
- * updatePolicyRetentionCache Map — see
- * rehydrateUpdatePolicyRetentionCacheFromStore() in container.ts.
+ * List every persisted record, oldest-refreshed first. Used once at startup to
+ * rehydrate the in-memory updatePolicyRetentionCache Map — see
+ * rehydrateUpdatePolicyRetentionCacheFromStore() in container.ts — which
+ * relies on this order matching the Map insertion order its size-cap eviction
+ * reads as an LRU (finding 2, roadmap 7-STORE slice 7 review).
  */
 export function listRecords(): UpdatePolicyRetentionCacheRecord[] {
   if (!db) {
@@ -90,7 +114,7 @@ export function listRecords(): UpdatePolicyRetentionCacheRecord[] {
   }
   return db
     .prepare(
-      'SELECT cache_key, update_policy_overrides, expires_at FROM update_policy_retention_cache',
+      'SELECT cache_key, update_policy_overrides, expires_at FROM update_policy_retention_cache ORDER BY refresh_order ASC',
     )
     .all()
     .map(rowToRecord);

@@ -35,6 +35,16 @@ export interface UpdateLifecycleCacheRecord {
 }
 
 let db: Database | undefined;
+/**
+ * Monotonic per-database counter, bumped on every insert/refresh. Backs the
+ * `refresh_order` column: a SELECT with no ORDER BY does not reproduce Map
+ * insertion order across a restart, and an upsert never moves a row's
+ * rowid, so listRecords() orders by this column instead (finding 2,
+ * roadmap 7-STORE slice 7 review). Seeded from the table's current max on
+ * createCollections() so it keeps counting up rather than restarting at 0
+ * and colliding with rows already on disk.
+ */
+let refreshOrderCounter = 0;
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -57,6 +67,12 @@ function rowToRecord(row: Row): UpdateLifecycleCacheRecord {
  */
 export function createCollections(database: Database): void {
   db = database;
+  // COALESCE guarantees exactly one row with a non-null maxOrder, even on an
+  // empty table, so the aggregate query never actually returns undefined.
+  const row = db
+    .prepare('SELECT COALESCE(MAX(refresh_order), 0) AS maxOrder FROM update_lifecycle_cache')
+    .get()!;
+  refreshOrderCounter = Number(row.maxOrder);
 }
 
 /**
@@ -70,16 +86,18 @@ export function upsertRecord(record: UpdateLifecycleCacheRecord): void {
   if (!db) {
     return;
   }
+  refreshOrderCounter += 1;
   db.prepare(
     `INSERT INTO update_lifecycle_cache
-       (cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+       (cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at, refresh_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(cache_key) DO UPDATE SET
        update_detected_at = excluded.update_detected_at,
        first_seen_at = excluded.first_seen_at,
        maturity_gate_pending_since = excluded.maturity_gate_pending_since,
        result_signature = excluded.result_signature,
-       expires_at = excluded.expires_at`,
+       expires_at = excluded.expires_at,
+       refresh_order = excluded.refresh_order`,
   ).run(
     record.cacheKey,
     record.updateDetectedAt,
@@ -87,6 +105,7 @@ export function upsertRecord(record: UpdateLifecycleCacheRecord): void {
     record.maturityGatePendingSince ?? null,
     record.resultSignature,
     record.expiresAt,
+    refreshOrderCounter,
   );
 }
 
@@ -101,9 +120,11 @@ export function deleteRecord(cacheKey: string): void {
 }
 
 /**
- * List every persisted record. Used once at startup to rehydrate the in-memory
- * updateLifecycleCache Map — see rehydrateUpdateLifecycleCacheFromStore() in
- * container.ts.
+ * List every persisted record, oldest-refreshed first. Used once at startup to
+ * rehydrate the in-memory updateLifecycleCache Map — see
+ * rehydrateUpdateLifecycleCacheFromStore() in container.ts — which relies on
+ * this order matching the Map insertion order its size-cap eviction reads as
+ * an LRU (finding 2, roadmap 7-STORE slice 7 review).
  */
 export function listRecords(): UpdateLifecycleCacheRecord[] {
   if (!db) {
@@ -111,7 +132,7 @@ export function listRecords(): UpdateLifecycleCacheRecord[] {
   }
   return db
     .prepare(
-      'SELECT cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at FROM update_lifecycle_cache',
+      'SELECT cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at FROM update_lifecycle_cache ORDER BY refresh_order ASC',
     )
     .all()
     .map(rowToRecord);

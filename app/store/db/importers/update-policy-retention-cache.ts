@@ -17,6 +17,12 @@
  * `app/store/update-policy-retention-cache.ts`) so the later document wins
  * instead of the whole first-start import transaction throwing on the second
  * INSERT (review finding, roadmap 7-STORE slice 7).
+ *
+ * `refresh_order` is assigned in legacy document order — the only ordering
+ * evidence a first-start import has — so a fresh install's eviction order
+ * (app/store/container.ts) at least reflects the order the legacy store held
+ * the documents in, the same way the module's own upsertRecord() assigns it
+ * for every write after import (finding 2, same review).
  */
 import type { CollectionImporter, ImportContext } from '../import.js';
 
@@ -28,11 +34,12 @@ export const updatePolicyRetentionCacheImporter: CollectionImporter = {
   table: TARGET_TABLE,
   importInto({ db, snapshot }: ImportContext): number {
     const insert = db.prepare(
-      `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at)
-       VALUES (?, ?, ?)
+      `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT(cache_key) DO UPDATE SET
          update_policy_overrides = excluded.update_policy_overrides,
-         expires_at = excluded.expires_at`,
+         expires_at = excluded.expires_at,
+         refresh_order = excluded.refresh_order`,
     );
 
     let rows = 0;
@@ -40,12 +47,13 @@ export const updatePolicyRetentionCacheImporter: CollectionImporter = {
       if (typeof doc.cacheKey !== 'string' || typeof doc.expiresAt !== 'number') {
         continue;
       }
+      rows += 1;
       insert.run(
         doc.cacheKey,
         doc.updatePolicyOverrides === undefined ? null : JSON.stringify(doc.updatePolicyOverrides),
         doc.expiresAt,
+        rows,
       );
-      rows += 1;
     }
     return rows;
   },

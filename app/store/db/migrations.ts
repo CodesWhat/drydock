@@ -36,6 +36,23 @@ export const MIGRATIONS: readonly Migration[] = [
     note: 'index approvals.operation_id (roadmap 7-STORE slice 6)',
     sql: 'CREATE INDEX approvals_operation_id ON approvals(operation_id);',
   },
+  {
+    version: 3,
+    // Eviction in app/store/container.ts reads Map insertion order as its
+    // LRU for both caches, but a SELECT with no ORDER BY does not reproduce
+    // that order across a restart, and an upsert (ON CONFLICT DO UPDATE)
+    // never moves a row's rowid — so a just-refreshed entry could resurface
+    // ahead of the row it should have outlived (roadmap 7-STORE slice 7
+    // review fix). refresh_order is a monotonic counter each store module
+    // bumps on every insert/refresh; rehydration orders by it instead of by
+    // document order or expires_at, which only ever approximated refresh
+    // order and ties on equal timestamps.
+    note: 'add refresh_order to the lifecycle/retention caches for eviction-order fidelity (roadmap 7-STORE slice 7)',
+    sql: `
+ALTER TABLE update_lifecycle_cache ADD COLUMN refresh_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE update_policy_retention_cache ADD COLUMN refresh_order INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];
 
 /** Versions already recorded in `schema_migrations`, ascending. */
