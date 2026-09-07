@@ -297,13 +297,19 @@ describe('config export', () => {
   });
 
   test('falls back to process.env when no env override is supplied', async () => {
-    const collector = createIoCollector();
-    const result = await runConfigCommandIfRequested(['config', 'export'], {
-      io: collector.io,
-    });
-    expect(result).toBe(0);
-    // No DD_* vars in this test process's real environment, so the export is empty.
-    expect(collector.out).toStrictEqual(['{}\n']);
+    // CI sets DD_* variables of its own (a server port, for one), so the
+    // assertion is on a stubbed key rather than on an empty document.
+    vi.stubEnv('DD_SERVER_PORT', '4242');
+    try {
+      const collector = createIoCollector();
+      const result = await runConfigCommandIfRequested(['config', 'export'], {
+        io: collector.io,
+      });
+      expect(result).toBe(0);
+      expect(collector.out.join('')).toContain('port: "4242"');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   test('an empty DD_* environment prints an empty document and exits 0', async () => {
