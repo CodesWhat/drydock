@@ -487,13 +487,15 @@ describe('loadConfigFileIntoLayer', () => {
   });
 
   test('a load failure rejects and never publishes a layer', async () => {
-    const missingPath = path.join(
-      os.tmpdir(),
-      `drydock-config-into-layer-missing-${Date.now()}.yml`,
-    );
-    await expect(loadConfigFileIntoLayer({ DD_CONFIG_FILE: missingPath })).rejects.toThrow(
-      new RegExp(`DD_CONFIG_FILE points at "${missingPath.replace(/[/\\]/g, '\\$&')}"`),
-    );
-    expect(getConfigFileLayer()).toStrictEqual({});
+    const tempDir = makeTempDir('drydock-config-into-layer-missing-');
+    const missingPath = path.join(tempDir, 'missing.yml');
+    try {
+      await expect(loadConfigFileIntoLayer({ DD_CONFIG_FILE: missingPath })).rejects.toThrow(
+        new RegExp(`DD_CONFIG_FILE points at "${missingPath.replace(/[/\\]/g, '\\$&')}"`),
+      );
+      expect(getConfigFileLayer()).toStrictEqual({});
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
