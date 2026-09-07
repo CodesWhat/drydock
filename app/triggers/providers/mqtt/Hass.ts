@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { MqttClient } from 'mqtt';
 import { recordAuditEvent } from '../../../api/audit-events.js';
 import { providers as iconProviders, normalizeSlug } from '../../../api/icons/providers.js';
@@ -10,8 +11,9 @@ import {
   registerWatcherStart,
   registerWatcherStop,
 } from '../../../event/index.js';
-import type { Container } from '../../../model/container.js';
+import { type Container, deriveContainerIdentityKey } from '../../../model/container.js';
 import * as containerStore from '../../../store/container.js';
+import * as mqttHassStore from '../../../store/mqtt-hass.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
@@ -25,6 +27,7 @@ import {
   resolveHassCommandContainer,
 } from './hass-commands.js';
 import {
+  getContainerIdentitySlug,
   getSanitizedCanonicalContainerName,
   getStaleSanitizedContainerNameCandidates,
 } from './naming.js';
@@ -122,6 +125,26 @@ interface HassLogger {
  */
 function getHassEntityId(topic) {
   return topic.replaceAll('/', '_');
+}
+
+/**
+ * Home Assistant `unique_id` for a container's update sensor, derived from
+ * the container's durable identity key instead of its MQTT state topic. The
+ * state topic changes on a rename or a Compose recreate (it is built from
+ * `getContainerIdentitySlug`); `unique_id` is what HA actually uses to keep an
+ * entity's history and dashboard placement across a discovery payload update,
+ * so keeping it independent of the topic is what stops a rename from orphaning
+ * the entity and spawning a duplicate "Unknown" ghost next to it. `dd_` keeps
+ * the id from starting with a bare hex digit; 12 hex characters match the
+ * length of a Docker short id for a familiar shape (the two are unrelated
+ * otherwise — this is a hash of the identity key, not of any Docker id).
+ */
+function getHassUniqueId(container: Container): string {
+  const identityKey = container.identityKey ?? deriveContainerIdentityKey(container);
+  return `dd_${createHash('sha256')
+    .update(identityKey ?? '')
+    .digest('hex')
+    .slice(0, 12)}`;
 }
 
 /**
@@ -401,6 +424,8 @@ class Hass {
       );
       return;
     }
+
+    await this.cleanupLegacyIdentityTopics(containers);
 
     let previousSnapshot = Promise.resolve();
     const snapshotSyncs = containers.map((container) => {
@@ -848,6 +873,7 @@ class Hass {
         name: container.displayName,
         icon: sanitizeIcon(container.displayIcon),
         entityPicture: entityPictureOverride,
+        uniqueId: getHassUniqueId(container),
         options: {
           force_update: true,
           value_template: HASS_ENTITY_VALUE_TEMPLATE,
@@ -1197,6 +1223,7 @@ class Hass {
     name,
     icon,
     entityPicture,
+    uniqueId,
     options = {},
   }: {
     discoveryTopic: string;
@@ -1205,13 +1232,19 @@ class Hass {
     name: string;
     icon?: string;
     entityPicture?: string;
+    // Per-container sensors pass the identity-derived id from
+    // `getHassUniqueId` so `unique_id` survives a rename/recreate; the
+    // aggregate total/watcher sensors below have no container identity to
+    // derive from and fall back to the topic-derived entity id, same as
+    // before.
+    uniqueId?: string;
     options?: Record<string, unknown>;
   }) {
     const entityId = getHassEntityId(stateTopic);
     return this.client.publish(
       discoveryTopic,
       JSON.stringify({
-        unique_id: entityId,
+        unique_id: uniqueId ?? entityId,
         default_entity_id: `${kind}.${entityId}`,
         name: name || entityId,
         device: getHaDevice(),
@@ -1248,16 +1281,78 @@ class Hass {
   }
 
   /**
-   * Get container state topic.
+   * Get container state topic. Identity-based (`getContainerIdentitySlug`) so
+   * a rename or Compose recreate does not change it — see
+   * `getLegacyContainerStateTopics` for the pre-v1.8 name-based shape this
+   * replaces, still needed for the one-time post-upgrade discovery cleanup.
    * @param container
    * @return {string}
    */
   getContainerStateTopic({ container }) {
     return this.getContainerStateTopicFromName({
       watcherName: container.watcher,
-      containerName: getSanitizedCanonicalContainerName(container),
+      containerName: getContainerIdentitySlug(container),
       agentName: normalizeAgentValue(container?.agent),
     });
+  }
+
+  /**
+   * The pre-v1.8 name-based state topic for a container, plus its
+   * rename/recreate stale-name variants. Used only by the one-time
+   * post-upgrade discovery cleanup in `resyncDiscovery`: whenever the
+   * container carries Compose labels this always differs from the
+   * identity-based topic `getContainerStateTopic` now returns, and it can
+   * differ even without Compose labels if the container was renamed before
+   * the upgrade.
+   */
+  private getLegacyContainerStateTopics(container: {
+    id?: unknown;
+    name?: unknown;
+    watcher?: unknown;
+    agent?: unknown;
+  }): string[] {
+    const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+    if (watcherName === '') {
+      return [];
+    }
+    const agentName = normalizeAgentValue(container?.agent);
+    const legacyContainerNames = new Set<string>([
+      getSanitizedCanonicalContainerName(container),
+      ...getStaleSanitizedContainerNameCandidates(container),
+    ]);
+    return Array.from(legacyContainerNames).map((containerName) =>
+      this.getContainerStateTopicFromName({ watcherName, containerName, agentName }),
+    );
+  }
+
+  /**
+   * One-time post-upgrade cleanup (MQTT identity cut): publish an empty
+   * retained message on every pre-v1.8 name-based discovery topic the
+   * identity-based topic scheme replaces, so Home Assistant prunes the old
+   * entity instead of leaving a duplicate "Unknown" ghost beside the new one.
+   * Guarded by a `store_metadata` marker (`app/store/mqtt-hass.ts`) so it runs
+   * at most once ever, not once per restart. A container-level publish
+   * failure is logged and skipped rather than retried forever — the cost of a
+   * missed cleanup is a lingering ghost entity, not a functional break.
+   */
+  private async cleanupLegacyIdentityTopics(containers: Container[]): Promise<void> {
+    if (!this.configuration.hass.discovery || mqttHassStore.hasRunHassIdentityTopicCleanup()) {
+      return;
+    }
+    for (const container of containers) {
+      try {
+        const currentStateTopic = this.getContainerStateTopic({ container });
+        const legacyStateTopics = this.getLegacyContainerStateTopics(container).filter(
+          (stateTopic) => stateTopic !== currentStateTopic,
+        );
+        await this.removeDiscoveryTopics({ kind: 'update', stateTopics: legacyStateTopics });
+      } catch (error: unknown) {
+        this.log.warn(
+          `Failed to clean up legacy hass discovery topics for container [${container.name}] (${getErrorMessage(error)})`,
+        );
+      }
+    }
+    mqttHassStore.markHassIdentityTopicCleanupComplete();
   }
 
   /**

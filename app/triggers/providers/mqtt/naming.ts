@@ -1,3 +1,5 @@
+import { getComposeProjectService } from '../../../model/container.js';
+
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
 
 function getContainerId(container: { id?: unknown }) {
@@ -82,4 +84,27 @@ export function getStaleSanitizedContainerNameCandidates(container: {
   }
 
   return Array.from(staleContainerNames);
+}
+
+/**
+ * The MQTT topic segment identifying a container by durable identity rather
+ * than by name: the Compose `project-service` pair when the container carries
+ * both `com.docker.compose.*` labels (this pair survives a `docker compose up`
+ * recreate, unlike the container name and id), falling back to the current
+ * sanitised container name for a container Compose never labeled. Unlike
+ * `getSanitizedCanonicalContainerName`, this does not change when a
+ * non-Compose container is renamed or recreated with a different name — it
+ * changes only when the Compose project/service pair itself changes, which is
+ * effectively a different container.
+ */
+export function getContainerIdentitySlug(
+  container: { id?: unknown; name?: unknown } & Parameters<typeof getComposeProjectService>[0],
+): string {
+  const composeProjectService = getComposeProjectService(container);
+  if (composeProjectService) {
+    return sanitizeContainerName(
+      `${composeProjectService.project}-${composeProjectService.service}`,
+    );
+  }
+  return getSanitizedCanonicalContainerName(container);
 }

@@ -1147,6 +1147,28 @@ const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 const COMPOSE_SERVICE_LABEL = 'com.docker.compose.service';
 
 /**
+ * The Compose project/service pair a container's `com.docker.compose.*`
+ * labels carry, when both are present and non-empty. `undefined` for a
+ * container that was never started by Compose (or is missing one of the
+ * pair) — the only case that means anything here is having both.
+ */
+export function getComposeProjectService(
+  container: Pick<Container, 'labels'>,
+): { project: string; service: string } | undefined {
+  const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
+  const composeService = container.labels?.[COMPOSE_SERVICE_LABEL];
+  if (
+    typeof composeProject === 'string' &&
+    composeProject.length > 0 &&
+    typeof composeService === 'string' &&
+    composeService.length > 0
+  ) {
+    return { project: composeProject, service: composeService };
+  }
+  return undefined;
+}
+
+/**
  * Build a stable per-container identity key that survives container recreates
  * but still discriminates between same-named siblings (e.g. two `pi-hole`
  * services in different compose projects, or a service vs container created
@@ -1163,15 +1185,9 @@ export function deriveContainerIdentityKey(container: Container): string | undef
     return undefined;
   }
   const agent = typeof container.agent === 'string' ? container.agent : '';
-  const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
-  const composeService = container.labels?.[COMPOSE_SERVICE_LABEL];
-  if (
-    typeof composeProject === 'string' &&
-    composeProject.length > 0 &&
-    typeof composeService === 'string' &&
-    composeService.length > 0
-  ) {
-    return `${agent}::${container.watcher}::compose:${composeProject}/${composeService}`;
+  const composeProjectService = getComposeProjectService(container);
+  if (composeProjectService) {
+    return `${agent}::${container.watcher}::compose:${composeProjectService.project}/${composeProjectService.service}`;
   }
   return `${agent}::${container.watcher}::${container.name}`;
 }

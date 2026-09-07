@@ -7,6 +7,7 @@ import {
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
 import * as containerStore from '../../../store/container.js';
+import * as mqttHassStore from '../../../store/mqtt-hass.js';
 import * as requestUpdateModule from '../../../updates/request-update.js';
 import { UpdateRequestError } from '../../../updates/request-update.js';
 import Hass, { HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT } from './Hass.js';
@@ -262,7 +263,7 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
   expect(mqttClientMock.publish).toHaveBeenCalledWith(
     'homeassistant/update/topic_watcher-name_container-name/config',
     JSON.stringify({
-      unique_id: 'topic_watcher-name_container-name',
+      unique_id: 'dd_7e333fb0b11c',
       default_entity_id: 'update.topic_watcher-name_container-name',
       name: 'topic_watcher-name_container-name',
       device: {
@@ -1846,6 +1847,169 @@ describe('hass discovery startup resync (#708)', () => {
       'Failed to load containers for hass discovery resync (store unavailable)',
     );
     expect(mqttClientMock.publish).not.toHaveBeenCalled();
+  });
+
+  // ── MQTT identity cut: one-time legacy discovery topic cleanup ──────────
+
+  test('publishes an empty retained message on the pre-v1.8 compose-identity legacy topic exactly once', async () => {
+    const cleanupClient = { publish: vi.fn(() => undefined) };
+    const cleanupHass = new Hass({
+      client: cleanupClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = {
+      id: 'ctr-compose',
+      name: 'myapp_web_1',
+      watcher: 'local',
+      displayIcon: 'mdi:docker',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(cleanupHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await getResyncDiscovery(cleanupHass)();
+
+    // The pre-v1.8 topic was name-based (myapp_web_1 sanitized), the new one
+    // is identity-based (myapp-web) — the old discovery entity is retired.
+    expect(cleanupClient.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_myapp_web_1/config',
+      '',
+      { retain: true },
+    );
+    // The new identity-based entity is published (not retired).
+    expect(cleanupClient.publish).not.toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_myapp-web/config',
+      '',
+      { retain: true },
+    );
+
+    const legacyCleanupCallCount = cleanupClient.publish.mock.calls.filter(
+      ([topic]) => topic === 'homeassistant/update/topic_local_myapp_web_1/config',
+    ).length;
+
+    // Running the sweep again must not repeat it: the store_metadata marker
+    // (a no-op stub in this unit-test environment, since no db is wired up —
+    // see app/store/mqtt-hass.ts) is spied on directly to prove intent, since
+    // the unit test cannot observe real persistence.
+    const hasRunSpy = vi
+      .spyOn(mqttHassStore, 'hasRunHassIdentityTopicCleanup')
+      .mockReturnValue(true);
+    await getResyncDiscovery(cleanupHass)();
+    expect(
+      cleanupClient.publish.mock.calls.filter(
+        ([topic]) => topic === 'homeassistant/update/topic_local_myapp_web_1/config',
+      ).length,
+    ).toBe(legacyCleanupCallCount);
+    hasRunSpy.mockRestore();
+  });
+
+  test('skips the legacy topic cleanup entirely when hass discovery is disabled', async () => {
+    const discoveryOffClient = { publish: vi.fn(() => undefined) };
+    const discoveryOffHass = new Hass({
+      client: discoveryOffClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: false, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = {
+      id: 'ctr-compose-off',
+      name: 'myapp_web_1',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(discoveryOffHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await getResyncDiscovery(discoveryOffHass)();
+
+    expect(discoveryOffClient.publish).not.toHaveBeenCalled();
+  });
+
+  test('does not compute a legacy topic for a stored container with no watcher name', async () => {
+    const noWatcherClient = { publish: vi.fn(() => undefined) };
+    const noWatcherHass = new Hass({
+      client: noWatcherClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const malformedContainer = { id: 'ctr-no-watcher', name: 'orphan' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([malformedContainer] as any);
+    vi.spyOn(noWatcherHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await expect(getResyncDiscovery(noWatcherHass)()).resolves.toBeUndefined();
+
+    expect(noWatcherClient.publish).not.toHaveBeenCalledWith(
+      expect.stringContaining('/orphan/'),
+      '',
+      { retain: true },
+    );
+  });
+
+  test('logs and continues when the legacy topic cleanup publish fails for one container', async () => {
+    const failingClient = {
+      publish: vi.fn((topic: string) => {
+        if (topic === 'homeassistant/update/topic_local_myapp_web_1/config') {
+          return Promise.reject(new Error('broker publish failed'));
+        }
+        return undefined;
+      }),
+    };
+    const failingHass = new Hass({
+      client: failingClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const legacyContainer = {
+      id: 'ctr-compose-fail',
+      name: 'myapp_web_1',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    const otherContainer = { id: 'ctr-other', name: 'other', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+      legacyContainer,
+      otherContainer,
+    ] as any);
+    vi.spyOn(failingHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    await expect(getResyncDiscovery(failingHass)()).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to clean up legacy hass discovery topics for container [myapp_web_1] (broker publish failed)',
+    );
+    // The failure on one container's cleanup must not stop the sweep, or the
+    // rest of resync, from continuing to the next container.
+    expect(failingClient.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_other/config',
+      expect.any(String),
+      { retain: true },
+    );
   });
 });
 
