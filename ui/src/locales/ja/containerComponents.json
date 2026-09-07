@@ -273,6 +273,9 @@
     },
     "listContent": {
       "loadingContainers": "コンテナを読み込み中...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "名前またはイメージを検索...",
       "allStatuses": "全ステータス",
       "running": "稼働中",

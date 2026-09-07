@@ -41,6 +41,7 @@ describe('useOperationStore', () => {
       succeeded: 0,
       failed: 0,
       active: 1,
+      activeContainerNames: ['web'],
     });
   });
 
@@ -76,6 +77,7 @@ describe('useOperationStore', () => {
       succeeded: 1,
       failed: 0,
       active: 0,
+      activeContainerNames: [],
     });
   });
 
@@ -142,6 +144,7 @@ describe('useOperationStore', () => {
       succeeded: 2,
       failed: 1,
       active: 0,
+      activeContainerNames: [],
     });
   });
 
@@ -164,6 +167,7 @@ describe('useOperationStore', () => {
       succeeded: 1,
       failed: 1,
       active: 1,
+      activeContainerNames: [],
     });
 
     operations.incrementDisplayBatchSucceeded('stack-a');
@@ -638,6 +642,7 @@ describe('useOperationStore', () => {
       succeeded: 0,
       failed: 1,
       active: 0,
+      activeContainerNames: [],
     });
     expect(operations.getBatchProgress('batch-stream-defaults')).toEqual({
       batchId: 'batch-stream-defaults',
@@ -645,6 +650,7 @@ describe('useOperationStore', () => {
       succeeded: 0,
       failed: 0,
       active: 0,
+      activeContainerNames: [],
     });
     expect(operations.byId['op-stream-4']).toEqual(
       expect.objectContaining({
@@ -662,5 +668,159 @@ describe('useOperationStore', () => {
     });
 
     expect(operations.byId['op-after-stop']).toBeUndefined();
+  });
+});
+
+describe('getActiveBatchProgress', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it('returns an empty list when nothing is tracked', () => {
+    const operations = useOperationStore();
+    expect(operations.getActiveBatchProgress()).toEqual([]);
+  });
+
+  it('ignores operations with no batch id', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-unbatched',
+      containerId: 'c-unbatched',
+      containerName: 'unbatched',
+      status: 'in-progress',
+    });
+
+    expect(operations.getActiveBatchProgress()).toEqual([]);
+  });
+
+  it('excludes single-container batches even while active', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-solo',
+      containerId: 'c-solo',
+      containerName: 'solo',
+      batchId: 'batch-solo',
+      status: 'in-progress',
+    });
+
+    expect(operations.getActiveBatchProgress()).toEqual([]);
+  });
+
+  it('includes a multi-container batch with active operations and their names', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-1',
+      containerId: 'c1',
+      containerName: 'app1',
+      batchId: 'batch-fleet',
+      queuePosition: 1,
+      queueTotal: 3,
+      status: 'in-progress',
+    });
+    operations.applyOperationChanged({
+      operationId: 'op-2',
+      containerId: 'c2',
+      containerName: 'app2',
+      batchId: 'batch-fleet',
+      queuePosition: 2,
+      queueTotal: 3,
+      status: 'queued',
+    });
+    operations.applyOperationChanged({
+      operationId: 'op-3',
+      containerId: 'c3',
+      containerName: 'app3',
+      batchId: 'batch-fleet',
+      queuePosition: 3,
+      queueTotal: 3,
+      status: 'in-progress',
+    });
+
+    expect(operations.getActiveBatchProgress()).toEqual([
+      {
+        batchId: 'batch-fleet',
+        total: 3,
+        succeeded: 0,
+        failed: 0,
+        active: 3,
+        activeContainerNames: ['app1', 'app3'],
+      },
+    ]);
+  });
+
+  it('drops a batch once every operation has reached a terminal status', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-1',
+      containerId: 'c1',
+      containerName: 'app1',
+      batchId: 'batch-done',
+      status: 'in-progress',
+    });
+    operations.applyOperationChanged({
+      operationId: 'op-2',
+      containerId: 'c2',
+      containerName: 'app2',
+      batchId: 'batch-done',
+      status: 'in-progress',
+    });
+
+    expect(operations.getActiveBatchProgress()).toHaveLength(1);
+
+    operations.applyUpdateApplied({
+      operationId: 'op-1',
+      containerId: 'c1',
+      containerName: 'app1',
+      batchId: 'batch-done',
+      timestamp: '2026-04-29T12:00:00.000Z',
+    });
+    operations.applyUpdateFailed({
+      operationId: 'op-2',
+      containerId: 'c2',
+      containerName: 'app2',
+      batchId: 'batch-done',
+      error: 'boom',
+      phase: 'failed',
+      timestamp: '2026-04-29T12:00:01.000Z',
+    });
+
+    expect(operations.getActiveBatchProgress()).toEqual([]);
+  });
+
+  it('returns multiple active batches sorted by batch id', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-b1',
+      containerId: 'cb1',
+      containerName: 'b1',
+      batchId: 'batch-b',
+      status: 'in-progress',
+    });
+    operations.applyOperationChanged({
+      operationId: 'op-b2',
+      containerId: 'cb2',
+      containerName: 'b2',
+      batchId: 'batch-b',
+      status: 'in-progress',
+    });
+    operations.applyOperationChanged({
+      operationId: 'op-a1',
+      containerId: 'ca1',
+      containerName: 'a1',
+      batchId: 'batch-a',
+      status: 'in-progress',
+    });
+    operations.applyOperationChanged({
+      operationId: 'op-a2',
+      containerId: 'ca2',
+      containerName: 'a2',
+      batchId: 'batch-a',
+      status: 'in-progress',
+    });
+
+    expect(operations.getActiveBatchProgress().map((batch) => batch.batchId)).toEqual([
+      'batch-a',
+      'batch-b',
+    ]);
   });
 });

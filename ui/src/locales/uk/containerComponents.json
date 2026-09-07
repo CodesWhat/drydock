@@ -273,6 +273,9 @@
     },
     "listContent": {
       "loadingContainers": "Завантаження контейнерів...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "Пошук за назвою або образом...",
       "allStatuses": "Всі статуси",
       "running": "Запущено",

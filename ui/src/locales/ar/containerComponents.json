@@ -273,6 +273,9 @@
     },
     "listContent": {
       "loadingContainers": "جارٍ تحميل الحاويات...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "البحث بالاسم أو الصورة...",
       "allStatuses": "جميع الحالات",
       "running": "تعمل",
