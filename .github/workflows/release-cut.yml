@@ -710,6 +710,13 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
+          # docker/metadata-action defaults org.opencontainers.image.revision to
+          # github.sha, which is the workflow run's own checkout commit
+          # (main's head at RC-cut time), not SOURCE_SHA (the dev-branch commit
+          # actually built). Override it explicitly so the shipped label names
+          # the true source commit on every maintenance cut where they differ.
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}
 
       - name: Docker staging metadata
         id: staging_meta
@@ -724,6 +731,10 @@ jobs:
             latest=false
           tags: |
             type=raw,value=release-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          # Same override as the "Docker metadata" step above: pin the
+          # revision label to SOURCE_SHA, not github.sha.
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}
 
       - name: Validate GA candidate digest in every registry
         if: steps.tag.outputs.is_prerelease == 'false'
