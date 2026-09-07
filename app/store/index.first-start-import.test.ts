@@ -42,6 +42,7 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const notificationOutbox = await import('./notification-outbox.js');
       const notification = await import('./notification.js');
       const approval = await import('./approval.js');
+      const container = await import('./container.js');
       const updateLifecycleCache = await import('./update-lifecycle-cache.js');
       const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
 
@@ -213,6 +214,44 @@ describe('store first-start import from a v1.7 dd.json', () => {
       expect(approval.findApprovalByOperationId('operation-one')?.id).toBe(
         'approval-fixture-decided',
       );
+
+      // containers (roadmap 7-STORE slice 8): both fixture rows — a minimal
+      // one and one with a full image/result/security/policy shape — import
+      // and read back through the public container functions, and the list
+      // renders the same shape the API returns.
+      const minimalContainer = container.getContainer('container-cache-web');
+      expect(minimalContainer).toMatchObject({
+        id: 'container-cache-web',
+        name: 'cache-web',
+        watcher: 'local',
+      });
+      expect(minimalContainer?.image.name).toBe('library/web');
+      expect(minimalContainer?.image.tag.value).toBe('one');
+      const fullContainer = container.getContainer('container-full-app');
+      expect(fullContainer).toMatchObject({
+        id: 'container-full-app',
+        name: 'full-app',
+        displayName: 'Full App',
+        status: 'running',
+        health: 'healthy',
+        watcher: 'local',
+        agent: 'edge-one',
+        sourceRepo: 'library/full-app-source',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 3 },
+      });
+      expect(fullContainer?.security?.scan?.summary).toEqual({
+        unknown: 0,
+        low: 1,
+        medium: 0,
+        high: 0,
+        critical: 0,
+      });
+      expect(
+        container
+          .getContainers()
+          .map((entry) => entry.id)
+          .sort(),
+      ).toEqual(['container-cache-web', 'container-full-app']);
 
       // update-lifecycle cache (roadmap 7-STORE slice 7): the fixture's legacy
       // `watcher::name` row maps forward to the still-present container's
