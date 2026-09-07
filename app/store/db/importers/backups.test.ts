@@ -91,6 +91,25 @@ describe('store/db/importers/backups', () => {
     expect(row?.container_identity_key).toBeNull();
   });
 
+  test('imports a backup with no recorded containerId as NULL', () => {
+    expect(
+      run([
+        {
+          id: 'backup-no-container-id',
+          containerName: 'web',
+          imageName: 'library/web',
+          imageTag: 'one',
+          timestamp: '2026-01-02T00:00:00.000Z',
+          triggerName: 'docker.default',
+        },
+      ]),
+    ).toBe(1);
+    const row = db
+      .prepare('SELECT container_id FROM backups WHERE id = ?')
+      .get('backup-no-container-id');
+    expect(row?.container_id).toBeNull();
+  });
+
   test('skips a document missing id, containerName, imageName, imageTag, triggerName or timestamp', () => {
     expect(
       run([

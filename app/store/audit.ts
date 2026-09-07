@@ -202,8 +202,11 @@ export function getAuditEntries(query: GetAuditEntriesQuery = {}): {
   }
 
   const { clause, params } = buildWhereClause(query, fromDate, toDate);
-  const totalRow = db.prepare(`SELECT COUNT(*) AS count FROM audit${clause}`).get(...params);
-  const total = Number(totalRow?.count ?? 0);
+  // COUNT(*) always returns exactly one row with a numeric count, even when
+  // nothing matches, so there is no undefined-row or nullish-count case to
+  // fall back from.
+  const totalRow = db.prepare(`SELECT COUNT(*) AS count FROM audit${clause}`).get(...params) as Row;
+  const total = Number(totalRow.count);
 
   const skip = query.skip || 0;
   const limit = query.limit || 50;

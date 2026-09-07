@@ -103,6 +103,33 @@ describe('store/db/importers/notification-outbox', () => {
     });
   });
 
+  test('carries a delivered entry with its deliveredAt across', () => {
+    expect(
+      run([
+        {
+          id: 'outbox-delivered',
+          eventName: 'container.updated',
+          payload: { message: 'plain text payload' },
+          triggerId: 'trigger-one',
+          containerId: 'watcher-web',
+          attempts: 1,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'delivered',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          deliveredAt: '2026-01-01T01:00:00.000Z',
+        },
+      ]),
+    ).toBe(1);
+    const row = db
+      .prepare('SELECT status, delivered_at FROM notification_outbox WHERE id = ?')
+      .get('outbox-delivered');
+    expect(row).toEqual({
+      status: 'delivered',
+      delivered_at: '2026-01-01T01:00:00.000Z',
+    });
+  });
+
   test('defaults a missing attempts/maxAttempts and an empty payload rather than skipping the row', () => {
     expect(
       run([

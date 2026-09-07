@@ -117,6 +117,24 @@ describe('store/db/importers/audit', () => {
     expect(row?.timestamp_ms).toBe(0);
   });
 
+  test('stores an empty timestamp when the document never recorded one', () => {
+    expect(
+      run([
+        {
+          data: {
+            id: 'audit-four',
+            action: 'update-failed',
+            containerName: 'app',
+            status: 'error',
+          },
+          timestampMs: 1700000000000,
+        },
+      ]),
+    ).toBe(1);
+    const row = db.prepare('SELECT timestamp FROM audit WHERE id = ?').get('audit-four');
+    expect(row?.timestamp).toBe('');
+  });
+
   test('skips a document missing id, action, containerName or status', () => {
     expect(
       run([{ data: { action: 'update-applied', containerName: 'web', status: 'success' } }]),

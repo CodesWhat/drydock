@@ -87,6 +87,18 @@ describe('insertAudit', () => {
     expect(stored?.timestamp_ms).toBe(new Date(timestamp).getTime());
   });
 
+  test('falls back to a zero timestampMs when the provided timestamp does not parse', () => {
+    const result = audit.insertAudit({
+      action: 'update-applied',
+      containerName: 'redis',
+      status: 'success',
+      timestamp: 'not-a-date',
+    } as never);
+
+    const stored = db.prepare('SELECT timestamp_ms FROM audit WHERE id = ?').get(result.id);
+    expect(stored?.timestamp_ms).toBe(0);
+  });
+
   test('prunes entries older than the retention window after enough inserts', () => {
     const oldDate = new Date(Date.now() - daysToMs(100)).toISOString();
 
