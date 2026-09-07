@@ -2,6 +2,14 @@ import { createMDX } from "fumadocs-mdx/next";
 
 import { escapeRegExp, versions } from "./scripts/docs-versions.mjs";
 
+// apps/web/package.json's "version" field stays 0.1.0 on purpose and is not
+// bumped alongside the root release. It's a private, never-published npm
+// workspace member (see "private": true in that file), and nothing reads the
+// field: not this config, not Vercel, not any script under scripts/. The
+// version the site actually shows to readers is src/lib/site-config.ts's
+// `version`, which release-precut-check.mjs does keep in step with the root
+// release on every cut.
+
 const withMDX = createMDX();
 
 // Derived from the single source of truth in scripts/docs-versions.mjs.
