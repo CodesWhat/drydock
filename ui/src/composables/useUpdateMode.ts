@@ -12,7 +12,7 @@ let savePromise: Promise<void> | null = null;
 let revalidationConsumers = 0;
 let canonicalRevision = 0;
 
-export interface LoadUpdateModeOptions {
+interface LoadUpdateModeOptions {
   force?: boolean;
 }
 
