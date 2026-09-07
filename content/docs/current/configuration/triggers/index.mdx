@@ -238,6 +238,52 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 
 <Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Action triggers do not use the outbox. Docker and Docker Compose retries are handled by the update lifecycle; Command triggers run the configured command directly.</Callout>
 
+## Diagnosing a missed notification
+
+If a container has an update but the expected notification never arrives, turn on debug logging and read the fields drydock attaches to each skip decision rather than guessing at the cause.
+
+### Turn on debug logging
+
+Set `DD_LOG_LEVEL=debug` (see [Logs](/docs/configuration/logs)). Every component logs through a child logger bound with a `component` field, so once debug logging is on you can narrow to the trigger you're investigating:
+
+- A trigger's own logger is `trigger.<type>.<name>` -- for example `DD_NOTIFICATION_SLACK_OPS_URL=...` logs as `trigger.slack.ops`.
+- Per-container log lines from a trigger add a `container` field carrying the container's full name. Not every skip reason below goes through that per-container child logger, though -- some embed the container name directly in the message text instead (noted in the table).
+- A watcher's own registry-check failures log as `watcher.docker.<name>`, also with a `container` field -- worth checking first if the update was never detected at all, not just never notified.
+
+With `DD_LOG_FORMAT=json`, filter with your log aggregator or `grep`, e.g. `grep '"component":"trigger.slack.ops"'`. With the default text format, use the **Configuration > Logs** page in the UI and its **Component filter** box (see [Logs](/docs/configuration/logs#toolbar-controls)).
+
+### Skip reasons
+
+| Cause | Log line to look for | Level | Where the container/trigger name is |
+| --- | --- | --- | --- |
+| Below the configured `THRESHOLD` | `Threshold not reached => ignore (threshold=..., updateKind=..., semverDiff=...)` | debug | `container` field |
+| `ONCE=true` and this exact result was already sent | `Skipping update-available notification for <container> (once=..., updateAvailable=..., alreadyNotified=...)` | debug | embedded in the message |
+| Excluded by a `dd.notification.include`/`dd.notification.exclude` label (or `dd.action.*` for action triggers), an agent mismatch, or the action-policy resolver | `Trigger conditions not met => ignore (category=..., triggerInclude=..., triggerExclude=..., included=..., excluded=...)` | debug | `container` field |
+| The `update-available` notification rule is disabled, or this trigger isn't in that rule's trigger allow-list | `Skipping update-available notification for <container> (rule-disabled)` or `(excluded-from-allow-list)` | debug | embedded in the message |
+| The provider call failed (network error, bad credentials) or a `${...}` template failed to render | `Error (<message>)`, or `Suppressed repeated error (<message>)` once the same error already logged recently | warn (debug when suppressed) | `container` field |
+| A lifecycle event (`update-applied`, `update-failed`, `security-alert`, ...) failed delivery and was queued for retry | `Error handling <ruleId> event (<message>)` | warn | `container` field; the delivery then shows up in the outbox (below) |
+| Outbox retry backoff | `Outbox <id> (event=<eventName> trigger=<triggerId>) attempt <n> failed: <message>; retry at <timestamp>` | debug | embedded in the message |
+| Outbox dead-letter after 5 attempts | `Outbox <id> (event=<eventName> trigger=<triggerId>) → dead-letter after <n> attempts: <message>` | warn | embedded in the message |
+| The registry check itself failed, so no update was ever detected | `Error when processing (<message>)` | warn | `container` field; `component` is `watcher.docker.<name>` |
+
+The message text above is a stable log-line prefix, not a documented schema -- match on the leading words, not the whole line.
+
+### Worked example
+
+A container named `nginx` has an update available, but the `slack.ops` notification trigger never fires. With `DD_LOG_LEVEL=debug` and `DD_LOG_FORMAT=json`:
+
+```json
+{"level":20,"time":1732000000000,"component":"trigger.slack.ops","container":"nginx","msg":"Trigger conditions not met => ignore (category=notification, triggerInclude=<none>, triggerExclude=nginx, included=true, excluded=true)"}
+```
+
+`component` names the trigger and `container` names the container; the message's `triggerExclude=nginx` shows a `dd.notification.exclude` label on the container whose regex also matches its own name. The fix is to narrow that label so it only excludes what was intended.
+
+### See also
+
+- [Notification Outbox](#notification-outbox) above for retry/backoff and dead-letter behavior.
+- [Notification Rules](#notification-rules) above for the allow-list and the `rule-disabled`/`excluded-from-allow-list` reasons.
+- [Logs](/docs/configuration/logs) for `DD_LOG_LEVEL`, `DD_LOG_FORMAT`, and the UI log viewer.
+
 ## Template Variable Reference
 
 Template strings use `${expression}` placeholders. Drydock provides two sets of variables depending on the trigger mode.

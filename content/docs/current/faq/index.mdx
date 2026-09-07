@@ -360,6 +360,10 @@ The official image defaults to `DD_LOG_FORMAT=text` for pretty, human-readable l
 Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/v1/log/entries` and the UI log viewer.
 See [Logs](/docs/configuration/logs) for examples.
 
+## A container has an update but I never got a notification
+
+Set `DD_LOG_LEVEL=debug` and look for one of the skip decisions a trigger logs before dropping an event -- threshold not reached, `dd.notification.include`/`dd.notification.exclude` label mismatch, `ONCE=true` dedup, a disabled notification rule, or a failed provider call queued in the outbox. Each skip line carries a `component` field naming the trigger (`trigger.<type>.<name>`) and, for most of them, a `container` field naming the container. See [Diagnosing a missed notification](/docs/configuration/triggers#diagnosing-a-missed-notification) for the full table of log lines to grep for and a worked example.
+
 ## Trivy or Cosign not found errors
 
 Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosign. If you see "not found" errors, you are likely running a custom or older image that does not include them.
