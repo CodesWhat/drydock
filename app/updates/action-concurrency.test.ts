@@ -1,3 +1,11 @@
+const { mockDdEnvVars } = vi.hoisted(() => ({
+  mockDdEnvVars: {} as Record<string, string | undefined>,
+}));
+
+vi.mock('../configuration/index.js', () => ({
+  ddEnvVars: mockDdEnvVars,
+}));
+
 import {
   getGlobalUpdateConcurrency,
   parseUpdateConcurrencyEnv,
@@ -37,69 +45,49 @@ describe('parseUpdateConcurrencyEnv', () => {
 });
 
 describe('getGlobalUpdateConcurrency', () => {
+  afterEach(() => {
+    delete mockDdEnvVars.DD_UPDATE_CONCURRENCY;
+  });
+
   test('defaults to 1 when DD_UPDATE_CONCURRENCY is unset', () => {
-    // Module under test was loaded with no env var set, so the module-level
-    // default applies.
+    delete mockDdEnvVars.DD_UPDATE_CONCURRENCY;
     expect(getGlobalUpdateConcurrency()).toBe(1);
   });
 
-  test('reflects DD_UPDATE_CONCURRENCY after a dynamic import with it set', async () => {
-    const prev = process.env.DD_UPDATE_CONCURRENCY;
-    process.env.DD_UPDATE_CONCURRENCY = '5';
-    vi.resetModules();
-    try {
-      const mod = await import('./action-concurrency.js?concurrency5');
-      expect(mod.getGlobalUpdateConcurrency()).toBe(5);
-    } finally {
-      if (prev === undefined) {
-        delete process.env.DD_UPDATE_CONCURRENCY;
-      } else {
-        process.env.DD_UPDATE_CONCURRENCY = prev;
-      }
-      vi.resetModules();
-    }
+  test('reflects DD_UPDATE_CONCURRENCY when set', () => {
+    mockDdEnvVars.DD_UPDATE_CONCURRENCY = '5';
+    expect(getGlobalUpdateConcurrency()).toBe(5);
   });
 
-  test('fails fast at import time for an invalid DD_UPDATE_CONCURRENCY', async () => {
-    const prev = process.env.DD_UPDATE_CONCURRENCY;
-    process.env.DD_UPDATE_CONCURRENCY = '0';
-    vi.resetModules();
-    try {
-      await expect(import('./action-concurrency.js?concurrency-invalid')).rejects.toThrow(
-        'DD_UPDATE_CONCURRENCY must be a positive integer (got "0")',
-      );
-    } finally {
-      if (prev === undefined) {
-        delete process.env.DD_UPDATE_CONCURRENCY;
-      } else {
-        process.env.DD_UPDATE_CONCURRENCY = prev;
-      }
-      vi.resetModules();
-    }
+  test('fails fast for an invalid DD_UPDATE_CONCURRENCY', () => {
+    mockDdEnvVars.DD_UPDATE_CONCURRENCY = '0';
+    expect(() => getGlobalUpdateConcurrency()).toThrow(
+      'DD_UPDATE_CONCURRENCY must be a positive integer (got "0")',
+    );
+  });
+
+  test('reads ddEnvVars lazily on each call, not a value cached at module load', () => {
+    delete mockDdEnvVars.DD_UPDATE_CONCURRENCY;
+    expect(getGlobalUpdateConcurrency()).toBe(1);
+    mockDdEnvVars.DD_UPDATE_CONCURRENCY = '3';
+    expect(getGlobalUpdateConcurrency()).toBe(3);
   });
 });
 
 describe('resolveActionConcurrency', () => {
+  afterEach(() => {
+    delete mockDdEnvVars.DD_UPDATE_CONCURRENCY;
+  });
+
   test('falls back to the global default when no per-action override is configured', () => {
+    delete mockDdEnvVars.DD_UPDATE_CONCURRENCY;
     expect(resolveActionConcurrency({})).toBe(getGlobalUpdateConcurrency());
     expect(resolveActionConcurrency({ concurrency: undefined })).toBe(getGlobalUpdateConcurrency());
   });
 
-  test('the per-action override wins over the global default', async () => {
-    const prev = process.env.DD_UPDATE_CONCURRENCY;
-    process.env.DD_UPDATE_CONCURRENCY = '1';
-    vi.resetModules();
-    try {
-      const mod = await import('./action-concurrency.js?override-wins');
-      expect(mod.getGlobalUpdateConcurrency()).toBe(1);
-      expect(mod.resolveActionConcurrency({ concurrency: 7 })).toBe(7);
-    } finally {
-      if (prev === undefined) {
-        delete process.env.DD_UPDATE_CONCURRENCY;
-      } else {
-        process.env.DD_UPDATE_CONCURRENCY = prev;
-      }
-      vi.resetModules();
-    }
+  test('the per-action override wins over the global default', () => {
+    mockDdEnvVars.DD_UPDATE_CONCURRENCY = '1';
+    expect(getGlobalUpdateConcurrency()).toBe(1);
+    expect(resolveActionConcurrency({ concurrency: 7 })).toBe(7);
   });
 });

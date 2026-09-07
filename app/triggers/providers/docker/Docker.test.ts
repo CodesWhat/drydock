@@ -4,6 +4,7 @@ import {
   getSelfUpdateFinalizeSecret,
   SELF_UPDATE_FINALIZE_SECRET_HEADER,
 } from '../../../api/internal-self-update.js';
+import { ddEnvVars } from '../../../configuration/index.js';
 import log from '../../../log/index.js';
 import Hub from '../../../registries/providers/hub/Hub.js';
 import * as registryStore from '../../../registry';
@@ -1773,25 +1774,35 @@ test('triggerBatch should call trigger for each container', async () => {
 });
 
 test('triggerBatch defaults to concurrency 1 (serialises) when nothing is configured', async () => {
-  const containers = Array.from({ length: 4 }, (_, index) => ({ name: `c${index}` }));
-  let inFlight = 0;
-  let maxInFlight = 0;
-  // The concurrency gate lives inside trigger(), around the call to
-  // runContainerUpdateLifecycle() — spy there so the semaphore acquire/
-  // release actually runs, unlike spying on trigger() itself.
-  const lifecycleSpy = vi
-    .spyOn(docker, 'runContainerUpdateLifecycle')
-    .mockImplementation(async () => {
-      inFlight += 1;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      inFlight -= 1;
-    });
+  const prevConcurrency = ddEnvVars.DD_UPDATE_CONCURRENCY;
+  delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+  try {
+    const containers = Array.from({ length: 4 }, (_, index) => ({ name: `c${index}` }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    // The concurrency gate lives inside trigger(), around the call to
+    // runContainerUpdateLifecycle() — spy there so the semaphore acquire/
+    // release actually runs, unlike spying on trigger() itself.
+    const lifecycleSpy = vi
+      .spyOn(docker, 'runContainerUpdateLifecycle')
+      .mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+      });
 
-  await docker.triggerBatch(containers);
+    await docker.triggerBatch(containers);
 
-  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
-  expect(maxInFlight).toBe(1);
+    expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
+    expect(maxInFlight).toBe(1);
+  } finally {
+    if (prevConcurrency === undefined) {
+      delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+    } else {
+      ddEnvVars.DD_UPDATE_CONCURRENCY = prevConcurrency;
+    }
+  }
 });
 
 test('triggerBatch runs up to the configured concurrency at once and never above it', async () => {
@@ -1816,35 +1827,30 @@ test('triggerBatch runs up to the configured concurrency at once and never above
 });
 
 test('triggerBatch: a per-action concurrency override wins over the global default', async () => {
-  const prev = process.env.DD_UPDATE_CONCURRENCY;
-  process.env.DD_UPDATE_CONCURRENCY = '1';
-  vi.resetModules();
+  const prevConcurrency = ddEnvVars.DD_UPDATE_CONCURRENCY;
+  ddEnvVars.DD_UPDATE_CONCURRENCY = '1';
   try {
-    const { default: DockerModule } = await import('./Docker.js?override-wins');
-    const dockerWithOverride = new DockerModule();
-    dockerWithOverride.configuration = { ...configurationValid, concurrency: 3 };
-    dockerWithOverride.log = log;
+    docker.configuration = { ...configurationValid, concurrency: 3 };
 
     const containers = Array.from({ length: 6 }, (_, index) => ({ name: `c${index}` }));
     let inFlight = 0;
     let maxInFlight = 0;
-    vi.spyOn(dockerWithOverride, 'runContainerUpdateLifecycle').mockImplementation(async () => {
+    vi.spyOn(docker, 'runContainerUpdateLifecycle').mockImplementation(async () => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 10));
       inFlight -= 1;
     });
 
-    await dockerWithOverride.triggerBatch(containers);
+    await docker.triggerBatch(containers);
 
     expect(maxInFlight).toBe(3);
   } finally {
-    if (prev === undefined) {
-      delete process.env.DD_UPDATE_CONCURRENCY;
+    if (prevConcurrency === undefined) {
+      delete ddEnvVars.DD_UPDATE_CONCURRENCY;
     } else {
-      process.env.DD_UPDATE_CONCURRENCY = prev;
+      ddEnvVars.DD_UPDATE_CONCURRENCY = prevConcurrency;
     }
-    vi.resetModules();
   }
 });
 

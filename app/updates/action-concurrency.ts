@@ -1,3 +1,4 @@
+import { ddEnvVars } from '../configuration/index.js';
 import { parseEnvNonNegativeInteger } from '../util/parse.js';
 
 /**
@@ -20,7 +21,7 @@ const DEFAULT_UPDATE_CONCURRENCY = 1;
  *
  * Returns `undefined` when the variable is absent or empty, so callers can
  * fall back to a default. Throws a descriptive Error for invalid values so
- * the process fails fast at startup rather than silently ignoring operator
+ * an invalid setting fails loudly rather than silently ignoring operator
  * intent.
  */
 export function parseUpdateConcurrencyEnv(
@@ -37,17 +38,21 @@ export function parseUpdateConcurrencyEnv(
   return parsed;
 }
 
-const globalUpdateConcurrency =
-  parseUpdateConcurrencyEnv(process.env.DD_UPDATE_CONCURRENCY, 'DD_UPDATE_CONCURRENCY') ??
-  DEFAULT_UPDATE_CONCURRENCY;
-
 /**
  * The fleet-wide default action concurrency, from DD_UPDATE_CONCURRENCY
- * (default 1). Read once at module load, matching the fail-fast-at-startup
- * convention DD_UPDATE_MAX_CONCURRENT already uses in update-locks.ts.
+ * (default 1). Read through ddEnvVars, not process.env directly, so this
+ * module picks up whatever the configuration loader resolved (including a
+ * future drydock.yml value) and so tests can isolate the default without
+ * depending on the test process's own environment. Read lazily on each
+ * call rather than cached at module load: callers that need a stable value
+ * for an instance's lifetime (the per-action semaphores in Docker.ts and
+ * Command.ts) already memoize it themselves at construction time.
  */
 export function getGlobalUpdateConcurrency(): number {
-  return globalUpdateConcurrency;
+  return (
+    parseUpdateConcurrencyEnv(ddEnvVars.DD_UPDATE_CONCURRENCY, 'DD_UPDATE_CONCURRENCY') ??
+    DEFAULT_UPDATE_CONCURRENCY
+  );
 }
 
 /**
@@ -67,5 +72,5 @@ export interface ActionConcurrencyConfiguration {
  * else the DD_UPDATE_CONCURRENCY global default.
  */
 export function resolveActionConcurrency(configuration: ActionConcurrencyConfiguration): number {
-  return configuration.concurrency ?? globalUpdateConcurrency;
+  return configuration.concurrency ?? getGlobalUpdateConcurrency();
 }
