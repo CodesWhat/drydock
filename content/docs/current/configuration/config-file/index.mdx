@@ -94,7 +94,28 @@ The same permission check `_FILE`-referenced secrets already get, plus one addit
 
 ## What the file does not cover
 
-A handful of tuning knobs and process-lifecycle values are read directly from `process.env.DD_*` rather than through the merged configuration map the file populates, so setting one of them in `drydock.yml` has no effect — only the real environment variable reaches them. This includes cache sizes and outbound timeouts (`configuration/runtime-defaults.ts`), `DD_ANONYMOUS_AUTH_CONFIRM`, `DD_GHCR_VERSIONS_MAX_PAGES`, the self-update handoff state, and a few other lifecycle and stats-interval values across 21 files. A test enumerates that exact file list, so a new direct reader shows up as a failing assertion rather than a silent gap. Migrating those onto the merged configuration map is a later release's follow-up, not part of v1.8.
+40 `DD_*` variables are read directly from `process.env` by code that never goes through the merged configuration map the file populates, so the file layer can never reach them — `UNSUPPORTED_FILE_KEYS` in `app/configuration/file/flatten.ts` names them. Setting one of these in `drydock.yml` is **not** a silent no-op: the loader rejects the file at load time, naming the YAML path and the variable, and startup fails before anything else runs:
+
+```
+Config file "/config/drydock.yml": agent.secret: DD_AGENT_SECRET is only read from the environment in this release, not from a config file; set it as an environment variable instead
+```
+
+The rejected keys, grouped by what they configure:
+
+- **Agent secret handling** — `DD_AGENT_SECRET`, `DD_AGENT_SECRET_FILE`, `DD_AGENT_ALLOW_INSECURE_SECRET`
+- **Privilege guards** — `DD_ALLOW_INSECURE_ROOT`, `DD_RUN_AS_ROOT`
+- **Anonymous-auth confirmation** — `DD_ANONYMOUS_AUTH_CONFIRM`, `DD_AUTH_ANONYMOUS_CONFIRM`
+- **Hooks** — `DD_HOOKS_ENABLED`, `DD_HOOKS_ALLOWED_COMMANDS`
+- **Stats sampling** — `DD_STATS_INTERVAL`, `DD_STATS_HISTORY_SIZE`
+- **Registry pagination** — `DD_GHCR_VERSIONS_MAX_PAGES`
+- **SSE debug logging** — `DD_SSE_DEBUG_LOG_IP`
+- **UI maturity threshold** — `DD_UI_MATURITY_THRESHOLD_DAYS`
+- **Update-operation bookkeeping and concurrency** — `DD_UPDATE_MAX_CONCURRENT`, `DD_UPDATE_OPERATION_MAX_ENTRIES`, `DD_UPDATE_OPERATION_RETENTION_DAYS`, `DD_UPDATE_RECOVERY_BOOT_CONCURRENCY`
+- **Cache sizes, TTLs, timeouts and rate limits** — `DD_CONTAINERS_QUERY_CACHE_MAX_ENTRIES`, `DD_DEFAULT_CACHE_MAX_ENTRIES`, `DD_EVENT_HANDLER_TIMEOUT_MS`, `DD_ICON_CACHE_ENFORCEMENT_INTERVAL_MS`, `DD_ICON_CACHE_MAX_BYTES`, `DD_ICON_CACHE_MAX_FILES`, `DD_ICON_CACHE_TTL_MS`, `DD_ICON_IN_FLIGHT_TIMEOUT_MS`, `DD_ICON_PROXY_RATE_LIMIT_MAX`, `DD_ICON_PROXY_RATE_LIMIT_WINDOW_MS`, `DD_OUTBOUND_HTTP_TIMEOUT_MS`, `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`, `DD_SECURITY_STATE_CACHE_MAX_ENTRIES`, `DD_SECURITY_STATE_CACHE_TTL_MS`, `DD_SSE_MAX_CLIENTS`, `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS`, `DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES`, `DD_UPDATE_LIFECYCLE_CACHE_TTL_MS`, `DD_UPDATE_OPERATION_ACTIVE_TTL_MS`, `DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES`, `DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS`, `DD_UPDATE_POST_START_LIVENESS_GRACE_MS`
+
+`DD_SELF_UPDATE_*` is deliberately not on this list, even though the code that reads it has the same direct-`process.env` shape: those variables are handoff state drydock writes itself for a helper container it spawns during a self-update, never something an operator sets, so a `self.update.*` key in `drydock.yml` doesn't get rejected — it's just inert, since nothing operator-facing reads it back.
+
+A test recomputes the rejected-key list from every direct `process.env.DD_*` reader in the codebase and fails if the two drift, so a new direct reader shows up as a failing assertion rather than a silent gap. Migrating these onto the merged configuration map is a later release's follow-up, not part of v1.8.
 
 ## Reload and what needs a restart
 
