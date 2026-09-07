@@ -103,6 +103,26 @@ As of v1.7.0, `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT` defaults to `
 
 ---
 
+### MQTT state topics and Home Assistant `unique_id` keyed by container identity
+
+| | |
+| --- | --- |
+| **Changed in** | v1.8.0 |
+| **Affects** | Hand-written MQTT subscriptions to drydock's container state topics, and the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) |
+
+Through v1.7.x, a container's MQTT state topic (`<topic>/<watcher>/<container>`) and its Home Assistant discovery `unique_id` were both derived from the container's current name. A `docker rename`, or a Compose recreate that regenerates the container name from the project, service and an ordinal, changed both: the state topic moved, and because `unique_id` was derived from that topic, Home Assistant treated the renamed container as a brand-new entity. The old entity's history stayed behind under the abandoned `unique_id`, and a fresh "Unknown" entity appeared next to it.
+
+As of v1.8.0:
+
+- The state topic is `<topic>/<watcher>/<identitySlug>`, where `identitySlug` is the Compose `project-service` pair (`getContainerIdentitySlug`, `app/triggers/providers/mqtt/naming.ts`) when the container carries both `com.docker.compose.project` and `com.docker.compose.service` labels, and the sanitized container name otherwise.
+- The Home Assistant `unique_id` is `dd_` followed by the first 12 hex characters of `sha256(identity_key)` (`getHassUniqueId`, `app/triggers/providers/mqtt/Hass.ts`), independent of the topic entirely. It no longer changes on a rename, and for a Compose-labeled container it does not change on a recreate either, since the identity key is derived from the Compose project/service pair rather than the container name or id.
+
+**Unlike the v1.7.0 agent-topic-segment flip above, the old discovery entities are cleaned up automatically.** The first time a v1.8.0 controller starts, drydock publishes an empty retained message on every pre-v1.8 name-based discovery topic still known for a stored container, so Home Assistant prunes the old entity instead of leaving it duplicated alongside the new one. This runs at most once, guarded by a marker in the `store_metadata` table (`app/store/mqtt-hass.ts`), not once per restart.
+
+**Migration:** Update any hand-written MQTT subscriptions (ones not going through Home Assistant discovery) to the new `<topic>/<watcher>/<identitySlug>` shape. Home Assistant automations, dashboards, or templates that reference the old entity ID for a Compose-managed container should be re-pointed once the new entity appears after the upgrade — the underlying `unique_id` is unaffected by any future rename or recreate, so this should be a one-time cost.
+
+---
+
 ### v1.6.0 configuration and authentication removals
 
 The following v1.4-era compatibility inputs are no longer executed in v1.6.0:
