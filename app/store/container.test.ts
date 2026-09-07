@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import * as container from './container.js';
+import type { Database } from './db/driver.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 
@@ -4933,7 +4935,7 @@ describe('updateLifecycleCache carry-forward', () => {
     container.deleteContainer('lifecycle-old-6', { replacementExpected: true });
     // No updateDetectedAt on the old container → no cache entry written
     const lifecycleCache = container._getUpdateLifecycleCacheForTests();
-    expect(lifecycleCache.has('local::myapp')).toBe(false);
+    expect(lifecycleCache.has('::local::myapp')).toBe(false);
     const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-6' });
     const inserted = container.insertContainer(newFixture);
     expect(typeof inserted.updateDetectedAt).toBe('string');
@@ -4996,7 +4998,7 @@ describe('updateLifecycleCache carry-forward', () => {
     }
     const lifecycleCache = container._getUpdateLifecycleCacheForTests();
     expect(lifecycleCache.size).toBeLessThanOrEqual(maxEntries);
-    expect(lifecycleCache.has('local::evict-app-0')).toBe(false);
+    expect(lifecycleCache.has('::local::evict-app-0')).toBe(false);
   });
 
   test('getResultSignature handles missing result tag and digest fields', () => {
@@ -5387,9 +5389,9 @@ describe('updateLifecycleCache carry-forward', () => {
       container.deleteContainer(`lifecycle-expfirst-${maxEntries}`, { replacementExpected: true });
 
       // New entry should be present
-      expect(lifecycleCache.has(`local::expfirst-app-${maxEntries}`)).toBe(true);
+      expect(lifecycleCache.has(`::local::expfirst-app-${maxEntries}`)).toBe(true);
       // All old (now-expired) entries should be gone
-      expect(lifecycleCache.has(`local::expfirst-app-0`)).toBe(false);
+      expect(lifecycleCache.has(`::local::expfirst-app-0`)).toBe(false);
       // Total size should be 1 (only the fresh entry remains)
       expect(lifecycleCache.size).toBeLessThanOrEqual(maxEntries);
     } finally {
@@ -5417,6 +5419,43 @@ describe('updateLifecycleCache carry-forward', () => {
     // firstSeenAt must not be overwritten by cached value
     expect(inserted.firstSeenAt).toBe(incomingFirstSeenAt);
   });
+
+  // roadmap 7-STORE slice 7 acceptance: the lifecycle cache key moved from
+  // `${watcher}::${name}` to the same identity key the retention cache already
+  // used. A compose recreate can mint a fresh Docker container name (Compose
+  // regenerates it from project+service+ordinal) while the compose labels stay
+  // put, so the identity key is stable across the rename even though the raw
+  // name is not. Under the old watcher+name key this case did not carry
+  // forward at all.
+  test('a compose container recreated under a new name inherits its predecessor maturity clock', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const composeLabels = {
+      'com.docker.compose.project': 'stack',
+      'com.docker.compose.service': 'web',
+    };
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-compose-old',
+      name: 'stack-web-1',
+      labels: composeLabels,
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    container.deleteContainer('lifecycle-compose-old', { replacementExpected: true });
+
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-compose-new',
+      name: 'stack-web-2',
+      labels: composeLabels,
+    });
+    const inserted = container.insertContainer(newFixture);
+
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
+    expect(inserted.maturityGatePendingSince).toBe(twelveHoursAgo);
+  });
 });
 
 // #556: updateLifecycleCache (see the "updateLifecycleCache carry-forward" describe block
@@ -5440,59 +5479,24 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     };
   }
 
-  function createLifecycleStoreCollection(
-    initialDocs: updateLifecycleCacheStore.UpdateLifecycleCacheRecord[] = [],
-  ) {
-    const docs = [...initialDocs];
-    return {
-      docs,
-      findOne: vi.fn(
-        (
-          query: Record<string, unknown>,
-        ): updateLifecycleCacheStore.UpdateLifecycleCacheRecord | null => {
-          const match = docs.find((doc) =>
-            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
-          );
-          return match ?? null;
-        },
-      ),
-      find: vi.fn(
-        (
-          query?: Record<string, unknown>,
-        ): updateLifecycleCacheStore.UpdateLifecycleCacheRecord[] => {
-          if (!query || Object.keys(query).length === 0) {
-            return [...docs];
-          }
-          return docs.filter((doc) =>
-            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
-          );
-        },
-      ),
-      insert: vi.fn((doc: updateLifecycleCacheStore.UpdateLifecycleCacheRecord) => {
-        docs.push(doc);
-      }),
-      update: vi.fn(),
-      remove: vi.fn((doc: updateLifecycleCacheStore.UpdateLifecycleCacheRecord) => {
-        const index = docs.indexOf(doc);
-        if (index !== -1) {
-          docs.splice(index, 1);
-        }
-      }),
-    };
-  }
+  let lifecycleDb: Database;
 
   function mountLifecycleStore(
     initialDocs: updateLifecycleCacheStore.UpdateLifecycleCacheRecord[] = [],
   ) {
-    const collection = createLifecycleStoreCollection(initialDocs);
-    updateLifecycleCacheStore.createCollections({
-      getCollection: () => collection,
-      addCollection: () => collection,
-    });
-    return collection;
+    updateLifecycleCacheStore.createCollections(lifecycleDb);
+    for (const doc of initialDocs) {
+      updateLifecycleCacheStore.upsertRecord(doc);
+    }
   }
 
   beforeEach(() => {
+    lifecycleDb = createMigratedMemoryDatabase();
+    updateLifecycleCacheStore.clearCollectionForTesting();
+  });
+
+  afterEach(() => {
+    lifecycleDb.close();
     updateLifecycleCacheStore.clearCollectionForTesting();
   });
 
@@ -5511,7 +5515,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
 
     const [record] = updateLifecycleCacheStore.listRecords();
     expect(record).toMatchObject({
-      cacheKey: 'local::myapp',
+      cacheKey: '::local::myapp',
       updateDetectedAt: twelveHoursAgo,
       firstSeenAt: twelveHoursAgo,
     });
@@ -5608,7 +5612,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
 
     const persisted = updateLifecycleCacheStore.listRecords();
     expect(persisted.length).toBeLessThanOrEqual(maxEntries);
-    expect(persisted.some((record) => record.cacheKey === 'local::persist-evict-app-0')).toBe(
+    expect(persisted.some((record) => record.cacheKey === '::local::persist-evict-app-0')).toBe(
       false,
     );
   });
@@ -5617,14 +5621,14 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     const nowMs = Date.now();
     mountLifecycleStore([
       {
-        cacheKey: 'local::live-app',
+        cacheKey: '::local::live-app',
         updateDetectedAt: '2026-01-01T00:00:00.000Z',
         firstSeenAt: '2025-12-01T00:00:00.000Z',
         resultSignature: '{"tag":"live"}',
         expiresAt: nowMs + 60_000,
       },
       {
-        cacheKey: 'local::expired-app',
+        cacheKey: '::local::expired-app',
         updateDetectedAt: '2025-01-01T00:00:00.000Z',
         resultSignature: '{"tag":"expired"}',
         expiresAt: nowMs - 1,
@@ -5634,24 +5638,24 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     container.rehydrateUpdateLifecycleCacheFromStore();
 
     const lifecycleCache = container._getUpdateLifecycleCacheForTests();
-    expect(lifecycleCache.has('local::live-app')).toBe(true);
-    expect(lifecycleCache.get('local::live-app')?.updateDetectedAt).toBe(
+    expect(lifecycleCache.has('::local::live-app')).toBe(true);
+    expect(lifecycleCache.get('::local::live-app')?.updateDetectedAt).toBe(
       '2026-01-01T00:00:00.000Z',
     );
-    expect(lifecycleCache.has('local::expired-app')).toBe(false);
+    expect(lifecycleCache.has('::local::expired-app')).toBe(false);
   });
 
   test('rehydrateUpdateLifecycleCacheFromStore prunes expired records from the durable store, not just the in-memory Map (#678)', () => {
     const nowMs = Date.now();
     mountLifecycleStore([
       {
-        cacheKey: 'local::live-app-2',
+        cacheKey: '::local::live-app-2',
         updateDetectedAt: '2026-01-01T00:00:00.000Z',
         resultSignature: '{"tag":"live"}',
         expiresAt: nowMs + 60_000,
       },
       {
-        cacheKey: 'local::expired-app-2',
+        cacheKey: '::local::expired-app-2',
         updateDetectedAt: '2025-01-01T00:00:00.000Z',
         resultSignature: '{"tag":"expired"}',
         expiresAt: nowMs - 1,
@@ -5664,7 +5668,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     // from the durable collection too, or it accumulates as a dead row forever
     // (the collection only ever grows via the write-through path otherwise).
     const persistedKeys = updateLifecycleCacheStore.listRecords().map((record) => record.cacheKey);
-    expect(persistedKeys).toEqual(['local::live-app-2']);
+    expect(persistedKeys).toEqual(['::local::live-app-2']);
   });
 
   test('end-to-end: a simulated process restart still carries updateDetectedAt/firstSeenAt forward', () => {
@@ -5691,7 +5695,7 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     // 3. New process boots: store/index.ts's createCollections() would call
     //    rehydrateUpdateLifecycleCacheFromStore() right after re-creating the collections.
     container.rehydrateUpdateLifecycleCacheFromStore();
-    expect(container._getUpdateLifecycleCacheForTests().has('local::myapp')).toBe(true);
+    expect(container._getUpdateLifecycleCacheForTests().has('::local::myapp')).toBe(true);
 
     // 4. The watcher discovers the replacement container under the same watcher+name —
     //    insertContainer's Map lookup now hits even though it's a brand-new process.
@@ -5725,56 +5729,24 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     return collection;
   }
 
-  function createPolicyRetentionStoreCollection(
-    initialDocs: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] = [],
-  ) {
-    const docs = [...initialDocs];
-    return {
-      findOne: vi.fn(
-        (
-          query: Record<string, unknown>,
-        ): updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord | null =>
-          docs.find((doc) =>
-            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
-          ) ?? null,
-      ),
-      find: vi.fn(
-        (
-          query?: Record<string, unknown>,
-        ): updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] => {
-          if (!query || Object.keys(query).length === 0) {
-            return [...docs];
-          }
-          return docs.filter((doc) =>
-            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
-          );
-        },
-      ),
-      insert: vi.fn((doc: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord) => {
-        docs.push(doc);
-      }),
-      update: vi.fn(),
-      remove: vi.fn((doc: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord) => {
-        const index = docs.indexOf(doc);
-        if (index !== -1) {
-          docs.splice(index, 1);
-        }
-      }),
-    };
-  }
+  let policyDb: Database;
 
   function mountPolicyRetentionStore(
     initialDocs: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] = [],
   ) {
-    const collection = createPolicyRetentionStoreCollection(initialDocs);
-    updatePolicyRetentionCacheStore.createCollections({
-      getCollection: () => collection,
-      addCollection: () => collection,
-    });
-    return collection;
+    updatePolicyRetentionCacheStore.createCollections(policyDb);
+    for (const doc of initialDocs) {
+      updatePolicyRetentionCacheStore.upsertRecord(doc);
+    }
   }
 
   beforeEach(() => {
+    policyDb = createMigratedMemoryDatabase();
+    updatePolicyRetentionCacheStore.clearCollectionForTesting();
+  });
+
+  afterEach(() => {
+    policyDb.close();
     updatePolicyRetentionCacheStore.clearCollectionForTesting();
   });
 

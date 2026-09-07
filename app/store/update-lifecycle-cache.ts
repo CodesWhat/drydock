@@ -4,8 +4,8 @@
  * Backs the in-memory `updateLifecycleCache` Map in app/store/container.ts — the
  * cache that lets a recreated container inherit its predecessor's
  * updateDetectedAt/firstSeenAt/maturityGatePendingSince instead of restarting its
- * maturity clock. Mirrors name-bindings.ts: one LokiJS collection, loaded/autosaved
- * by the shared store, one document per cache entry.
+ * maturity clock. Backed by the `update_lifecycle_cache` table (roadmap 7-STORE,
+ * slice 7), one row per cache entry.
  *
  * Without this, the cache lived only in a bare process-memory Map — wiped on every
  * restart, including the SIGTERM-driven restart that IS drydock's own self-update
@@ -14,11 +14,19 @@
  * container could consume it, silently re-stamping updateDetectedAt as "now" and
  * restarting any maturity soak (#556). Persisting the cache means a restarted
  * process still has the stash before the replacement container is discovered.
+ *
+ * The cache key was `${watcher}::${name}` before this slice; it is now the same
+ * durable identity key (`deriveContainerIdentityKey()`, `app/model/container.ts`)
+ * the update-policy retention cache already used, so a container recreated under
+ * a new name (a compose service redeployed with a new container name, for
+ * instance) inherits its predecessor's maturity clock the same way it already
+ * inherited the retained update policy. `app/store/container.ts` derives the key;
+ * this module only stores whatever key it is given.
  */
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
 export interface UpdateLifecycleCacheRecord {
-  cacheKey: string; // `${watcher}::${name}` — same key the in-memory Map uses
+  cacheKey: string; // deriveContainerIdentityKey() — same key the in-memory Map uses
   updateDetectedAt: string;
   firstSeenAt?: string;
   maturityGatePendingSince?: string;
@@ -26,66 +34,70 @@ export interface UpdateLifecycleCacheRecord {
   expiresAt: number; // epoch ms — same TTL semantics as the in-memory Map
 }
 
-interface UpdateLifecycleCacheCollection {
-  findOne(query: Record<string, unknown>): UpdateLifecycleCacheRecord | null;
-  find(query?: Record<string, unknown>): UpdateLifecycleCacheRecord[];
-  insert(document: UpdateLifecycleCacheRecord): void;
-  update(document: UpdateLifecycleCacheRecord): void;
-  remove(document: UpdateLifecycleCacheRecord): void;
+let db: Database | undefined;
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
-interface UpdateLifecycleCacheStoreDb {
-  getCollection(name: string): UpdateLifecycleCacheCollection | null;
-  addCollection(name: string, options?: Record<string, unknown>): UpdateLifecycleCacheCollection;
+function rowToRecord(row: Row): UpdateLifecycleCacheRecord {
+  return {
+    cacheKey: String(row.cache_key),
+    updateDetectedAt: String(row.update_detected_at),
+    firstSeenAt: optionalString(row.first_seen_at),
+    maturityGatePendingSince: optionalString(row.maturity_gate_pending_since),
+    resultSignature: String(row.result_signature),
+    expiresAt: Number(row.expires_at),
+  };
 }
-
-let updateLifecycleCacheCollection: UpdateLifecycleCacheCollection | undefined;
 
 /**
- * Create the update-lifecycle-cache collection.
- * @param db
+ * Wire the update-lifecycle-cache store to the shared SQLite database.
+ * @param database
  */
-export function createCollections(db: UpdateLifecycleCacheStoreDb): void {
-  updateLifecycleCacheCollection = initCollection(db, 'update-lifecycle-cache', {
-    indices: ['cacheKey'],
-  }) as UpdateLifecycleCacheCollection;
+export function createCollections(database: Database): void {
+  db = database;
 }
 
 /**
  * Insert or update the persisted record for record.cacheKey.
- * A no-op (rather than a throw) when the collection has not been initialized
+ * A no-op (rather than a throw) when the store has not been initialized
  * yet — callers (container.ts) run this on every replacement-expected
  * deleteContainer and must not fail the stash just because the durable store
  * isn't wired up (e.g. in unit tests that only exercise the in-memory cache).
  */
 export function upsertRecord(record: UpdateLifecycleCacheRecord): void {
-  if (!updateLifecycleCacheCollection) {
+  if (!db) {
     return;
   }
-  const existing = updateLifecycleCacheCollection.findOne({ cacheKey: record.cacheKey });
-  if (existing) {
-    existing.updateDetectedAt = record.updateDetectedAt;
-    existing.firstSeenAt = record.firstSeenAt;
-    existing.maturityGatePendingSince = record.maturityGatePendingSince;
-    existing.resultSignature = record.resultSignature;
-    existing.expiresAt = record.expiresAt;
-    updateLifecycleCacheCollection.update(existing);
-    return;
-  }
-  updateLifecycleCacheCollection.insert(record);
+  db.prepare(
+    `INSERT INTO update_lifecycle_cache
+       (cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(cache_key) DO UPDATE SET
+       update_detected_at = excluded.update_detected_at,
+       first_seen_at = excluded.first_seen_at,
+       maturity_gate_pending_since = excluded.maturity_gate_pending_since,
+       result_signature = excluded.result_signature,
+       expires_at = excluded.expires_at`,
+  ).run(
+    record.cacheKey,
+    record.updateDetectedAt,
+    record.firstSeenAt ?? null,
+    record.maturityGatePendingSince ?? null,
+    record.resultSignature,
+    record.expiresAt,
+  );
 }
 
 /**
  * Delete the persisted record for cacheKey, if any.
  */
 export function deleteRecord(cacheKey: string): void {
-  if (!updateLifecycleCacheCollection) {
+  if (!db) {
     return;
   }
-  const existing = updateLifecycleCacheCollection.findOne({ cacheKey });
-  if (existing) {
-    updateLifecycleCacheCollection.remove(existing);
-  }
+  db.prepare('DELETE FROM update_lifecycle_cache WHERE cache_key = ?').run(cacheKey);
 }
 
 /**
@@ -94,13 +106,18 @@ export function deleteRecord(cacheKey: string): void {
  * container.ts.
  */
 export function listRecords(): UpdateLifecycleCacheRecord[] {
-  if (!updateLifecycleCacheCollection) {
+  if (!db) {
     return [];
   }
-  return updateLifecycleCacheCollection.find();
+  return db
+    .prepare(
+      'SELECT cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at FROM update_lifecycle_cache',
+    )
+    .all()
+    .map(rowToRecord);
 }
 
 /** Exposed for tests to reset module state between cases. */
 export function clearCollectionForTesting(): void {
-  updateLifecycleCacheCollection = undefined;
+  db = undefined;
 }
