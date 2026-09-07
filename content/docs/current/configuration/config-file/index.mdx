@@ -205,7 +205,7 @@ The file and the SQLite `settings` table are disjoint by design: no `DD_*` varia
 
 ## Agents
 
-An agent (`--agent`) reads its own `drydock.yml` from its own `/config`, exactly the same shape and sections a standalone instance uses for `watcher.*`, `action.*`, `notification.*`, `registry.*`, `server.*` and `DD_AGENT_SECRET`. The controller does not push configuration to an agent in v1.8 — see [Agents](/docs/configuration/agents) for the controller/agent split.
+An agent (`--agent`) reads its own `drydock.yml` from its own `/config`, exactly the same shape and sections a standalone instance uses for `watcher.*`, `action.*`, `notification.*`, `registry.*` and `server.*`. The agent secret is the exception: `DD_AGENT_SECRET` (or `DD_AGENT_SECRET_FILE`) is one of the rejected keys above, so every agent still takes it from the environment. The controller does not push configuration to an agent in v1.8 — see [Agents](/docs/configuration/agents) for the controller/agent split.
 
 ## Complete example
 
