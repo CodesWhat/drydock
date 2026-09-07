@@ -132,6 +132,8 @@ This example talks to the agent over plain HTTP, so it sets `DD_AGENT_ALLOW_INSE
 
 To run drydock in Agent mode, start the application with the `--agent` command line flag.
 
+<Callout type="info">An agent reads its own [config file](/docs/configuration/config-file) from its own `/config/drydock.yml`, using the same shape and the same sections (`watcher.*`, `action.*`, `notification.*`, `registry.*`, `server.*`, `DD_AGENT_SECRET`) it already accepts as environment variables. The controller does not push configuration to an agent in v1.8 — each side's file (or environment) is its own.</Callout>
+
 ### Agent Environment Variables
 
 | Env var | Required | Description | Default |

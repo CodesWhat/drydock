@@ -6,6 +6,7 @@
     "agents",
     "dashboard",
     "authentications",
+    "config-file",
     "dns",
     "hooks",
     "logs",
