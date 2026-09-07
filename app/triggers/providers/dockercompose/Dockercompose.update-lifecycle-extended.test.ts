@@ -1034,12 +1034,155 @@ describe('Dockercompose Trigger', () => {
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
   });
 
+  test("compose-file-once should judge a bind failure against each replica's own dd.security.gate label, recording exactly one audit row per replica that needs one (DR-42)", async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // Security enabled globally with availability policy `warn`: a container
+    // with no label override resolves `optional` and records the skip. The
+    // first replica overrides the gate off entirely, so it resolves
+    // `disabled` and must record nothing, no matter which replica the
+    // service-level identity capture happened to resolve from.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const gateOffContainer = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx', 'dd.security.gate': 'off' },
+    });
+    const gatedContainer = makeContainer({
+      id: 'nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    // The daemon cannot bind the pull to a manifest digest.
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:nginx-local-id',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    const recordUnboundWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
+    const scanAndGatePostPullSpy = vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger as any, 'recreateReplacementContainerWithCleanup').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    // Whichever replica the batch resolves identity from first, the bind
+    // failure comes back as a raw reason: it must not silently swallow the
+    // failure for the gated replica, and must not force the gate-off replica
+    // through a scan it explicitly opted out of.
+    await trigger.processComposeFile(composeFile, [gateOffContainer, gatedContainer]);
+
+    expect(recordUnboundWarningSpy).toHaveBeenCalledTimes(1);
+    expect(recordUnboundWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'nginx-b' }),
+      expect.any(String),
+    );
+    // nginx-a's own `disabled` policy proceeds to the ordinary gate call
+    // (which the security gate itself then no-ops on its own reading of
+    // `dd.security.gate=off`); nginx-b's own `optional` policy skips the
+    // gate call entirely rather than running it against the mutable tag.
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(1);
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ name: 'nginx-a' }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  test('compose-file-once should abort only over a replica whose own policy actually requires binding, not the arbitrary replica identity was resolved from (DR-42)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // Availability policy `block` (the default) resolves to `required` for
+    // any container with no gate override; the first replica's `gate=off`
+    // label resolves to `disabled` instead, and must not decide the second
+    // replica's outcome.
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    const firstContainer = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx', 'dd.security.gate': 'off' },
+    });
+    const secondContainer = makeContainer({
+      id: 'nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:nginx-local-id',
+        RepoDigests: [],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+
+    // Resolving the service's shared identity from the gate-off replica must
+    // not swallow the failure: `required` policy still belongs to the other
+    // replica and the batch must still refuse the update over it.
+    await expect(
+      trigger.processComposeFile(composeFile, [firstContainer, secondContainer]),
+    ).rejects.toThrow(/Unable to bind security gate to the pulled image/);
+
+    // The failed resolution is still a single pull for the service, not one
+    // required-policy replica re-triggering a second attempt.
+    expect(pullImageSpy).toHaveBeenCalledTimes(1);
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
   test('compose-file-once should record one skipped-scan audit per replica, not one extra for the refreshed service', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
     trigger.configuration.composeFileOnce = true;
-    // The pulled image cannot be bound to a manifest digest and availability
-    // policy `warn` allows the update to proceed without a scan.
+    // The pulled image cannot be bound to a manifest digest. Neither replica
+    // carries a `dd.security.gate` override, so both resolve the same
+    // `optional` policy from this global config, and availability policy
+    // `warn` allows each of them to proceed without a scan (DR-42).
+    trigger.getSecurityGate().securityConfig.getSecurityConfiguration = vi.fn().mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
     vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
       unboundWarn: true,
       reason: 'manifest digest unavailable',

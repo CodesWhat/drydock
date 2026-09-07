@@ -1997,8 +1997,16 @@ class Docker<
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     options?: PulledImageIdentityOptions,
+    // Compose-file-once resolves one digest per service from a single,
+    // arbitrarily-picked replica (DR-42), so that resolution must not apply
+    // *that* replica's binding policy: `required` would abort the whole batch
+    // over one container's label, and `disabled` would silently drop a bind
+    // failure every other replica still needs to see. Overriding to `optional`
+    // there gets the raw `{ imageIdentity | reason }` back without either
+    // failure mode; each container then applies its own policy to that result.
+    bindingPolicyOverride?: 'required' | 'optional' | 'disabled',
   ): Promise<PulledImageIdentityOutcome> {
-    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+    const bindingPolicy = bindingPolicyOverride ?? this.getPostPullIdentityBindingPolicy(container);
     if (typeof dockerApi.getImage !== 'function') {
       return this.handleMissingPulledImageIdentity(
         container,
