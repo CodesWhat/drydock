@@ -80,7 +80,84 @@ describe('configPaths', () => {
     });
   });
 
-  test('configPaths exports exactly two path entries', () => {
-    expect(Object.keys(configPaths)).toStrictEqual(['/api/v1/config', '/api/v1/config/{section}']);
+  test('/api/v1/config/validate POST path is fully specified', () => {
+    expect(configPaths['/api/v1/config/validate']).toStrictEqual({
+      post: {
+        tags: ['System'],
+        summary: 'Validate a candidate configuration without applying it',
+        description:
+          'Runs the candidate document through the same flatten/interpolate/validate path real startup and "config validate" use (roadmap 7.1 slice 5), merged beneath the real environment (env still wins). Touches no disk, applies nothing, and constructs no component beyond schema validation.',
+        operationId: 'validateCandidateConfiguration',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description:
+                  'Either { "yaml": "<document text>" } or the configuration tree itself, the same shape yaml.parse() would produce.',
+                properties: {
+                  yaml: { type: 'string', description: 'Raw drydock.yml document text' },
+                },
+                additionalProperties: true,
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Validation result', {
+            type: 'object',
+            properties: {
+              valid: { type: 'boolean' },
+              errors: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string', description: 'Dot-separated YAML path' },
+                    envKey: {
+                      type: 'string',
+                      description: 'The DD_*-prefixed env key the same value would carry',
+                    },
+                    message: { type: 'string' },
+                  },
+                  required: ['path', 'envKey', 'message'],
+                  additionalProperties: false,
+                },
+              },
+              diff: {
+                type: 'object',
+                description:
+                  'Keys that would change if this candidate replaced the current file layer, and which sections that implies would reload versus need a restart (spec-7.1-config-file.md section 4.3).',
+                properties: {
+                  changed: { type: 'array', items: { type: 'string' } },
+                  reload: { type: 'array', items: { type: 'string' } },
+                  restart: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['changed', 'reload', 'restart'],
+                additionalProperties: false,
+              },
+            },
+            required: ['valid', 'errors', 'diff'],
+            additionalProperties: false,
+          }),
+          401: errorResponse('Authentication required'),
+          403: errorResponse('API key is missing the required scope'),
+          413: errorResponse(
+            'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
+          ),
+          429: errorResponse('Config validate rate limit exceeded'),
+          500: errorResponse('Unable to validate the candidate configuration'),
+        },
+      },
+    });
+  });
+
+  test('configPaths exports exactly three path entries', () => {
+    expect(Object.keys(configPaths)).toStrictEqual([
+      '/api/v1/config',
+      '/api/v1/config/{section}',
+      '/api/v1/config/validate',
+    ]);
   });
 });

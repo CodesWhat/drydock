@@ -12,7 +12,7 @@ const {
   mockDdEnvVars,
   mockConfigFileSources,
 } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn() },
+  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockGetServerConfiguration: vi.fn(() => ({}) as Record<string, unknown>),
   mockGetConfigFileInfo: vi.fn(() => undefined as { path: string; modifiedAt: string } | undefined),
   mockDdEnvVars: {} as Record<string, string | undefined>,
@@ -66,6 +66,9 @@ function createResponse() {
 }
 
 function getHandler(path: string) {
+  if (path === '/validate') {
+    return mockRouter.post.mock.calls.find((call) => call[0] === path)?.at(-1);
+  }
   return mockRouter.get.mock.calls.find((call) => call[0] === path)?.at(-1);
 }
 
@@ -123,6 +126,37 @@ describe('Config Router', () => {
       { rateLimiter: expect.objectContaining({ windowMs: 60_000, max: 5 }) },
       expect.any(Function),
     );
+    expect(router.post).toHaveBeenCalledWith(
+      '/validate',
+      { rateLimiter: expect.objectContaining({ windowMs: 60_000, max: 5 }) },
+      expect.any(Function),
+    );
+  });
+
+  test('POST /validate rejects an API key without admin scope', async () => {
+    configRouter.init();
+    const handler = getHandler('/validate');
+    const res = createResponse();
+
+    await handler({ principal: { kind: 'api-key', scopes: ['read'] }, body: {} }, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  test('POST /validate is reachable by an API key holding admin', async () => {
+    configRouter.init();
+    const handler = getHandler('/validate');
+    const res = createResponse();
+
+    await handler({ principal: { kind: 'api-key', scopes: ['admin'] }, body: {} }, res);
+
+    // Scope enforcement is what this test is about — an admin key reaches
+    // the handler at all (200, not 403), whatever the seeded, deliberately
+    // validation-hostile fixture data above (SEEDED_SECRET is not a real
+    // argon2 hash) makes the actual `valid` verdict. config-validate.test.ts
+    // exercises the validation outcomes themselves against a clean env.
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect((res.json as any).mock.calls[0][0].valid).toEqual(expect.any(Boolean));
   });
 
   test('keys the rate limit by identity when identity keying is enabled', () => {

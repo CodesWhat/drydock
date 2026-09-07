@@ -7,6 +7,7 @@ import { getConfigFileInfo } from '../configuration/file/layer.js';
 import { configFileSources, ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import { redactConfigurationTree } from '../debug/redact.js';
 import { recordAuditEvent } from './audit-events.js';
+import { validateCandidateConfiguration } from './config-validate.js';
 import { sendErrorResponse } from './error-response.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -187,9 +188,31 @@ export function init() {
     message: 'Config read rate limit exceeded. Max 5 per 60 seconds.',
     ...identityAwareRateLimitOptions,
   });
+  // Same shape as the read limiter (5 per 60 s, identity-aware keying when
+  // enabled) — a validate call is cheap for us but still worth bounding,
+  // since a candidate document is attacker-controlled input run through
+  // every component schema.
+  const configValidateRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: 'Config validate rate limit exceeded. Max 5 per 60 seconds.',
+    ...identityAwareRateLimitOptions,
+  });
 
   router.use(nocache());
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
   router.get('/:section', configReadRateLimit, scoped(SESSION_ONLY, getConfigurationSection));
+  // `admin`, not SESSION_ONLY: this route never returns a configuration
+  // value, only paths/env-key names/error text, so an API key holding
+  // `admin` is the right reach — see config-validate.ts's module doc
+  // comment.
+  router.post(
+    '/validate',
+    configValidateRateLimit,
+    scoped('admin', validateCandidateConfiguration),
+  );
   return router;
 }
