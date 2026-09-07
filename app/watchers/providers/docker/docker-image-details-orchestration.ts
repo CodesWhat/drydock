@@ -343,17 +343,20 @@ async function refreshStoredContainerImageFields(
     // when the old digest.repo isn't among the freshly derived entries (#669).
     containerInStore.image.digest.repoDigests = freshOrderedRepoDigests;
 
-    if (shouldRepairStoredImageReference(containerInStore)) {
-      const resolvedImageState = resolveContainerImageState({
-        watcher,
-        container,
-        dockerContainerName,
-        labelOverrides,
-        image: currentImage,
-        containerInspect,
-        helpers,
-      });
+    // Re-resolved every cycle (not just inside the repair branch below) so
+    // digest.watch can be re-derived unconditionally — see the re-derivation
+    // block after the repair branch for why (#1070).
+    const resolvedImageState = resolveContainerImageState({
+      watcher,
+      container,
+      dockerContainerName,
+      labelOverrides,
+      image: currentImage,
+      containerInspect,
+      helpers,
+    });
 
+    if (shouldRepairStoredImageReference(containerInStore)) {
       if (resolvedImageState) {
         const refreshedContainer = helpers.normalizeContainer({
           ...containerInStore,
@@ -402,6 +405,20 @@ async function refreshStoredContainerImageFields(
         containerInStore.sourceRepo = refreshedContainer.sourceRepo;
         return;
       }
+    }
+
+    // Re-derive digest.watch every cycle — independent of
+    // shouldRepairStoredImageReference above, same as isLocalImage and
+    // digest.repoDigests further up. A row discovered before the
+    // isDigestToWatch default changed from `!isDockerHubDomain(domain)` to
+    // "watch when the tag is meaningful" (dd6c4ae37, v1.5.0-rc.17) had
+    // `watch: false` written once at discovery and never revisited, so it
+    // stayed stuck on the old default forever. resolveContainerImageState
+    // already re-reads the live dd.watch.digest label/imgset value ahead of
+    // the auto-derived default, so an explicit override still wins; only the
+    // stale auto-derived default gets replaced (#1070).
+    if (resolvedImageState) {
+      containerInStore.image.digest.watch = resolvedImageState.watchDigest;
     }
 
     // Keep local digest value populated for digest-watch containers, even when
