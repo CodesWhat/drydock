@@ -5,6 +5,7 @@ import yaml from 'yaml';
 import { logWarn } from '../../log/warn.js';
 import { resolveConfiguredPath } from '../../runtime/paths.js';
 import { flattenConfigTree } from './flatten.js';
+import { interpolateConfigTree } from './interpolate.js';
 import { setConfigFileLayer } from './layer.js';
 
 /**
@@ -35,6 +36,14 @@ export interface LoadConfigFileOptions {
    * `MigrateCliIo` injection pattern already used in `../migrate-cli.ts`.
    */
   defaultPaths?: readonly [string, string];
+  /**
+   * Out-param: when provided, populated with the `DD_*` keys whose value
+   * came from `${NAME}` interpolation (spec-7.1-config-file.md decision D1)
+   * rather than literal file text. Callers that don't care about per-key
+   * source attribution can omit it — the return type of `loadConfigFile`
+   * itself stays the flat `DD_*` map either way.
+   */
+  interpolatedKeys?: Set<string>;
 }
 
 interface ResolvedConfigFile {
@@ -164,8 +173,21 @@ export async function loadConfigFile(
     );
   }
 
+  let interpolatedTree: unknown;
   try {
-    return flattenConfigTree(parsed);
+    const interpolated = interpolateConfigTree(parsed, env);
+    interpolatedTree = interpolated.tree;
+    if (options.interpolatedKeys) {
+      for (const key of interpolated.interpolatedKeys) {
+        options.interpolatedKeys.add(key);
+      }
+    }
+  } catch (error) {
+    throw configFileError(`Config file "${resolvedPath}": ${(error as Error).message}`);
+  }
+
+  try {
+    return flattenConfigTree(interpolatedTree);
   } catch (error) {
     throw configFileError(`Config file "${resolvedPath}": ${(error as Error).message}`);
   }
@@ -173,14 +195,16 @@ export async function loadConfigFile(
 
 /**
  * `loadConfigFile` plus the `setConfigFileLayer` call that publishes its
- * result to `./layer.ts`. This is the only function `app/index.ts`'s
- * bootstrap calls — everything else in this module exists to support it (or
- * `loader.test.ts`, which exercises the pieces directly against real temp
- * files).
+ * result (and which of its keys came from `${NAME}` interpolation) to
+ * `./layer.ts`. This is the only function `app/index.ts`'s bootstrap calls —
+ * everything else in this module exists to support it (or `loader.test.ts`,
+ * which exercises the pieces directly against real temp files).
  */
 export async function loadConfigFileIntoLayer(
   env: Record<string, string | undefined> = process.env,
   options: LoadConfigFileOptions = {},
 ): Promise<void> {
-  setConfigFileLayer(await loadConfigFile(env, options));
+  const interpolatedKeys = new Set<string>();
+  const layer = await loadConfigFile(env, { ...options, interpolatedKeys });
+  setConfigFileLayer(layer, interpolatedKeys);
 }

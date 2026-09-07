@@ -10,6 +10,7 @@ import * as configuration from '../configuration/index.js';
 import * as prometheusWatcher from '../prometheus/watcher.js';
 import * as store from '../store/index.js';
 import Component from './Component.js';
+import { constructComponent } from './component-resolution.js';
 
 vi.mock('../configuration/index.js', () => ({
   getLogLevel: vi.fn(() => 'info'),
@@ -166,6 +167,52 @@ test('registerComponent should execute module fallback branch when module has no
   } finally {
     fs.rmSync(tempProviderPath, { recursive: true, force: true });
   }
+});
+
+test('registerComponent should construct the agent-proxy module fallback branch when it has no default export', async () => {
+  // The agent branch resolves Agent${capitalize(kind)} directly under
+  // componentPath, with no per-provider subdirectory, unlike the ordinary
+  // provider lookup constructComponent owns.
+  const tempAgentPath = path.join(process.cwd(), 'tmp-test-agent-nodefault');
+  const agentModule = path.join(tempAgentPath, 'AgentWatcher.ts');
+
+  fs.mkdirSync(tempAgentPath, { recursive: true });
+  fs.writeFileSync(agentModule, 'export const value = 1;');
+
+  try {
+    await expect(
+      registry.testable_registerComponent({
+        kind: 'watcher',
+        provider: 'docker',
+        name: 'agent-local',
+        configuration: {},
+        componentPath: 'tmp-test-agent-nodefault',
+        agent: 'node-1',
+      }),
+    ).rejects.toThrow(/Error when registering component|Unknown watcher provider/);
+  } finally {
+    fs.rmSync(tempAgentPath, { recursive: true, force: true });
+  }
+});
+
+test('constructComponent should resolve and construct a real provider without calling register or init', async () => {
+  // resolveRuntimeRoot is unmocked in this file, so this exercises the real
+  // watchers/providers/docker/Docker.ts module — the one path
+  // component-resolution.test.ts's mocked fs/paths setup cannot reach.
+  // Roadmap 7.1 slice 2's validator relies on exactly this: constructing a
+  // real component class to call its validateConfiguration() without ever
+  // starting it.
+  const initSpy = vi.spyOn(Component.prototype, 'init');
+  const registerSpy = vi.spyOn(Component.prototype, 'register');
+
+  const component = await constructComponent('watcher', 'docker', 'watchers/providers');
+
+  expect(component).toBeInstanceOf(Component);
+  expect(initSpy).not.toHaveBeenCalled();
+  expect(registerSpy).not.toHaveBeenCalled();
+
+  initSpy.mockRestore();
+  registerSpy.mockRestore();
 });
 
 test('applySharedTriggerConfigurationByName should return undefined when configurations are missing', () => {

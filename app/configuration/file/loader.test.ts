@@ -458,6 +458,98 @@ describe('loadConfigFile', () => {
       }
     });
   });
+
+  describe('${NAME} interpolation (spec-7.1-config-file.md decision D1)', () => {
+    test('substitutes ${NAME} in the flattened result', async () => {
+      const tempDir = makeTempDir('drydock-config-interp-');
+      try {
+        const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  name: ${SERVER_NAME}\n');
+        const result = await loadConfigFile({
+          DD_CONFIG_FILE: filePath,
+          SERVER_NAME: 'from-env',
+        });
+        expect(result).toStrictEqual({ DD_SERVER_NAME: 'from-env' });
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('populates the interpolatedKeys out-param when provided', async () => {
+      const tempDir = makeTempDir('drydock-config-interp-keys-');
+      try {
+        const filePath = writeFile(
+          tempDir,
+          'drydock.yml',
+          'server:\n  name: ${SERVER_NAME}\n  port: 3000\n',
+        );
+        const interpolatedKeys = new Set<string>();
+        const result = await loadConfigFile(
+          { DD_CONFIG_FILE: filePath, SERVER_NAME: 'from-env' },
+          { interpolatedKeys },
+        );
+        expect(result).toStrictEqual({ DD_SERVER_NAME: 'from-env', DD_SERVER_PORT: '3000' });
+        expect(interpolatedKeys).toStrictEqual(new Set(['DD_SERVER_NAME']));
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('leaves interpolatedKeys empty when the file has no ${NAME} references', async () => {
+      const tempDir = makeTempDir('drydock-config-interp-empty-');
+      try {
+        const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  port: 3000\n');
+        const interpolatedKeys = new Set<string>();
+        await loadConfigFile({ DD_CONFIG_FILE: filePath }, { interpolatedKeys });
+        expect(interpolatedKeys.size).toBe(0);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('an unset variable with no default is fatal, wrapped with the file path', async () => {
+      const tempDir = makeTempDir('drydock-config-interp-unset-');
+      try {
+        const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  name: ${MISSING_VAR}\n');
+        await expect(loadConfigFile({ DD_CONFIG_FILE: filePath })).rejects.toThrow(
+          new RegExp(
+            `Config file "${filePath.replace(/[/\\]/g, '\\$&')}": server.name.*MISSING_VAR`,
+            's',
+          ),
+        );
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('a _file node’s path can itself be interpolated, without touching the referenced file’s contents', async () => {
+      const tempDir = makeTempDir('drydock-config-interp-secretfile-');
+      try {
+        const secretPath = writeFile(tempDir, 'ghcr-secret', 'super-secret-value\n');
+        const filePath = writeFile(
+          tempDir,
+          'drydock.yml',
+          [
+            'registry:',
+            '  ghcr:',
+            '    private:',
+            '      token:',
+            '        _file: ${GHCR_SECRET_PATH}',
+            '',
+          ].join('\n'),
+        );
+        const result = await loadConfigFile({
+          DD_CONFIG_FILE: filePath,
+          GHCR_SECRET_PATH: secretPath,
+        });
+        // loadConfigFile only flattens the tree; it never reads the target
+        // of a `_file` node (that's replaceSecrets's job, later in
+        // ../index.ts's pipeline), so the result names the path verbatim.
+        expect(result).toStrictEqual({ DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE: secretPath });
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 describe('loadConfigFileIntoLayer', () => {

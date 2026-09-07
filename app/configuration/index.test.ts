@@ -3626,6 +3626,162 @@ const DIRECT_ENV_READER_FILES = [
   'updates/update-locks.ts',
 ].sort();
 
+// ── Slice 1b: ${NAME} interpolation (spec-7.1-config-file.md, decision D1) ──
+
+describe('${NAME} interpolation in drydock.yml', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  /**
+   * Writes a real `drydock.yml` and runs it through the real `loader.ts` into
+   * `file/layer.ts` — the way `app/index.ts`'s bootstrap does via
+   * `loadConfigFileIntoLayer` — before importing a fresh `./index.js` to
+   * consume that layer. `configuration/index.ts` no longer loads the file
+   * itself (see `drydock.yml loading` describe above), so a real end-to-end
+   * interpolation check has to drive the loader explicitly instead of
+   * relying on importing `./index.js` to trigger it.
+   */
+  async function withConfigFile<T>(
+    yamlContents: string,
+    run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
+  ): Promise<T> {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-interp-integration-'));
+    const configPath = path.join(tempDir, 'drydock.yml');
+    fs.writeFileSync(configPath, yamlContents, 'utf-8');
+    fs.chmodSync(configPath, 0o600);
+    const originalConfigFile = process.env.DD_CONFIG_FILE;
+    process.env.DD_CONFIG_FILE = configPath;
+    try {
+      vi.resetModules();
+      const { loadConfigFileIntoLayer } = await import('./file/loader.js');
+      await loadConfigFileIntoLayer();
+      const freshConfiguration = await import('./index.js');
+      return await run(freshConfiguration);
+    } finally {
+      if (originalConfigFile === undefined) {
+        delete process.env.DD_CONFIG_FILE;
+      } else {
+        process.env.DD_CONFIG_FILE = originalConfigFile;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  test('a ${NAME} reference resolves against the real environment and is sourced as "env"', async () => {
+    const originalValue = process.env.DD_TEST_CONFIG_INTERP;
+    process.env.DD_TEST_CONFIG_INTERP = 'resolved-from-env';
+    try {
+      await withConfigFile(
+        'server:\n  name: ${DD_TEST_CONFIG_INTERP}\n',
+        async (freshConfiguration) => {
+          expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('resolved-from-env');
+          expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('env');
+        },
+      );
+    } finally {
+      if (originalValue === undefined) {
+        delete process.env.DD_TEST_CONFIG_INTERP;
+      } else {
+        process.env.DD_TEST_CONFIG_INTERP = originalValue;
+      }
+    }
+  });
+
+  // An unset ${NAME} with no default failing startup, naming the YAML path
+  // and the variable, is now a `loader.ts` concern (`configuration/index.ts`
+  // never sees a load failure, since it only reads whatever's already in
+  // `file/layer.ts`): see loader.test.ts's 'an unset variable with no
+  // default is fatal, wrapped with the file path', and index.test.ts's
+  // 'on a load failure, prints the loader message to stderr, exits 1, and
+  // never imports main' for the bootstrap-level behavior.
+
+  test('a ${NAME:-default} falls back to the default and is still sourced as "env"', async () => {
+    await withConfigFile(
+      'server:\n  name: ${DD_TEST_CONFIG_INTERP_DEFAULT:-fallback-value}\n',
+      async (freshConfiguration) => {
+        expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('fallback-value');
+        expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('env');
+      },
+    );
+  });
+
+  test('a literal value with no ${...} pattern is still sourced as "file"', async () => {
+    await withConfigFile('server:\n  name: literal-name\n', async (freshConfiguration) => {
+      expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('literal-name');
+      expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('file');
+    });
+  });
+});
+
+describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  /**
+   * Same real loader → file/layer.ts → fresh index.js pipeline as the
+   * `${NAME} interpolation` describe's `withConfigFile` above:
+   * `configuration/index.ts` only merges whatever's already in
+   * `file/layer.ts`, so a real drydock.yml has to go through `loader.ts`
+   * explicitly rather than relying on importing `./index.js` to load it.
+   */
+  async function withConfigFile<T>(
+    yamlContents: string,
+    run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
+  ): Promise<T> {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-validate-startup-'));
+    const configPath = path.join(tempDir, 'drydock.yml');
+    fs.writeFileSync(configPath, yamlContents, 'utf-8');
+    fs.chmodSync(configPath, 0o600);
+    const originalConfigFile = process.env.DD_CONFIG_FILE;
+    process.env.DD_CONFIG_FILE = configPath;
+    try {
+      vi.resetModules();
+      const { loadConfigFileIntoLayer } = await import('./file/loader.js');
+      await loadConfigFileIntoLayer();
+      const freshConfiguration = await import('./index.js');
+      return await run(freshConfiguration);
+    } finally {
+      if (originalConfigFile === undefined) {
+        delete process.env.DD_CONFIG_FILE;
+      } else {
+        process.env.DD_CONFIG_FILE = originalConfigFile;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  test('with no config file present, resolves to no errors without walking a single component (env-only gate)', async () => {
+    // No DD_CONFIG_FILE at all in this process's real environment, so every
+    // key in configFileSources (if any) is 'env' — the hasFileSourcedValue
+    // gate short-circuits before the dynamic import of file/validate.js.
+    await expect(configuration.validateStartupConfiguration()).resolves.toStrictEqual({
+      errors: [],
+    });
+  });
+
+  test('a valid config file produces no errors', async () => {
+    await withConfigFile('server:\n  port: 3000\n', async (freshConfiguration) => {
+      await expect(freshConfiguration.validateStartupConfiguration()).resolves.toStrictEqual({
+        errors: [],
+      });
+    });
+  });
+
+  test('an invalid config file value is reported with its YAML path and the Joi message', async () => {
+    await withConfigFile('security:\n  scanner: bogus\n', async (freshConfiguration) => {
+      const result = await freshConfiguration.validateStartupConfiguration();
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe('security.scanner');
+      expect(result.errors[0].envKey).toBe('DD_SECURITY_SCANNER');
+      expect(result.errors[0].message).toContain('"scanner"');
+    });
+  });
+});
+
 describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
   // This test enumerates the 21 files so a new direct reader shows up as a
   // failing assertion instead of a silent coverage gap.

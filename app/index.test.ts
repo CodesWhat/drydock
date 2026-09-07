@@ -49,4 +49,53 @@ describe('bootstrap', () => {
       process.exitCode = originalExitCode;
     }
   });
+
+  test('a "config validate"/"config export" command is dispatched before the load, and never imports main', async () => {
+    const loadConfigFileIntoLayer = vi.fn(async () => undefined);
+    const mainFactory = vi.fn(() => ({}));
+    const runConfigCommandIfRequested = vi.fn(async () => 0);
+    const originalArgv = process.argv;
+    const originalExitCode = process.exitCode;
+    process.argv = ['node', 'index.js', 'config', 'validate'];
+    process.exitCode = undefined;
+
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./configuration/config-cli.js', () => ({ runConfigCommandIfRequested }));
+    vi.doMock('./main.js', mainFactory);
+
+    try {
+      await import('./index.js');
+
+      expect(runConfigCommandIfRequested).toHaveBeenCalledWith(['config', 'validate']);
+      expect(process.exitCode).toBe(0);
+      expect(loadConfigFileIntoLayer).not.toHaveBeenCalled();
+      expect(mainFactory).not.toHaveBeenCalled();
+    } finally {
+      process.argv = originalArgv;
+      process.exitCode = originalExitCode;
+    }
+  });
+
+  test('a non-config command falls through to the ordinary load-then-import-main bootstrap', async () => {
+    const calls: string[] = [];
+    const loadConfigFileIntoLayer = vi.fn(async () => {
+      calls.push('loadConfigFileIntoLayer');
+    });
+    const mainFactory = vi.fn(() => {
+      calls.push('main');
+      return {};
+    });
+    const runConfigCommandIfRequested = vi.fn(async () => null);
+
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./configuration/config-cli.js', () => ({ runConfigCommandIfRequested }));
+    vi.doMock('./main.js', mainFactory);
+
+    await import('./index.js');
+
+    expect(runConfigCommandIfRequested).toHaveBeenCalledTimes(1);
+    expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'main']);
+  });
 });

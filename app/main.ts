@@ -4,7 +4,7 @@ import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
 import * as approvalReconciler from './approvals/reconcile.js';
 import { renderBanner } from './banner/index.js';
-import { getDnsMode } from './configuration/index.js';
+import { getDnsMode, validateStartupConfiguration } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
 import log from './log/index.js';
 import * as maturityScheduler from './maturity/scheduler.js';
@@ -49,6 +49,17 @@ if (commandExitCode !== null) {
     log.warn(
       'Running in insecure root mode (DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true); use socket-proxy mode when possible.',
     );
+  }
+
+  // Validate drydock.yml against every component schema before starting
+  // anything (roadmap 7.1 slice 2). A no-op for an env-only deployment: see
+  // validateStartupConfiguration's own gate on configFileSources.
+  const configurationValidation = await validateStartupConfiguration();
+  if (configurationValidation.errors.length > 0) {
+    for (const error of configurationValidation.errors) {
+      log.error(`Invalid configuration at ${error.path} (${error.envKey}): ${error.message}`);
+    }
+    process.exit(1);
   }
 
   // Init store
