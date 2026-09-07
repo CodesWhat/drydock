@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
 import {
@@ -37,6 +36,7 @@ import { isMemoryStore, save as saveStore } from '../../../store/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
+import { Semaphore } from '../../../updates/lock-primitives.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
@@ -478,6 +478,28 @@ class Docker<
   updateLifecycleExecutor: UpdateLifecycleExecutor;
 
   rollbackMonitor: RollbackMonitor;
+
+  /**
+   * Persistent per-instance semaphore gating every real container update
+   * this action executes, regardless of caller. Sized once per instance so
+   * it bounds concurrency across ALL entry points, not just calls that
+   * happen to share one triggerBatch() invocation:
+   * runAcceptedContainerUpdates() (manual "Update All", dependency-chain
+   * updates, startup recovery) dispatches one trigger() call per container
+   * from its own wave-worker pool, with no batch boundary of its own — a
+   * pLimit created fresh inside trigger() would never see those sibling
+   * calls and would not bound anything. A persistent Semaphore does,
+   * because every trigger() call on this instance acquires from the same
+   * pool of permits.
+   */
+  protected updateSemaphore?: Semaphore;
+
+  protected getUpdateSemaphore(): Semaphore {
+    if (!this.updateSemaphore) {
+      this.updateSemaphore = new Semaphore(resolveActionConcurrency(this.configuration));
+    }
+    return this.updateSemaphore;
+  }
 
   constructor() {
     super();
@@ -2611,33 +2633,40 @@ class Docker<
 
   /**
    * Update the container.
-   * @param container the container
-   * @returns {Promise<void>}
-   */
-  async trigger(container, runtimeContext?: unknown) {
-    await this.runContainerUpdateLifecycle(container, runtimeContext);
-  }
-
-  /**
-   * Update the containers.
    *
    * The fan-out limit is DD_UPDATE_CONCURRENCY (default 1), or this action's
    * own DD_ACTION_DOCKER_<NAME>_CONCURRENCY override when set. This is the
    * single choke point where the docker action executes container updates
-   * concurrently; Dockercompose.triggerBatch resolves the same value for its
-   * own (compose-file-scoped) fan-out.
+   * concurrently: every caller (triggerBatch()'s own fan-out, and
+   * runAcceptedContainerUpdates()'s per-container dispatch for manual bulk
+   * updates, dependency chains, and startup recovery) funnels through this
+   * one method, so they all draw from the same permit pool.
+   * Dockercompose.triggerBatch resolves the same value for its own
+   * (compose-file-scoped) fan-out.
+   * @param container the container
+   * @returns {Promise<void>}
+   */
+  async trigger(container, runtimeContext?: unknown) {
+    const release = await this.getUpdateSemaphore().acquire();
+    try {
+      await this.runContainerUpdateLifecycle(container, runtimeContext);
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Update the containers. Concurrency is bounded by trigger()'s own
+   * persistent semaphore, so this fan-out needs no limiter of its own.
    * @param containers
    * @returns {Promise<unknown[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<unknown[]> {
-    const limit = pLimit(resolveActionConcurrency(this.configuration));
     return Promise.all(
       containers.map((container) =>
-        limit(() =>
-          runtimeContext === undefined
-            ? this.trigger(container)
-            : this.trigger(container, runtimeContext),
-        ),
+        runtimeContext === undefined
+          ? this.trigger(container)
+          : this.trigger(container, runtimeContext),
       ),
     );
   }

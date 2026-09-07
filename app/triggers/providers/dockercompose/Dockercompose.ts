@@ -1,7 +1,6 @@
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import pLimit from 'p-limit';
 import yaml from 'yaml';
 import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
 import type { ContainerImage } from '../../../model/container.js';
@@ -9,7 +8,6 @@ import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
-import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
 import {
   buildComposeFileLockKeys,
   buildComposeProjectLockKey,
@@ -2253,29 +2251,43 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // groups never collide because their lock keys and compose object/
     // document caches are both keyed by file path (see
     // buildComposeFileLockKeys() and _composeObjectCache).
-    const limit = pLimit(resolveActionConcurrency(this.configuration));
+    //
+    // getUpdateSemaphore() (inherited from Docker) is a persistent
+    // per-instance permit pool, not a limiter scoped to this call: trigger()
+    // delegates to triggerBatch([container]) for a single container, so a
+    // fresh per-call limiter would never see sibling calls made by
+    // runAcceptedContainerUpdates()'s per-container dispatch (manual bulk
+    // updates, dependency chains, startup recovery) and would bound
+    // nothing. The shared semaphore does, because every group here, and
+    // every single-container call routed through it, draws from the same
+    // pool of permits.
+    const semaphore = this.getUpdateSemaphore();
     return Promise.all(
       Array.from(containersByComposeFile.values()).map(
-        ({ composeFile, composeFiles, containers: containersInFile }) =>
-          limit(() =>
-            composeFiles.length > 1
+        async ({ composeFile, composeFiles, containers: containersInFile }) => {
+          const release = await semaphore.acquire();
+          try {
+            return composeFiles.length > 1
               ? sanitizedRuntimeContext === undefined
-                ? this.processComposeFile(composeFile, containersInFile, composeFiles)
-                : this.processComposeFile(
+                ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
+                : await this.processComposeFile(
                     composeFile,
                     containersInFile,
                     composeFiles,
                     sanitizedRuntimeContext,
                   )
               : sanitizedRuntimeContext === undefined
-                ? this.processComposeFile(composeFile, containersInFile)
-                : this.processComposeFile(
+                ? await this.processComposeFile(composeFile, containersInFile)
+                : await this.processComposeFile(
                     composeFile,
                     containersInFile,
                     undefined,
                     sanitizedRuntimeContext,
-                  ),
-          ),
+                  );
+          } finally {
+            release();
+          }
+        },
       ),
     );
   }

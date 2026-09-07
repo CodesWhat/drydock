@@ -438,6 +438,12 @@ function createMockLog(...methods) {
 beforeEach(async () => {
   vi.resetAllMocks();
   docker.configuration = configurationValid;
+  // The update-concurrency semaphore is created lazily and cached per
+  // instance (so it can bound concurrency across separate trigger() calls,
+  // not just within one triggerBatch()) — reset it whenever configuration
+  // is reset so a test that sets `concurrency` doesn't inherit a semaphore
+  // sized by whatever ran before it against this shared `docker` instance.
+  docker.updateSemaphore = undefined;
   docker.log = log;
   docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
     id: '123456789',
@@ -1770,16 +1776,21 @@ test('triggerBatch defaults to concurrency 1 (serialises) when nothing is config
   const containers = Array.from({ length: 4 }, (_, index) => ({ name: `c${index}` }));
   let inFlight = 0;
   let maxInFlight = 0;
-  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
-    inFlight += 1;
-    maxInFlight = Math.max(maxInFlight, inFlight);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    inFlight -= 1;
-  });
+  // The concurrency gate lives inside trigger(), around the call to
+  // runContainerUpdateLifecycle() — spy there so the semaphore acquire/
+  // release actually runs, unlike spying on trigger() itself.
+  const lifecycleSpy = vi
+    .spyOn(docker, 'runContainerUpdateLifecycle')
+    .mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+    });
 
   await docker.triggerBatch(containers);
 
-  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
   expect(maxInFlight).toBe(1);
 });
 
@@ -1788,16 +1799,18 @@ test('triggerBatch runs up to the configured concurrency at once and never above
   const containers = Array.from({ length: 8 }, (_, index) => ({ name: `c${index}` }));
   let inFlight = 0;
   let maxInFlight = 0;
-  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
-    inFlight += 1;
-    maxInFlight = Math.max(maxInFlight, inFlight);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    inFlight -= 1;
-  });
+  const lifecycleSpy = vi
+    .spyOn(docker, 'runContainerUpdateLifecycle')
+    .mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+    });
 
   await docker.triggerBatch(containers);
 
-  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
   expect(maxInFlight).toBe(3);
   expect(maxInFlight).toBeLessThanOrEqual(3);
 });
@@ -1815,7 +1828,7 @@ test('triggerBatch: a per-action concurrency override wins over the global defau
     const containers = Array.from({ length: 6 }, (_, index) => ({ name: `c${index}` }));
     let inFlight = 0;
     let maxInFlight = 0;
-    vi.spyOn(dockerWithOverride, 'trigger').mockImplementation(async () => {
+    vi.spyOn(dockerWithOverride, 'runContainerUpdateLifecycle').mockImplementation(async () => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1838,8 +1851,8 @@ test('triggerBatch: a per-action concurrency override wins over the global defau
 test('triggerBatch releases a failing container update slot so the remaining queue still runs', async () => {
   docker.configuration = { ...configurationValid, concurrency: 1 };
   const containers = [{ name: 'fails' }, { name: 'c1' }, { name: 'c2' }];
-  const triggerSpy = vi
-    .spyOn(docker, 'trigger')
+  const lifecycleSpy = vi
+    .spyOn(docker, 'runContainerUpdateLifecycle')
     .mockImplementation(async (container: { name: string }) => {
       if (container.name === 'fails') {
         throw new Error('update failed');
@@ -1851,7 +1864,7 @@ test('triggerBatch releases a failing container update slot so the remaining que
   // one) a turn to run and release their slot.
   await new Promise((resolve) => setTimeout(resolve, 20));
 
-  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
 });
 
 test('triggerBatch should forward runtimeContext when provided', async () => {
@@ -1864,6 +1877,30 @@ test('triggerBatch should forward runtimeContext when provided', async () => {
   expect(triggerSpy).toHaveBeenCalledTimes(2);
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c1' }, runtimeContext);
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' }, runtimeContext);
+});
+
+test('trigger() bounds concurrency across independent calls, not just within one triggerBatch() call', async () => {
+  // runAcceptedContainerUpdates() (manual bulk "Update All", dependency
+  // chains, startup recovery) dispatches one docker.trigger() call per
+  // container from its own wave-worker pool — there is no shared
+  // triggerBatch() call for it to fan out inside of. Simulate that by
+  // calling trigger() directly, several times concurrently, and confirm
+  // the configured concurrency still bounds how many run at once.
+  docker.configuration = { ...configurationValid, concurrency: 2 };
+  let inFlight = 0;
+  let maxInFlight = 0;
+  vi.spyOn(docker, 'runContainerUpdateLifecycle').mockImplementation(async () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight -= 1;
+  });
+
+  const containers = Array.from({ length: 5 }, (_, index) => ({ name: `c${index}` }));
+  await Promise.all(containers.map((container) => docker.trigger(container)));
+
+  expect(maxInFlight).toBeLessThanOrEqual(2);
+  expect(maxInFlight).toBeGreaterThan(0);
 });
 
 // --- pruneImages (parametric: exclusion filters) ---
