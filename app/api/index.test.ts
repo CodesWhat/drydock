@@ -1289,6 +1289,74 @@ describe('API Index', () => {
     }
   });
 
+  test('real Express: sendUiDisabledResponse lets unmatched API, health, and metrics paths fall through instead of returning the UI-disabled body', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      ui: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+    const sendUiDisabledResponse = rootFunctionMountCalls[0][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const app = realExpress.default();
+    // No /health, /api/v1, or /metrics routers mounted ahead of it — mirrors
+    // an unmatched request falling through all of them, exactly like the
+    // real mount order in registerRoutes.
+    app.use('/', sendUiDisabledResponse);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      // Unmatched non-GET /api/v1 path (e.g. the /api/v1 router's GET-only
+      // catch-all never resolving DELETE /api/v1/app) — startsWith branch.
+      const deleteRes = await fetch(`${baseUrl}/api/v1/app`, { method: 'DELETE' });
+      expect(deleteRes.status).toBe(404);
+      expect(await deleteRes.text()).not.toContain('The web UI is disabled');
+
+      // Path exactly '/api' — equal branch.
+      const apiRes = await fetch(`${baseUrl}/api`);
+      expect(apiRes.status).toBe(404);
+      expect(await apiRes.text()).not.toContain('The web UI is disabled');
+
+      // Path under '/health' — startsWith branch.
+      const healthRes = await fetch(`${baseUrl}/health/foo`);
+      expect(healthRes.status).toBe(404);
+      expect(await healthRes.text()).not.toContain('The web UI is disabled');
+
+      // Path exactly '/metrics' — equal branch.
+      const metricsRes = await fetch(`${baseUrl}/metrics`);
+      expect(metricsRes.status).toBe(404);
+      expect(await metricsRes.text()).not.toContain('The web UI is disabled');
+
+      // Sanity check: an actual UI path still gets the JSON UI-disabled body.
+      const uiRes = await fetch(`${baseUrl}/some-ui-path`);
+      expect(uiRes.status).toBe(404);
+      expect(uiRes.headers.get('content-type')).toMatch(/application\/json/);
+      const uiBody = (await uiRes.json()) as { error: string };
+      expect(uiBody.error).toContain('The web UI is disabled');
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
   test('should not mount legacy error-response normalization middleware', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

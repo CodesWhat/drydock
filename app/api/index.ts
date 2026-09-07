@@ -214,12 +214,35 @@ function sendUnversionedApiTombstone(req, res, next) {
 // of those matched (i.e. UI paths). Returns a JSON 404 instead of Express's
 // bare HTML 404 so headless deployments get a machine-readable body instead
 // of a dead end, for any method (GET/HEAD included).
-function sendUiDisabledResponse(_req, res) {
+//
+// Needs the same kind of fallthrough guard as sendUnversionedApiTombstone
+// above: the /api/v1 mount's catch-all (app/api/api.ts) is GET-only, so a
+// non-GET request to an otherwise-valid /api/v1/* path that only defines a
+// GET handler (e.g. DELETE /api/v1/app) never resolves inside the /api/v1
+// mount, and sendUnversionedApiTombstone itself deliberately lets /v1/*
+// paths fall through rather than tombstoning them — so both cases arrive
+// here with req.path unchanged. Without this guard an unmatched API,
+// /health, or /metrics request would get the "web UI is disabled" 404 body
+// instead of continuing to Express's own 404 handling, exactly like it
+// would if the UI were enabled.
+function sendUiDisabledResponse(req, res, next) {
+  if (
+    isPathUnderPrefix(req.path, '/api') ||
+    isPathUnderPrefix(req.path, '/health') ||
+    isPathUnderPrefix(req.path, '/metrics')
+  ) {
+    next();
+    return;
+  }
   sendErrorResponse(
     res,
     404,
     'The web UI is disabled (DD_SERVER_UI_ENABLED=false); the API remains available under /api/v1',
   );
+}
+
+function isPathUnderPrefix(path, prefix) {
+  return path === prefix || path.startsWith(`${prefix}/`);
 }
 
 function registerRoutes(app) {
