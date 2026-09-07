@@ -789,10 +789,15 @@ describe('docker image details orchestration module', () => {
       env: [{ key: 'APP_ENV', value: 'prod' }],
     });
     expect(containerInStore.image.id).toBe('image-new');
+    // digest.watch is re-derived every cycle (#1070): the default helpers'
+    // resolveTagName('1.2.3') resolves as a meaningful specific-precision
+    // semver tag with no dd.watch.digest label, so isDigestToWatch's default
+    // is true.
     expect(containerInStore.image.digest).toEqual({
       repo: 'sha256:new',
       repoDigests: ['sha256:new'],
       value: 'sha256:new',
+      watch: true,
     });
     expect(containerInStore.image.created).toBe('2026-03-01T00:00:00.000Z');
   });
@@ -1892,6 +1897,132 @@ describe('docker image details orchestration module', () => {
         repo: 'sha256:mine',
         repoDigests: ['sha256:mine'],
       });
+    });
+  });
+
+  describe('digest.watch re-derivation on every scan (#1070)', () => {
+    function createStoredContainerForRederivation(overrides: Record<string, any> = {}) {
+      return {
+        id: 'container-1',
+        name: 'service',
+        error: undefined,
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-new',
+          name: 'acme/service',
+          registry: { name: 'hub', url: 'https://registry-1.docker.io/v2' },
+          tag: { value: 'latest', semver: false },
+          digest: { repo: 'sha256:new', value: 'sha256:new', watch: false },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+        ...overrides,
+      };
+    }
+
+    test('a stale watch:false row for a non-semver Docker Hub tag flips to true with no label', async () => {
+      const containerInStore = createStoredContainerForRederivation();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher } = createWatcher();
+      const helpers = createHelpers({
+        resolveImageName: vi.fn().mockReturnValue({ domain: 'docker.io', path: 'acme/service' }),
+        resolveTagName: vi.fn().mockReturnValue('latest'),
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Image: 'acme/service:latest' }),
+        {},
+        helpers as any,
+      );
+
+      expect(containerInStore.image.digest.watch).toBe(true);
+    });
+
+    test('a live dd.watch.digest=false label keeps a non-semver Docker Hub tag from flipping', async () => {
+      const containerInStore = createStoredContainerForRederivation();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher } = createWatcher();
+      const helpers = createHelpers({
+        resolveImageName: vi.fn().mockReturnValue({ domain: 'docker.io', path: 'acme/service' }),
+        resolveTagName: vi.fn().mockReturnValue('latest'),
+        mergeConfigWithImgset: vi.fn(() => ({
+          includeTags: undefined,
+          excludeTags: undefined,
+          transformTags: undefined,
+          tagFamily: undefined,
+          linkTemplate: undefined,
+          displayName: undefined,
+          displayIcon: undefined,
+          triggerInclude: undefined,
+          triggerExclude: undefined,
+          watchDigest: 'false',
+          inspectTagPath: undefined,
+          lookupImage: undefined,
+        })),
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({
+          Image: 'acme/service:latest',
+          Labels: { 'dd.watch.digest': 'false' },
+        }),
+        {},
+        helpers as any,
+      );
+
+      expect(containerInStore.image.digest.watch).toBe(false);
+    });
+
+    // isDigestToWatch's auto-derived default treats a meaningful semver tag
+    // the same as a floating one (#498), so an unlabeled semver row would
+    // also flip to true here — the "stays false" case for a semver tag is an
+    // explicit dd.watch.digest=false override, same override mechanism as
+    // the non-semver case above, proven separately here because it is the
+    // scenario #1070 must not regress: the override still wins after the
+    // fix, whatever the tag's shape.
+    test('a live dd.watch.digest=false label keeps a semver tag row from flipping', async () => {
+      const containerInStore = createStoredContainerForRederivation({
+        image: {
+          ...createStoredContainerForRederivation().image,
+          tag: { value: '1.4.5', semver: true },
+        },
+      });
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher } = createWatcher();
+      const helpers = createHelpers({
+        resolveImageName: vi.fn().mockReturnValue({ domain: 'docker.io', path: 'acme/service' }),
+        resolveTagName: vi.fn().mockReturnValue('1.4.5'),
+        mergeConfigWithImgset: vi.fn(() => ({
+          includeTags: undefined,
+          excludeTags: undefined,
+          transformTags: undefined,
+          tagFamily: undefined,
+          linkTemplate: undefined,
+          displayName: undefined,
+          displayIcon: undefined,
+          triggerInclude: undefined,
+          triggerExclude: undefined,
+          watchDigest: 'false',
+          inspectTagPath: undefined,
+          lookupImage: undefined,
+        })),
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({
+          Image: 'acme/service:1.4.5',
+          Labels: { 'dd.watch.digest': 'false' },
+        }),
+        {},
+        helpers as any,
+      );
+
+      expect(containerInStore.image.digest.watch).toBe(false);
     });
   });
 
