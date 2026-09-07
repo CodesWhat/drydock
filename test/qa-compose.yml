@@ -8,6 +8,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./qa-action-demo-compose.yml:/drydock/qa-action-demo-compose.yml
+      # Config file (roadmap 7.1) fixture: sets one otherwise-unset value
+      # (DD_SERVER_NAME has no other source in this compose file) so
+      # api-config.feature can assert GET /api/v1/config reports a present
+      # file, a real section value, and that key's source as "file".
+      - ./qa-drydock.yml:/config/drydock.yml:ro
     # Optional gitignored credentials file (Docker Hub / GHCR tokens). See
     # test/.env.qa-creds.example. Compose silently no-ops when the file is
     # absent so CI / fresh checkouts still work without it.
