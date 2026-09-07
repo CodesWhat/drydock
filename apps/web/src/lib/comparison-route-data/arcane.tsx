@@ -30,7 +30,7 @@ RBAC / roles|Yes, six built-in roles plus custom roles and OIDC group mapping|No
 Scoped API keys|Yes, per-resource:action permission catalog|Yes, coarse scopes (read, containers:watch, containers:update, admin, api-keys:manage)|tie
 `,
   highlightsTable: `
-rotate|Auto-Rollback on Failed Health Checks|Drydock watches the container's HEALTHCHECK after an update and can automatically stop, remove, and recreate it from an immutable digest-pinned backup. Arcane has no automatic rollback — a failed update stays failed until someone steps in.
+rotate|Auto-Rollback on Failed Health Checks|Drydock watches the container's HEALTHCHECK after an update and can automatically stop, remove, and recreate it from an immutable digest-pinned backup. Arcane has no automatic rollback to the previous image when an update fails its health check.
 calendar-clock|Maintenance Windows and Update Hooks|Schedule when auto-updates are allowed to run, and fire a shell command before or after every update with dd.hook.pre and dd.hook.post. Neither exists in Arcane outside its Git-sync-only GitOps pre-deploy hook.
 shield|SBOM, Cosign, and a Bouncer|Trivy and Grype scanning, SBOM generation (SPDX and CycloneDX) for every scanned image, cosign signature verification, and an Update Bouncer that can block a vulnerable deploy outright. Arcane's Trivy scans (with a genuinely useful Copacetic auto-patch for OS packages) publish an SBOM only for Arcane's own release, not for the images it scans.
 list-checks|A Real Approval Queue|Drydock's dedicated Approvals view lets you approve, reject, or defer a pending update with a full audit trail and keyboard shortcuts. Arcane's Updates page only offers apply-now or ignore per item — there's no queue, no defer, no decision log.
