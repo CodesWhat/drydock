@@ -327,7 +327,7 @@ function getContainersFromSameDockerSource(
  */
 class Docker extends Watcher<DockerWatcherConfiguration> {
   public configuration: DockerWatcherConfiguration = {} as DockerWatcherConfiguration;
-  public declare dockerApi: Dockerode;
+  declare public dockerApi: Dockerode;
   public watchCron?: ScheduledTask;
   public watchCronTimeout?: ReturnType<typeof setTimeout>;
   public watchCronDebounced?: (reason?: string) => void;
