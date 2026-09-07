@@ -9,10 +9,7 @@ import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
-import {
-  isTriggerAssociatedWithContainer,
-  isTriggerStructurallyCompatibleWithContainer,
-} from '../docker-trigger.js';
+import { getTriggerAssociationFailureReason } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import { enforceApiKeyScope } from '../route-scopes.js';
@@ -113,11 +110,11 @@ function isDefined<T>(value: T | undefined): value is T {
 /**
  * Why a trigger does not apply to the requested container (DR-78), each backed by one of
  * the same predicates `getContainerTriggers` already uses to decide association:
- * - `agentOwnership` — the trigger belongs to a different agent than the container (or the
- *   container is remote and the trigger has none), from the same check `isTriggerAssociatedWithContainer`
- *   applies before structural compatibility.
- * - `structuralIncompatibility` — `isTriggerStructurallyCompatibleWithContainer` fails (a
- *   dockercompose/portainer trigger whose compose project/service or file doesn't match).
+ * - `agentOwnership` — `getTriggerAssociationFailureReason` reports this first: the trigger
+ *   belongs to a different agent than the container (or the container is remote and the
+ *   trigger has none).
+ * - `structuralIncompatibility` — only reported once agent ownership checks out; a
+ *   dockercompose/portainer trigger whose compose project/service or file doesn't match.
  * - `labelScope` — the container's `dd.action.include`/`dd.action.exclude` (or the
  *   `dd.notification.*` equivalents) labels exclude this trigger, or omit it from a
  *   configured include list.
@@ -219,12 +216,10 @@ function createGetContainerTriggersHandler({
         const triggerId = trigger.id || `${trigger.type}.${trigger.name}`;
         const runtimeTrigger = triggerMap[triggerId];
         const candidate = (runtimeTrigger || trigger) as unknown as TriggerComponent;
-        if (isTriggerAssociatedWithContainer(candidate, container)) {
+        const reason = getTriggerAssociationFailureReason(candidate, container);
+        if (!reason) {
           return true;
         }
-        const reason = isTriggerStructurallyCompatibleWithContainer(candidate, container)
-          ? 'agentOwnership'
-          : 'structuralIncompatibility';
         unassociatedTriggers.push(toUnassociatedTrigger(trigger, reason));
         return false;
       })

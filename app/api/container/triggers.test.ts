@@ -605,6 +605,40 @@ describe('api/container/triggers', () => {
       ]);
     });
 
+    test('reports agentOwnership (not structuralIncompatibility) for an agent-mismatched portainer trigger with no compose labels', async () => {
+      // A trigger can fail both agent ownership and structural compatibility at once — the
+      // portainer trigger below is owned by agent-2 (mismatching the agent-1 container) AND has
+      // no compose project/service labels to satisfy `isPortainerCompatibleWithContainer`. The
+      // real association check (`isTriggerAssociatedWithContainer`) rejects on agent ownership
+      // first, so the reported reason must match that order rather than a parallel
+      // reimplementation that checks structural compatibility independently.
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'agent-1' },
+        triggerMap: {
+          'agent-2.portainer.update': createTrigger({
+            id: 'agent-2.portainer.update',
+            type: 'portainer',
+            name: 'update',
+            agent: 'agent-2',
+          }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([]);
+      expect(payload.unassociatedTriggers).toEqual([
+        {
+          id: 'agent-2.portainer.update',
+          type: 'portainer',
+          name: 'update',
+          agent: 'agent-2',
+          reason: 'agentOwnership',
+        },
+      ]);
+    });
+
     test('reports labelScope for a trigger excluded by dd.notification.exclude', async () => {
       const harness = createHarness({
         container: { id: 'c1', notificationTriggerExclude: 'notify' },

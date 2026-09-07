@@ -3,6 +3,8 @@ import { describe, expect, test } from 'vitest';
 import {
   findDockerTriggerForContainer,
   getDockerTriggerSpecificity,
+  getTriggerAssociationFailureReason,
+  isTriggerAssociatedWithContainer,
   isTriggerCompatibleWithContainer,
   isTriggerStructurallyCompatibleWithContainer,
   NO_DOCKER_TRIGGER_FOUND_ERROR,
@@ -490,5 +492,35 @@ describe('docker-trigger helper', () => {
     );
 
     expect(result).toBe(monitoringComposeTrigger);
+  });
+});
+
+describe('getTriggerAssociationFailureReason / isTriggerAssociatedWithContainer', () => {
+  test('reports agentOwnership first when a trigger fails both agent and structural checks', () => {
+    // A portainer trigger owned by a different agent, targeting a container with no compose
+    // labels, fails agent compatibility AND structural compatibility. Agent ownership must win.
+    const trigger = { type: 'portainer', agent: 'agent-2' };
+    const container = { id: 'c1', agent: 'agent-1' };
+
+    expect(getTriggerAssociationFailureReason(trigger, container)).toBe('agentOwnership');
+    expect(isTriggerAssociatedWithContainer(trigger, container)).toBe(false);
+  });
+
+  test('reports structuralIncompatibility when agent ownership checks out but structure does not', () => {
+    const trigger = { type: 'portainer' };
+    const container = { id: 'c1' };
+
+    expect(getTriggerAssociationFailureReason(trigger, container)).toBe(
+      'structuralIncompatibility',
+    );
+    expect(isTriggerAssociatedWithContainer(trigger, container)).toBe(false);
+  });
+
+  test('reports no failure reason when the trigger is fully associated', () => {
+    const trigger = { type: 'docker', agent: 'agent-1' };
+    const container = { id: 'c1', agent: 'agent-1' };
+
+    expect(getTriggerAssociationFailureReason(trigger, container)).toBeUndefined();
+    expect(isTriggerAssociatedWithContainer(trigger, container)).toBe(true);
   });
 });
