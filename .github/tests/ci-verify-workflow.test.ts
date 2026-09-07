@@ -564,6 +564,19 @@ test('load-test processor only exports Artillery hooks used by scenarios', () =>
   expect(processorSource).not.toContain('ensureContainerId');
 });
 
+test('the ui coverage step bounds memory and worker count so the runner cannot kill it', () => {
+  // CI-17: three runs on 2026-09-07 (plus #1102) saw "Run ui tests" marked
+  // `cancelled` after 2.5-6 min with no timeout hit and no concurrency
+  // group -- the 7 GB runner most likely OOM'd under the vitest coverage
+  // pass and GitHub reported the runner service's death as a cancel. An
+  // explicit heap cap and worker cap keep worst-case memory well inside the
+  // runner's budget so nobody can silently drop them later.
+  const step = getTestJobStep('Run ui tests');
+
+  expect(step?.env?.NODE_OPTIONS).toContain('--max-old-space-size=1536');
+  expect(step?.run).toMatch(/(?:^|\s)--maxWorkers=1(?:\s|$)/);
+});
+
 test('build job checks base image pins before building, for the platforms it smoke-builds', () => {
   const workflow = loadWorkflow();
   const steps = workflow.jobs?.build?.steps ?? [];

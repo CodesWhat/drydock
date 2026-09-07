@@ -626,7 +626,18 @@ jobs:
         working-directory: ui
 
       - name: Run ui tests
-        run: npm run test:unit
+        # CI-17: three runs on 2026-09-07 (plus #1102) had this step marked
+        # `cancelled` after 2.5-6 min with no timeout hit and no concurrency
+        # group -- the 7 GB ubuntu-latest runner most likely ran the vitest
+        # coverage pass out of memory and the runner service died, which
+        # GitHub reports as a cancel rather than an OOM. Budget: 1536 MiB
+        # heap cap * 2 processes (the main vitest process plus the single
+        # worker fork --maxWorkers=1 allows) = 3 GiB worst case, comfortably
+        # under the 7 GiB runner with headroom left for non-heap V8
+        # overhead, npm, and the OS.
+        env:
+          NODE_OPTIONS: --max-old-space-size=1536
+        run: npm run test:unit -- --maxWorkers=1
         working-directory: ui
 
       - name: Normalize coverage paths
