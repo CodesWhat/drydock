@@ -1,5 +1,23 @@
 import { flattenConfigTree } from './flatten.js';
 
+describe('__FILE inside a key', () => {
+  test('rejects a _file node whose base key contains __FILE inside a segment', () => {
+    expect(() => flattenConfigTree({ my__file_path: { _file: '/run/secrets/x' } })).toThrow(
+      /my__file_path: flattens to DD_MY__FILE_PATH, which contains "__FILE"/,
+    );
+  });
+
+  test('rejects a scalar whose base key contains __FILE inside a segment', () => {
+    expect(() => flattenConfigTree({ my__file_path: 'x' })).toThrow(/contains "__FILE"/);
+  });
+
+  test('rejects __FILE formed across a segment boundary', () => {
+    expect(() => flattenConfigTree({ a_: { _file_b: 'x' } })).toThrow(
+      /a_\._file_b: flattens to DD_A___FILE_B, which contains "__FILE"/,
+    );
+  });
+});
+
 describe('flattenConfigTree', () => {
   test('flattens a nested mapping to DD_-prefixed uppercase keys', () => {
     const result = flattenConfigTree({

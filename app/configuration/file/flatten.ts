@@ -125,7 +125,24 @@ function validateKeySegment(rawKey: string, pathSegments: string[]): void {
 }
 
 function toEnvKey(pathSegments: string[], suffix = ''): string {
-  return `DD_${pathSegments.map((segment) => segment.toUpperCase()).join('_')}${suffix}`;
+  const baseKey = `DD_${pathSegments.map((segment) => segment.toUpperCase()).join('_')}`;
+  // `replaceSecrets` derives a secret's target key with `replaceAll('__FILE', '')`,
+  // so an `__FILE` anywhere in the base key (inside one segment, or straddling
+  // two, as `a_` + `_file_b` does) would resolve to a different variable than
+  // the one this key names. Reserve the substring in every position.
+  if (baseKey.includes(VAR_FILE_SUFFIX)) {
+    if (suffix === '' && baseKey.endsWith(VAR_FILE_SUFFIX)) {
+      throw new Error(
+        `${describePath(pathSegments)}: flattens to ${baseKey}, but the "${VAR_FILE_SUFFIX}" suffix ` +
+          'is reserved for a "_file" mapping (e.g. `{ _file: /run/secrets/x }`), not a scalar value',
+      );
+    }
+    throw new Error(
+      `${describePath(pathSegments)}: flattens to ${baseKey}, which contains "${VAR_FILE_SUFFIX}"; ` +
+        'that substring is reserved for the secret-file suffix and cannot appear inside a key',
+    );
+  }
+  return `${baseKey}${suffix}`;
 }
 
 /**
@@ -204,12 +221,6 @@ function processValue(value: unknown, pathSegments: string[], entries: FlattenEn
   }
 
   const key = toEnvKey(pathSegments);
-  if (key.endsWith(VAR_FILE_SUFFIX)) {
-    throw new Error(
-      `${describePath(pathSegments)}: flattens to ${key}, but the "${VAR_FILE_SUFFIX}" suffix ` +
-        'is reserved for a "_file" mapping (e.g. `{ _file: /run/secrets/x }`), not a scalar value',
-    );
-  }
 
   const coerced = coerceScalar(value as string | number | boolean, pathSegments);
   entries.push({
