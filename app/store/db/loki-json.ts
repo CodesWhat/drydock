@@ -27,7 +27,7 @@ export type LokiDocument = Record<string, unknown>;
 
 export const LEGACY_STORE_UNREADABLE_CODE = 'STORE_LEGACY_STORE_UNREADABLE';
 
-/** The collection `connect-loki` writes into the shared store file. */
+/** The collection the pre-1.8 session store wrote into the shared store file. */
 export const LEGACY_SESSIONS_COLLECTION = 'Sessions';
 /**
  * DR-121 moves express-session records out of `dd.json` into their own LokiJS
@@ -128,9 +128,9 @@ export function readLokiDatabase(filePath: string): LokiDatabaseSnapshot {
  * Find the express-session documents to import.
  *
  * Prefers the dedicated sessions file DR-121 introduces, and falls back to the
- * `Sessions` collection `connect-loki` used to write into the shared store
- * file. Neither existing is normal and returns an empty list: sessions are
- * disposable, so a store with none imports none.
+ * `Sessions` collection the pre-1.8 session store used to write into the
+ * shared store file. Neither existing is normal and returns an empty list:
+ * sessions are disposable, so a store with none imports none.
  */
 export function resolveLegacySessionDocuments(
   storeDirectory: string,

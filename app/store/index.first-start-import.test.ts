@@ -46,6 +46,7 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const updateOperation = await import('./update-operation.js');
       const updateLifecycleCache = await import('./update-lifecycle-cache.js');
       const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
+      const sessionModel = await import('./session.js');
 
       // The fixture stores a placeholder secretHash for its api-keys rows
       // (a real hash is a high-entropy string gitleaks flags as an API key
@@ -108,6 +109,22 @@ describe('store first-start import from a v1.7 dd.json', () => {
       for (const document of updateOperationsCollection.data) {
         document.data.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       }
+
+      // The Sessions fixture's live row carries a fixed 2026-01 cookie
+      // expiry for readability, but the importer (roadmap 7-STORE slice 11)
+      // skips anything already expired at import time. Move it into the
+      // future so it survives; the expired row's expiry is already, and
+      // stays, in the past on purpose — it is the case the importer is
+      // supposed to skip.
+      const sessionsCollection = fixture.collections.find(
+        (collection: { name: string }) => collection.name === 'Sessions',
+      );
+      const liveSessionDocument = sessionsCollection.data.find(
+        (document: { sid: string }) => document.sid === 'session-fixture-live',
+      );
+      liveSessionDocument.content.cookie.expires = new Date(
+        Date.now() + 24 * 60 * 60 * 1000,
+      ).toISOString();
 
       fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
 
@@ -335,6 +352,17 @@ describe('store first-start import from a v1.7 dd.json', () => {
           updatePolicyOverrides: { maturityMode: 'mature', maturityMinAgeDays: 5 },
         }),
       ]);
+
+      // sessions (roadmap 7-STORE slice 11): the live row survives the
+      // import with its express-session payload intact; the row whose
+      // cookie had already expired at import time is skipped rather than
+      // carried forward.
+      expect(sessionModel.getSession('session-fixture-live')).toEqual({
+        sid: 'session-fixture-live',
+        expiresAt: Date.parse(liveSessionDocument.content.cookie.expires),
+        data: JSON.stringify(liveSessionDocument.content),
+      });
+      expect(sessionModel.getSession('session-fixture-expired')).toBeUndefined();
 
       // The untouched pre-1.8 backup is the whole rollback story, and the
       // SQLite database now exists alongside it.

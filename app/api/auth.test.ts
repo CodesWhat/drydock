@@ -1,6 +1,7 @@
 const {
   mockRouter,
-  mockLokiStore,
+  mockSessionStoreConstructor,
+  mockSessionStoreInstance,
   mockExpressJson,
   mockJsonMiddleware,
   mockFs,
@@ -13,9 +14,16 @@ const {
 } = vi.hoisted(() => {
   const jsonMiddleware = vi.fn();
   const rateLimitMiddleware = vi.fn((_, __, next) => next());
+  const sessionStoreInstance = { stop: vi.fn() };
   return {
     mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
-    mockLokiStore: vi.fn(),
+    // A plain function, not an arrow function: this mock is invoked with
+    // `new SessionStore(...)` in api/auth.ts, and arrow functions cannot be
+    // used as constructors.
+    mockSessionStoreConstructor: vi.fn(function SessionStore() {
+      return sessionStoreInstance;
+    }),
+    mockSessionStoreInstance: sessionStoreInstance,
     mockJsonMiddleware: jsonMiddleware,
     mockExpressJson: vi.fn(() => jsonMiddleware),
     mockFs: {
@@ -58,8 +66,8 @@ vi.mock('express-rate-limit', () => ({
   default: mockRateLimit,
 }));
 
-vi.mock('connect-loki', () => ({
-  default: vi.fn(() => mockLokiStore),
+vi.mock('./session-store.js', () => ({
+  SessionStore: mockSessionStoreConstructor,
 }));
 
 vi.mock('uuid', () => ({
@@ -75,9 +83,6 @@ vi.mock('../store', () => ({
     path: '/test/store',
     file: 'db.json',
   })),
-  // DR-121: the session store's file is a sibling of the main store file,
-  // derived from getConfiguration() above, not the main store file itself.
-  getSessionStorePath: vi.fn(() => '/test/store/db-sessions.json'),
 }));
 
 vi.mock('../store/secrets.js', () => ({
@@ -1538,9 +1543,9 @@ describe('Auth Router', () => {
       const app = createApp();
       auth.init(app);
 
-      expect(mockLokiStore).toHaveBeenCalledWith(
+      expect(mockSessionStoreConstructor).toHaveBeenCalledWith(
         expect.objectContaining({
-          ttl: 3600 * 24 * 30,
+          ttlMs: 3600 * 1000 * 24 * 30,
         }),
       );
     });
@@ -3452,19 +3457,17 @@ describe('Auth Router', () => {
     });
   });
 
-  describe('LokiStore path configuration', () => {
-    test('LokiStore path is built from the session store path, not the main store file (not empty string)', () => {
-      // Line 336: StringLiteral `` mutant — empty path would cause session store issues
-      // DR-121: this must be store.getSessionStorePath(), a sibling of the main
-      // store file, never `${getConfiguration().path}/${getConfiguration().file}`
-      // itself — two LokiJS instances autosaving that file clobber each other.
+  describe('session store wiring', () => {
+    test('the session middleware is configured with the SQLite-backed SessionStore instance', () => {
+      // roadmap 7-STORE slice 11: sessions live in the same SQLite database
+      // as everything else now, so init() needs nothing about the main
+      // store's own path or filename to build the session store.
       const app = createApp();
       auth.init(app);
 
-      expect(mockLokiStore).toHaveBeenCalledWith(
-        expect.objectContaining({
-          path: '/test/store/db-sessions.json',
-        }),
+      expect(mockSessionStoreConstructor).toHaveBeenCalledTimes(1);
+      expect(session).toHaveBeenCalledWith(
+        expect.objectContaining({ store: mockSessionStoreInstance }),
       );
     });
   });

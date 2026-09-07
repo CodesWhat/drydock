@@ -18,6 +18,7 @@ import { notificationHistoryImporter } from './notification-history.js';
 import { notificationOutboxImporter } from './notification-outbox.js';
 import { notificationRulesImporter } from './notification-rules.js';
 import { secretsImporter } from './secrets.js';
+import { sessionsImporter } from './sessions.js';
 import { settingsImporter } from './settings.js';
 import { uiPreferencesImporter } from './ui-preferences.js';
 import { updateLifecycleCacheImporter } from './update-lifecycle-cache.js';
@@ -59,4 +60,6 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   // above) because its identity backfill queries the containers table this
   // import already wrote — it must run after containersImporter.
   backupsImporter,
+  // roadmap 7-STORE slice 11: sessions, independent of everything above.
+  sessionsImporter,
 ];

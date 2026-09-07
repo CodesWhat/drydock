@@ -1,32 +1,36 @@
 /**
- * DR-121 fix: the main store (app/store/index.ts) and express-session's
- * connect-loki store (built in app/api/auth.ts around lines 416-422) used to
- * open two independent LokiJS instances on the same /store/dd.json. LokiJS
- * serializes the whole in-memory database on every save, so whichever
- * instance saved last overwrote everything the other had written.
+ * DR-121 fix, updated for the SQLite store (roadmap 7-STORE, slice 11): the
+ * main store (app/store/index.ts) and express-session's pre-1.8 session
+ * store package used to open two independent LokiJS instances on the same
+ * /store/dd.json. That engine serialized the whole in-memory database on
+ * every save, so whichever
+ * instance saved last overwrote everything the other had written (spec
+ * section 1.4).
  *
- * The fix gives the session store its own sibling file, derived from
- * store.getSessionStorePath(), and has the main store drop a stale `Sessions`
- * collection left behind in dd.json by an older build. These tests assert
- * the two stores use different files and that saving one never erases what
- * the other wrote, including the touch-driven case and a restart reload.
- *
- * Containers moved off dd.json onto the SQLite database next to it (roadmap
- * 7-STORE slice 8), so surviving-container assertions go through
- * app/store/container.js's public functions rather than reading dd.json's
- * `containers` collection directly — dd.json still holds every other Loki
- * collection, which is what the Sessions-collection assertions below keep
- * checking.
+ * Sessions now live in the `sessions` table of the exact same SQLite database
+ * every other collection uses — app/api/session-store.ts (the real
+ * express-session Store app/api/auth.ts wires in) reads and writes it through
+ * app/store/session.ts. There is one writer instead of two independent
+ * database instances, so the clobber this file used to reproduce is now
+ * structurally impossible: a session write and a container write are two
+ * transactions against the same connection, not two competing whole-file
+ * serializations. These tests prove that directly — writing sessions and
+ * containers interleaved, in either order, across a store.save() checkpoint
+ * and a full restart, and asserting neither ever erases the other — and that
+ * no second, sibling store file (the old `dd-sessions.json`) is ever created.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import ConnectLoki from 'connect-loki';
-import session from 'express-session';
+import type { SessionStore } from '../api/session-store.js';
 import { createContainerFixture } from '../test/helpers.js';
 
-// Exactly app/api/auth.ts:62.
-const LokiStore = ConnectLoki(session);
+// SessionStore is imported dynamically inside each test, after
+// vi.resetModules(), rather than statically at the top of the file. A static
+// import binds to whatever module instance was current the first time this
+// file was transformed, before any test ran — every subsequently
+// vi.resetModules()'d, freshly `await import('./session.js')`'d instance the
+// tests below assert against would then be invisible to it.
 
 const ENV_KEYS = ['DD_STORE_PATH', 'DD_STORE_FILE'] as const;
 
@@ -35,77 +39,30 @@ function setStoreEnv(storePath: string) {
   process.env.DD_STORE_FILE = 'dd.json';
 }
 
-/**
- * Build the session store exactly the way app/api/auth.ts:418-422 does, and
- * wait for connect-loki's loadDatabase() to finish
- * (connect-loki/lib/connect-loki.js:67).
- */
-function openSessionStore(sessionStorePath: string): Promise<any> {
+function setSessionAsync(store: SessionStore, sid: string, session: object): Promise<void> {
+  return new Promise((resolve, reject) => {
+    store.set(sid, session as never, (error) => (error ? reject(error) : resolve()));
+  });
+}
+
+function touchSessionAsync(store: SessionStore, sid: string, session: object): Promise<void> {
   return new Promise((resolve) => {
-    const sessionStore: any = new (LokiStore as any)({
-      path: sessionStorePath,
-      // 30 days in seconds, matching getCookieMaxAge(REMEMBER_ME_DAYS) / 1000.
-      ttl: 2592000,
-    });
-    sessionStore.on('connect', () => resolve(sessionStore));
+    store.touch(sid, session as never, () => resolve());
   });
 }
 
-function writeSession(sessionStore: any, sid: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sessionStore.set(
-      sid,
-      { cookie: { originalMaxAge: 86400000 }, principal: { username: 'admin' } },
-      (error: unknown) => (error ? reject(error) : resolve()),
-    );
-  });
-}
-
-/** What connect-loki's 5-second autosave does (lokijs.js:2922 -> saveDatabase). */
-function saveSessionInstance(sessionStore: any): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sessionStore.client.saveDatabase((error: unknown) => (error ? reject(error) : resolve()));
-  });
-}
-
-function stopSessionStore(sessionStore: any) {
-  if (!sessionStore) {
-    return;
-  }
-  sessionStore.client?.autosaveDisable?.();
-  const daemon = sessionStore.collection?.ttl?.daemon;
-  if (daemon) {
-    clearInterval(daemon);
-  }
-}
-
-/** Read a persisted Loki file directly — this is the only state a restart sees. */
-function readPersistedCollections(file: string): Record<string, any[]> {
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const collections: Record<string, any[]> = {};
-  for (const collection of parsed.collections ?? []) {
-    collections[collection.name] = collection.data;
-  }
-  return collections;
-}
-
-/** Read container names back through the public store API, not dd.json — containers live in SQLite now. */
-function liveContainerNames(containerModule: typeof import('./container.js')): string[] {
-  return containerModule.getContainers().map((containerItem: any) => containerItem.name);
-}
-
-describe('DR-121 session store owns its own file', () => {
+describe('sessions and the main store share one SQLite writer (roadmap 7-STORE slice 11, DR-121)', () => {
   let tempDir: string;
   let previousEnv: Record<string, string | undefined>;
-  let sessionStore: any;
+  let sessionStore: SessionStore | undefined;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-dr121-'));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-store-sessions-'));
     previousEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   });
 
   afterEach(() => {
-    stopSessionStore(sessionStore);
+    sessionStore?.stop();
     sessionStore = undefined;
     for (const key of ENV_KEYS) {
       const value = previousEnv[key];
@@ -119,206 +76,140 @@ describe('DR-121 session store owns its own file', () => {
     vi.resetModules();
   });
 
-  test('the session store path is a sibling of the main store file, never the file itself', async () => {
+  test('no sibling session file is ever created — sessions live in dd.sqlite itself', async () => {
     setStoreEnv(tempDir);
     vi.resetModules();
     const store = await import('./index.js');
+
     await store.init();
 
-    const configuration = store.getConfiguration();
-    const mainStoreFile = path.join(configuration.path, configuration.file);
-    const sessionStorePath = store.getSessionStorePath();
-
-    expect(sessionStorePath).not.toBe(mainStoreFile);
-    expect(sessionStorePath).toBe(path.join(tempDir, 'dd-sessions.json'));
-    expect(path.dirname(sessionStorePath)).toBe(path.dirname(mainStoreFile));
+    expect(fs.existsSync(path.join(tempDir, 'dd.sqlite'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'dd-sessions.json'))).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, 'dd.json.pre-1.8.bak'))).toBe(false);
   });
 
-  test('a DD_STORE_FILE with no extension still gets a distinct sibling', async () => {
-    process.env.DD_STORE_PATH = tempDir;
-    process.env.DD_STORE_FILE = 'ddstore';
-    vi.resetModules();
-    const store = await import('./index.js');
-    await store.init();
-
-    expect(store.getSessionStorePath()).toBe(path.join(tempDir, 'ddstore-sessions.json'));
-  });
-
-  test('a session save does not remove main-store writes', async () => {
+  test('a session write does not remove main-store writes, across a save() checkpoint', async () => {
     setStoreEnv(tempDir);
     vi.resetModules();
     const store = await import('./index.js');
+    const { SessionStore } = await import('../api/session-store.js');
     const storeContainer = await import('./container.js');
-    const mainStoreFile = path.join(tempDir, 'dd.json');
+    const sessionModel = await import('./session.js');
 
     await store.init();
     storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
     await store.save();
 
-    sessionStore = await openSessionStore(store.getSessionStorePath());
+    sessionStore = new SessionStore({ ttlMs: 86400000 });
+    await setSessionAsync(sessionStore, 'sid-login', {
+      cookie: { originalMaxAge: 86400000 },
+      principal: { username: 'admin' },
+    });
 
     storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
     await store.save();
-    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
 
-    await writeSession(sessionStore, 'sid-login');
-    await saveSessionInstance(sessionStore);
-
-    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
-    expect(fs.existsSync(mainStoreFile)).toBe(true);
-    const sessionsFile = readPersistedCollections(store.getSessionStorePath());
-    expect(sessionsFile.Sessions.map((row: any) => row.sid)).toEqual(['sid-login']);
+    expect(storeContainer.getContainerRaw('seed')).toBeDefined();
+    expect(storeContainer.getContainerRaw('watched')).toBeDefined();
+    expect(sessionModel.getSession('sid-login')).toBeDefined();
   });
 
   test('a main-store save does not remove sessions', async () => {
     setStoreEnv(tempDir);
     vi.resetModules();
     const store = await import('./index.js');
+    const { SessionStore } = await import('../api/session-store.js');
     const storeContainer = await import('./container.js');
+    const sessionModel = await import('./session.js');
 
     await store.init();
     storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
     await store.save();
 
-    sessionStore = await openSessionStore(store.getSessionStorePath());
-
-    await writeSession(sessionStore, 'sid-login');
-    await saveSessionInstance(sessionStore);
-    expect(
-      readPersistedCollections(store.getSessionStorePath()).Sessions.map((row: any) => row.sid),
-    ).toEqual(['sid-login']);
-
-    storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
-    await store.save();
-
-    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
-    expect(
-      readPersistedCollections(store.getSessionStorePath()).Sessions.map((row: any) => row.sid),
-    ).toEqual(['sid-login']);
-  });
-
-  test('a touch-driven session save does not remove main-store writes', async () => {
-    setStoreEnv(tempDir);
-    vi.resetModules();
-    const store = await import('./index.js');
-    const storeContainer = await import('./container.js');
-
-    await store.init();
-    storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
-    await store.save();
-
-    sessionStore = await openSessionStore(store.getSessionStorePath());
-
-    await writeSession(sessionStore, 'sid-login');
-    await saveSessionInstance(sessionStore);
-    expect(sessionStore.client.autosaveDirty()).toBe(false);
-
-    storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
-    await store.save();
-
-    // express-session/index.js:359-362 calls store.touch on any request that
-    // carries an existing session cookie and does not modify the session.
-    await new Promise<void>((resolve, reject) => {
-      sessionStore.touch('sid-login', { cookie: { originalMaxAge: 86400000 } }, (error: unknown) =>
-        error ? reject(error) : resolve(),
-      );
+    sessionStore = new SessionStore({ ttlMs: 86400000 });
+    await setSessionAsync(sessionStore, 'sid-login', {
+      cookie: { originalMaxAge: 86400000 },
+      principal: { username: 'admin' },
     });
-    expect(sessionStore.client.autosaveDirty()).toBe(true);
+    expect(sessionModel.getSession('sid-login')).toBeDefined();
 
-    // ...which is all connect-loki's 5-second autosave needs.
-    await saveSessionInstance(sessionStore);
+    storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
+    await store.save();
 
-    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
-    expect(
-      readPersistedCollections(store.getSessionStorePath()).Sessions.map((row: any) => row.sid),
-    ).toEqual(['sid-login']);
+    expect(storeContainer.getContainerRaw('seed')).toBeDefined();
+    expect(storeContainer.getContainerRaw('watched')).toBeDefined();
+    expect(sessionModel.getSession('sid-login')).toBeDefined();
   });
 
-  test('a restart reload sees both the main store and the session store', async () => {
+  test('a touch-driven session update does not remove main-store writes or other sessions', async () => {
     setStoreEnv(tempDir);
     vi.resetModules();
     const store = await import('./index.js');
+    const { SessionStore } = await import('../api/session-store.js');
+    const storeContainer = await import('./container.js');
+    const sessionModel = await import('./session.js');
+
+    await store.init();
+    storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
+    await store.save();
+
+    sessionStore = new SessionStore({ ttlMs: 86400000 });
+    await setSessionAsync(sessionStore, 'sid-login', {
+      cookie: { originalMaxAge: 86400000, expires: new Date(Date.now() + 86400000).toISOString() },
+    });
+    const originalExpiresAt = sessionModel.getSession('sid-login')?.expiresAt;
+
+    storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
+    await store.save();
+
+    // express-session/index.js calls store.touch on any request that carries
+    // an existing session cookie and does not modify the session. A distinct
+    // cookie.expires from the original set() is what makes the refreshed
+    // expiresAt observably different below.
+    await touchSessionAsync(sessionStore, 'sid-login', {
+      cookie: {
+        originalMaxAge: 172800000,
+        expires: new Date(Date.now() + 172800000).toISOString(),
+      },
+    });
+    await store.save();
+
+    expect(storeContainer.getContainerRaw('seed')).toBeDefined();
+    expect(storeContainer.getContainerRaw('watched')).toBeDefined();
+    const touchedSession = sessionModel.getSession('sid-login');
+    expect(touchedSession).toBeDefined();
+    expect(touchedSession?.expiresAt).not.toBe(originalExpiresAt);
+  });
+
+  test('a restart reload sees both the main store and every session written before it', async () => {
+    setStoreEnv(tempDir);
+    vi.resetModules();
+    const store = await import('./index.js');
+    const { SessionStore } = await import('../api/session-store.js');
     const storeContainer = await import('./container.js');
 
     await store.init();
     storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
     await store.save();
 
-    const sessionStorePath = store.getSessionStorePath();
-    sessionStore = await openSessionStore(sessionStorePath);
-
+    sessionStore = new SessionStore({ ttlMs: 86400000 });
+    await setSessionAsync(sessionStore, 'sid-login', {
+      cookie: { originalMaxAge: 86400000 },
+    });
     storeContainer.insertContainer(createContainerFixture({ id: 'watched', name: 'watched' }));
     await store.save();
-    await writeSession(sessionStore, 'sid-login');
-    await saveSessionInstance(sessionStore);
-    stopSessionStore(sessionStore);
+    sessionStore.stop();
     sessionStore = undefined;
 
-    expect(liveContainerNames(storeContainer)).toEqual(['seed', 'watched']);
-    expect(readPersistedCollections(sessionStorePath).Sessions.map((row: any) => row.sid)).toEqual([
-      'sid-login',
-    ]);
-
     setStoreEnv(tempDir);
     vi.resetModules();
     const restartedStore = await import('./index.js');
     const restartedContainer = await import('./container.js');
+    const restartedSessionModel = await import('./session.js');
     await restartedStore.init();
 
+    expect(restartedContainer.getContainerRaw('seed')).toBeDefined();
     expect(restartedContainer.getContainerRaw('watched')).toBeDefined();
-    expect(restartedContainer.getContainerRaw('seed')).toBeDefined();
-    expect(liveContainerNames(restartedContainer)).toEqual(['seed', 'watched']);
-    expect(
-      readPersistedCollections(restartedStore.getSessionStorePath()).Sessions.map(
-        (row: any) => row.sid,
-      ),
-    ).toEqual(['sid-login']);
-  });
-
-  test('main-store init drops a stale Sessions collection left in dd.json by an older build', async () => {
-    setStoreEnv(tempDir);
-    vi.resetModules();
-    const mainStoreFile = path.join(tempDir, 'dd.json');
-
-    // Simulate a pre-fix install where the session store's collection was
-    // written straight into dd.json by an older LokiStore sharing the file.
-    const store = await import('./index.js');
-    const storeContainer = await import('./container.js');
-    await store.init();
-    storeContainer.insertContainer(createContainerFixture({ id: 'seed', name: 'seed' }));
-    await store.save();
-
-    const legacySessionStore = await openSessionStore(mainStoreFile);
-    await writeSession(legacySessionStore, 'sid-legacy');
-    await saveSessionInstance(legacySessionStore);
-    stopSessionStore(legacySessionStore);
-    expect(readPersistedCollections(mainStoreFile).Sessions).toBeDefined();
-
-    // A restart on the fixed code drops the stale collection from the main
-    // store and persists the removal during init() itself — no explicit
-    // save() call here, so this is durable even on a store that never
-    // writes again.
-    vi.resetModules();
-    const restartedStore = await import('./index.js');
-    const restartedContainer = await import('./container.js');
-    await restartedStore.init();
-    expect(restartedContainer.getContainerRaw('seed')).toBeDefined();
-
-    expect(readPersistedCollections(mainStoreFile).Sessions).toBeUndefined();
-  });
-
-  test('init() does not persist a save when there is no legacy Sessions collection to drop', async () => {
-    setStoreEnv(tempDir);
-    vi.resetModules();
-    const store = await import('./index.js');
-
-    // LokiFsAdapter.saveDatabase() (lokijs.js:2435-2445) writes through
-    // fs.writeFile before renaming into place, so a call here is the
-    // observable signature of a save actually happening.
-    const writeFileSpy = vi.spyOn(fs, 'writeFile');
-    await store.init();
-
-    expect(writeFileSpy).not.toHaveBeenCalled();
-    vi.restoreAllMocks();
+    expect(restartedSessionModel.getSession('sid-login')).toBeDefined();
   });
 });

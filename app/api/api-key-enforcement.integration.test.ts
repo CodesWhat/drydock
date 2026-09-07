@@ -2,10 +2,11 @@
  * Integration test for API key authentication and scope enforcement.
  *
  * Everything below the HTTP boundary is real: the express-session +
- * connect-loki store, the real Basic provider with a real argon2id hash, the
- * real api-keys SQLite table with real SHA-256 digests, the real
- * authenticator chain, the real `requireAuthentication`, and routes declared
- * with the real `scoped()`.
+ * SessionStore (roadmap 7-STORE slice 11, backed by a real SQLite database),
+ * the real Basic provider with a real argon2id hash, the real api-keys
+ * SQLite table with real SHA-256 digests, the real authenticator chain, the
+ * real `requireAuthentication`, and routes declared with the real
+ * `scoped()`.
  *
  * Three of the phase's Done-when points are proven here rather than in a unit
  * test, because each one is a claim about the whole stack:
@@ -15,9 +16,6 @@
  */
 import { argon2Sync, randomBytes } from 'node:crypto';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import ConnectLoki from 'connect-loki';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
@@ -36,6 +34,7 @@ vi.mock('../log/index.js', () => ({
 import Basic from '../authentications/providers/basic/Basic.js';
 import * as apiKeyStore from '../store/api-key.js';
 import type { Database } from '../store/db/driver.js';
+import * as sessionModel from '../store/session.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { apiKeyAuthenticator } from './api-key-auth.js';
 import { requireAuthentication } from './auth.js';
@@ -52,16 +51,14 @@ import {
   sessionAuthenticator,
   writeSessionPrincipal,
 } from './session-principal.js';
+import { SessionStore } from './session-store.js';
 
-const LokiStore = ConnectLoki(session);
 const TEST_USER = 'wud-card';
 const TEST_PASSWORD = 'correct-horse-battery-staple';
 const BASIC_AUTH_HEADER = `Basic ${Buffer.from(`${TEST_USER}:${TEST_PASSWORD}`).toString('base64')}`;
 const HTTPS_HEADERS = { 'X-Forwarded-Proto': 'https' };
 const IDP_CREDENTIAL = 'idp-issued-access-credential';
 const WEBHOOK_CREDENTIAL = 'webhook-issued-bearer-secret';
-
-type LokiSessionStore = InstanceType<typeof LokiStore>;
 
 interface RunningServer {
   server: http.Server;
@@ -81,21 +78,14 @@ function createArgon2Hash(password: string): string {
   return `argon2id$19456$2$4$${salt.toString('base64')}$${derived.toString('base64')}`;
 }
 
-function createStore(): LokiSessionStore {
-  return new LokiStore({
-    path: path.join(os.tmpdir(), `drydock-api-key-test-${randomBytes(8).toString('hex')}.db`),
-    autosave: false,
-    ttl: 60,
-  });
+/** A throwaway SQLite database backing its own SessionStore — real writes, no shared state across tests. */
+function createStore(): SessionStore {
+  const db = createMigratedMemoryDatabase();
+  sessionModel.createCollections(db);
+  return new SessionStore({ ttlMs: 60_000 });
 }
 
-function waitForStoreReady(store: LokiSessionStore): Promise<void> {
-  return new Promise((resolve) => {
-    store.once('connect', resolve);
-  });
-}
-
-function storeLength(store: LokiSessionStore): Promise<number> {
+function storeLength(store: SessionStore): Promise<number> {
   return new Promise((resolve, reject) => {
     store.length((error: unknown, count?: number) => {
       if (error) {
@@ -131,7 +121,7 @@ async function createBasicAuthenticator(): Promise<Basic> {
   return basic;
 }
 
-function clearSessionStore(store: LokiSessionStore): Promise<void> {
+function clearSessionStore(store: SessionStore): Promise<void> {
   return new Promise((resolve, reject) => {
     store.clear((error: unknown) => {
       if (error) {
@@ -143,7 +133,7 @@ function clearSessionStore(store: LokiSessionStore): Promise<void> {
   });
 }
 
-function createTestApp(store: LokiSessionStore): Application {
+function createTestApp(store: SessionStore): Application {
   const app = express();
   app.set('trust proxy', 1);
   app.use(
@@ -249,7 +239,7 @@ describe('API key enforcement', () => {
   // state a case can actually leave behind — the api-key collection, the
   // session store's rows, and the registered authenticator chain a couple of
   // cases deliberately swap out — gets reset per case below.
-  let sessionStore: LokiSessionStore;
+  let sessionStore: SessionStore;
   let server: http.Server;
   let basic: Basic;
   let port: number;
@@ -259,7 +249,6 @@ describe('API key enforcement', () => {
   beforeAll(async () => {
     basic = await createBasicAuthenticator();
     sessionStore = createStore();
-    await waitForStoreReady(sessionStore);
     const app = createTestApp(sessionStore);
     const running = await startServer(app);
     server = running.server;
@@ -268,6 +257,7 @@ describe('API key enforcement', () => {
 
   afterAll(async () => {
     await closeServer(server);
+    sessionStore.stop();
   });
 
   beforeEach(async () => {

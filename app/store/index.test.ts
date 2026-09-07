@@ -4,7 +4,6 @@ import * as store from './index.js';
 // vi.hoisted ensures these are available when vi.mock factories execute (hoisted above imports)
 const {
   STORE_CONFIG,
-  createLokiMock,
   fsMock,
   resetFsMock,
   createConfigMock,
@@ -13,7 +12,9 @@ const {
   createContainerMock,
   createAgentKeysMock,
   createLogMock,
+  createSqliteDbMock,
   createDriverMock,
+  createDebugSnapshotSqliteDbMock,
   createMigrationsMock,
   createImportMock,
   registerCommonMocks,
@@ -28,13 +29,54 @@ const {
       isOpen: true,
       isTransaction: false,
       exec: vi.fn(),
-      prepare: vi.fn(),
+      prepare: vi.fn(() => ({
+        all: vi.fn(() => []),
+        get: vi.fn(() => undefined),
+        run: vi.fn(),
+        iterate: vi.fn(() => []),
+      })),
       pragma: vi.fn(),
       transaction: vi.fn((run: () => unknown) => run()),
       backup: vi.fn(async () => 0),
       close: vi.fn(),
       ...overrides,
     };
+  }
+
+  // A `prepare()` that actually answers the two queries getDebugSnapshot()
+  // issues — `SELECT name FROM sqlite_schema ...` and
+  // `SELECT COUNT(*) AS count FROM "<table>"` — from a plain table-name to
+  // row-count map, plus a `pragma()` answering `page_count`/`page_size`. Real
+  // enough to exercise getDebugSnapshot()'s own filtering and arithmetic
+  // without standing up a real database.
+  function createDebugSnapshotSqliteDbMock({
+    tables = {} as Record<string, number>,
+    pageCount = 0,
+    pageSize = 0,
+  } = {}) {
+    return createSqliteDbMock({
+      prepare: vi.fn((sql: string) => {
+        if (sql.includes('FROM sqlite_schema')) {
+          return {
+            all: vi.fn(() =>
+              Object.keys(tables)
+                .sort()
+                .map((name) => ({ name })),
+            ),
+          };
+        }
+        const match = sql.match(/FROM "([^"]+)"/);
+        const tableName = match?.[1];
+        return {
+          get: vi.fn(() => ({ count: tableName ? (tables[tableName] ?? 0) : 0 })),
+        };
+      }),
+      pragma: vi.fn((name: string) => {
+        if (name === 'page_count') return pageCount;
+        if (name === 'page_size') return pageSize;
+        return undefined;
+      }),
+    });
   }
 
   function createDriverMock(openDatabaseImpl = vi.fn(() => createSqliteDbMock())) {
@@ -62,22 +104,6 @@ const {
     })),
   ) {
     return { runFirstStartImport: runFirstStartImportImpl };
-  }
-
-  function createLokiMock(
-    loadDbCallback = (options, callback) => callback(null),
-    saveDbCallback = (callback) => callback(null),
-    createDbInstance = () => ({
-      loadDatabase: vi.fn(loadDbCallback),
-      saveDatabase: vi.fn(saveDbCallback),
-    }),
-  ) {
-    return {
-      // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
-      default: vi.fn().mockImplementation(function () {
-        return createDbInstance();
-      }),
-    };
   }
 
   // A single, stable object backs every 'node:fs' mock for the whole file.
@@ -154,9 +180,6 @@ const {
   /** Register the standard set of doMock calls needed after vi.resetModules. */
   function registerCommonMocks(
     overrides: {
-      loki?: Parameters<typeof createLokiMock>[0];
-      lokiSave?: Parameters<typeof createLokiMock>[1];
-      lokiInstance?: Parameters<typeof createLokiMock>[2];
       fs?: Record<string, unknown>;
       config?: Record<string, unknown>;
       container?: Record<string, unknown>;
@@ -166,9 +189,6 @@ const {
       runFirstStartImport?: Parameters<typeof createImportMock>[0];
     } = {},
   ) {
-    vi.doMock('lokijs', () =>
-      createLokiMock(overrides.loki, overrides.lokiSave, overrides.lokiInstance),
-    );
     resetFsMock(overrides.fs);
     vi.doMock('./db/driver.js', () => createDriverMock(overrides.sqliteOpenDatabase));
     vi.doMock('./db/migrations.js', createMigrationsMock);
@@ -198,16 +218,17 @@ const {
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
+    vi.doMock('./session', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./ui-preferences', createCollectionsMock);
     vi.doMock('./update-lifecycle-cache', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
+    vi.doMock('./update-policy-retention-cache', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
 
   return {
     STORE_CONFIG,
-    createLokiMock,
     fsMock,
     resetFsMock,
     createConfigMock,
@@ -216,7 +237,9 @@ const {
     createContainerMock,
     createAgentKeysMock,
     createLogMock,
+    createSqliteDbMock,
     createDriverMock,
+    createDebugSnapshotSqliteDbMock,
     createMigrationsMock,
     createImportMock,
     registerCommonMocks,
@@ -225,7 +248,6 @@ const {
 
 // --- Top-level mocks (hoisted, used for the non-resetModules tests) ---
 
-vi.mock('lokijs', () => createLokiMock());
 vi.mock('node:fs', () => ({ default: fsMock }));
 vi.mock('./db/driver.js', () => createDriverMock());
 vi.mock('./db/migrations.js', createMigrationsMock);
@@ -247,6 +269,7 @@ vi.mock('./agent-keys', createAgentKeysMock);
 vi.mock('./api-key', createCollectionsMock);
 vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
+vi.mock('./session', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
 vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-lifecycle-cache', createCollectionsMock);
@@ -279,11 +302,6 @@ describe('Store Module', () => {
 
     await store.init();
 
-    const Loki = (await import('lokijs')).default;
-    expect(Loki).toHaveBeenCalledWith('/test/store/test.json', {
-      autosave: true,
-      autosaveInterval: 300000,
-    });
     expect(process.umask()).toBe(0o077);
     expect(fs.chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
     expect(fs.chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
@@ -293,6 +311,7 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const mqttHass = await import('./mqtt-hass.js');
     const notification = await import('./notification.js');
+    const sessionStore = await import('./session.js');
     const settings = await import('./settings.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateLifecycleCache = await import('./update-lifecycle-cache.js');
@@ -304,6 +323,7 @@ describe('Store Module', () => {
     expect(container.createCollections).toHaveBeenCalled();
     expect(mqttHass.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
+    expect(sessionStore.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateLifecycleCache.createCollections).toHaveBeenCalled();
@@ -348,16 +368,7 @@ describe('Store Module', () => {
       databasePath: '/test/store/dd.sqlite',
       rowsByTable: {},
     }));
-    const openDatabaseMock = vi.fn(() => ({
-      isOpen: true,
-      isTransaction: false,
-      exec: vi.fn(),
-      prepare: vi.fn(),
-      pragma: vi.fn(),
-      transaction: vi.fn((run: () => unknown) => run()),
-      backup: vi.fn(async () => 0),
-      close: vi.fn(),
-    }));
+    const openDatabaseMock = vi.fn(() => createSqliteDbMock());
 
     registerCommonMocks({
       fs: { existsSync: vi.fn(() => false), mkdirSync: vi.fn(), renameSync: vi.fn() },
@@ -388,7 +399,6 @@ describe('Store Module', () => {
     }));
 
     registerCommonMocks({
-      loki: vi.fn(),
       fs: { renameSync: vi.fn() },
       runFirstStartImport: runFirstStartImportMock,
     });
@@ -413,19 +423,6 @@ describe('Store Module', () => {
     expect(config).toEqual({ ...STORE_CONFIG, dbFile: 'dd.sqlite' });
   });
 
-  test('should handle database load error', async () => {
-    vi.resetModules();
-
-    vi.doMock('lokijs', () =>
-      createLokiMock((options, callback) => {
-        callback(new Error('Database load failed'));
-      }),
-    );
-
-    const storeWithError = await import('./index.js');
-    await expect(storeWithError.init()).rejects.toThrow('Database load failed');
-  });
-
   test('should reject initialization when post-load SBOM migration rejects', async () => {
     vi.resetModules();
     registerCommonMocks({
@@ -442,20 +439,13 @@ describe('Store Module', () => {
     });
 
     const storeWithMigrationError = await import('./index.js');
-    const initWithDeadline = Promise.race([
-      storeWithMigrationError.init(),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Store initialization did not settle')), 100);
-      }),
-    ]);
 
-    await expect(initWithDeadline).rejects.toThrow('SBOM migration failed');
+    await expect(storeWithMigrationError.init()).rejects.toThrow('SBOM migration failed');
   });
 
   test('should initialize store in memory mode', async () => {
     vi.resetModules();
     registerCommonMocks({
-      loki: vi.fn(),
       fs: { renameSync: vi.fn() },
     });
 
@@ -520,38 +510,18 @@ describe('Store Module', () => {
     await storeWithMigration.init();
 
     const container = await import('./container.js');
-    const Loki = (await import('lokijs')).default;
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
     const logger = (await import('../log/index.js')).default;
     const scopedLog = storeScopedLog(logger);
     expect(container.updateContainer).toHaveBeenCalledWith(migratedContainer);
-    expect(Loki.mock.results[0].value.saveDatabase).toHaveBeenCalledOnce();
+    expect(sqliteInstance.pragma).toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
     expect(scopedLog.info).toHaveBeenCalledWith(
       'Migrated 2 inline SBOM document(s) across 1 record(s)',
     );
     expect(scopedLog.warn).toHaveBeenCalledWith(
       'Failed to migrate 1 SBOM record(s); inline data was preserved for retry',
     );
-  });
-
-  test('should save database when persistence is enabled', async () => {
-    vi.resetModules();
-    registerCommonMocks({
-      fs: {
-        existsSync: vi.fn(() => true),
-        mkdirSync: vi.fn(),
-        renameSync: vi.fn(),
-      },
-    });
-
-    const storePersistent = await import('./index.js');
-    await storePersistent.init();
-    await storePersistent.save();
-
-    const Loki = (await import('lokijs')).default;
-    const dbInstance = Loki.mock.results[0].value;
-    expect(dbInstance.saveDatabase).toHaveBeenCalledTimes(1);
-    const mockedFs = (await import('node:fs')).default;
-    expect(mockedFs.chmodSync).toHaveBeenLastCalledWith('/test/store/test.json', 0o600);
   });
 
   test('should enforce directory permissions on the configured store root when DD_STORE_FILE is a subpath', async () => {
@@ -578,39 +548,6 @@ describe('Store Module', () => {
     expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
     expect(mockedFs.chmodSync).not.toHaveBeenCalledWith('/test/store/nested/sub', 0o700);
     expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/nested/sub/test.json', 0o600);
-  });
-
-  test('should no-op save when store runs in memory mode', async () => {
-    vi.resetModules();
-    registerCommonMocks({
-      lokiSave: vi.fn((callback) => callback(null)),
-      fs: { renameSync: vi.fn() },
-    });
-
-    const storeMemory = await import('./index.js');
-    await storeMemory.init({ memory: true });
-    await storeMemory.save();
-
-    const Loki = (await import('lokijs')).default;
-    const dbInstance = Loki.mock.results[0].value;
-    expect(dbInstance.saveDatabase).not.toHaveBeenCalled();
-  });
-
-  test('should throw when database save fails', async () => {
-    vi.resetModules();
-    registerCommonMocks({
-      lokiSave: vi.fn((callback) => callback(new Error('Database save failed'))),
-      fs: {
-        existsSync: vi.fn(() => true),
-        mkdirSync: vi.fn(),
-        renameSync: vi.fn(),
-      },
-    });
-
-    const storeWithSaveError = await import('./index.js');
-    await storeWithSaveError.init();
-
-    await expect(storeWithSaveError.save()).rejects.toThrow('Database save failed');
   });
 
   test('should reject when database permissions cannot be repaired after save', async () => {
@@ -956,7 +893,6 @@ describe('Store Module', () => {
   test('should not checkpoint the SQLite database when save runs in memory mode', async () => {
     vi.resetModules();
     registerCommonMocks({
-      lokiSave: vi.fn((callback) => callback(null)),
       fs: { renameSync: vi.fn() },
     });
 
@@ -971,7 +907,30 @@ describe('Store Module', () => {
     expect(sqliteInstance.pragma).not.toHaveBeenCalled();
   });
 
-  test('should report an uninitialized store as memory-only even once Loki alone has been assigned', async () => {
+  test('should reject when the checkpoint pragma throws', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+      sqliteOpenDatabase: vi.fn(() =>
+        createSqliteDbMock({
+          pragma: vi.fn(() => {
+            throw new Error('checkpoint failed');
+          }),
+        }),
+      ),
+    });
+
+    const storeWithCheckpointError = await import('./index.js');
+    await storeWithCheckpointError.init();
+
+    await expect(storeWithCheckpointError.save()).rejects.toThrow('checkpoint failed');
+  });
+
+  test('should report an uninitialized store as memory-only when the SQLite open fails', async () => {
     vi.resetModules();
     registerCommonMocks({
       fs: {
@@ -1000,7 +959,6 @@ describe('Store Module', () => {
 
   test('should fall back to schema defaults when store configuration is null', async () => {
     vi.resetModules();
-    vi.doMock('lokijs', () => createLokiMock());
     resetFsMock({ renameSync: vi.fn() });
     vi.doMock('../configuration', () => ({ getStoreConfiguration: vi.fn(() => null) }));
     vi.doMock('./app', createCollectionsMock);
@@ -1056,30 +1014,23 @@ describe('Store Module', () => {
     expect(mockFs.renameSync).toHaveBeenCalledWith('/test/store/wud.json', '/test/store/test.json');
   });
 
-  test('should collect debug snapshot values from collection fallbacks', async () => {
+  test('should report per-table row counts and the whole-database size from sqlite_schema', async () => {
     vi.resetModules();
 
-    const storeDb = {
-      collections: [
-        123,
-        { count: vi.fn(() => -4) },
-        { name: undefined, count: vi.fn(() => Number.NaN) },
-        { name: 'bad-data', data: { value: 1 } },
-        { name: 'data', data: [1, 2, 3] },
-        { name: 'named', count: vi.fn(() => 5) },
-      ],
-      loadDatabase: vi.fn((options, callback) => callback(null)),
-      saveDatabase: vi.fn((callback) => callback(null)),
-    };
-
     registerCommonMocks({
-      lokiInstance: () => storeDb,
       fs: {
         existsSync: vi.fn(() => true),
         mkdirSync: vi.fn(),
-        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
         renameSync: vi.fn(),
+        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
       },
+      sqliteOpenDatabase: vi.fn(() =>
+        createDebugSnapshotSqliteDbMock({
+          tables: { app_info: 1, containers: 3, schema_migrations: 7, store_metadata: 2 },
+          pageCount: 25,
+          pageSize: 4096,
+        }),
+      ),
     });
 
     const storeWithSnapshot = await import('./index.js');
@@ -1089,98 +1040,51 @@ describe('Store Module', () => {
       memoryMode: false,
       path: '/test/store/test.json',
       sqlitePath: '/test/store/dd.sqlite',
-      collectionCount: 6,
-      documentCount: 8,
-      serializedBytes: 91,
+      collectionCount: 2,
+      documentCount: 4,
+      serializedBytes: 25 * 4096,
       lastPersistAt: '2026-03-18T12:34:56.000Z',
       collections: [
-        { name: 'unknown', documents: 0, serializedBytes: 3 },
-        { name: 'unknown', documents: 0, serializedBytes: 2 },
-        { name: 'unknown', documents: 0, serializedBytes: 2 },
-        { name: 'bad-data', documents: 0, serializedBytes: 38 },
-        { name: 'data', documents: 3, serializedBytes: 30 },
-        { name: 'named', documents: 5, serializedBytes: 16 },
+        { name: 'app_info', documents: 1 },
+        { name: 'containers', documents: 3 },
       ],
     });
   });
 
-  test('should attribute UTF-8 serialized bytes and tolerate an unserializable collection', async () => {
+  test('should fall back to zero bytes when the database answers no page_count/page_size pragma', async () => {
     vi.resetModules();
-
-    const circularCollection: Record<string, unknown> = { name: 'circular', data: [] };
-    circularCollection.self = circularCollection;
     registerCommonMocks({
-      lokiInstance: () => ({
-        collections: [
-          Symbol('unserializable'),
-          { name: 'unicode', data: [{ label: 'café 🚢' }] },
-          circularCollection,
-        ],
-        loadDatabase: vi.fn((options, callback) => callback(null)),
-        saveDatabase: vi.fn((callback) => callback(null)),
-      }),
-      fs: { existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() },
-    });
-
-    const storeWithByteStats = await import('./index.js');
-    await storeWithByteStats.init();
-
-    expect(storeWithByteStats.getDebugSnapshot()).toMatchObject({
-      serializedBytes: 50,
-      collections: [
-        { name: 'unknown', documents: 0, serializedBytes: 0 },
-        { name: 'unicode', documents: 1, serializedBytes: 50 },
-        { name: 'circular', documents: 0, serializedBytes: 0 },
-      ],
-    });
-  });
-
-  test('should return undefined lastPersistAt when store runs in memory mode', async () => {
-    vi.resetModules();
-
-    registerCommonMocks({
-      lokiInstance: () => ({
-        collections: [],
-        loadDatabase: vi.fn((options, callback) => callback(null)),
-        saveDatabase: vi.fn((callback) => callback(null)),
-      }),
       fs: {
         existsSync: vi.fn(() => true),
         mkdirSync: vi.fn(),
-        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
         renameSync: vi.fn(),
       },
+      // The bare mock's prepare()/pragma() answer every call with an empty
+      // result regardless of the SQL text or pragma name, exercising the
+      // `?? 0` fallback getDatabaseFileSize() takes when a driver answers no
+      // page_count/page_size at all.
+      sqliteOpenDatabase: vi.fn(() => createSqliteDbMock()),
     });
 
-    const storeInMemory = await import('./index.js');
-    await storeInMemory.init({ memory: true });
+    const storeWithNoPragmaAnswer = await import('./index.js');
+    await storeWithNoPragmaAnswer.init();
 
-    expect(storeInMemory.getDebugSnapshot()).toEqual({
-      memoryMode: true,
-      path: '/test/store/test.json',
-      sqlitePath: '/test/store/dd.sqlite',
+    expect(storeWithNoPragmaAnswer.getDebugSnapshot()).toMatchObject({
       collectionCount: 0,
       documentCount: 0,
       serializedBytes: 0,
-      lastPersistAt: undefined,
       collections: [],
     });
   });
 
-  test('should return undefined lastPersistAt when store path has not been initialized', async () => {
+  test('should return zero collections and no persisted-at when the store was never initialized', async () => {
     vi.resetModules();
-
     registerCommonMocks({
-      lokiInstance: () => ({
-        collections: [],
-        loadDatabase: vi.fn((options, callback) => callback(null)),
-        saveDatabase: vi.fn((callback) => callback(null)),
-      }),
       fs: {
         existsSync: vi.fn(() => true),
         mkdirSync: vi.fn(),
-        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
         renameSync: vi.fn(),
+        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
       },
     });
 
@@ -1198,25 +1102,47 @@ describe('Store Module', () => {
     });
   });
 
+  test('should return undefined lastPersistAt when store runs in memory mode', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
+      },
+      sqliteOpenDatabase: vi.fn(() => createDebugSnapshotSqliteDbMock()),
+    });
+
+    const storeInMemory = await import('./index.js');
+    await storeInMemory.init({ memory: true });
+
+    expect(storeInMemory.getDebugSnapshot()).toEqual({
+      memoryMode: true,
+      path: '/test/store/test.json',
+      sqlitePath: '/test/store/dd.sqlite',
+      collectionCount: 0,
+      documentCount: 0,
+      serializedBytes: 0,
+      lastPersistAt: undefined,
+      collections: [],
+    });
+  });
+
   test('should return undefined lastPersistAt when statSync throws', async () => {
     vi.resetModules();
-
     registerCommonMocks({
-      lokiInstance: () => ({
-        collections: [{ name: 'only', count: vi.fn(() => 1) }],
-        loadDatabase: vi.fn((options, callback) => callback(null)),
-        saveDatabase: vi.fn((callback) => callback(null)),
-      }),
       fs: {
-        existsSync: vi.fn(
-          (targetPath) => targetPath === '/test/store/test.json' || targetPath === '/test/store',
-        ),
+        existsSync: vi.fn(() => true),
         mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
         statSync: vi.fn(() => {
           throw new Error('stat failed');
         }),
-        renameSync: vi.fn(),
       },
+      sqliteOpenDatabase: vi.fn(() =>
+        createDebugSnapshotSqliteDbMock({ tables: { only: 1 }, pageCount: 4, pageSize: 4096 }),
+      ),
     });
 
     const storeWithStatError = await import('./index.js');
@@ -1228,9 +1154,9 @@ describe('Store Module', () => {
       sqlitePath: '/test/store/dd.sqlite',
       collectionCount: 1,
       documentCount: 1,
-      serializedBytes: 15,
+      serializedBytes: 4 * 4096,
       lastPersistAt: undefined,
-      collections: [{ name: 'only', documents: 1, serializedBytes: 15 }],
+      collections: [{ name: 'only', documents: 1 }],
     });
   });
 
@@ -1268,7 +1194,6 @@ describe('Store Module', () => {
     vi.resetModules();
 
     const mockWarn = vi.fn();
-    vi.doMock('lokijs', () => createLokiMock());
     resetFsMock({ existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() });
     vi.doMock('../configuration', () => ({
       ...createConfigMock(STORE_CONFIG),

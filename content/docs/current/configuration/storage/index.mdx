@@ -7,15 +7,17 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 If you want the state to persist after the container removal, you need to mount `/store` as a volume.
 
-Login sessions persist in their own file next to the main store — `dd-sessions.json` by default, derived from `DD_STORE_FILE` — so mounting `/store` covers both.
+Everything drydock persists — containers, settings, secrets, agent and API keys, audit history, notification history, backups, notification rules, the approval queue, update operations, and login sessions — lives in one SQLite database, `DD_STORE_DB_FILE` (`dd.sqlite` by default). Mounting `/store` covers all of it; there is nothing else to mount separately.
+
+A plain file copy of `dd.sqlite` (and its `-wal`/`-shm` sidecars, if present) taken while drydock is running can catch it mid-write and produce a corrupt backup. Either stop the container first and then copy the files, or take a consistent live backup with `sqlite3 dd.sqlite ".backup /path/out.sqlite"` (or `VACUUM INTO`) instead. Restore from one complete, consistent snapshot, never from a copy taken mid-write.
 
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_STORE_PATH` | ⚪ | Directory where the database file is stored | directory path | `/store` |
-| `DD_STORE_FILE` | ⚪ | Database filename | filename | `dd.json` |
-| `DD_STORE_DB_FILE` | ⚪ | SQLite database filename, stored alongside `DD_STORE_FILE` in the same directory. App metadata, settings, the session secret, UI preferences, Portwing agent keys and name bindings, API keys with their scopes, audit entries, notification history and the notification outbox, image-restore backups, notification rules and the approval queue, the update-lifecycle and update-policy-retention caches, and containers live here; everything else still lives in `DD_STORE_FILE`, which still has to find your existing data on an upgrade. | filename | `dd.sqlite` |
+| `DD_STORE_FILE` | ⚪ | Legacy database filename. Only read once, on first start against an existing v1.7 (or earlier) install, to import its data into `DD_STORE_DB_FILE`; a fresh v1.8 install never creates it. After a successful import it is renamed to `<DD_STORE_FILE>.pre-1.8.bak` and kept as the only rollback path to v1.7 — it is never opened again. | filename | `dd.json` |
+| `DD_STORE_DB_FILE` | ⚪ | SQLite database filename, stored alongside `DD_STORE_FILE` in the same directory. Everything drydock persists lives here: app metadata, settings, the session secret, UI preferences, Portwing agent keys and name bindings, API keys with their scopes, audit entries, notification history and the notification outbox, image-restore backups, notification rules and the approval queue, the update-lifecycle and update-policy-retention caches, containers, update operations, and login sessions. | filename | `dd.sqlite` |
 | `DD_DEFAULT_CACHE_MAX_ENTRIES` | ⚪ | Shared default entry cap used by several in-memory caches when their specific cap is not set | integer (`>0`) | `500` |
 | `DD_CONTAINERS_QUERY_CACHE_MAX_ENTRIES` | ⚪ | Max cached container-list query results retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_SECURITY_STATE_CACHE_TTL_MS` | ⚪ | Time-to-live for cached per-container security state used to survive short container recreation gaps | integer (`>0`) | `900000` (15 min) |
@@ -54,6 +56,8 @@ docker run \
 </Tabs>
 
 ## Downgrade Notes
+
+Rolling back from v1.8 to v1.7 or earlier needs `dd.json` back, not `dd.sqlite`: stop drydock, rename `<DD_STORE_PATH>/<DD_STORE_FILE>.pre-1.8.bak` back to `<DD_STORE_FILE>` (`dd.json.pre-1.8.bak` → `dd.json` with the defaults), then start the older build. It only has what existed at the moment of the v1.8 upgrade's one-time import — anything written afterward (new containers, settings changes, sessions) lived in `dd.sqlite` alone and does not roll back with it.
 
 The `dd.json` store written by v1.5.1 and later tolerates unknown fields, so a later v1.5.x store can usually be read after rolling back to another v1.5.1+ build.
 

@@ -246,6 +246,22 @@ The system log stream WebSocket (`app/api/log-stream.ts`) accepted both the vers
 
 **Migration:** Point WebSocket clients at `/api/v1/log/stream`.
 
+---
+
+### `dd.json` as the live store file
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.8.0 (store's SQLite migration began, roadmap 7-STORE, slice 1) |
+| **Removed in** | v1.8.0 (slice 11, the same release) |
+| **Affects** | Anything reading or backing up `/store/dd.json` directly instead of through the API |
+
+The store's LokiJS engine and its `dd.json` file are gone. Every collection — containers, settings, secrets, agent keys, API keys, audit history, notification history and outbox, backups, notification rules, the approval queue, update-lifecycle and retention caches, update operations, and finally sessions — now lives in `dd.sqlite`, one SQLite database opened by one connection. On first start against an existing v1.7 install, `dd.json` is read exactly once to import its collections into `dd.sqlite`, then renamed to `dd.json.pre-1.8.bak` and kept as the only rollback path to v1.7; it is never opened again after that. A fresh v1.8 install never creates `dd.json` at all. The `lokijs` and `connect-loki` npm packages are removed from `app/package.json`.
+
+This also closes DR-121: `express-session`'s `connect-loki` store used to open a second, independent LokiJS instance on the same `dd.json` the main store had open, and since that engine always serializes its whole in-memory database on save, whichever of the two instances saved last erased the other's writes. With sessions and every other collection behind the same SQLite connection, that mutual clobber is structurally impossible rather than merely mitigated.
+
+**Migration:** Read and write store state through the API (`GET/PATCH /api/v1/settings`, `/api/v1/containers`, and so on) rather than `dd.json` directly. A backup or restore tool that copied `dd.json` off disk should target `dd.sqlite` now, but a plain file copy of `dd.sqlite` (and its `-wal`/`-shm` sidecars, if present) taken while drydock is running can catch it mid-write and produce a corrupt snapshot. Either stop the container first and then copy the files, or take a consistent live backup with `sqlite3 dd.sqlite ".backup /path/out.sqlite"` (or `VACUUM INTO`) instead. Restore from one complete, consistent snapshot, never from a copy taken mid-write. `GET /api/v1/store` reports the current file names under `configuration.file` (legacy, still resolved for the one-time import) and `configuration.dbFile`.
+
 ## Enforced security changes (no deprecation window)
 
 These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability — keeping it alive behind a warning would have left the hole open. They are listed here for upgrade visibility and migration guidance.
