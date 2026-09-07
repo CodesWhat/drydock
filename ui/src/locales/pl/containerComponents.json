@@ -58,6 +58,12 @@
       "runningButton": "Uruchomione...",
       "runButton": "Uruchom",
       "noTriggersAssociated": "Brak wyzwalaczy powiązanych z tym kontenerem",
+      "unavailableTriggers": "Niedostępne wyzwalacze",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Należy do innego agenta niż ten kontener.",
+        "structuralIncompatibility": "Projekt, usługa lub plik Compose nie pasują do tego kontenera.",
+        "labelScope": "Wykluczony przez etykiety include/exclude dd.action/dd.notification tego kontenera."
+      },
       "backupsRollback": "Kopie zapasowe i przywracanie",
       "rollingBack": "Cofanie się...",
       "rollbackLatest": "Wycofaj najnowszą",

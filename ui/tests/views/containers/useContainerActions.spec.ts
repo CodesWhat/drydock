@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   scanContainer: vi.fn(),
   getContainerUpdateOperations: vi.fn(),
   getContainerTriggers: vi.fn(),
+  getUnassociatedContainerTriggers: vi.fn(),
   runTrigger: vi.fn(),
   updateContainerPolicy: vi.fn(),
   restartContainer: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock('@/services/container', () => ({
   scanContainer: mocks.scanContainer,
   getContainerUpdateOperations: mocks.getContainerUpdateOperations,
   getContainerTriggers: mocks.getContainerTriggers,
+  getUnassociatedContainerTriggers: mocks.getUnassociatedContainerTriggers,
   runTrigger: mocks.runTrigger,
   updateContainerPolicy: mocks.updateContainerPolicy,
   previewUpdateChain: mocks.previewUpdateChain,
@@ -264,6 +266,7 @@ describe('useContainerActions', () => {
     mocks.scanContainer.mockResolvedValue({});
     mocks.getContainerUpdateOperations.mockResolvedValue([]);
     mocks.getContainerTriggers.mockResolvedValue([]);
+    mocks.getUnassociatedContainerTriggers.mockResolvedValue([]);
     mocks.runTrigger.mockResolvedValue({});
     mocks.updateContainerPolicy.mockResolvedValue({});
     mocks.restartContainer.mockResolvedValue({});
@@ -2114,6 +2117,42 @@ describe('useContainerActions', () => {
     expect(composable.triggerError.value).toBe('trigger load failed');
     expect(composable.rollbackError.value).toBe('backup load failed');
     expect(composable.updateOperationsError.value).toBe('ops load failed');
+  });
+
+  it('loads the unassociated-triggers reason list alongside associated triggers (DR-78)', async () => {
+    vi.useFakeTimers();
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    mocks.getUnassociatedContainerTriggers.mockResolvedValueOnce([
+      { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+    ]);
+    const { composable } = await mountActionsHarness({
+      activeDetailTab: 'actions',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+
+    expect(mocks.getUnassociatedContainerTriggers).toHaveBeenCalledWith('container-1');
+    expect(composable.unassociatedTriggers.value).toEqual([
+      { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+    ]);
+  });
+
+  it('leaves the unassociated-triggers list empty when its own load fails, without a second error', async () => {
+    vi.useFakeTimers();
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    mocks.getUnassociatedContainerTriggers.mockRejectedValueOnce(new Error('reason load failed'));
+    const { composable } = await mountActionsHarness({
+      activeDetailTab: 'actions',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+
+    expect(composable.unassociatedTriggers.value).toEqual([]);
+    expect(composable.triggerError.value).toBeNull();
   });
 
   it('clears action-tab detail data when refresh runs without a selected container id', async () => {

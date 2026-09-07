@@ -269,7 +269,19 @@ describe('api/container/triggers', () => {
       const res = await callGetContainerTriggers(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
+      expect(res.json).toHaveBeenCalledWith({
+        data: [],
+        total: 0,
+        unassociatedTriggers: [
+          {
+            id: 'slack.notify',
+            type: 'slack',
+            name: 'notify',
+            agent: undefined,
+            reason: 'labelScope',
+          },
+        ],
+      });
     });
 
     test('drops triggers that are not present in the include list', async () => {
@@ -286,7 +298,19 @@ describe('api/container/triggers', () => {
       const res = await callGetContainerTriggers(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
+      expect(res.json).toHaveBeenCalledWith({
+        data: [],
+        total: 0,
+        unassociatedTriggers: [
+          {
+            id: 'slack.notify',
+            type: 'slack',
+            name: 'notify',
+            agent: undefined,
+            reason: 'labelScope',
+          },
+        ],
+      });
     });
 
     test('parses each trigger against the list scoped to its own category (#494)', async () => {
@@ -524,6 +548,120 @@ describe('api/container/triggers', () => {
 
       expect(payload.data).toHaveLength(1);
       expect('resolvedState' in payload.data[0]).toBe(false);
+    });
+  });
+
+  describe('getContainerTriggers — unassociatedTriggers (DR-78)', () => {
+    test('reports agentOwnership for a trigger belonging to a different agent', async () => {
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'agent-1' },
+        triggerMap: {
+          'agent-2.slack.notify': createTrigger({
+            id: 'agent-2.slack.notify',
+            agent: 'agent-2',
+          }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([]);
+      expect(payload.unassociatedTriggers).toEqual([
+        {
+          id: 'agent-2.slack.notify',
+          type: 'slack',
+          name: 'notify',
+          agent: 'agent-2',
+          reason: 'agentOwnership',
+        },
+      ]);
+    });
+
+    test('reports structuralIncompatibility for a portainer trigger with no local compose identity', async () => {
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'portainer.update': createTrigger({
+            id: 'portainer.update',
+            type: 'portainer',
+            name: 'update',
+          }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([]);
+      expect(payload.unassociatedTriggers).toEqual([
+        {
+          id: 'portainer.update',
+          type: 'portainer',
+          name: 'update',
+          agent: undefined,
+          reason: 'structuralIncompatibility',
+        },
+      ]);
+    });
+
+    test('reports labelScope for a trigger excluded by dd.notification.exclude', async () => {
+      const harness = createHarness({
+        container: { id: 'c1', notificationTriggerExclude: 'notify' },
+        triggerMap: {
+          'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([]);
+      expect(payload.unassociatedTriggers).toEqual([
+        {
+          id: 'slack.notify',
+          type: 'slack',
+          name: 'notify',
+          agent: undefined,
+          reason: 'labelScope',
+        },
+      ]);
+    });
+
+    test('falls back to the type/name id for an unassociated trigger with no explicit id', async () => {
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'agent-1' },
+        triggerMap: {
+          orphan: createTrigger({ id: undefined, agent: 'agent-2' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.unassociatedTriggers).toEqual([
+        {
+          id: 'slack.notify',
+          type: 'slack',
+          name: 'notify',
+          agent: 'agent-2',
+          reason: 'agentOwnership',
+        },
+      ]);
+    });
+
+    test('reports an empty unassociatedTriggers list when every trigger applies', async () => {
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.unassociatedTriggers).toEqual([]);
     });
   });
 

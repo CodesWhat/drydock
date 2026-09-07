@@ -9,7 +9,10 @@ import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
-import { isTriggerAssociatedWithContainer } from '../docker-trigger.js';
+import {
+  isTriggerAssociatedWithContainer,
+  isTriggerStructurallyCompatibleWithContainer,
+} from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import { enforceApiKeyScope } from '../route-scopes.js';
@@ -108,6 +111,44 @@ function isDefined<T>(value: T | undefined): value is T {
 }
 
 /**
+ * Why a trigger does not apply to the requested container (DR-78), each backed by one of
+ * the same predicates `getContainerTriggers` already uses to decide association:
+ * - `agentOwnership` — the trigger belongs to a different agent than the container (or the
+ *   container is remote and the trigger has none), from the same check `isTriggerAssociatedWithContainer`
+ *   applies before structural compatibility.
+ * - `structuralIncompatibility` — `isTriggerStructurallyCompatibleWithContainer` fails (a
+ *   dockercompose/portainer trigger whose compose project/service or file doesn't match).
+ * - `labelScope` — the container's `dd.action.include`/`dd.action.exclude` (or the
+ *   `dd.notification.*` equivalents) labels exclude this trigger, or omit it from a
+ *   configured include list.
+ */
+export type TriggerAssociationReason =
+  | 'agentOwnership'
+  | 'structuralIncompatibility'
+  | 'labelScope';
+
+export interface UnassociatedContainerTrigger {
+  id: string;
+  type: string;
+  name: string;
+  agent?: string;
+  reason: TriggerAssociationReason;
+}
+
+function toUnassociatedTrigger(
+  trigger: TriggerComponent,
+  reason: TriggerAssociationReason,
+): UnassociatedContainerTrigger {
+  return {
+    id: trigger.id || `${trigger.type}.${trigger.name}`,
+    type: trigger.type,
+    name: trigger.name,
+    agent: trigger.agent,
+    reason,
+  };
+}
+
+/**
  * Attach the action-policy resolver's `resolvedState` to a docker/dockercompose/portainer
  * (update-action) trigger entry in the `GET /containers/:id/triggers` response
  * (spec-6.0.1-action-policy.md API surface). Notification and command triggers
@@ -169,14 +210,23 @@ function createGetContainerTriggersHandler({
       Trigger,
     );
 
+    // Triggers dropped for DR-78's reason reporting (agent/structural mismatch, or label-scope
+    // exclusion) — additive alongside the existing `data`/`total` envelope, never in place of it.
+    const unassociatedTriggers: UnassociatedContainerTrigger[] = [];
+
     const associatedTriggers = allTriggers
       .filter((trigger) => {
         const triggerId = trigger.id || `${trigger.type}.${trigger.name}`;
         const runtimeTrigger = triggerMap[triggerId];
-        return isTriggerAssociatedWithContainer(
-          (runtimeTrigger || trigger) as unknown as TriggerComponent,
-          container,
-        );
+        const candidate = (runtimeTrigger || trigger) as unknown as TriggerComponent;
+        if (isTriggerAssociatedWithContainer(candidate, container)) {
+          return true;
+        }
+        const reason = isTriggerStructurallyCompatibleWithContainer(candidate, container)
+          ? 'agentOwnership'
+          : 'structuralIncompatibility';
+        unassociatedTriggers.push(toUnassociatedTrigger(trigger, reason));
+        return false;
       })
       .map((trigger) => {
         const [includedTriggers, excludedTriggers] =
@@ -189,13 +239,18 @@ function createGetContainerTriggersHandler({
           excludedTriggers,
           Trigger,
         );
-        return associated ? attachResolvedState(associated, triggerMap, container) : undefined;
+        if (!associated) {
+          unassociatedTriggers.push(toUnassociatedTrigger(trigger, 'labelScope'));
+          return undefined;
+        }
+        return attachResolvedState(associated, triggerMap, container);
       })
       .filter(isDefined);
 
     res.status(200).json({
       data: associatedTriggers,
       total: associatedTriggers.length,
+      unassociatedTriggers,
     });
   };
 }

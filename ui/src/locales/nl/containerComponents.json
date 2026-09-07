@@ -58,6 +58,12 @@
       "runningButton": "Actief...",
       "runButton": "Uitvoeren",
       "noTriggersAssociated": "Er zijn geen triggers gekoppeld aan deze container",
+      "unavailableTriggers": "Niet-beschikbare triggers",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Behoort tot een andere agent dan deze container.",
+        "structuralIncompatibility": "Compose-project, -service of -bestand komt niet overeen met deze container.",
+        "labelScope": "Uitgesloten door de dd.action/dd.notification include- of exclude-labels van deze container."
+      },
       "backupsRollback": "Back-ups en terugdraaien",
       "rollingBack": "Terugrollen...",
       "rollbackLatest": "Laatste terugdraaien",

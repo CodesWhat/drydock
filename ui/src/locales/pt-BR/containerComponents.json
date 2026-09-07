@@ -58,6 +58,12 @@
       "runningButton": "Executando...",
       "runButton": "Executar",
       "noTriggersAssociated": "Nenhum trigger associado a este contêiner",
+      "unavailableTriggers": "Triggers indisponíveis",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Pertence a um agente diferente do deste contêiner.",
+        "structuralIncompatibility": "O projeto, serviço ou arquivo do Compose não corresponde a este contêiner.",
+        "labelScope": "Excluído pelas labels de inclusão ou exclusão dd.action/dd.notification deste contêiner."
+      },
       "backupsRollback": "Backups e rollback",
       "rollingBack": "Fazendo rollback...",
       "rollbackLatest": "Rollback do mais recente",

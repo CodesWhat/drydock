@@ -58,6 +58,12 @@
       "runningButton": "Running...",
       "runButton": "Run",
       "noTriggersAssociated": "No triggers associated with this container",
+      "unavailableTriggers": "Unavailable Triggers",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Belongs to a different agent than this container.",
+        "structuralIncompatibility": "Compose project, service, or file doesn't match this container.",
+        "labelScope": "Excluded by this container's dd.action/dd.notification include or exclude labels."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rolling back...",
       "rollbackLatest": "Rollback Latest",

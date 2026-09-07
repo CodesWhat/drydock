@@ -12,6 +12,7 @@ import {
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
+  getUnassociatedContainerTriggers,
   getUpdateOperationById,
   previewUpdateChain,
   refreshAllContainers,
@@ -376,6 +377,46 @@ describe('Container Service', () => {
       } as any);
 
       await expect(getContainerTriggers('c1')).rejects.toThrow(
+        'Failed to get triggers for container c1: Not Found',
+      );
+    });
+  });
+
+  describe('getUnassociatedContainerTriggers', () => {
+    it('reads the unassociatedTriggers field from the response envelope (DR-78)', async () => {
+      const mockUnassociated = [
+        { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [], total: 0, unassociatedTriggers: mockUnassociated }),
+      } as any);
+
+      const triggers = await getUnassociatedContainerTriggers('container1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/triggers', {
+        credentials: 'include',
+      });
+      expect(triggers).toEqual(mockUnassociated);
+    });
+
+    it('returns an empty array when the response has no unassociatedTriggers field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [], total: 0 }),
+      } as any);
+
+      const triggers = await getUnassociatedContainerTriggers('container1');
+      expect(triggers).toEqual([]);
+    });
+
+    it('throws when fetching triggers fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+      } as any);
+
+      await expect(getUnassociatedContainerTriggers('c1')).rejects.toThrow(
         'Failed to get triggers for container c1: Not Found',
       );
     });

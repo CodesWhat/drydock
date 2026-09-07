@@ -58,6 +58,12 @@
       "runningButton": "جارٍ التشغيل...",
       "runButton": "تشغيل",
       "noTriggersAssociated": "لا توجد مشغّلات مرتبطة بهذه الحاوية",
+      "unavailableTriggers": "مشغّلات غير متاحة",
+      "unavailableTriggerReason": {
+        "agentOwnership": "تنتمي إلى وكيل مختلف عن هذه الحاوية.",
+        "structuralIncompatibility": "مشروع أو خدمة أو ملف Compose لا يطابق هذه الحاوية.",
+        "labelScope": "مستبعدة بواسطة تصنيفات dd.action/dd.notification للتضمين أو الاستبعاد الخاصة بهذه الحاوية."
+      },
       "backupsRollback": "النسخ الاحتياطية والتراجع",
       "rollingBack": "جارٍ التراجع...",
       "rollbackLatest": "التراجع إلى الأحدث",

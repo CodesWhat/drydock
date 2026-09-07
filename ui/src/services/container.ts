@@ -1,4 +1,4 @@
-import type { ApiContainerUpdateOperation } from '../types/api';
+import type { ApiContainerUpdateOperation, ApiUnassociatedContainerTrigger } from '../types/api';
 import type { DependencyGraph, UpdateChainPreview } from '../types/container';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
@@ -208,6 +208,27 @@ async function getContainerTriggers(containerId: string) {
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
   return extractCollectionData<Record<string, unknown>>(payload);
+}
+
+/**
+ * Triggers that do not apply to this container, each with a reason (DR-78). Reads the same
+ * GET /api/v1/containers/:id/triggers response `getContainerTriggers` reads `data` from, but
+ * pulls the additive `unassociatedTriggers` field instead.
+ */
+async function getUnassociatedContainerTriggers(
+  containerId: string,
+): Promise<ApiUnassociatedContainerTrigger[]> {
+  const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
+  }
+  const payload = await readJsonResponse(response, 'Container triggers API');
+  const envelope = payload as { unassociatedTriggers?: unknown };
+  return Array.isArray(envelope.unassociatedTriggers)
+    ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
+    : [];
 }
 
 async function runTrigger({
@@ -561,6 +582,7 @@ export {
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
+  getUnassociatedContainerTriggers,
   getUpdateOperationById,
   previewUpdateChain,
   refreshAllContainers,

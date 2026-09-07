@@ -122,6 +122,8 @@ const previewError = ref<string | null>(null);
 const previewErrorAction = ref<{ label: string; href: '/registries' | '/triggers' } | null>(null);
 const triggersLoading = ref(false);
 const detailTriggers = ref<Trigger[]>([]);
+type UnassociatedTrigger = Trigger & { id: string; reason: string };
+const unassociatedTriggers = ref<UnassociatedTrigger[]>([]);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
@@ -254,6 +256,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     previewErrorAction,
     triggersLoading,
     detailTriggers,
+    unassociatedTriggers,
     getTriggerKey: mockGetTriggerKey,
     triggerRunInProgress,
     runAssociatedTrigger: mockRunAssociatedTrigger,
@@ -350,6 +353,7 @@ function resetState() {
   previewErrorAction.value = null;
   triggersLoading.value = false;
   detailTriggers.value = [];
+  unassociatedTriggers.value = [];
   triggerRunInProgress.value = null;
   triggerMessage.value = null;
   triggerError.value = null;
@@ -737,6 +741,27 @@ describe('ContainerFullPageTabContent', () => {
     );
     expect(wrapper.get('[data-test="dry-run-trigger-condition"]').text()).toContain(
       'Action trigger docker.local is in dry-run mode',
+    );
+  });
+
+  it('shows why an unassociated trigger does not apply to the container (DR-78)', () => {
+    unassociatedTriggers.value = [
+      {
+        id: 'portainer.update',
+        type: 'portainer',
+        name: 'update',
+        reason: 'structuralIncompatibility',
+      } as UnassociatedTrigger,
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Unavailable Triggers');
+    const row = wrapper.get('[data-unassociated-trigger-key="portainer.update"]');
+    expect(row.text()).toContain('portainer.update');
+    expect(row.text()).toContain("Compose project, service, or file doesn't match this container.");
+    expect(wrapper.find('[data-unassociated-trigger-key="portainer.update"] button').exists()).toBe(
+      false,
     );
   });
 

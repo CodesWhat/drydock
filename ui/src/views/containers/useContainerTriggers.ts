@@ -1,8 +1,12 @@
 import { type Ref, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
-import { getContainerTriggers, runTrigger as runContainerTrigger } from '../../services/container';
-import type { ApiContainerTrigger } from '../../types/api';
+import {
+  getContainerTriggers,
+  getUnassociatedContainerTriggers,
+  runTrigger as runContainerTrigger,
+} from '../../services/container';
+import type { ApiContainerTrigger, ApiUnassociatedContainerTrigger } from '../../types/api';
 import { errorMessage } from '../../utils/error';
 import { loadContainerDetailListState } from './loadContainerDetailListState';
 
@@ -89,6 +93,8 @@ async function runAssociatedTriggerState(args: {
 export function useContainerTriggers(input: UseContainerTriggersInput) {
   const { t } = useI18n();
   const detailTriggers = ref<ApiContainerTrigger[]>([]);
+  // Triggers that do not apply to the selected container, each with a reason (DR-78).
+  const unassociatedTriggers = ref<ApiUnassociatedContainerTrigger[]>([]);
   const triggersLoading = ref(false);
   const triggerRunInProgress = ref<string | null>(null);
   const triggerMessage = ref<string | null>(null);
@@ -96,6 +102,7 @@ export function useContainerTriggers(input: UseContainerTriggersInput) {
 
   function clearTriggerDetails() {
     detailTriggers.value = [];
+    unassociatedTriggers.value = [];
   }
 
   function resetTriggerMessages() {
@@ -112,6 +119,20 @@ export function useContainerTriggers(input: UseContainerTriggersInput) {
       loader: getContainerTriggers,
       failureMessage: t('containerComponents.triggers.toasts.loadFailed'),
     });
+    if (!input.selectedContainerId.value) {
+      unassociatedTriggers.value = [];
+      return;
+    }
+    try {
+      unassociatedTriggers.value = await getUnassociatedContainerTriggers(
+        input.selectedContainerId.value,
+      );
+    } catch {
+      // The associated-triggers load above already surfaced a failure toast/error for this
+      // container; the reason list is supplementary, so a failure here just leaves it empty
+      // rather than showing a second error for the same request.
+      unassociatedTriggers.value = [];
+    }
   }
 
   async function runAssociatedTrigger(trigger: ApiContainerTrigger) {
@@ -140,5 +161,6 @@ export function useContainerTriggers(input: UseContainerTriggersInput) {
     triggerMessage,
     triggerRunInProgress,
     triggersLoading,
+    unassociatedTriggers,
   };
 }

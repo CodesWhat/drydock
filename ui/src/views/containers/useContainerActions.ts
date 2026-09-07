@@ -1726,6 +1726,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     triggerMessage: triggers.triggerMessage,
     triggerRunInProgress: triggers.triggerRunInProgress,
     triggersLoading: triggers.triggersLoading,
+    unassociatedTriggers: triggers.unassociatedTriggers,
     unsnoozeSelected: policy.unsnoozeSelected,
     updateAllInGroup,
     updateContainer,

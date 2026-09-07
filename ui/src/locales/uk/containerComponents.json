@@ -58,6 +58,12 @@
       "runningButton": "Виконується...",
       "runButton": "Запустити",
       "noTriggersAssociated": "З цим контейнером не пов'язані жодні тригери",
+      "unavailableTriggers": "Недоступні тригери",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Належить іншому агенту, ніж цей контейнер.",
+        "structuralIncompatibility": "Проєкт, сервіс або файл Compose не відповідає цьому контейнеру.",
+        "labelScope": "Виключено мітками include/exclude dd.action/dd.notification цього контейнера."
+      },
       "backupsRollback": "Резервні копії та відкат",
       "rollingBack": "Виконується відкат...",
       "rollbackLatest": "Відкат до останньої версії",
