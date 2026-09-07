@@ -197,10 +197,24 @@ test('secret scanning gates full history and the tracked working tree', () => {
 
   const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8');
   expect(gitleaksConfig).toContain('useDefault = true');
-  expect(gitleaksConfig).not.toContain('paths =');
+  // A bare `paths =` allowlist would exempt a whole directory from every
+  // rule unconditionally, which is the blanket exemption this job exists to
+  // prevent. CI-16 adds one narrow exception for the webhooks doc's
+  // documented placeholder credential, so a `paths` entry is only allowed
+  // when it is paired with `condition = "and"` and a `regexes` match — path
+  // alone is never enough to allowlist a finding.
+  const allowlistBlocks = gitleaksConfig.split('[[allowlists]]').slice(1);
+  for (const block of allowlistBlocks.filter((candidate) => candidate.includes('paths ='))) {
+    expect(block).toContain('condition = "and"');
+    expect(block).toContain('regexes =');
+  }
 
   const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8').trim().split('\n');
-  expect(baselineEntries.length).toBeGreaterThan(400);
+  // CI-16 removed the line-pinned curl-auth-header fingerprints for
+  // content/docs/ in favor of the pattern-based allowlist above, so the
+  // historical baseline shrank from 446 to 399; the floor here just guards
+  // against the file being emptied by accident.
+  expect(baselineEntries.length).toBeGreaterThan(350);
   expect(
     baselineEntries.every((entry) =>
       /^(?:[0-9a-f]{40}:)?[^:]+:(?:generic-api-key|private-key|curl-auth-header|telegram-bot-api-token):\d+$/u.test(

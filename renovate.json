@@ -54,6 +54,15 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<compatibility>noble)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the Alpine apk package pins in the Dockerfile. Renovate has no native apk datasource, so this resolves versions through Repology's alpine_3_24 repository — the Alpine release the Dockerfile's own alpine:3.24 healthcheck-build stage pins. Without this, an apk pin rotting behind upstream (cosign 3.0.6-r1 -> -r2 broke every open PR's Docker build on 2026-09-06) goes unnoticed until it breaks CI.",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["(?<depName>[a-z][a-z0-9_-]*)=(?<currentValue>[0-9][\\w.]*-r\\d+)"],
+      "datasourceTemplate": "repology",
+      "packageNameTemplate": "alpine_3_24/{{{depName}}}",
+      "versioningTemplate": "loose"
     }
   ]
 }
