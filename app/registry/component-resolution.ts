@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import capitalize from 'capitalize';
 import { resolveConfiguredPathWithinBase, resolveRuntimeRoot } from '../runtime/paths.js';
 
-type RegistryComponentKind = 'trigger' | 'watcher' | 'registry' | 'authentication' | 'agent';
+export type RegistryComponentKind = 'trigger' | 'watcher' | 'registry' | 'authentication' | 'agent';
 
 const DOCUMENTATION_LINKS: Record<RegistryComponentKind, string> = {
   trigger: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/triggers',
@@ -70,6 +71,47 @@ export function resolveComponentModuleSpecifier(componentFileBase: string): stri
   }
 
   return pathToFileURL(jsCandidate).href;
+}
+
+/**
+ * Resolve a provider's component file the same way `registerComponent` does
+ * (the "provider by convention" `Provider/Provider.ts` file, falling back to
+ * the lowercase `provider/provider.ts` file), dynamically import it, and
+ * construct the class with `new` — but never call `register()` or `init()`.
+ * Roadmap 7.1 slice 2's validator is the reason this exists: it needs the
+ * same resolution `registerComponent` uses so an unknown provider or a
+ * missing module produces the identical error, but it must never start a
+ * component (open a socket, dial a registry) just to validate a
+ * configuration shape. `registerComponent` calls this for the ordinary
+ * (non-agent-wrapped) case too, so there is exactly one resolution path.
+ *
+ * Does no filesystem I/O beyond the synchronous `fs.existsSync` convention
+ * check and the dynamic `import()` of the resolved module itself — nothing
+ * this function does reads a config file, a secret file, or opens a socket.
+ */
+export async function constructComponent(
+  kind: RegistryComponentKind,
+  provider: string,
+  componentPath: string,
+): Promise<unknown> {
+  const providerLowercase = provider.toLowerCase();
+  const componentRoot = resolveComponentRoot(kind, componentPath);
+  const componentFileByConvention = path.join(
+    componentRoot,
+    providerLowercase,
+    capitalize(provider),
+  );
+  const componentFileLowercase = path.join(componentRoot, providerLowercase, providerLowercase);
+  const componentFileByConventionExists = ['.js', '.ts'].some((extension) =>
+    fs.existsSync(`${componentFileByConvention}${extension}`),
+  );
+  const componentFileBase = componentFileByConventionExists
+    ? componentFileByConvention
+    : componentFileLowercase;
+  const componentModuleSpecifier = resolveComponentModuleSpecifier(componentFileBase);
+  const componentModule = await import(componentModuleSpecifier);
+  const ComponentClass = componentModule.default || componentModule;
+  return new ComponentClass();
 }
 
 export function getHelpfulErrorMessage(

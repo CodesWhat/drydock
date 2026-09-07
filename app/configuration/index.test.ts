@@ -3717,6 +3717,63 @@ describe('${NAME} interpolation in drydock.yml', () => {
   });
 });
 
+describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  async function withConfigFile<T>(
+    yamlContents: string,
+    run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
+  ): Promise<T> {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-validate-startup-'));
+    const configPath = path.join(tempDir, 'drydock.yml');
+    fs.writeFileSync(configPath, yamlContents, 'utf-8');
+    fs.chmodSync(configPath, 0o600);
+    const originalConfigFile = process.env.DD_CONFIG_FILE;
+    process.env.DD_CONFIG_FILE = configPath;
+    try {
+      const freshConfiguration = await importFreshConfiguration();
+      return await run(freshConfiguration);
+    } finally {
+      if (originalConfigFile === undefined) {
+        delete process.env.DD_CONFIG_FILE;
+      } else {
+        process.env.DD_CONFIG_FILE = originalConfigFile;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  test('with no config file present, resolves to no errors without walking a single component (env-only gate)', async () => {
+    // No DD_CONFIG_FILE at all in this process's real environment, so every
+    // key in configFileSources (if any) is 'env' — the hasFileSourcedValue
+    // gate short-circuits before the dynamic import of file/validate.js.
+    await expect(configuration.validateStartupConfiguration()).resolves.toStrictEqual({
+      errors: [],
+    });
+  });
+
+  test('a valid config file produces no errors', async () => {
+    await withConfigFile('server:\n  port: 3000\n', async (freshConfiguration) => {
+      await expect(freshConfiguration.validateStartupConfiguration()).resolves.toStrictEqual({
+        errors: [],
+      });
+    });
+  });
+
+  test('an invalid config file value is reported with its YAML path and the Joi message', async () => {
+    await withConfigFile('security:\n  scanner: bogus\n', async (freshConfiguration) => {
+      const result = await freshConfiguration.validateStartupConfiguration();
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe('security.scanner');
+      expect(result.errors[0].envKey).toBe('DD_SECURITY_SCANNER');
+      expect(result.errors[0].message).toContain('"scanner"');
+    });
+  });
+});
+
 describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
   // This test enumerates the 21 files so a new direct reader shows up as a
   // failing assertion instead of a silent coverage gap.

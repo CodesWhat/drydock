@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+  constructComponent,
   getAvailableProviders,
   resolveComponentModuleSpecifier,
   resolveComponentRoot,
@@ -95,5 +96,34 @@ describe('component-resolution', () => {
 
     const resolved = resolveComponentModuleSpecifier(base);
     expect(resolved).toBe(pathToFileURL(`${base}.js`).href);
+  });
+
+  // constructComponent resolves against the fake /runtime root above, so the
+  // dynamic import() it performs always fails against the real filesystem —
+  // these tests are about which path it tries, not about a successful
+  // construction (registry/index.test.ts covers that against real provider
+  // files, since resolveRuntimeRoot there is unmocked).
+  test('constructComponent should prefer the provider-by-convention file (capitalized) when it exists', async () => {
+    fs.existsSync.mockImplementation((candidate) => `${candidate}`.endsWith('Docker.ts'));
+
+    await expect(constructComponent('watcher', 'docker', 'watchers/providers')).rejects.toThrow(
+      /Docker/,
+    );
+  });
+
+  test('constructComponent should fall back to the lowercase provider file when no convention file exists', async () => {
+    fs.existsSync.mockReturnValue(false);
+
+    await expect(constructComponent('watcher', 'docker', 'watchers/providers')).rejects.toThrow(
+      /docker/,
+    );
+  });
+
+  test('constructComponent should lowercase the provider before building either candidate path', async () => {
+    fs.existsSync.mockReturnValue(false);
+
+    await expect(constructComponent('registry', 'GHCR', 'registries/providers')).rejects.toThrow(
+      /ghcr/,
+    );
   });
 });

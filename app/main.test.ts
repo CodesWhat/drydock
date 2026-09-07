@@ -11,6 +11,7 @@ interface EntryPointOptions {
   getuid?: number | 'unavailable';
   migrateExitCode?: number | null;
   triggerState?: Record<string, unknown>;
+  configurationValidationErrors?: Array<{ path: string; envKey: string; message: string }>;
 }
 
 async function loadEntryPoint({
@@ -19,6 +20,7 @@ async function loadEntryPoint({
   getuid = 501,
   migrateExitCode = null,
   triggerState = {},
+  configurationValidationErrors = [],
 }: EntryPointOptions = {}) {
   vi.resetModules();
   vi.clearAllMocks();
@@ -40,10 +42,17 @@ async function loadEntryPoint({
 
   const setDefaultResultOrder = vi.fn();
   const getDnsMode = vi.fn(() => 'ipv4first');
+  const validateStartupConfiguration = vi.fn(async () => ({
+    errors: configurationValidationErrors,
+  }));
   const runConfigMigrateCommandIfRequested = vi.fn(() => migrateExitCode);
   const renderBanner = vi.fn();
   const logInfo = vi.fn();
   const logWarn = vi.fn();
+  const logError = vi.fn();
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+    throw new Error('process.exit(1) called');
+  });
   const storeInit = vi.fn(async () => undefined);
   const prometheusInit = vi.fn();
   const registryState = { trigger: triggerState };
@@ -68,12 +77,13 @@ async function loadEntryPoint({
     default: { setDefaultResultOrder },
   }));
   vi.doMock('./banner/index.js', () => ({ renderBanner }));
-  vi.doMock('./configuration/index.js', () => ({ getDnsMode }));
+  vi.doMock('./configuration/index.js', () => ({ getDnsMode, validateStartupConfiguration }));
   vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
   vi.doMock('./log/index.js', () => ({
     default: {
       info: logInfo,
       warn: logWarn,
+      error: logError,
     },
   }));
   vi.doMock('./store/index.js', () => ({ init: storeInit }));
@@ -106,10 +116,13 @@ async function loadEntryPoint({
     imported,
     setDefaultResultOrder,
     getDnsMode,
+    validateStartupConfiguration,
     runConfigMigrateCommandIfRequested,
     renderBanner,
     logInfo,
     logWarn,
+    logError,
+    exitSpy,
     storeInit,
     prometheusInit,
     registryInit,
@@ -350,6 +363,23 @@ describe('entrypoint', () => {
     // Non-root should NOT throw even with DD_RUN_AS_ROOT=true
     expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
     expect(harness.logWarn).not.toHaveBeenCalled();
+  });
+
+  test('exits 1 and logs each error when the config file fails validation', async () => {
+    const harness = await loadEntryPoint({
+      configurationValidationErrors: [
+        { path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: '"security.scanner" must be one of [trivy]' },
+      ],
+    });
+
+    await expect(harness.imported).rejects.toThrow('process.exit(1) called');
+
+    expect(harness.validateStartupConfiguration).toHaveBeenCalledOnce();
+    expect(harness.logError).toHaveBeenCalledWith(
+      'Invalid configuration at security.scanner (DD_SECURITY_SCANNER): "security.scanner" must be one of [trivy]',
+    );
+    expect(harness.exitSpy).toHaveBeenCalledWith(1);
+    expect(harness.storeInit).not.toHaveBeenCalled();
   });
 
   test('handles undefined trigger state in outbox worker delivery', async () => {

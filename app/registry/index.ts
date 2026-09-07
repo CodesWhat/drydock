@@ -2,7 +2,6 @@
  * Registry handling all components (registries, triggers, watchers).
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
@@ -31,6 +30,7 @@ import type Watcher from '../watchers/Watcher.js';
 import type Component from './Component.js';
 import type { ComponentConfiguration } from './Component.js';
 import {
+  constructComponent,
   getAvailableProviders,
   getHelpfulErrorMessage,
   resolveComponentModuleSpecifier,
@@ -137,28 +137,24 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
   const { kind, provider, name, configuration, componentPath, agent } = options;
   const providerLowercase = provider.toLowerCase();
   const nameLowercase = name.toLowerCase();
-  const componentRoot = resolveComponentRoot(kind, componentPath);
-  const componentFileByConvention = path.join(
-    componentRoot,
-    providerLowercase,
-    capitalize(provider),
-  );
-  const componentFileLowercase = path.join(componentRoot, providerLowercase, providerLowercase);
-  const componentFileByConventionExists = ['.js', '.ts'].some((extension) =>
-    fs.existsSync(`${componentFileByConvention}${extension}`),
-  );
-  let componentFileBase = componentFileLowercase;
-  if (agent) {
-    componentFileBase = path.join(componentRoot, `Agent${capitalize(kind)}`);
-  } else if (componentFileByConventionExists) {
-    componentFileBase = componentFileByConvention;
-  }
-  const componentModuleSpecifier = resolveComponentModuleSpecifier(componentFileBase);
-  log.debug(`Resolving ${kind}.${providerLowercase}.${nameLowercase} from ${componentFileBase}`);
+  log.debug(`Resolving ${kind}.${providerLowercase}.${nameLowercase}`);
   try {
-    const componentModule = await import(componentModuleSpecifier);
-    const ComponentClass = componentModule.default || componentModule;
-    const component: Component = new ComponentClass();
+    let component: Component;
+    if (agent) {
+      // A remote-agent-owned watcher/trigger is always the fixed
+      // `AgentWatcher`/`AgentTrigger` proxy class, one per kind, never a
+      // per-provider module — structurally different from an ordinary
+      // provider lookup, so it isn't part of constructComponent's
+      // kind+provider+componentPath contract and stays resolved inline.
+      const componentRoot = resolveComponentRoot(kind, componentPath);
+      const componentFileBase = path.join(componentRoot, `Agent${capitalize(kind)}`);
+      const componentModuleSpecifier = resolveComponentModuleSpecifier(componentFileBase);
+      const componentModule = await import(componentModuleSpecifier);
+      const ComponentClass = componentModule.default || componentModule;
+      component = new ComponentClass();
+    } else {
+      component = (await constructComponent(kind, providerLowercase, componentPath)) as Component;
+    }
     const componentRegistered = await component.register(
       kind,
       providerLowercase,
