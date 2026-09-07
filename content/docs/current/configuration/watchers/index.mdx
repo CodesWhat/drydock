@@ -816,7 +816,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag. The extracted value overwrites the image tag (for update detection) **and** is written to `image.softwareVersion` (for the Version column). Use `dd.inspect.tag.version-only=true` to route it to `image.softwareVersion` only. | Slash-separated path in `docker inspect` output | |
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
-| `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
+| `dd.link.template` | ⚪ | Browsable link associated to the container version. A matching imgset's `LINK_TEMPLATE` is used when this label is absent — see [Associate a link to the container version](#associate-a-link-to-the-container-version) | String template with placeholders `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | Matching imgset `LINK_TEMPLATE` → none |
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` — see the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) | |
@@ -1152,7 +1152,7 @@ The capturing groups are accessible with the syntax `$1`, `$2`, `$3`....
 
 #### Interaction with include/exclude and semver comparison
 
-`dd.tag.include`/`dd.tag.exclude` are matched against the **raw tags returned by the registry**, before any transform is applied — the transform never changes which tags are considered candidates. `dd.tag.transform` is applied afterward, to both the current tag and each surviving candidate, and it's the **transformed** value that gets semver-parsed, family-matched, and compared to decide whether an update is available and what precision (`tagPrecision`) and family shape the tag has. In other words: use include/exclude to narrow down _which_ tags are in play using their real names, and transform to reshape _those_ tags into something semver-comparable. The `${transformed}` variable in `dd.link.template` is this same post-transform value.
+`dd.tag.include`/`dd.tag.exclude` are matched against the **raw tags returned by the registry**, before any transform is applied — the transform never changes which tags are considered candidates. `dd.tag.transform` is applied afterward, to both the current tag and each surviving candidate, and it's the **transformed** value that gets semver-parsed, family-matched, and compared to decide whether an update is available and what precision (`tagPrecision`) and family shape the tag has. In other words: use include/exclude to narrow down _which_ tags are in play using their real names, and transform to reshape _those_ tags into something semver-comparable. The `${transformed}` variable in [`dd.link.template`](#associate-a-link-to-the-container-version) is this same post-transform value.
 
 For example, to watch only `x.y.z-n-hash`-style tags and strip the hash suffix before comparison:
 
@@ -1207,19 +1207,57 @@ docker run -d --name mariadb --label 'dd.tag.include=^\d+$' --label dd.watch.dig
 
 ### Associate a link to the container version
 
-You can associate a browsable link to the container version using a templated string.
-For example, if you want to associate a mariadb version to a changelog (e.g. `https://mariadb.com/kb/en/mariadb-1064-changelog`),
+You can associate a browsable link to the container version — a GitHub release, a changelog page, a registry tag search — using a templated string. Drydock renders the template once per container, computes it onto `container.link` and `container.result.link`, and the UI's release-notes/release-link action surfaces it wherever that container is shown.
 
-you would specify a template like `https://mariadb.com/kb/en/mariadb-${major}${minor}${patch}-changelog`
+Set it with the `dd.link.template` label, or with `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_LINK_TEMPLATE` on a matching [image set preset](#image-set-presets) when many containers of the same image should share one template. A per-container `dd.link.template` label always wins over a matching imgset's `LINK_TEMPLATE` — see [Imgset precedence](#imgset-precedence).
 
-The available variables are:
+#### Placeholders
 
-- `${original}` the original unparsed tag
-- `${transformed}` the original unparsed tag transformed with the optional `dd.tag.transform` label option
-- `${major}` the major version (if tag value is semver)
-- `${minor}` the minor version (if tag value is semver)
-- `${patch}` the patch version (if tag value is semver)
-- `${prerelease}` the prerelease version (if tag value is semver)
+| Placeholder | Value | Notes |
+| --- | --- | --- |
+| `${raw}` | The tag as reported by the registry, before `dd.tag.transform` | Deprecated alias for `${original}`, kept for backward compatibility — prefer `${original}` in new templates |
+| `${original}` | The tag as reported by the registry, before `dd.tag.transform` | |
+| `${transformed}` | `${original}` after the optional `dd.tag.transform` is applied; equal to `${original}` when no transform is configured or its regex doesn't match | Same post-transform value used for semver parsing, family matching, and update comparison — see [Interaction with include/exclude and semver comparison](#interaction-with-includeexclude-and-semver-comparison) |
+| `${major}` | Major segment of `${transformed}` | Empty string unless drydock recognizes the tag as semver-shaped **and** `${transformed}` parses as valid semver |
+| `${minor}` | Minor segment of `${transformed}` | Same conditions as `${major}` |
+| `${patch}` | Patch segment of `${transformed}` | Same conditions as `${major}` |
+| `${prerelease}` | First identifier of the prerelease sequence (e.g. `2.0.0-rc.1` → `rc`) | Empty string when there's no prerelease, or the same conditions as `${major}` aren't met |
+
+A placeholder outside this set (e.g. `${bogus}`) is silently replaced with an empty string — the template is never rejected and nothing is logged.
+
+#### Worked examples
+
+**GitHub release link from `${major}.${minor}.${patch}`** — Traefik tags carry a `v` prefix (`v3.1.4`) that has to come off before the value parses as semver, so `dd.tag.transform` strips it and the template rebuilds the release URL from the parsed segments:
+
+```bash
+docker run -d --name traefik \
+  --label 'dd.tag.transform=^v(.*)$ => $1' \
+  --label 'dd.link.template=https://github.com/traefik/traefik/releases/tag/v${major}.${minor}.${patch}' \
+  traefik:v3.1.4
+```
+
+Tag `v3.1.4` renders `https://github.com/traefik/traefik/releases/tag/v3.1.4`.
+
+**Changelog link using `${transformed}`** — Postgres tags carry a variant suffix (`16.4-alpine`) the changelog URL doesn't use, so the transform trims it to `major.minor` and the template uses that value directly instead of rebuilding it from `${major}`/`${minor}`:
+
+```bash
+docker run -d --name postgres \
+  --label 'dd.tag.transform=^(\d+\.\d+).*$ => $1' \
+  --label 'dd.link.template=https://www.postgresql.org/docs/release/${transformed}/' \
+  postgres:16.4-alpine
+```
+
+Tag `16.4-alpine` renders `https://www.postgresql.org/docs/release/16.4/`.
+
+**Registry link using `${raw}`** — no transform is needed to point at a registry's own tag listing, since the raw tag is exactly what the registry expects in the query string:
+
+```bash
+docker run -d --name mariadb \
+  --label 'dd.link.template=https://hub.docker.com/_/mariadb?tab=tags&name=${raw}' \
+  mariadb:10.6.4-jammy
+```
+
+Tag `10.6.4-jammy` renders `https://hub.docker.com/_/mariadb?tab=tags&name=10.6.4-jammy`.
 
 <Tabs items={["Docker Compose (Link Template)", "Docker (Link Template)"]}>
 <Tab value="Docker Compose (Link Template)">
@@ -1240,6 +1278,11 @@ docker run -d --name mariadb --label 'dd.link.template=https://mariadb.com/kb/en
 ```
 </Tab>
 </Tabs>
+
+#### Failure behavior
+
+- **Unknown placeholder:** substituted with an empty string. The template still renders and drydock never rejects or logs it — a typo like `${majro}` quietly produces a broken-looking URL instead of an error.
+- **Invalid or non-`http(s)` URL:** drydock doesn't validate the rendered value at all — any string is accepted and stored on `container.link`/`result.link`. The UI's release-link action only renders it as a clickable link when the rendered string starts with `http://` or `https://` (case-insensitive); anything else (a bare path, a `javascript:` URL, malformed output from an unmatched transform) is silently dropped from the UI instead of shown broken.
 
 ### Customize the name and the icon to display
 
