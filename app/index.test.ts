@@ -77,7 +77,38 @@ describe('bootstrap', () => {
     }
   });
 
-  test('a non-config command falls through to the ordinary load-then-import-main bootstrap', async () => {
+  test('a non-config command never imports the config CLI and falls through to load-then-import-main', async () => {
+    const calls: string[] = [];
+    const loadConfigFileIntoLayer = vi.fn(async () => {
+      calls.push('loadConfigFileIntoLayer');
+    });
+    const mainFactory = vi.fn(() => {
+      calls.push('main');
+      return {};
+    });
+    const configCliFactory = vi.fn(() => {
+      calls.push('config-cli');
+      return { runConfigCommandIfRequested: vi.fn(async () => null) };
+    });
+    const originalArgv = process.argv;
+    process.argv = ['node', 'index.js', '--agent'];
+
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./configuration/config-cli.js', configCliFactory);
+    vi.doMock('./main.js', mainFactory);
+
+    try {
+      await import('./index.js');
+
+      expect(configCliFactory).not.toHaveBeenCalled();
+      expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'main']);
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  test('an unknown "config" subcommand falls through to the ordinary bootstrap', async () => {
     const calls: string[] = [];
     const loadConfigFileIntoLayer = vi.fn(async () => {
       calls.push('loadConfigFileIntoLayer');
@@ -87,15 +118,54 @@ describe('bootstrap', () => {
       return {};
     });
     const runConfigCommandIfRequested = vi.fn(async () => null);
+    const originalArgv = process.argv;
+    process.argv = ['node', 'index.js', 'config', 'unknown'];
 
     vi.resetModules();
     vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
     vi.doMock('./configuration/config-cli.js', () => ({ runConfigCommandIfRequested }));
     vi.doMock('./main.js', mainFactory);
 
-    await import('./index.js');
+    try {
+      await import('./index.js');
 
-    expect(runConfigCommandIfRequested).toHaveBeenCalledTimes(1);
-    expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'main']);
+      expect(runConfigCommandIfRequested).toHaveBeenCalledWith(['config', 'unknown']);
+      expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'main']);
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  test('the configuration singleton is not evaluated before the file layer is loaded', async () => {
+    // Regression: a static import of config-cli.js reached configuration/index.ts
+    // (via file/validate.ts) before loadConfigFileIntoLayer ran, so the merge saw
+    // an empty file layer and every file-sourced value vanished at runtime.
+    const calls: string[] = [];
+    const loadConfigFileIntoLayer = vi.fn(async () => {
+      calls.push('loadConfigFileIntoLayer');
+    });
+    const configurationFactory = vi.fn(() => {
+      calls.push('configuration');
+      return {};
+    });
+    const originalArgv = process.argv;
+    process.argv = ['node', 'index.js'];
+
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./configuration/index.js', configurationFactory);
+    vi.doMock('./main.js', () => {
+      calls.push('main');
+      return {};
+    });
+
+    try {
+      await import('./index.js');
+
+      expect(configurationFactory).not.toHaveBeenCalled();
+      expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'main']);
+    } finally {
+      process.argv = originalArgv;
+    }
   });
 });
