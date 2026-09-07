@@ -195,6 +195,35 @@ describe('watchContainer error result preservation', () => {
   });
 });
 
+describe('watchContainer stale scan gating (DR-72)', () => {
+  test('skips the store write and report emission when isScanStale reports the scan is stale', async () => {
+    const container = createValidatedContainer({ result: { tag: '1.3.0' } });
+    const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: '1.4.0' }));
+    const isScanStale = vi.fn().mockReturnValue(true);
+
+    const report = await watchContainer(container, { ...dependencies, isScanStale });
+
+    expect(isScanStale).toHaveBeenCalled();
+    expect(dependencies.mapContainerToContainerReport).not.toHaveBeenCalled();
+    expect(maturityGateWatchMocks.maybeEmitMaturityGateCleared).not.toHaveBeenCalled();
+    expect(eventMocks.emitContainerReport).not.toHaveBeenCalled();
+    expect(eventMocks.emitContainerReports).not.toHaveBeenCalled();
+    expect(report).toEqual({ container, changed: false });
+  });
+
+  test('still writes the store and emits the report when isScanStale reports the scan is current', async () => {
+    const container = createValidatedContainer({ result: { tag: '1.3.0' } });
+    const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: '1.4.0' }));
+    const isScanStale = vi.fn().mockReturnValue(false);
+
+    const report = await watchContainer(container, { ...dependencies, isScanStale });
+
+    expect(isScanStale).toHaveBeenCalled();
+    expect(dependencies.mapContainerToContainerReport).toHaveBeenCalledTimes(1);
+    expect(eventMocks.emitContainerReport).toHaveBeenCalledWith(report);
+  });
+});
+
 describe('watchContainer maturity-cleared hook', () => {
   test('awaits the maturity-cleared detection helper with the persisted container before emitting the report', async () => {
     const callOrder: string[] = [];

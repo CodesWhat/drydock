@@ -44,10 +44,21 @@ import { expect, test } from 'vitest';
 // explanatory comment) around the recordControllerLocalEnumeration() call in
 // getContainers(), so an older concurrent call's listContainers() result
 // can't overwrite a newer call's claim set.
-test('Docker watcher implementation should stay under 1748 lines', () => {
+// Bumped from 1748 for the DR-72 stale-scan fix: a scanGeneration field plus
+// the guards (and explanatory comments) in watch(), watchContainer(), and
+// deregisterComponent(), so a scan still processing containers when the
+// watcher is torn down discards its results instead of emitting them. The
+// per-container gate itself lives in container-processing.ts's isScanStale.
+// Bumped from 1787 for the PR #1076 review-fix round: getContainers() takes
+// an options.scanGeneration parameter and a guard around pruneOldContainers,
+// watch() rechecks scanGeneration after each awaited report emission and
+// again before the snapshot, and a cronRunGeneration field separates the
+// isCronWatchInProgress reset from scanGeneration so an unrelated concurrent
+// watch() (an AgentWatcher's direct delegate.watch()) can't leave it stuck.
+test('Docker watcher implementation should stay under 1834 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1748);
+  expect(lineCount).toBeLessThanOrEqual(1834);
 });

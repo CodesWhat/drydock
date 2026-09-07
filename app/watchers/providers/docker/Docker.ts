@@ -359,6 +359,27 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   // right to record the claim set (see recordControllerLocalEnumeration()
   // guard in getContainers()).
   private controllerLocalEnumerationGeneration: number = 0;
+  // Bumped ONLY in deregisterComponent() (never by watch() itself), so any
+  // number of concurrent watch()/getContainers() calls on this instance -
+  // a cron scan, an AgentWatcher's direct delegate.watch() call, a manual
+  // single-container scan - can each capture the same value at their own
+  // start without colliding with one another, and all of them go stale
+  // together the moment the watcher is actually torn down (DR-72 review
+  // finding #3: a self-minting counter here made an overlapping delegate
+  // watch() permanently wedge isCronWatchInProgress true, since nothing
+  // else ever clears it). Checked before emitting reports, writing the
+  // snapshot, updating lastRunAt, and pruning in getContainers(); threaded
+  // into watchContainer() so a per-container store write mid-scan is gated
+  // the same way (see container-processing.ts's isScanStale).
+  private scanGeneration: number = 0;
+  // Minted fresh by every runCronWatch() call in docker-cron-watch.ts
+  // (never reset elsewhere), so that function's own isCronWatchInProgress
+  // reset can tell whether it is still the outstanding cron run - a
+  // deliberately separate concern from scanGeneration above, which only
+  // tracks deregistration and would otherwise let an unrelated concurrent
+  // watch() call (see scanGeneration's comment) leave the flag stuck true
+  // forever with nothing left to clear it.
+  public cronRunGeneration: number = 0;
   // Single-flight state for watchFromCron; see watchFromCronOrchestration()
   // in docker-cron-watch.ts for the coalescing contract.
   public cronWatchInFlight?: Promise<ContainerReport[]>;
@@ -1031,6 +1052,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async deregisterComponent() {
     this.isWatcherDeregistered = true;
     this.isDockerEventsListenerActive = false;
+    // See scanGeneration's declaration: invalidates any scan already in
+    // flight so it discards its results instead of emitting them (DR-72).
+    this.scanGeneration++;
     forgetControllerLocalEnumeration(this);
 
     if (this.watchCron) {
@@ -1224,6 +1248,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
   async watch() {
     this.ensureLogger();
+    // Captured before any await; see scanGeneration's declaration. A plain
+    // read, not a mint: watch() no longer bumps this itself (DR-72 review
+    // finding #3), so a concurrent watch() call elsewhere on this instance
+    // reads the same value rather than invalidating this scan.
+    const scanGeneration = this.scanGeneration;
     let containers: Container[] = [];
     let containerEnumerationFailed = false;
     const enumerationDiagnostics: { enrichmentErrors: number } = { enrichmentErrors: 0 };
@@ -1234,7 +1263,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     // List images to watch
     try {
-      containers = await this.getContainers(enumerationDiagnostics);
+      containers = await this.getContainers(enumerationDiagnostics, { scanGeneration });
     } catch (e: unknown) {
       this.log.warn(
         `Error when trying to get the list of the containers to watch (${getErrorMessage(e)})`,
@@ -1261,8 +1290,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
       const containerReportsSettled = await allSettledWithDockerWatchConcurrency(
         containers,
-        (container) => this.watchContainer(container, { useRegistryPollCache: true }),
+        (container) =>
+          this.watchContainer(container, { useRegistryPollCache: true, scanGeneration }),
       );
+      if (scanGeneration !== this.scanGeneration) {
+        this.log.debug(
+          'Discarding the results of this scan because the watcher was deregistered while it was still processing containers',
+        );
+        return [];
+      }
       const containerReports: ContainerReport[] = [];
       for (const [index, containerReport] of containerReportsSettled.entries()) {
         if (containerReport.status === 'fulfilled') {
@@ -1275,9 +1311,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         );
         const fallbackContainerReport = buildFallbackContainerReport(containers[index], message);
         await event.emitContainerReport(fallbackContainerReport);
+        // Rechecked after the awaited emit above: a handler on it can run
+        // long enough for deregisterComponent() to land mid-loop.
+        if (scanGeneration !== this.scanGeneration) {
+          this.log.debug(
+            'Discarding the results of this scan because the watcher was deregistered while emitting a fallback container report',
+          );
+          return [];
+        }
         containerReports.push(fallbackContainerReport);
       }
       await event.emitContainerReports(containerReports);
+      // Rechecked after the awaited batch emit above, before lastRunAt and
+      // the snapshot: same handler-duration race as the fallback emit loop.
+      if (scanGeneration !== this.scanGeneration) {
+        this.log.debug(
+          'Discarding the results of this scan because the watcher was deregistered while emitting the batch container report',
+        );
+        return [];
+      }
       this.lastRunAt = new Date().toISOString();
       // Skip the snapshot emit when container enumeration itself failed, or
       // when per-container image-detail enrichment dropped one or more
@@ -1303,7 +1355,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       endDigestCachePollCycleForRegistries(digestCachePollCycle);
       // Dispatch event to notify stop watching
       event.emitWatcherStop(this);
-      this.lastRunAt = new Date().toISOString();
+      // Stale scan (see scanGeneration's declaration): leave lastRunAt as the
+      // torn-down watcher last set it rather than overwrite it here.
+      if (scanGeneration === this.scanGeneration) {
+        this.lastRunAt = new Date().toISOString();
+      }
     }
   }
 
@@ -1315,6 +1371,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    *   standalone per-container scans. Must be false (default) when called
    *   from the bulk `watch()` loop because that path emits its own
    *   `emitContainerReports` for the full set at the end.
+   * @param options.scanGeneration - Only supplied by the bulk `watch()` loop;
+   *   see scanGeneration's declaration. When present, a mismatch against the
+   *   live generation at emission time (i.e. the watcher was deregistered
+   *   mid-scan) skips the store write and report emission (DR-72).
    * @returns {Promise<*>}
    */
   async watchContainer(
@@ -1322,7 +1382,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     {
       emitBatchEvent = false,
       useRegistryPollCache = false,
-    }: { emitBatchEvent?: boolean; useRegistryPollCache?: boolean } = {},
+      scanGeneration,
+    }: {
+      emitBatchEvent?: boolean;
+      useRegistryPollCache?: boolean;
+      scanGeneration?: number;
+    } = {},
   ) {
     this.ensureLogger();
     return watchContainerState(container, {
@@ -1333,14 +1398,22 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
         this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
       emitBatchEvent,
+      isScanStale:
+        scanGeneration === undefined ? undefined : () => scanGeneration !== this.scanGeneration,
     });
   }
 
   /**
    * Get all containers to watch.
+   * @param options.scanGeneration - See scanGeneration's declaration. When
+   *   present, a mismatch found after listContainers() settles skips the
+   *   prune below (DR-72 review finding #2).
    * @returns {Promise<unknown[]>}
    */
-  async getContainers(diagnostics?: { enrichmentErrors: number }): Promise<Container[]> {
+  async getContainers(
+    diagnostics?: { enrichmentErrors: number },
+    options: { scanGeneration?: number } = {},
+  ): Promise<Container[]> {
     this.ensureLogger();
     // Captured before the first await so two concurrent getContainers()
     // calls (the agent API's watch() can run alongside a scheduled/event
@@ -1460,6 +1533,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const containersToReturn = enrichmentResults.filter(
       (result): result is Container => !(result instanceof Error) && result != null,
     );
+
+    // deregisterComponent() can land while listContainers() above is still
+    // pending; pruning off a listing gathered for a scan nobody wants any
+    // more could delete or update persisted container state on its behalf.
+    // Skip the prune (and the gauge update below, scoped to this watcher's
+    // type+name and no more meaningful once it's torn down) once that
+    // happens (DR-72 review finding #2).
+    if (options.scanGeneration !== undefined && options.scanGeneration !== this.scanGeneration) {
+      this.log.debug('Skipping prune - the watcher was deregistered while listing containers');
+      return containersToReturn;
+    }
 
     // Prune old containers from the store (#869; see getStillInWatchScopeContainerIds in docker-helpers.ts).
     const stillInWatchScopeContainerIds = getStillInWatchScopeContainerIds(

@@ -40,6 +40,14 @@ interface WatchContainerDependencies {
    * so it must leave this as false to avoid double-firing batch triggers.
    */
   emitBatchEvent?: boolean;
+  /**
+   * Checked once findNewVersion() has settled, right before the store write and event
+   * emission below. Only the bulk `watch()` loop supplies this (DR-72): the watcher was
+   * deregistered while this container was mid-scan, so the store write and report/batch
+   * emission are stale side effects and must not land. Absent for standalone single-container
+   * scans, which are not part of a generation-tracked bulk scan.
+   */
+  isScanStale?: () => boolean;
 }
 
 interface MapContainerToReportDependencies {
@@ -60,6 +68,7 @@ export async function watchContainer(
     findNewVersion,
     mapContainerToContainerReport,
     emitBatchEvent = false,
+    isScanStale,
   }: WatchContainerDependencies,
 ): Promise<ContainerReport> {
   ensureLogger();
@@ -98,6 +107,13 @@ export async function watchContainer(
       containerWithResult.result = previousResult;
       containerWithResult.currentReleaseNotes = previousCurrentReleaseNotes;
     }
+  }
+
+  if (isScanStale?.()) {
+    logContainer.debug(
+      'Skipping stale scan side effects — the watcher was deregistered while this container was being processed',
+    );
+    return { container: containerWithResult, changed: false };
   }
 
   const containerReport = mapContainerToContainerReport(containerWithResult, watchStartedAtMs);
