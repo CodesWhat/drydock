@@ -163,7 +163,10 @@ test('the config file fixture is mounted read-only at /config/drydock.yml', asyn
   const result = await runStartScript({ skipBuild: true });
 
   assert.equal(result.exitCode, 0, result.stderr || result.stdout);
-  assert.match(result.dockerCalls, /--volume \S+\/test\/qa-drydock\.yml:\/config\/drydock\.yml:ro /u);
+  assert.match(
+    result.dockerCalls,
+    /--volume \S+\/test\/qa-drydock\.yml:\/config\/drydock\.yml:ro /u,
+  );
 });
 
 test('health readiness rejects an HTTP 503 response', async () => {
