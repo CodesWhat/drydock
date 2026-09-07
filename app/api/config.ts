@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
 import { getConfigFileInfo } from '../configuration/file/layer.js';
+import { reloadConfiguration } from '../configuration/file/reload.js';
 import { configFileSources, ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import { redactConfigurationTree } from '../debug/redact.js';
 import { recordAuditEvent } from './audit-events.js';
@@ -171,6 +172,74 @@ function getConfigurationSection(req: Request<{ section: string }>, res: Respons
   }
 }
 
+/**
+ * `POST /api/v1/config/reload` — re-read `drydock.yml` and reconcile
+ * registered components by difference (roadmap 7.1 slice 6,
+ * spec-7.1-config-file.md section 4.1). The engine
+ * (`configuration/file/reload.ts`'s `reloadConfiguration`) owns every I/O
+ * and mutation step; this handler's only job is the HTTP/audit wrapping
+ * every other route in this file already follows — always `200` with an
+ * outcome field in the body (`applied`), matching `/validate`'s
+ * `valid`/errors shape, rather than a 4xx/5xx for "the candidate didn't
+ * validate", which is an expected, well-formed outcome, not a request error.
+ */
+function summarizeReconcile(
+  reconcile: Awaited<ReturnType<typeof reloadConfiguration>>['reconcile'],
+) {
+  if (!reconcile) {
+    return undefined;
+  }
+  return {
+    added: reconcile.added.length,
+    changed: reconcile.changed.length,
+    removed: reconcile.removed.length,
+    unchanged: reconcile.unchanged.length,
+    errors: reconcile.errors.length,
+  };
+}
+
+// `reconcileSummary` is only ever undefined when `result.applied` is false
+// (`reloadConfiguration`'s own contract: `reconcile` is set iff the reload
+// applied), so the applied branch below can read it directly rather than
+// guard against a case the type system can't rule out but the contract
+// already does.
+function describeReload(
+  result: Awaited<ReturnType<typeof reloadConfiguration>>,
+  reconcileSummary: ReturnType<typeof summarizeReconcile>,
+): string {
+  if (!result.applied) {
+    return `Reloaded configuration: refused (${result.errors.length} error(s))`;
+  }
+  const summary = reconcileSummary as NonNullable<typeof reconcileSummary>;
+  return (
+    `Reloaded configuration: applied (added ${summary.added}, ` +
+    `changed ${summary.changed}, removed ${summary.removed}, ` +
+    `unchanged ${summary.unchanged}, errors ${summary.errors})`
+  );
+}
+
+async function reloadEffectiveConfiguration(_req: Request, res: Response): Promise<void> {
+  try {
+    const result = await reloadConfiguration();
+    const reconcileSummary = summarizeReconcile(result.reconcile);
+    const details = describeReload(result, reconcileSummary);
+    recordAuditEvent({
+      action: 'config-reloaded',
+      containerName: 'diagnostics',
+      status: result.applied ? 'info' : 'error',
+      details,
+    });
+    res.status(200).json({
+      applied: result.applied,
+      errors: result.errors,
+      diff: result.diff,
+      reconcile: reconcileSummary,
+    });
+  } catch {
+    sendErrorResponse(res, 500, 'Unable to reload the configuration');
+  }
+}
+
 export function init() {
   const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
   const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
@@ -201,6 +270,19 @@ export function init() {
     message: 'Config validate rate limit exceeded. Max 5 per 60 seconds.',
     ...identityAwareRateLimitOptions,
   });
+  // Same shape again: a reload is heavier than a validate (it also
+  // reconciles every registered component), so if anything it deserves a
+  // tighter cap, but 5/60s already bounds the expensive path and there is no
+  // reason for this route's limit to diverge from its two siblings.
+  const configReloadRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: 'Config reload rate limit exceeded. Max 5 per 60 seconds.',
+    ...identityAwareRateLimitOptions,
+  });
 
   router.use(nocache());
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
@@ -214,5 +296,9 @@ export function init() {
     configValidateRateLimit,
     scoped('admin', validateCandidateConfiguration),
   );
+  // `admin`, same reasoning as `/validate` above: reload's response is the
+  // same paths/env-key-names/error-text/counts shape, never a raw
+  // configuration value.
+  router.post('/reload', configReloadRateLimit, scoped('admin', reloadEffectiveConfiguration));
   return router;
 }

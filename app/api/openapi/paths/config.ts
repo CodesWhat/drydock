@@ -94,6 +94,44 @@ const validateConfigurationResponseSchema = {
   additionalProperties: false,
 } as const;
 
+const reconcileSummarySchema = {
+  type: 'object',
+  description:
+    'Present only when `applied` is true — the component reconciliation outcome for this reload (roadmap 7.1 slice 6), counted rather than named: how many components were added, changed, removed, left unchanged, or errored while being reconciled to the new configuration.',
+  properties: {
+    added: { type: 'integer' },
+    changed: { type: 'integer' },
+    removed: { type: 'integer' },
+    unchanged: { type: 'integer' },
+    errors: { type: 'integer' },
+  },
+  required: ['added', 'changed', 'removed', 'unchanged', 'errors'],
+  additionalProperties: false,
+} as const;
+
+const reloadConfigurationResponseSchema = {
+  type: 'object',
+  properties: {
+    applied: { type: 'boolean' },
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+    diff: {
+      type: 'object',
+      description:
+        'Keys that changed between the previous and newly re-read file, and which sections that implies reloaded versus need a restart (spec-7.1-config-file.md section 4.3).',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+    reconcile: { ...reconcileSummarySchema },
+  },
+  required: ['applied', 'errors', 'diff'],
+  additionalProperties: false,
+} as const;
+
 export const configPaths = {
   '/api/v1/config': {
     get: {
@@ -146,6 +184,22 @@ export const configPaths = {
         ),
         429: errorResponse('Config validate rate limit exceeded'),
         500: errorResponse('Unable to validate the candidate configuration'),
+      },
+    },
+  },
+  '/api/v1/config/reload': {
+    post: {
+      tags: ['System'],
+      summary: 'Re-read the configuration file and reconcile components against it',
+      description:
+        'Re-reads drydock.yml, validates the merged result exactly like /validate, and — only on success — reconciles registered components by difference against the new desired state (roadmap 7.1 slice 6, spec-7.1-config-file.md section 4.3). A restart-only key (server port, store path, log settings, and other module-load-read values) is reported in diff.restart but never applied; refuses the whole reload on any validation error, applying nothing.',
+      operationId: 'reloadEffectiveConfiguration',
+      responses: {
+        200: jsonResponse('Reload result', { ...reloadConfigurationResponseSchema }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        429: errorResponse('Config reload rate limit exceeded'),
+        500: errorResponse('Unable to reload the configuration'),
       },
     },
   },

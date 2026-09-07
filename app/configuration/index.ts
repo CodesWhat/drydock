@@ -207,6 +207,45 @@ export async function validateStartupConfiguration(): Promise<{
   return validateConfiguration(ddEnvVars);
 }
 
+/**
+ * Apply the per-key delta a successful configuration reload computed
+ * (roadmap 7.1 slice 6, `configuration/file/reload.ts`) to the running
+ * `ddEnvVars`/`configFileSources` singletons, in place — the same mutate-
+ * don't-reassign discipline step 3 above already follows, so every module
+ * that imported either binding at its own import time keeps seeing live
+ * values.
+ *
+ * Deliberately narrow: `envDelta`/`sourcesDelta` carry only the keys
+ * `reload.ts` decided to actually apply (reloadable-section keys that
+ * changed), never every key in the new file — a restart-required key that
+ * changed is reported in the reload's `restart` diff but must never reach
+ * here, and an unchanged key has no reason to. A `value`/`source` of
+ * `undefined` for a key means the key is gone in the new file (and not
+ * re-supplied by the real environment either): deleted outright, rather
+ * than left present with an `undefined` value, so a later
+ * `Object.keys(ddEnvVars)` walk (`get()` above, every section getter) never
+ * sees it.
+ */
+export function applyConfigurationReload(
+  envDelta: Record<string, string | undefined>,
+  sourcesDelta: Record<string, ConfigValueSource | undefined>,
+): void {
+  for (const [key, value] of Object.entries(envDelta)) {
+    if (value === undefined) {
+      delete ddEnvVars[key];
+    } else {
+      ddEnvVars[key] = value;
+    }
+  }
+  for (const [key, source] of Object.entries(sourcesDelta)) {
+    if (source === undefined) {
+      delete configFileSources[key];
+    } else {
+      configFileSources[key] = source;
+    }
+  }
+}
+
 export function getVersion() {
   const configuredVersion = ddEnvVars.DD_VERSION?.trim();
   if (configuredVersion && configuredVersion.toLowerCase() !== 'unknown') {

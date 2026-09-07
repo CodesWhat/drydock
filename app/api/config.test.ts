@@ -1,3 +1,4 @@
+import type { ComponentReconcileResult } from '../registry/index.js';
 import { getSettingsSchemaKeys } from '../store/settings.js';
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
@@ -11,12 +12,14 @@ const {
   mockGetConfigFileInfo,
   mockDdEnvVars,
   mockConfigFileSources,
+  mockReloadConfiguration,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockGetServerConfiguration: vi.fn(() => ({}) as Record<string, unknown>),
   mockGetConfigFileInfo: vi.fn(() => undefined as { path: string; modifiedAt: string } | undefined),
   mockDdEnvVars: {} as Record<string, string | undefined>,
   mockConfigFileSources: {} as Record<string, string>,
+  mockReloadConfiguration: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -59,14 +62,20 @@ vi.mock('../configuration/file/layer.js', async (importOriginal) => {
   };
 });
 
+vi.mock('../configuration/file/reload.js', () => ({
+  reloadConfiguration: () => mockReloadConfiguration(),
+}));
+
 import * as configRouter from './config.js';
 
 function createResponse() {
   return createMockResponse();
 }
 
+const POST_PATHS = new Set(['/validate', '/reload']);
+
 function getHandler(path: string) {
-  if (path === '/validate') {
+  if (POST_PATHS.has(path)) {
     return mockRouter.post.mock.calls.find((call) => call[0] === path)?.at(-1);
   }
   return mockRouter.get.mock.calls.find((call) => call[0] === path)?.at(-1);
@@ -77,6 +86,7 @@ describe('Config Router', () => {
     vi.clearAllMocks();
     mockGetServerConfiguration.mockReturnValue({});
     mockGetConfigFileInfo.mockReturnValue(undefined);
+    mockReloadConfiguration.mockReset();
 
     for (const key of Object.keys(mockDdEnvVars)) {
       delete mockDdEnvVars[key];
@@ -424,5 +434,176 @@ describe('Config Router', () => {
     for (const settingsKey of getSettingsSchemaKeys()) {
       expect(configSectionKeys.has(settingsKey)).toBe(false);
     }
+  });
+
+  describe('POST /reload', () => {
+    function reconcileResult(overrides: Partial<ComponentReconcileResult> = {}) {
+      return {
+        added: [],
+        changed: [],
+        removed: [],
+        unchanged: [],
+        errors: [],
+        ...overrides,
+      };
+    }
+
+    test('registers a rate-limited admin route', () => {
+      configRouter.init();
+      expect(mockRouter.post).toHaveBeenCalledWith(
+        '/reload',
+        { rateLimiter: expect.objectContaining({ windowMs: 60_000, max: 5 }) },
+        expect.any(Function),
+      );
+    });
+
+    test('rejects an API key without admin scope', async () => {
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({ principal: { kind: 'api-key', scopes: ['read'] } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(mockReloadConfiguration).not.toHaveBeenCalled();
+    });
+
+    test('is reachable by an API key holding admin', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: { changed: [], reload: [], restart: [] },
+        reconcile: reconcileResult(),
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({ principal: { kind: 'api-key', scopes: ['admin'] } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('returns the applied result with a reconcile summary and records an info audit entry', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload).toStrictEqual({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: { added: 1, changed: 0, removed: 0, unchanged: 0, errors: 0 },
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'config-reloaded',
+        containerName: 'diagnostics',
+        status: 'info',
+        details: expect.stringContaining('applied'),
+      });
+    });
+
+    test('returns a refused result with no reconcile summary and records an error audit entry', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: false,
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+        diff: { changed: [], reload: [], restart: [] },
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.applied).toBe(false);
+      expect(payload.reconcile).toBeUndefined();
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'config-reloaded',
+        containerName: 'diagnostics',
+        status: 'error',
+        details: expect.stringContaining('refused'),
+      });
+    });
+
+    test('fails with a 500 when the reload engine throws', async () => {
+      mockReloadConfiguration.mockRejectedValue(new Error('boom'));
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to reload the configuration' });
+    });
+
+    test('applied response satisfies the OpenAPI contract', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/v1/config/reload',
+        method: 'post',
+        statusCode: '200',
+        payload: (res.json as any).mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
+    });
+
+    test('refused response satisfies the OpenAPI contract', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: false,
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+        diff: { changed: [], reload: [], restart: [] },
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/v1/config/reload',
+        method: 'post',
+        statusCode: '200',
+        payload: (res.json as any).mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
+    });
   });
 });

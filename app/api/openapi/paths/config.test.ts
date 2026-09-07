@@ -153,11 +153,80 @@ describe('configPaths', () => {
     });
   });
 
-  test('configPaths exports exactly three path entries', () => {
+  test('/api/v1/config/reload POST path is fully specified', () => {
+    expect(configPaths['/api/v1/config/reload']).toStrictEqual({
+      post: {
+        tags: ['System'],
+        summary: 'Re-read the configuration file and reconcile components against it',
+        description:
+          'Re-reads drydock.yml, validates the merged result exactly like /validate, and — only on success — reconciles registered components by difference against the new desired state (roadmap 7.1 slice 6, spec-7.1-config-file.md section 4.3). A restart-only key (server port, store path, log settings, and other module-load-read values) is reported in diff.restart but never applied; refuses the whole reload on any validation error, applying nothing.',
+        operationId: 'reloadEffectiveConfiguration',
+        responses: {
+          200: jsonResponse('Reload result', {
+            type: 'object',
+            properties: {
+              applied: { type: 'boolean' },
+              errors: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string', description: 'Dot-separated YAML path' },
+                    envKey: {
+                      type: 'string',
+                      description: 'The DD_*-prefixed env key the same value would carry',
+                    },
+                    message: { type: 'string' },
+                  },
+                  required: ['path', 'envKey', 'message'],
+                  additionalProperties: false,
+                },
+              },
+              diff: {
+                type: 'object',
+                description:
+                  'Keys that changed between the previous and newly re-read file, and which sections that implies reloaded versus need a restart (spec-7.1-config-file.md section 4.3).',
+                properties: {
+                  changed: { type: 'array', items: { type: 'string' } },
+                  reload: { type: 'array', items: { type: 'string' } },
+                  restart: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['changed', 'reload', 'restart'],
+                additionalProperties: false,
+              },
+              reconcile: {
+                type: 'object',
+                description:
+                  'Present only when `applied` is true — the component reconciliation outcome for this reload (roadmap 7.1 slice 6), counted rather than named: how many components were added, changed, removed, left unchanged, or errored while being reconciled to the new configuration.',
+                properties: {
+                  added: { type: 'integer' },
+                  changed: { type: 'integer' },
+                  removed: { type: 'integer' },
+                  unchanged: { type: 'integer' },
+                  errors: { type: 'integer' },
+                },
+                required: ['added', 'changed', 'removed', 'unchanged', 'errors'],
+                additionalProperties: false,
+              },
+            },
+            required: ['applied', 'errors', 'diff'],
+            additionalProperties: false,
+          }),
+          401: errorResponse('Authentication required'),
+          403: errorResponse('API key is missing the required scope'),
+          429: errorResponse('Config reload rate limit exceeded'),
+          500: errorResponse('Unable to reload the configuration'),
+        },
+      },
+    });
+  });
+
+  test('configPaths exports exactly four path entries', () => {
     expect(Object.keys(configPaths)).toStrictEqual([
       '/api/v1/config',
       '/api/v1/config/{section}',
       '/api/v1/config/validate',
+      '/api/v1/config/reload',
     ]);
   });
 });
