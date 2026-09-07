@@ -9,11 +9,13 @@ import type { ConfigurationReloadResult } from './reload.js';
 
 const mockRename = vi.hoisted(() => vi.fn());
 const mockUnlink = vi.hoisted(() => vi.fn());
+const mockOpen = vi.hoisted(() => vi.fn());
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   mockRename.mockImplementation(actual.rename);
   mockUnlink.mockImplementation(actual.unlink);
-  return { ...actual, rename: mockRename, unlink: mockUnlink };
+  mockOpen.mockImplementation(actual.open);
+  return { ...actual, rename: mockRename, unlink: mockUnlink, open: mockOpen };
 });
 
 const mockReloadConfiguration = vi.hoisted(() => vi.fn());
@@ -233,6 +235,33 @@ describe('writeConfigurationSection', () => {
       }),
     ).rejects.toThrow('rename failed');
 
+    expect(readRaw()).toBe(before);
+  });
+
+  test('a write failure inside the temp-file handle still unlinks the temp file and leaves the target untouched', async () => {
+    writeFixture(FIXTURE_WITH_COMMENTS);
+    const before = readRaw();
+    const fakeClose = vi.fn().mockResolvedValue(undefined);
+    mockOpen.mockImplementationOnce(
+      async () =>
+        ({
+          writeFile: vi.fn().mockRejectedValue(new Error('write failed')),
+          sync: vi.fn(),
+          close: fakeClose,
+          // Minimal fake FileHandle: only the three methods writeFileAtomically calls.
+        }) as any,
+    );
+
+    await expect(
+      writeConfigurationSection('notification', {
+        discord: { myhook: { url: 'https://new.example/hook' } },
+      }),
+    ).rejects.toThrow('write failed');
+
+    expect(fakeClose).toHaveBeenCalledTimes(1);
+    expect(mockUnlink).toHaveBeenCalledWith(
+      expect.stringContaining(path.join(tempDir, '.drydock.yml.tmp-')),
+    );
     expect(readRaw()).toBe(before);
   });
 

@@ -25,7 +25,7 @@ function createFakeWatcher(): FakeWatcher {
 }
 
 const mockWatchFn = vi.hoisted(() => vi.fn());
-let capturedListener: (() => void) | undefined;
+let capturedListener: ((eventType: string, filename: string | Buffer | null) => void) | undefined;
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -45,10 +45,12 @@ describe('startConfigFileWatch', () => {
     fakeWatcher = createFakeWatcher();
     capturedListener = undefined;
     mockWatchFn.mockReset();
-    mockWatchFn.mockImplementation((_path: string, listener: () => void) => {
-      capturedListener = listener;
-      return fakeWatcher;
-    });
+    mockWatchFn.mockImplementation(
+      (_path: string, listener: (eventType: string, filename: string | Buffer | null) => void) => {
+        capturedListener = listener;
+        return fakeWatcher;
+      },
+    );
     resetConfigFileLayer();
   });
 
@@ -57,8 +59,8 @@ describe('startConfigFileWatch', () => {
     resetConfigFileLayer();
   });
 
-  function fireFileEvent(): void {
-    capturedListener?.();
+  function fireFileEvent(filename: string | Buffer | null = 'drydock.yml'): void {
+    capturedListener?.('change', filename);
   }
 
   test('returns undefined and never touches fs.watch when no config file was discovered at boot', async () => {
@@ -77,7 +79,10 @@ describe('startConfigFileWatch', () => {
     const handle = await startConfigFileWatch();
 
     expect(getConfigFileInfo()?.path).toBe('/tmp/drydock.yml');
-    expect(mockWatchFn).toHaveBeenCalledWith('/tmp/drydock.yml', expect.any(Function));
+    // Watches the file's directory, not the file itself (fix for the watch
+    // going dead after write.ts's rename-based atomic save replaces the
+    // inode a direct file watch is attached to) — see /tmp above.
+    expect(mockWatchFn).toHaveBeenCalledWith('/tmp', expect.any(Function));
     expect(handle).toBeDefined();
   });
 
@@ -86,7 +91,50 @@ describe('startConfigFileWatch', () => {
 
     await startConfigFileWatch({ filePath: '/tmp/override.yml', reload });
 
-    expect(mockWatchFn).toHaveBeenCalledWith('/tmp/override.yml', expect.any(Function));
+    expect(mockWatchFn).toHaveBeenCalledWith('/tmp', expect.any(Function));
+  });
+
+  test('ignores an event for another file in the watched directory', async () => {
+    const reload = vi.fn().mockResolvedValue({ applied: true, errors: [], diff: emptyDiff() });
+
+    await startConfigFileWatch({ filePath: '/tmp/drydock.yml', reload, debounceMs: 10 });
+    fireFileEvent('some-other-file.yml');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  test('treats a null filename as a match, rather than filtering it out', async () => {
+    const reload = vi.fn().mockResolvedValue({ applied: true, errors: [], diff: emptyDiff() });
+
+    await startConfigFileWatch({ filePath: '/tmp/drydock.yml', reload, debounceMs: 10 });
+    fireFileEvent(null);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  test('reloads on an event whose filename matches the watched file basename', async () => {
+    const reload = vi.fn().mockResolvedValue({ applied: true, errors: [], diff: emptyDiff() });
+
+    await startConfigFileWatch({ filePath: '/tmp/drydock.yml', reload, debounceMs: 10 });
+    fireFileEvent('drydock.yml');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns undefined and logs an error when fs.watch throws synchronously', async () => {
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => undefined as never);
+    mockWatchFn.mockImplementation(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
+
+    const handle = await startConfigFileWatch({ filePath: '/tmp/drydock.yml', reload: vi.fn() });
+
+    expect(handle).toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('ENOENT'));
+    errorSpy.mockRestore();
   });
 
   test('unrefs the underlying watch handle so it cannot hold the process open', async () => {
@@ -114,7 +162,7 @@ describe('startConfigFileWatch', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  test('ignores a change event that arrives while a reload is already in flight', async () => {
+  test('queues a change event that arrives while a reload is already in flight, running one more reload once it settles', async () => {
     let resolveReload:
       | ((result: { applied: boolean; errors: unknown[]; diff: unknown }) => void)
       | undefined;
@@ -131,18 +179,54 @@ describe('startConfigFileWatch', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(reload).toHaveBeenCalledTimes(1);
 
-    // A second change arrives mid-reload — ignored, not queued.
+    // A second (and third) change arrive mid-reload — queued, not dropped,
+    // and not acted on until the in-flight reload settles.
+    fireFileEvent();
+    await vi.advanceTimersByTimeAsync(10);
     fireFileEvent();
     await vi.advanceTimersByTimeAsync(10);
     expect(reload).toHaveBeenCalledTimes(1);
 
     resolveReload?.({ applied: true, errors: [], diff: emptyDiff() });
     await vi.runOnlyPendingTimersAsync();
+    // The queued signal runs through the same debounce as any other event.
+    await vi.advanceTimersByTimeAsync(10);
 
-    // Once the in-flight reload settles, a later change fires its own event.
+    // Exactly one follow-up reload runs for the whole queued burst, not one
+    // per queued event.
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  test('close() during an in-flight reload does not schedule another reload once it settles', async () => {
+    let resolveReload:
+      | ((result: { applied: boolean; errors: unknown[]; diff: unknown }) => void)
+      | undefined;
+    const reload = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveReload = resolve;
+        }),
+    );
+
+    const handle = await startConfigFileWatch({
+      filePath: '/tmp/drydock.yml',
+      reload,
+      debounceMs: 10,
+    });
+
     fireFileEvent();
     await vi.advanceTimersByTimeAsync(10);
-    expect(reload).toHaveBeenCalledTimes(2);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    // A second change arrives mid-reload, queuing a follow-up reload.
+    fireFileEvent();
+
+    handle?.close();
+    resolveReload?.({ applied: true, errors: [], diff: emptyDiff() });
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   test('logs a warning and does not throw when a triggered reload is refused', async () => {

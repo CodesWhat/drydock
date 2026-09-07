@@ -2150,4 +2150,27 @@ describe('reconcileComponentsWithConfiguration', () => {
     expect(result.unchanged).not.toContain('trigger:mock.untracked');
     expect(result.removed).not.toContain('trigger:mock.untracked');
   });
+
+  test('a reload after init({ agent: true }) never desires the controller-only local watcher or a disallowed trigger', async () => {
+    // Regression test for buildDesiredEntriesForKind passing a hardcoded `{}`
+    // to buildWatcherProviderConfigurations/buildTriggerProviderConfigurations
+    // instead of the options init() was actually called with: with the bug,
+    // a reload's desired state is computed as if the process were never
+    // started in agent mode, so it would report the controller-only
+    // docker.local watcher and the disallowed 'mock' trigger as things to
+    // ADD even though init() itself never registered either of them.
+    watchers = {};
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registry.init({ agent: true });
+
+    expect(registry.getState().watcher['docker.local']).toBeUndefined();
+    expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
+
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.added).not.toContain('watcher:docker.local');
+    expect(result.added).not.toContain('trigger:mock.mock1');
+    expect(registry.getState().watcher['docker.local']).toBeUndefined();
+    expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
+  });
 });

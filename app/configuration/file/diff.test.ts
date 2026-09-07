@@ -1,4 +1,4 @@
-import { configFileSources, ddEnvVars } from '../index.js';
+import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
 import {
   buildCandidateEnvAndDiff,
   ddEnvKeyToSection,
@@ -37,6 +37,7 @@ describe('buildCandidateEnvAndDiff', () => {
   beforeEach(() => {
     Object.keys(ddEnvVars).forEach((key) => delete ddEnvVars[key]);
     Object.keys(configFileSources).forEach((key) => delete configFileSources[key]);
+    configFileInterpolatedKeys.clear();
   });
 
   test('reports a key present in the candidate file layer but not currently set as changed and reloadable', () => {
@@ -84,6 +85,36 @@ describe('buildCandidateEnvAndDiff', () => {
     expect(diff.changed).toContain('DD_');
     expect(diff.reload).toEqual([]);
     expect(diff.restart).toEqual([]);
+  });
+
+  test('reports a currently-interpolated key as changed when the candidate resolves it differently, even though its source reads env', () => {
+    // Regression test: an interpolated file key attributes as 'env' in
+    // configFileSources (decision D1), same as a genuinely environment-owned
+    // key. Without configFileInterpolatedKeys, the old-file 'env' check
+    // above would skip it here too, and a reload would never see it change.
+    ddEnvVars.DD_WATCHER_LOCAL_SOCKET = '/interpolated/old.sock';
+    configFileSources.DD_WATCHER_LOCAL_SOCKET = 'env';
+    configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    const { diff, candidateEnv } = buildCandidateEnvAndDiff({
+      DD_WATCHER_LOCAL_SOCKET: '/literal/new.sock',
+    });
+
+    expect(diff.changed).toContain('DD_WATCHER_LOCAL_SOCKET');
+    expect(diff.reload).toEqual(['watcher']);
+    expect(candidateEnv.DD_WATCHER_LOCAL_SOCKET).toEqual('/literal/new.sock');
+  });
+
+  test('reports a currently-interpolated key as changed (removed) when the candidate no longer sets it', () => {
+    ddEnvVars.DD_WATCHER_LOCAL_SOCKET = '/interpolated/old.sock';
+    configFileSources.DD_WATCHER_LOCAL_SOCKET = 'env';
+    configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    const { diff, candidateEnv } = buildCandidateEnvAndDiff({});
+
+    expect(diff.changed).toContain('DD_WATCHER_LOCAL_SOCKET');
+    expect(diff.reload).toEqual(['watcher']);
+    expect(candidateEnv.DD_WATCHER_LOCAL_SOCKET).toBeUndefined();
   });
 
   test('attributes an interpolated candidate key as env, not file, when envSourcedFileKeys names it', () => {

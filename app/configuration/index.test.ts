@@ -3786,6 +3786,7 @@ describe('applyConfigurationReload', () => {
   afterEach(() => {
     delete configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET;
     delete configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET;
+    configuration.configFileInterpolatedKeys.delete('DD_WATCHER_LOCAL_SOCKET');
   });
 
   test('sets a new key in both ddEnvVars and configFileSources', () => {
@@ -3824,6 +3825,40 @@ describe('applyConfigurationReload', () => {
     expect(configuration.configFileSources.DD_SERVER_PORT).toEqual('env');
     delete configuration.ddEnvVars.DD_SERVER_PORT;
     delete configuration.configFileSources.DD_SERVER_PORT;
+  });
+
+  test('adds a touched key to configFileInterpolatedKeys when newInterpolatedKeys names it', () => {
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'env' },
+      new Set(['DD_WATCHER_LOCAL_SOCKET']),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(true);
+  });
+
+  test('removes a touched key from configFileInterpolatedKeys once it is no longer named in newInterpolatedKeys', () => {
+    configuration.configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/literal/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+      new Set(),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+
+  test('removes a touched key from configFileInterpolatedKeys when its delta value is undefined (removed), even if newInterpolatedKeys still names it', () => {
+    configuration.configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      new Set(['DD_WATCHER_LOCAL_SOCKET']),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(false);
   });
 });
 

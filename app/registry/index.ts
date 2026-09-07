@@ -106,6 +106,19 @@ const registrationWarnings: string[] = [];
 const authenticationRegistrationErrors: AuthenticationRegistrationError[] = [];
 
 /**
+ * The options the running process was actually started with — `init`'s own
+ * argument, remembered here so a later reload's `buildDesiredEntriesForKind`
+ * (roadmap 7.1 slice 6) can recompute desired watcher/trigger state under the
+ * same `{ agent: true }` restriction real registration used, instead of the
+ * `{}` it used to pass unconditionally. Passing `{}` there let a reload in
+ * agent mode compute (and reconcile in) a controller-only `docker.local`
+ * watcher or a trigger outside `AGENT_ALLOWED_TRIGGER_PROVIDERS`, since
+ * neither builder had any way to know the process was ever started with
+ * `agent: true`.
+ */
+let registrationOptions: RegistrationOptions = {};
+
+/**
  * The canonical JSON of the *raw* configuration passed to `registerComponent`
  * for every currently-registered non-agent component, keyed by
  * `${kind}:${id}`. Roadmap 7.1 slice 6's reload reconciliation
@@ -996,7 +1009,7 @@ function buildDesiredEntriesForKind(
   if (kind === 'watcher') {
     const { entries: watcherEntries } = buildWatcherProviderConfigurations(
       getWatcherConfigurations(),
-      {},
+      registrationOptions,
     );
     for (const entry of watcherEntries) {
       entries.set(`docker.${entry.name}`, {
@@ -1012,7 +1025,7 @@ function buildDesiredEntriesForKind(
   const providerConfigurations =
     kind === 'registry'
       ? buildRegistryProviderConfigurations()
-      : buildTriggerProviderConfigurations({});
+      : buildTriggerProviderConfigurations(registrationOptions);
 
   for (const [provider, instances] of Object.entries(providerConfigurations)) {
     if (!isObjectRecord(instances)) {
@@ -1186,6 +1199,7 @@ async function shutdown() {
 }
 
 export async function init(options: RegistrationOptions = {}) {
+  registrationOptions = options;
   // Register triggers
   await registerTriggers(options);
 

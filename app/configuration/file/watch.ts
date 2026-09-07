@@ -1,3 +1,4 @@
+import { basename, dirname } from 'node:path';
 import { logError, logWarn } from '../../log/warn.js';
 import { getErrorMessage } from '../../util/error.js';
 import { getConfigFileInfo } from './layer.js';
@@ -15,7 +16,16 @@ import { type ConfigurationReloadResult, reloadConfiguration } from './reload.js
  *
  * `fs.watch` is dynamically imported inside this function, never at module
  * load: every other module under `configuration/` performs no filesystem I/O
- * just by being imported, and this one is no exception.
+ * just by being imported, and this one is no exception. `node:path` is a
+ * pure, I/O-free import and stays static.
+ *
+ * Watches the file's *directory*, not the file itself: `write.ts` (and any
+ * editor) saves by writing a sibling temp file and renaming it over the
+ * target, which — per Node's own `fs.watch` docs — replaces the inode a
+ * direct watch on the file path is attached to, so that watch goes dead
+ * after the very first atomic save. Watching the directory survives that,
+ * at the cost of also seeing events for every other file in it, so the
+ * callback below filters to the one basename this module cares about.
  */
 
 export interface ConfigFileWatchHandle {
@@ -57,6 +67,8 @@ export async function startConfigFileWatch(
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let reloadInFlight = false;
+  let reloadQueued = false;
+  let closed = false;
 
   function runReload(): void {
     reloadInFlight = true;
@@ -75,15 +87,28 @@ export async function startConfigFileWatch(
       })
       .finally(() => {
         reloadInFlight = false;
+        // A change signal that arrived while this reload was in flight was
+        // queued, not dropped: the in-flight reload could only ever reread
+        // whatever was on disk when it started, so a queued signal means the
+        // file may already differ from what that reload just applied — run
+        // the (debounced) sequence again now rather than depending on some
+        // later, unrelated event to notice.
+        if (reloadQueued && !closed) {
+          reloadQueued = false;
+          onFileEvent();
+        }
       });
   }
 
   function onFileEvent(): void {
-    // Ignore a change signal that arrives while a reload is already in
-    // flight, rather than queueing it: the in-flight reload rereads
-    // whatever is on disk right now, and a file that changes again once it
-    // finishes fires its own, later event.
+    // A change signal that arrives while a reload is already in flight is
+    // queued rather than acted on immediately: the in-flight reload rereads
+    // whatever is on disk right now, so running a second one concurrently
+    // would just re-read the same content. Exactly one more reload runs once
+    // it settles (see the `.finally()` above), coalescing however many
+    // events arrived during the in-flight reload into that single follow-up.
     if (reloadInFlight) {
+      reloadQueued = true;
       return;
     }
     if (debounceTimer) {
@@ -96,10 +121,29 @@ export async function startConfigFileWatch(
     debounceTimer.unref();
   }
 
+  const targetBasename = basename(filePath);
+  const watchDir = dirname(filePath);
+
   const { watch } = await import('node:fs');
-  const watcher = watch(filePath, () => {
-    onFileEvent();
-  });
+  let watcher: ReturnType<typeof watch>;
+  try {
+    watcher = watch(watchDir, (_eventType, filename) => {
+      // `filename` may be a Buffer (a platform whose native encoding isn't
+      // representable as a JS string) or `null` (some platforms don't
+      // supply it at all, per Node's own fs.watch docs) — treat `null` as a
+      // match rather than filtering it out, since silently dropping every
+      // event a platform declines to name would be worse than an occasional
+      // extra reload triggered by another file in the same directory.
+      const changedName = filename === null ? null : filename.toString();
+      if (changedName !== null && changedName !== targetBasename) {
+        return;
+      }
+      onFileEvent();
+    });
+  } catch (error) {
+    logError(`Config file watch could not start: ${getErrorMessage(error)}`);
+    return undefined;
+  }
   watcher.on('error', (error: unknown) => {
     // An EventEmitter with no 'error' listener throws on emit — attaching
     // one, even just to log, is what keeps a watch failure (the file's
@@ -111,6 +155,8 @@ export async function startConfigFileWatch(
 
   return {
     close(): void {
+      closed = true;
+      reloadQueued = false;
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = undefined;

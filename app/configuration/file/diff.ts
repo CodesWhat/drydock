@@ -1,4 +1,4 @@
-import { configFileSources, ddEnvVars } from '../index.js';
+import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
 import { type ConfigValueSource, mergeConfigLayers } from './sources.js';
 
 /**
@@ -84,13 +84,28 @@ export function buildCandidateEnvAndDiff(
       delete envOnly[key];
     }
   }
+  // An interpolated key attributes as `'env'` in `configFileSources` (decision
+  // D1, mirrored by `mergeConfigLayers`), even though its value physically
+  // arrived via the file layer — so it belongs in `currentFileKeys` exactly
+  // like a literal `'file'`-sourced key does, or a reload would never see it
+  // as changed or removed (`configFileInterpolatedKeys`'s own doc comment on
+  // `../index.ts`).
+  for (const key of configFileInterpolatedKeys) {
+    currentFileKeys.add(key);
+    delete envOnly[key];
+  }
 
   const changedKeys = new Set<string>();
   const candidateKeys = Object.keys(candidateFileLayer);
   for (const key of new Set([...currentFileKeys, ...candidateKeys])) {
-    if (configFileSources[key] === 'env') {
+    if (configFileSources[key] === 'env' && !configFileInterpolatedKeys.has(key)) {
       // Env always wins; the candidate file can never change this key's
-      // effective value, whatever it sets.
+      // effective value, whatever it sets. A key that's `'env'`-attributed
+      // only because it's currently interpolated is NOT skipped here: its
+      // resolved value can still change (a different `${NAME}` reference, or
+      // the same one pointed at a different real env var), and the file can
+      // still remove it outright — both are real changes this loop has to
+      // see.
       continue;
     }
     const currentValue = currentFileKeys.has(key) ? ddEnvVars[key] : undefined;

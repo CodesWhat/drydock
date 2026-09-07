@@ -144,7 +144,7 @@ async function runReload(): Promise<ConfigurationReloadResult> {
   }
 
   const { envDelta, sourcesDelta } = buildApplyDeltas(diff.changed, candidateEnv, candidateSources);
-  applyConfigurationReload(envDelta, sourcesDelta);
+  applyConfigurationReload(envDelta, sourcesDelta, interpolatedKeys);
   // Published only now that validation passed and the delta is applied —
   // GET /api/v1/config's `file` field reflects "when was this file last
   // successfully read", independent of whether every key in it reached

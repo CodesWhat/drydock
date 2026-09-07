@@ -4,7 +4,7 @@ import path from 'node:path';
 import { setWarnLogger } from '../../log/warn.js';
 import type { ComponentReconcileResult } from '../../registry/index.js';
 import { getUpdateLockSnapshot, withContainerUpdateLocks } from '../../updates/update-locks.js';
-import { configFileSources, ddEnvVars } from '../index.js';
+import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
 import { getConfigFileInfo, getConfigFileLayer, resetConfigFileLayer } from './layer.js';
 
 const mockReconcile = vi.hoisted(() => vi.fn());
@@ -220,6 +220,58 @@ describe('reloadConfiguration', () => {
 
     expect(callOrder).toEqual(['first-start', 'first-end', 'reload-end']);
     expect(result.applied).toBe(true);
+  });
+
+  describe('interpolated file keys (decision D1, regression for a reload never seeing them change or get removed)', () => {
+    const ENV_KEY_A = 'DD_TEST_RELOAD_INTERPOLATE_A';
+    const ENV_KEY_B = 'DD_TEST_RELOAD_INTERPOLATE_B';
+
+    afterEach(() => {
+      delete process.env[ENV_KEY_A];
+      delete process.env[ENV_KEY_B];
+      configFileInterpolatedKeys.delete('DD_NOTIFICATION_DISCORD_MYHOOK_URL');
+    });
+
+    test('an interpolated reloadable key whose file reference changes to a different env var produces a reload delta with the new resolved value', async () => {
+      process.env[ENV_KEY_A] = 'https://a.example/hook';
+      process.env[ENV_KEY_B] = 'https://b.example/hook';
+      writeConfig(`notification:\n  discord:\n    myhook:\n      url: \${${ENV_KEY_A}}\n`);
+
+      const first = await reloadConfiguration();
+      expect(first.applied).toBe(true);
+      expect(ddEnvVars.DD_NOTIFICATION_DISCORD_MYHOOK_URL).toBe('https://a.example/hook');
+      expect(configFileSources.DD_NOTIFICATION_DISCORD_MYHOOK_URL).toBe('env');
+      expect(configFileInterpolatedKeys.has('DD_NOTIFICATION_DISCORD_MYHOOK_URL')).toBe(true);
+
+      writeConfig(`notification:\n  discord:\n    myhook:\n      url: \${${ENV_KEY_B}}\n`);
+      const second = await reloadConfiguration();
+
+      expect(second.applied).toBe(true);
+      expect(second.diff.changed).toContain('DD_NOTIFICATION_DISCORD_MYHOOK_URL');
+      expect(second.diff.reload).toContain('notification');
+      expect(ddEnvVars.DD_NOTIFICATION_DISCORD_MYHOOK_URL).toBe('https://b.example/hook');
+      expect(configFileInterpolatedKeys.has('DD_NOTIFICATION_DISCORD_MYHOOK_URL')).toBe(true);
+    });
+
+    test('an interpolated reloadable key removed from the file is removed from the applied delta', async () => {
+      process.env[ENV_KEY_A] = 'https://a.example/hook';
+      writeConfig(`notification:\n  discord:\n    myhook:\n      url: \${${ENV_KEY_A}}\n`);
+
+      const first = await reloadConfiguration();
+      expect(first.applied).toBe(true);
+      expect(ddEnvVars.DD_NOTIFICATION_DISCORD_MYHOOK_URL).toBe('https://a.example/hook');
+      expect(configFileInterpolatedKeys.has('DD_NOTIFICATION_DISCORD_MYHOOK_URL')).toBe(true);
+
+      writeConfig('notification:\n  discord: {}\n');
+      const second = await reloadConfiguration();
+
+      expect(second.applied).toBe(true);
+      expect(second.diff.changed).toContain('DD_NOTIFICATION_DISCORD_MYHOOK_URL');
+      expect(second.diff.reload).toContain('notification');
+      expect(ddEnvVars.DD_NOTIFICATION_DISCORD_MYHOOK_URL).toBeUndefined();
+      expect(configFileSources.DD_NOTIFICATION_DISCORD_MYHOOK_URL).toBeUndefined();
+      expect(configFileInterpolatedKeys.has('DD_NOTIFICATION_DISCORD_MYHOOK_URL')).toBe(false);
+    });
   });
 
   describe('orphaned notification rule reporting', () => {

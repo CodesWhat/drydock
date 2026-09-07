@@ -138,12 +138,12 @@ async function writeFileAtomically(targetPath: string, content: string): Promise
   const tempPath = join(dirname(targetPath), `.${basename(targetPath)}.tmp-${randomUUID()}`);
   const handle = await open(tempPath, 'w', 0o600);
   try {
-    await handle.writeFile(content, 'utf-8');
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
+    try {
+      await handle.writeFile(content, 'utf-8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await chmod(tempPath, 0o600);
     await rename(tempPath, targetPath);
   } catch (error) {
