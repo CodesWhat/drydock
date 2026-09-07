@@ -222,6 +222,16 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.13 highlights</strong></summary>
+
+- **Containers on a floating tag that drydock first saw before v1.5.0-rc.17 could stay marked Current forever, even with a newer digest available.** `image.digest.watch` is now re-derived every scan instead of being fixed at first discovery, the same way `isLocalImage` and `digest.repoDigests` already are. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))
+- **The weekly ZAP full scan of getdrydock.com ran into its 60-minute job timeout on every run and never produced a report.** The scan step now caps the spider at 10 minutes and the active scan at 35, leaving room for the passive scan and report inside the job budget. ([#1080](https://github.com/CodesWhat/drydock/pull/1080))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc13--2026-09-08).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.12 highlights</strong></summary>
 
 - **The demo site was missing `Cross-Origin-Opener-Policy`, so the weekly DAST scan failed on ZAP rule 90004 every run.** `apps/demo/vercel.json` now sends `same-origin` next to the existing `Cross-Origin-Embedder-Policy` header. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))

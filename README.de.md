@@ -219,6 +219,16 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.13</strong></summary>
+
+- **Container auf einem Floating-Tag, die Drydock erstmals vor v1.5.0-rc.17 gesehen hat, konnten für immer als Current markiert bleiben, selbst wenn die Registry einen neueren Digest hatte.** `image.digest.watch` wird jetzt bei jedem Scan neu ermittelt, statt einmalig bei der ersten Erkennung festgeschrieben zu werden, genau wie `isLocalImage` und `digest.repoDigests` es bereits tun. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))
+- **Der wöchentliche vollständige ZAP-Scan von getdrydock.com lief bei jedem Durchlauf in sein 60-Minuten-Job-Timeout und lieferte nie einen Bericht.** Der Scan-Schritt begrenzt jetzt den Spider auf 10 Minuten und den aktiven Scan auf 35 Minuten, sodass Platz für den passiven Scan und den Bericht im Job-Budget bleibt. ([#1080](https://github.com/CodesWhat/drydock/pull/1080))
+
+Vollständige Release-Notes in [CHANGELOG.md](./CHANGELOG.md#170-rc13--2026-09-08).
+
+</details>
+
+<details open>
 <summary><strong>Highlights von v1.7.0-rc.12</strong></summary>
 
 - **Die Demo-Site sendete kein `Cross-Origin-Opener-Policy`, sodass der wöchentliche DAST-Scan bei jeder Ausführung an ZAP-Regel 90004 scheiterte.** `apps/demo/vercel.json` sendet jetzt `same-origin` neben dem bereits vorhandenen `Cross-Origin-Embedder-Policy`-Header. ([#1050](https://github.com/CodesWhat/drydock/pull/1050))

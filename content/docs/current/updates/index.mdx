@@ -5,6 +5,11 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.13 Highlights — September 8, 2026
+
+- **Containers on a floating tag from before v1.5.0-rc.17 could stay marked Current forever, even with a newer digest available** — `image.digest.watch` is now re-derived every scan instead of being fixed at first discovery ([#1108](https://github.com/CodesWhat/drydock/pull/1108)).
+- **The weekly ZAP full scan of getdrydock.com hit its 60-minute job timeout on every run and never produced a report** — the scan step now caps the spider at 10 minutes and the active scan at 35, leaving room for the passive scan and report inside the job budget ([#1080](https://github.com/CodesWhat/drydock/pull/1080)).
+
 ## v1.7.0-rc.12 Highlights — September 6, 2026
 
 - **The demo site was missing `Cross-Origin-Opener-Policy`** — the weekly DAST scan failed on ZAP rule 90004 every run; `apps/demo/vercel.json` now sends `same-origin` next to the existing `Cross-Origin-Embedder-Policy` header ([#1050](https://github.com/CodesWhat/drydock/pull/1050)).
