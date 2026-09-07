@@ -288,6 +288,40 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
   );
 });
 
+test('unique_id stays the same across a rename and a recreate for a compose-identified container', async () => {
+  const beforeRename = {
+    id: 'container-id-before',
+    name: 'myapp_web_1',
+    watcher: 'watcher-name',
+    labels: {
+      'com.docker.compose.project': 'myapp',
+      'com.docker.compose.service': 'web',
+    },
+  };
+  const afterRename = {
+    ...beforeRename,
+    name: 'myapp_web_1_renamed',
+  };
+  // A recreate mints a new Docker id but the Compose labels (and so the
+  // identity) survive.
+  const afterRecreate = {
+    ...beforeRename,
+    id: 'container-id-after-recreate',
+    name: 'myapp_web_2',
+  };
+
+  await hass.addContainerSensor(beforeRename);
+  await hass.addContainerSensor(afterRename);
+  await hass.addContainerSensor(afterRecreate);
+
+  const uniqueIds = mqttClientMock.publish.mock.calls
+    .filter(([topic]) => topic === 'homeassistant/update/topic_watcher-name_myapp-web/config')
+    .map(([, payload]) => JSON.parse(payload).unique_id);
+
+  expect(uniqueIds).toHaveLength(3);
+  expect(new Set(uniqueIds).size).toBe(1);
+});
+
 test.each([
   {
     displayIcon: 'sh:nextcloud',
