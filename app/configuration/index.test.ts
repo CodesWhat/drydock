@@ -3634,6 +3634,15 @@ describe('${NAME} interpolation in drydock.yml', () => {
     return import('./index.js');
   }
 
+  /**
+   * Writes a real `drydock.yml` and runs it through the real `loader.ts` into
+   * `file/layer.ts` — the way `app/index.ts`'s bootstrap does via
+   * `loadConfigFileIntoLayer` — before importing a fresh `./index.js` to
+   * consume that layer. `configuration/index.ts` no longer loads the file
+   * itself (see `drydock.yml loading` describe above), so a real end-to-end
+   * interpolation check has to drive the loader explicitly instead of
+   * relying on importing `./index.js` to trigger it.
+   */
   async function withConfigFile<T>(
     yamlContents: string,
     run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
@@ -3645,7 +3654,10 @@ describe('${NAME} interpolation in drydock.yml', () => {
     const originalConfigFile = process.env.DD_CONFIG_FILE;
     process.env.DD_CONFIG_FILE = configPath;
     try {
-      const freshConfiguration = await importFreshConfiguration();
+      vi.resetModules();
+      const { loadConfigFileIntoLayer } = await import('./file/loader.js');
+      await loadConfigFileIntoLayer();
+      const freshConfiguration = await import('./index.js');
       return await run(freshConfiguration);
     } finally {
       if (originalConfigFile === undefined) {
@@ -3677,27 +3689,13 @@ describe('${NAME} interpolation in drydock.yml', () => {
     }
   });
 
-  test('an unset ${NAME} with no default fails startup, naming the YAML path and the variable', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-interp-fatal-'));
-    const configPath = path.join(tempDir, 'drydock.yml');
-    fs.writeFileSync(configPath, 'server:\n  name: ${DD_TEST_CONFIG_INTERP_UNSET}\n', 'utf-8');
-    fs.chmodSync(configPath, 0o600);
-    const originalConfigFile = process.env.DD_CONFIG_FILE;
-    process.env.DD_CONFIG_FILE = configPath;
-    try {
-      vi.resetModules();
-      await expect(import('./index.js')).rejects.toThrow(
-        /server\.name.*DD_TEST_CONFIG_INTERP_UNSET/s,
-      );
-    } finally {
-      if (originalConfigFile === undefined) {
-        delete process.env.DD_CONFIG_FILE;
-      } else {
-        process.env.DD_CONFIG_FILE = originalConfigFile;
-      }
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
+  // An unset ${NAME} with no default failing startup, naming the YAML path
+  // and the variable, is now a `loader.ts` concern (`configuration/index.ts`
+  // never sees a load failure, since it only reads whatever's already in
+  // `file/layer.ts`): see loader.test.ts's 'an unset variable with no
+  // default is fatal, wrapped with the file path', and index.test.ts's
+  // 'on a load failure, prints the loader message to stderr, exits 1, and
+  // never imports main' for the bootstrap-level behavior.
 
   test('a ${NAME:-default} falls back to the default and is still sourced as "env"', async () => {
     await withConfigFile(
@@ -3723,6 +3721,13 @@ describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
     return import('./index.js');
   }
 
+  /**
+   * Same real loader → file/layer.ts → fresh index.js pipeline as the
+   * `${NAME} interpolation` describe's `withConfigFile` above:
+   * `configuration/index.ts` only merges whatever's already in
+   * `file/layer.ts`, so a real drydock.yml has to go through `loader.ts`
+   * explicitly rather than relying on importing `./index.js` to load it.
+   */
   async function withConfigFile<T>(
     yamlContents: string,
     run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
@@ -3734,7 +3739,10 @@ describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
     const originalConfigFile = process.env.DD_CONFIG_FILE;
     process.env.DD_CONFIG_FILE = configPath;
     try {
-      const freshConfiguration = await importFreshConfiguration();
+      vi.resetModules();
+      const { loadConfigFileIntoLayer } = await import('./file/loader.js');
+      await loadConfigFileIntoLayer();
+      const freshConfiguration = await import('./index.js');
       return await run(freshConfiguration);
     } finally {
       if (originalConfigFile === undefined) {
