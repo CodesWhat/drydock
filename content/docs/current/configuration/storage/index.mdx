@@ -9,6 +9,8 @@ If you want the state to persist after the container removal, you need to mount 
 
 Everything drydock persists — containers, settings, secrets, agent and API keys, audit history, notification history, backups, notification rules, the approval queue, update operations, and login sessions — lives in one SQLite database, `DD_STORE_DB_FILE` (`dd.sqlite` by default). Mounting `/store` covers all of it; there is nothing else to mount separately.
 
+A plain file copy of `dd.sqlite` (and its `-wal`/`-shm` sidecars, if present) taken while drydock is running can catch it mid-write and produce a corrupt backup. Either stop the container first and then copy the files, or take a consistent live backup with `sqlite3 dd.sqlite ".backup /path/out.sqlite"` (or `VACUUM INTO`) instead. Restore from one complete, consistent snapshot, never from a copy taken mid-write.
+
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
