@@ -61,6 +61,7 @@ import mockCron from 'node-cron';
 import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
+import * as containerInit from './container-init.js';
 import * as dockerHelpers from './docker-helpers.js';
 import * as maintenance from './maintenance.js';
 
@@ -920,7 +921,7 @@ describe('Docker Watcher', () => {
 
       expect(docker.watchContainer).toHaveBeenCalledWith(container, {
         useRegistryPollCache: true,
-        scanGeneration: 1,
+        scanGeneration: 0,
       });
     });
 
@@ -1132,7 +1133,7 @@ describe('Docker Watcher', () => {
       expect(docker.watchContainer).toHaveBeenCalledTimes(1);
       expect(docker.watchContainer).toHaveBeenCalledWith(regularContainer, {
         useRegistryPollCache: true,
-        scanGeneration: 1,
+        scanGeneration: 0,
       });
       expect(result).toHaveLength(1);
       expect(docker.log.debug).toHaveBeenCalledWith(
@@ -1196,6 +1197,33 @@ describe('Docker Watcher', () => {
       expect(event.emitContainerReports).toHaveBeenCalled();
       expect(event.emitWatcherSnapshot).toHaveBeenCalled();
       expect(docker.lastRunAt).toBeDefined();
+    });
+
+    // DR-72 review finding #4: watch() awaits emitContainerReport() and
+    // emitContainerReports() handlers, either of which can run long enough for
+    // deregisterComponent() to land before they resolve. Without a recheck after
+    // each await, a scan that goes stale mid-emit could still start the
+    // snapshot emit right after.
+    test('discards the scan and skips the snapshot when deregistered from inside the batch report emitter', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'mid-emit-container', name: 'mid-emit-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn((c) => ({ container: c, changed: false }));
+      event.emitContainerReports.mockImplementationOnce(async () => {
+        await docker.deregisterComponent();
+      });
+
+      const result = await docker.watch();
+
+      expect(result).toEqual([]);
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(docker.log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('emitting the batch container report'),
+      );
     });
   });
 
@@ -1275,6 +1303,35 @@ describe('Docker Watcher', () => {
       await getContainersPromise;
 
       expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
+    });
+
+    // DR-72 review finding #2: getContainers() used to call pruneOldContainers()
+    // unconditionally after listContainers() settled, even if the watcher was
+    // deregistered while the listing was still pending. Pruning the store off a
+    // listing gathered for a scan nobody wants any more could delete or update
+    // persisted container state on behalf of a torn-down watcher.
+    test('skips pruneOldContainers when the watcher is deregistered while listContainers() is pending', async () => {
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+      const pruneSpy = vi.spyOn(containerInit, 'pruneOldContainers').mockResolvedValue(undefined);
+
+      let resolveListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingListContainers = new Promise<unknown[]>((resolve) => {
+        resolveListContainers = resolve;
+      });
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingListContainers);
+
+      // A fresh watcher's scanGeneration starts at 0; passed through the way
+      // watch() threads its own captured value in.
+      const getContainersPromise = docker.getContainers(undefined, { scanGeneration: 0 });
+
+      await docker.deregisterComponent();
+      resolveListContainers([{ Id: 'id-a', Labels: {}, Names: ['/a'] }]);
+      const result = await getContainersPromise;
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(pruneSpy).not.toHaveBeenCalled();
+      expect(docker.log.debug).toHaveBeenCalledWith(expect.stringContaining('Skipping prune'));
     });
 
     test("records only the newest generation's ids when an older getContainers() call settles later", async () => {
@@ -1530,6 +1587,40 @@ describe('Docker Watcher', () => {
 
       const result = await docker.watchFromCron();
       expect(result).toEqual([]);
+    });
+
+    // DR-72 review finding #3: AgentWatcher.watch() calls its delegate
+    // DockerWatcher's watch() directly, bypassing this cron orchestration
+    // entirely. Under the old single-counter design that direct call self-
+    // minted a new scanGeneration on the same shared field the cron run used
+    // to identify itself, so the cron run's finally check never matched again
+    // once the direct call resolved, and isCronWatchInProgress stuck true
+    // forever - nothing else ever cleared it. cronRunGeneration is now a
+    // field only this orchestration mints or reads, so a plain watch() call
+    // like the delegate's can't collide with it.
+    test('a concurrent direct watch() call does not leave isCronWatchInProgress stuck after the cron scan settles', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      await docker.register('watcher', 'docker', 'test', { cron: '0 * * * *' });
+      docker.log = createMockLog(['info', 'warn', 'debug']);
+
+      let resolveCronListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingCronListContainers = new Promise<unknown[]>((resolve) => {
+        resolveCronListContainers = resolve;
+      });
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingCronListContainers);
+
+      const cronPromise = docker.watchFromCron();
+
+      // Simulates AgentWatcher.watch() calling delegate.watch() directly
+      // while the cron scan above is still awaiting its own getContainers().
+      await docker.watch();
+
+      expect(docker.isCronWatchInProgress).toBe(true);
+
+      resolveCronListContainers([]);
+      await cronPromise;
+
+      expect(docker.isCronWatchInProgress).toBe(false);
     });
   });
 

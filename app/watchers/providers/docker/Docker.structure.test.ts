@@ -49,10 +49,16 @@ import { expect, test } from 'vitest';
 // deregisterComponent(), so a scan still processing containers when the
 // watcher is torn down discards its results instead of emitting them. The
 // per-container gate itself lives in container-processing.ts's isScanStale.
-test('Docker watcher implementation should stay under 1787 lines', () => {
+// Bumped from 1787 for the PR #1076 review-fix round: getContainers() takes
+// an options.scanGeneration parameter and a guard around pruneOldContainers,
+// watch() rechecks scanGeneration after each awaited report emission and
+// again before the snapshot, and a cronRunGeneration field separates the
+// isCronWatchInProgress reset from scanGeneration so an unrelated concurrent
+// watch() (an AgentWatcher's direct delegate.watch()) can't leave it stuck.
+test('Docker watcher implementation should stay under 1834 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1787);
+  expect(lineCount).toBeLessThanOrEqual(1834);
 });

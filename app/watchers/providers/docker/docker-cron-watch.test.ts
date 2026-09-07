@@ -31,6 +31,7 @@ function createWatcher(
     isCronWatchInProgress: false,
     isWatcherDeregistered: false,
     scanGeneration: 0,
+    cronRunGeneration: 0,
     maintenanceWindowWatchQueued: false,
     cronWatchInFlight: undefined,
     cronWatchRescanRequested: false,
@@ -83,12 +84,15 @@ describe('watchFromCronOrchestration', () => {
 
   // DR-72: a scan already inside watch() when the watcher is deregistered
   // must not resurrect isCronWatchInProgress on the torn-down watcher once it
-  // settles. watch() itself bumps scanGeneration again on deregister; this
-  // simulates that by having the mocked watch() bump it before resolving.
-  test('leaves isCronWatchInProgress untouched when scanGeneration was bumped while watch() was in flight', async () => {
+  // settles. deregisterComponent() always bumps scanGeneration and sets
+  // isWatcherDeregistered together (see Docker.ts); this simulates both, the
+  // same way the real deregistration path does, by having the mocked watch()
+  // do both before resolving (review finding #3's second required test).
+  test('leaves isCronWatchInProgress untouched when the watcher is deregistered while watch() is in flight', async () => {
     const watcher = createWatcher({
       watch: vi.fn().mockImplementation(async () => {
         watcher.scanGeneration++;
+        watcher.isWatcherDeregistered = true;
         return [];
       }),
     });
@@ -169,6 +173,41 @@ describe('watchFromCronOrchestration', () => {
     expect(watcher.clearMaintenanceWindowQueue).not.toHaveBeenCalled();
     // Nothing was consumed, so there is nothing to announce; the poll still owns this arm.
     expect(watcher.announceMaintenanceWindowOpened).not.toHaveBeenCalled();
+  });
+
+  // DR-72 review finding #1: a stale scan (the watcher was deregistered while
+  // watch() was still running) must not announce a maintenance-window
+  // opening it never actually delivered, even when the queue had been armed
+  // and would otherwise have been consumed.
+  test('a stale scan does not announce the maintenance window opening or log a finished summary', async () => {
+    const watcher = createWatcher({
+      configuration: {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowscope: 'install',
+      },
+      maintenanceWindowWatchQueued: true,
+      isMaintenanceWindowOpen: vi.fn().mockReturnValue(true),
+      watch: vi.fn().mockImplementation(async () => {
+        // Simulates deregisterComponent() landing while this scan's own
+        // watch() was still in flight.
+        watcher.scanGeneration++;
+        watcher.isWatcherDeregistered = true;
+        return [];
+      }),
+    });
+
+    const result = await watchFromCronOrchestration(watcher, {
+      ignoreMaintenanceWindow: true,
+      reason: 'maintenance-window',
+    });
+
+    expect(result).toEqual([]);
+    expect(watcher.announceMaintenanceWindowOpened).not.toHaveBeenCalled();
+    expect(watcher.log?.info).not.toHaveBeenCalledWith(expect.stringContaining('Cron finished'));
+    expect(watcher.log?.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Discarding this cron run'),
+    );
   });
 
   test('the catch-up scan clears the queue it was armed by and announces the opening', async () => {
