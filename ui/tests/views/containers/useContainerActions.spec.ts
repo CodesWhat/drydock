@@ -3208,8 +3208,8 @@ describe('useContainerActions', () => {
     await flushPromises();
 
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
-    expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
     await updatePromise;
 
@@ -3624,7 +3624,7 @@ describe('useContainerActions', () => {
     await nextTick();
 
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
     expect(composable.isContainerUpdateInProgress(worker)).toBe(true);
 
     resolvers[0]?.();
@@ -3896,6 +3896,7 @@ describe('useContainerActions', () => {
     const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
     const actionPendingLifecycleModes = ref(new Map([['web', 'presence' as const]]));
     const actionPendingLifecycleObserved = ref(new Set<string>());
+    const groupUpdateQueue = ref(new Set<string>());
     const stopPendingActionsPolling = vi.fn();
 
     prunePendingActionsState({
@@ -3905,6 +3906,7 @@ describe('useContainerActions', () => {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
       pollTimeout: 0,
       stopPendingActionsPolling,
     });
@@ -3928,6 +3930,7 @@ describe('useContainerActions', () => {
     const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
     const actionPendingLifecycleModes = ref(new Map([['web', 'presence' as const]]));
     const actionPendingLifecycleObserved = ref(new Set<string>());
+    const groupUpdateQueue = ref(new Set<string>());
     const stopPendingActionsPolling = vi.fn();
 
     prunePendingActionsState({
@@ -3937,6 +3940,7 @@ describe('useContainerActions', () => {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
       pollTimeout: PENDING_ACTIONS_POLL_INTERVAL_MS,
       stopPendingActionsPolling,
     });
@@ -3944,6 +3948,33 @@ describe('useContainerActions', () => {
     expect(actionPending.value.has('web')).toBe(true);
     expect(actionPendingStartTimes.value.has('web')).toBe(true);
     expect(stopPendingActionsPolling).not.toHaveBeenCalled();
+  });
+
+  it('clears a container from the grouped-update queue once its own update settles (DR-79)', () => {
+    const snapshot = makeContainer({ id: 'container-b', name: 'beta', status: 'running' });
+    const liveContainer = makeContainer({ id: 'container-b', name: 'beta', status: 'running' });
+    const actionPending = ref(new Map<string, Container>([['container-b', snapshot]]));
+    const actionPendingStartTimes = ref(new Map<string, number>([['container-b', 0]]));
+    const actionPendingLifecycleModes = ref(new Map([['container-b', 'update' as const]]));
+    const actionPendingLifecycleObserved = ref(new Set<string>(['container-b']));
+    const groupUpdateQueue = ref(new Set<string>(['container-b', 'container-c']));
+    const stopPendingActionsPolling = vi.fn();
+
+    prunePendingActionsState({
+      now: 60000,
+      containers: ref([liveContainer]),
+      actionPending,
+      actionPendingStartTimes,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
+      groupUpdateQueue,
+      pollTimeout: PENDING_ACTIONS_POLL_INTERVAL_MS,
+      stopPendingActionsPolling,
+    });
+
+    expect(actionPending.value.has('container-b')).toBe(false);
+    expect(groupUpdateQueue.value.has('container-b')).toBe(false);
+    expect(groupUpdateQueue.value.has('container-c')).toBe(true);
   });
 
   it('fails closed for action handlers when container actions are disabled', async () => {
