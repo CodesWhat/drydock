@@ -34,7 +34,7 @@ const DOCS_PAGE_PATH = path.join(
 // The marker comment the docs page carries directly above the fence, so this
 // test locates the right fence by content rather than by a brittle line
 // number or "the Nth ```yaml block on the page".
-const DOCS_FENCE_MARKER = '{/* drydock.example.yml */}';
+const DOCS_FENCE_MARKER = '{/*drydock.example.yml*/}';
 const YAML_FENCE_OPEN = '```yaml\n';
 const YAML_FENCE_CLOSE = '\n```';
 
