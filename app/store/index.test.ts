@@ -9,6 +9,7 @@ const {
   resetFsMock,
   createConfigMock,
   createCollectionsMock,
+  createNotificationMock,
   createContainerMock,
   createAgentKeysMock,
   createLogMock,
@@ -128,6 +129,16 @@ const {
     };
   }
 
+  // `./db/importers/index.js` is never mocked (store/index.ts imports the real
+  // COLLECTION_IMPORTERS array to pass to runFirstStartImport), and its
+  // notification-rules importer needs the real DEFAULT_NOTIFICATION_RULES and
+  // NOTIFICATION_BELL_THRESHOLDS from this module — so this mock keeps every
+  // real export and only replaces createCollections/completeStartupInitialization.
+  async function createNotificationMock() {
+    const actual = await vi.importActual<typeof import('./notification.js')>('./notification.js');
+    return { ...actual, ...createCollectionsMock() };
+  }
+
   function createAgentKeysMock() {
     return {
       createCollections: vi.fn(),
@@ -182,7 +193,7 @@ const {
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', () => createContainerMock(overrides.container));
     vi.doMock('./name-bindings', createCollectionsMock);
-    vi.doMock('./notification', createCollectionsMock);
+    vi.doMock('./notification', createNotificationMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
@@ -200,6 +211,7 @@ const {
     resetFsMock,
     createConfigMock,
     createCollectionsMock,
+    createNotificationMock,
     createContainerMock,
     createAgentKeysMock,
     createLogMock,
@@ -227,7 +239,7 @@ vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createContainerMock);
 vi.mock('./name-bindings', createCollectionsMock);
-vi.mock('./notification', createCollectionsMock);
+vi.mock('./notification', createNotificationMock);
 vi.mock('./notification-history', createCollectionsMock);
 vi.mock('./agent-keys', createAgentKeysMock);
 vi.mock('./api-key', createCollectionsMock);
@@ -980,7 +992,7 @@ describe('Store Module', () => {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createContainerMock);
-    vi.doMock('./notification', createCollectionsMock);
+    vi.doMock('./notification', createNotificationMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
@@ -1259,7 +1271,7 @@ describe('Store Module', () => {
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createContainerMock);
     vi.doMock('./name-bindings', createCollectionsMock);
-    vi.doMock('./notification', createCollectionsMock);
+    vi.doMock('./notification', createNotificationMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);

@@ -1,13 +1,15 @@
 /**
- * Tests for the approval ledger store (spec-ca-2-approval-queue.md, slice 1).
+ * Tests for the approval ledger store (spec-ca-2-approval-queue.md, slice 1;
+ * moved onto SQLite at roadmap 7-STORE, slice 6).
  *
- * Backed by a real LokiJS instance rather than a collection double, so the index
- * declarations, the flat-record shape and the serialize/reload round trip are all
+ * Backed by a real in-memory SQLite database rather than a collection double, so the
+ * unique constraint, the STRICT column types and the compare-and-set transaction are all
  * exercised as they will be in production.
  */
-import Loki from 'lokijs';
 import { APPROVAL_SCHEMA_VERSION, type ApprovalRecordInput } from '../model/approval.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as approvalStore from './approval.js';
+import type { Database } from './db/driver.js';
 
 vi.mock('../log/index.js', () => ({
   default: {
@@ -33,38 +35,38 @@ function createInput(overrides: Partial<ApprovalRecordInput> = {}): ApprovalReco
   };
 }
 
-function createDb(): Loki {
-  return new Loki('approval-test.db');
-}
+let db: Database;
 
 beforeEach(() => {
-  approvalStore.createCollections(createDb());
+  db = createMigratedMemoryDatabase();
+  approvalStore.createCollections(db);
 });
 
 afterEach(() => {
   approvalStore.resetApprovalStoreForTests();
+  db.close();
 });
 
 describe('createCollections', () => {
-  test('declares the queryable indices', () => {
-    const db = createDb();
-    const addCollection = vi.spyOn(db, 'addCollection');
-
-    approvalStore.createCollections(db);
-
-    expect(addCollection).toHaveBeenCalledWith('approvals', {
-      indices: ['containerId', 'candidateRef', 'decision', 'createdAtMs'],
-    });
-  });
-
-  test('reuses an existing collection across a reload', () => {
-    const db = createDb();
-    approvalStore.createCollections(db);
+  test('wires the store to the given database', () => {
     approvalStore.insertApproval(createInput());
 
     approvalStore.createCollections(db);
 
     expect(approvalStore.listApprovals().total).toBe(1);
+  });
+
+  test('tolerates a timer handle without unref support', () => {
+    const setIntervalSpy = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockReturnValue(0 as unknown as NodeJS.Timeout);
+
+    try {
+      expect(() => approvalStore.createCollections(db)).not.toThrow();
+      expect(setIntervalSpy).toHaveBeenCalled();
+    } finally {
+      setIntervalSpy.mockRestore();
+    }
   });
 });
 
@@ -126,16 +128,7 @@ describe('insertApproval', () => {
     );
   });
 
-  test('never leaks the LokiJS metadata fields onto a returned record', () => {
-    approvalStore.insertApproval(createInput());
-
-    const [record] = approvalStore.listApprovals().records;
-
-    expect(record).not.toHaveProperty('$loki');
-    expect(record).not.toHaveProperty('meta');
-  });
-
-  test('throws when the collection has not been created', () => {
+  test('throws when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(() => approvalStore.insertApproval(createInput())).toThrow(
@@ -155,7 +148,7 @@ describe('getApprovalById', () => {
     expect(approvalStore.getApprovalById('nope')).toBeUndefined();
   });
 
-  test('returns undefined when the collection has not been created', () => {
+  test('returns undefined when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.getApprovalById('nope')).toBeUndefined();
@@ -173,10 +166,34 @@ describe('findApprovalsByContainerId', () => {
     expect(records.map((record) => record.candidateRef)).toStrictEqual(['1.2.5', '1.2.4']);
   });
 
-  test('returns an empty list when the collection has not been created', () => {
+  test('returns an empty list when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.findApprovalsByContainerId('container-1')).toStrictEqual([]);
+  });
+});
+
+describe('findApprovalByContainerAndCandidate', () => {
+  test('returns the matching row', () => {
+    approvalStore.insertApproval(createInput());
+
+    expect(
+      approvalStore.findApprovalByContainerAndCandidate('container-1', '1.2.4')?.containerName,
+    ).toBe('nginx');
+  });
+
+  test('returns undefined for no match', () => {
+    expect(
+      approvalStore.findApprovalByContainerAndCandidate('container-1', '1.2.4'),
+    ).toBeUndefined();
+  });
+
+  test('returns undefined when the store has not been created', () => {
+    approvalStore.resetApprovalStoreForTests();
+
+    expect(
+      approvalStore.findApprovalByContainerAndCandidate('container-1', '1.2.4'),
+    ).toBeUndefined();
   });
 });
 
@@ -194,7 +211,7 @@ describe('findApprovalByOperationId', () => {
     expect(approvalStore.findApprovalByOperationId('op-1')).toBeUndefined();
   });
 
-  test('returns undefined when the collection has not been created', () => {
+  test('returns undefined when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.findApprovalByOperationId('op-1')).toBeUndefined();
@@ -211,6 +228,7 @@ describe('updateApproval', () => {
       decidedBy: 'scott',
       decidedAt: '2026-03-04T00:00:00.000Z',
       decisionNote: 'next window',
+      outcome: 'applied',
     });
 
     expect(updated).toMatchObject({
@@ -218,8 +236,10 @@ describe('updateApproval', () => {
       deferredUntil: '2099-01-01T00:00:00.000Z',
       decidedBy: 'scott',
       decisionNote: 'next window',
+      outcome: 'applied',
     });
     expect(approvalStore.getApprovalById(inserted.id)?.decision).toBe('deferred');
+    expect(approvalStore.getApprovalById(inserted.id)?.outcome).toBe('applied');
   });
 
   test('ignores keys outside the mutable set', () => {
@@ -248,11 +268,17 @@ describe('updateApproval', () => {
     });
   });
 
+  test('a patch with no defined fields writes nothing and still returns the row', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+
+    expect(approvalStore.updateApproval(inserted.id, {})).toStrictEqual(inserted);
+  });
+
   test('returns undefined for an unknown id', () => {
     expect(approvalStore.updateApproval('nope', { decision: 'approved' })).toBeUndefined();
   });
 
-  test('returns undefined when the collection has not been created', () => {
+  test('returns undefined when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.updateApproval('nope', { decision: 'approved' })).toBeUndefined();
@@ -296,6 +322,24 @@ describe('decideApprovalIfPending', () => {
       decision: 'approved',
       decidedBy: 'first',
     });
+  });
+
+  // The two decisions run through the same transaction path a real race would take:
+  // each call opens its own BEGIN IMMEDIATE, reads, checks and writes before the next
+  // one starts (node:sqlite is single-connection and synchronous), so this exercises the
+  // exact compare-and-set the spec calls for even though nothing here is truly concurrent.
+  test('two decisions on the same approval produce one decided and one already-decided', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+
+    const results = [
+      approvalStore.decideApprovalIfPending(inserted.id, { decision: 'approved', decidedBy: 'a' }),
+      approvalStore.decideApprovalIfPending(inserted.id, { decision: 'rejected', decidedBy: 'b' }),
+    ];
+
+    expect(results.map((result) => result.status).sort()).toStrictEqual([
+      'already-decided',
+      'decided',
+    ]);
   });
 
   test('a live deferral is not pending, so a decision on it loses', () => {
@@ -356,7 +400,7 @@ describe('decideApprovalIfPending', () => {
     });
   });
 
-  test('reports not-found when the collection has not been created', () => {
+  test('reports not-found when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.decideApprovalIfPending('nope', { decision: 'approved' })).toStrictEqual({
@@ -366,7 +410,7 @@ describe('decideApprovalIfPending', () => {
 
   // A row deciding twice is the expired-deferral case: the first decision's note and
   // expiry describe a choice that has lapsed, and carrying them into the second one would
-  // put a reason on the audit entry that the operator never typed.
+  // put a reason on the audit entry that this operator never typed.
   test('a second decision keeps nothing from the first', () => {
     const inserted = approvalStore.insertApproval(createInput());
     approvalStore.decideApprovalIfPending(inserted.id, {
@@ -433,7 +477,7 @@ describe('restoreApproval', () => {
       { now: Date.parse('2026-03-06T00:00:00.000Z') },
     );
 
-    const restored = approvalStore.restoreApproval(snapshot);
+    const restored = approvalStore.restoreApproval(snapshot as never);
 
     expect(restored).toStrictEqual(snapshot);
     expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(snapshot);
@@ -445,7 +489,7 @@ describe('restoreApproval', () => {
     expect(approvalStore.restoreApproval({ ...inserted, id: 'nope' })).toBeUndefined();
   });
 
-  test('returns undefined when the collection has not been created', () => {
+  test('returns undefined when the store has not been created', () => {
     const inserted = approvalStore.insertApproval(createInput());
     approvalStore.resetApprovalStoreForTests();
 
@@ -580,7 +624,7 @@ describe('listApprovals', () => {
     expect(approvalStore.listApprovals().total).toBe(1);
   });
 
-  test('returns an empty page when the collection has not been created', () => {
+  test('returns an empty page when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.listApprovals()).toStrictEqual({ records: [], total: 0 });
@@ -637,7 +681,7 @@ describe('countApprovals', () => {
     });
   });
 
-  test('returns zeroes when the collection has not been created', () => {
+  test('returns zeroes when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.countApprovals()).toStrictEqual({
@@ -735,7 +779,7 @@ describe('pruneOldApprovals', () => {
     expect(approvalStore.pruneOldApprovals(30)).toBe(0);
   });
 
-  test('returns zero when the collection has not been created', () => {
+  test('returns zero when the store has not been created', () => {
     approvalStore.resetApprovalStoreForTests();
 
     expect(approvalStore.pruneOldApprovals(30)).toBe(0);
@@ -766,7 +810,7 @@ describe('retention triggers', () => {
   test('prunes on the periodic timer', () => {
     vi.useFakeTimers();
     try {
-      approvalStore.createCollections(createDb());
+      approvalStore.createCollections(db);
       const stale = approvalStore.insertApproval(createInput({ containerId: 'stale' }), {
         now: Date.now() - 400 * DAY_MS,
       });
@@ -789,7 +833,7 @@ describe('retention triggers', () => {
       .mockReturnValue(0 as unknown as NodeJS.Timeout);
 
     try {
-      expect(() => approvalStore.createCollections(createDb())).not.toThrow();
+      expect(() => approvalStore.createCollections(db)).not.toThrow();
       expect(setIntervalSpy).toHaveBeenCalled();
     } finally {
       setIntervalSpy.mockRestore();
@@ -797,8 +841,6 @@ describe('retention triggers', () => {
   });
 
   test('prunes on collection creation', () => {
-    const db = createDb();
-    approvalStore.createCollections(db);
     const stale = approvalStore.insertApproval(createInput({ containerId: 'stale' }), {
       now: Date.now() - 400 * DAY_MS,
     });
@@ -810,21 +852,5 @@ describe('retention triggers', () => {
     approvalStore.createCollections(db);
 
     expect(approvalStore.listApprovals({ status: 'all' }).total).toBe(0);
-  });
-});
-
-// Spec edge case 17.
-describe('store round trip', () => {
-  test('rows survive a serialize and reload with schemaVersion intact', () => {
-    const db = createDb();
-    approvalStore.createCollections(db);
-    const inserted = approvalStore.insertApproval(createInput({ agent: 'edge-1' }));
-
-    const reloaded = createDb();
-    reloaded.loadJSON(db.serialize());
-    approvalStore.createCollections(reloaded);
-
-    expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(inserted);
-    expect(approvalStore.getApprovalById(inserted.id)?.schemaVersion).toBe(APPROVAL_SCHEMA_VERSION);
   });
 });

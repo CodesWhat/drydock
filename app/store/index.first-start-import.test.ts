@@ -40,6 +40,8 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const audit = await import('./audit.js');
       const backup = await import('./backup.js');
       const notificationOutbox = await import('./notification-outbox.js');
+      const notification = await import('./notification.js');
+      const approval = await import('./approval.js');
 
       // The fixture stores a placeholder secretHash for its api-keys rows
       // (a real hash is a high-entropy string gitleaks flags as an API key
@@ -75,6 +77,19 @@ describe('store first-start import from a v1.7 dd.json', () => {
       auditCollection.data[0].data.timestamp = auditFirstTimestamp;
       delete auditCollection.data[0].timestampMs;
       auditCollection.data[1].data.timestamp = auditSecondTimestamp;
+
+      // The decided approval fixture row carries a fixed 2026-01 decidedAt for
+      // readability, but approval.createCollections() runs a startup prune of
+      // decided rows older than the 30-day retention window (same reasoning
+      // as the audit rows above). Move it to "just now" so it survives; the
+      // point of the test is the import round trip, not the prune timer.
+      const approvalsCollection = fixture.collections.find(
+        (collection: { name: string }) => collection.name === 'approvals',
+      );
+      const decidedApprovalDocument = approvalsCollection.data.find(
+        (document: { id: string }) => document.id === 'approval-fixture-decided',
+      );
+      decidedApprovalDocument.decidedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
       fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
 
@@ -161,6 +176,41 @@ describe('store first-start import from a v1.7 dd.json', () => {
       expect(backup.getBackupsByName('web')).toEqual([
         expect.objectContaining({ id: 'backup-fixture-one', containerName: 'web' }),
       ]);
+
+      // notification rules (roadmap 7-STORE slice 6): the imported rule
+      // survives with its trigger allow-list and template overrides intact —
+      // both the join-table read path and the normalization pass that runs
+      // on every `createCollections()` call.
+      expect(notification.getNotificationRule('update-available')).toEqual({
+        id: 'update-available',
+        name: 'Update Available',
+        description: 'When a container has a new version',
+        enabled: true,
+        bellEnabled: true,
+        bellThreshold: 'major',
+        triggers: ['slack.ops', 'smtp.ops'],
+        templates: {
+          'slack.ops': {
+            simpleTitle: 'title one',
+            simpleBody: 'body one',
+            batchTitle: 'batch one',
+          },
+        },
+      });
+
+      // approvals (roadmap 7-STORE slice 6): the imported pending approval
+      // reads back as still pending, and the imported decided approval keeps
+      // its decision and operation id.
+      const pendingApproval = approval.getApprovalById('approval-fixture-pending');
+      expect(pendingApproval?.decision).toBe('pending');
+      expect(
+        approval.listApprovals({ status: 'pending' }).records.map((record) => record.id),
+      ).toEqual(['approval-fixture-pending']);
+      const decidedApproval = approval.getApprovalById('approval-fixture-decided');
+      expect(decidedApproval?.decision).toBe('approved');
+      expect(approval.findApprovalByOperationId('operation-one')?.id).toBe(
+        'approval-fixture-decided',
+      );
 
       // The untouched pre-1.8 backup is the whole rollback story, and the
       // SQLite database now exists alongside it.

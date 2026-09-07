@@ -120,6 +120,7 @@ describe('store/db/import', () => {
         imported: true,
         rowsByTable: {
           app_info: 0,
+          approvals: 0,
           secrets: 1,
           settings: 0,
           ui_preferences: 0,
@@ -130,12 +131,14 @@ describe('store/db/import', () => {
           backups: 0,
           notification_history: 0,
           notification_outbox: 0,
+          notification_rules: 0,
         },
       });
       expect(JSON.parse(String(readStoreMetadata(db, IMPORT_MARKER_KEY)))).toMatchObject({
         source: 'dd.json',
         rowsByTable: {
           app_info: 0,
+          approvals: 0,
           secrets: 1,
           settings: 0,
           ui_preferences: 0,
@@ -146,6 +149,7 @@ describe('store/db/import', () => {
           backups: 0,
           notification_history: 0,
           notification_outbox: 0,
+          notification_rules: 0,
         },
       });
     });
@@ -210,6 +214,7 @@ describe('store/db/import', () => {
         backupPath: `${legacyStorePath}${LEGACY_STORE_BACKUP_SUFFIX}`,
         rowsByTable: {
           app_info: 0,
+          approvals: 0,
           secrets: 1,
           settings: 0,
           ui_preferences: 0,
@@ -220,6 +225,7 @@ describe('store/db/import', () => {
           backups: 0,
           notification_history: 0,
           notification_outbox: 0,
+          notification_rules: 0,
         },
       });
       expect(fs.existsSync(legacyStorePath)).toBe(false);

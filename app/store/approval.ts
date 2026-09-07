@@ -1,17 +1,21 @@
 /**
- * Approval ledger store (spec-ca-2-approval-queue.md, slice 1).
+ * Approval ledger store (spec-ca-2-approval-queue.md, slice 1; moved onto
+ * SQLite at roadmap 7-STORE, slice 6).
  *
- * Flat records with no `{ data: … }` envelope — unlike `audit.ts` and
- * `update-operation.ts`, which wrap — because this collection maps 1:1 onto a SQLite
- * table at the v1.8 store migration. `agent-keys.ts` (flat) and `ui-preferences.ts`
- * (`schemaVersion`) are the shape precedents.
+ * Backed by the `approvals` table: one row per `(containerId, candidateRef)`,
+ * with `UNIQUE (container_id, candidate_ref)` enforcing the store's one-row
+ * invariant instead of a pre-insert scan. Every field is a scalar column —
+ * `agent-keys.ts` (flat) and `ui-preferences.ts` (`schemaVersion`) were the
+ * shape precedents before the migration, and the table keeps that shape
+ * exactly.
  *
- * The ledger stores the decision; the candidate set stays derived. Nothing live — soft
- * blockers, eligibility, release-notes body, current vulnerability counts — is frozen
- * into a row.
+ * The ledger stores the decision; the candidate set stays derived. Nothing
+ * live — soft blockers, eligibility, release-notes body, current
+ * vulnerability counts — is frozen into a row.
  *
- * The ledger must never be written through `store/container.ts`'s `updateContainer()`,
- * so it does not inherit that collection's full-record write-clobbering bug.
+ * The ledger must never be written through `store/container.ts`'s
+ * `updateContainer()`, so it does not inherit that collection's full-record
+ * write-clobbering bug.
  */
 import crypto from 'node:crypto';
 import {
@@ -19,13 +23,11 @@ import {
   type ApprovalRecord,
   type ApprovalRecordInput,
   type ApprovalSemverDiff,
-  isApprovalDeferred,
   isApprovalPending,
 } from '../model/approval.js';
 import { daysToMs } from '../model/maturity-policy.js';
-import { initCollection } from './util.js';
+import type { Database, Row, SqlBinding } from './db/driver.js';
 
-const APPROVAL_COLLECTION_INDICES = ['containerId', 'candidateRef', 'decision', 'createdAtMs'];
 const APPROVAL_RETENTION_DAYS = 30;
 export const APPROVAL_PRUNE_INSERT_INTERVAL = 100;
 const APPROVAL_PRUNE_TIMER_INTERVAL_MS = 60 * 60 * 1000;
@@ -58,32 +60,25 @@ const APPROVAL_DECISION_FIELDS = [
   'operationId',
 ] as const;
 
-/** Fields written only when the container actually carries them. */
-const APPROVAL_OPTIONAL_INPUT_FIELDS = [
-  'agent',
-  'releaseNotesUrl',
-  'scanCritical',
-  'scanHigh',
-  'scanMedium',
-  'scanLow',
-  'scanUnknown',
-  'scanAt',
-] as const;
+type ApprovalMutableField = (typeof APPROVAL_MUTABLE_FIELDS)[number];
 
-type ApprovalDocument = ApprovalRecord & { $loki?: number; meta?: unknown };
+/** Column name for every mutable field, so a patch can be turned into a `SET` clause. */
+const APPROVAL_COLUMN_BY_FIELD: Record<ApprovalMutableField, string> = {
+  decision: 'decision',
+  decidedAt: 'decided_at',
+  decidedBy: 'decided_by',
+  decisionNote: 'decision_note',
+  deferredUntil: 'deferred_until',
+  operationId: 'operation_id',
+  outcome: 'outcome',
+  resolvedAt: 'resolved_at',
+  resolution: 'resolution',
+};
 
-interface ApprovalCollection {
-  find(query?: Record<string, unknown>): ApprovalDocument[];
-  findOne(query: Record<string, unknown>): ApprovalDocument | null;
-  insert(document: ApprovalRecord): void;
-  update(document: ApprovalDocument): void;
-  remove(document: ApprovalDocument): void;
-}
-
-interface ApprovalStoreDb {
-  getCollection(name: string): ApprovalCollection | null;
-  addCollection(name: string, options?: Record<string, unknown>): ApprovalCollection;
-}
+const APPROVAL_OTHER_MUTABLE_FIELDS = APPROVAL_MUTABLE_FIELDS.filter(
+  (field): field is Exclude<ApprovalMutableField, (typeof APPROVAL_DECISION_FIELDS)[number]> =>
+    !(APPROVAL_DECISION_FIELDS as readonly string[]).includes(field),
+);
 
 export type ApprovalStatusFilter = 'pending' | 'deferred' | 'decided' | 'all';
 
@@ -117,73 +112,76 @@ export type ApprovalDecisionTransition =
   | { status: 'already-decided'; record: ApprovalRecord }
   | { status: 'not-found' };
 
-let approvalCollection: ApprovalCollection | undefined;
+let db: Database | undefined;
 let approvalInsertsSincePrune = 0;
 let approvalPruneTimer: ReturnType<typeof setInterval> | undefined;
 
-/**
- * Copy the fields a source actually carries onto a target, leaving the rest untouched.
- * Keeps the flat-record shape written in one place instead of eighteen conditional
- * spreads, without an index-signature cast the migration rules forbid on the record type.
- */
-function copyDefinedFields<T extends object, K extends keyof T>(
-  target: T,
-  source: Pick<Partial<T>, K>,
-  fields: readonly K[],
-): void {
-  for (const field of fields) {
-    const value = source[field];
-    if (value !== undefined) {
-      target[field] = value;
-    }
-  }
+function optionalString(value: unknown): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return value === null || value === undefined ? undefined : Number(value);
 }
 
 /**
- * Drop every field a human decision writes.
- *
- * Load-bearing on the way in as well as on the way back. A patch only carries the fields
- * its caller named, so applying one over a row that was already decided — an expired
- * deferral, which is semantically pending again — would leave the lapsed decision's note
- * and expiry sitting on the new decision, and put a reason on the audit entry that this
- * operator never typed.
- * @param document
+ * Copy the fields present on a row onto a record, one key at a time, so an absent
+ * (NULL) column is an absent property rather than an explicit `undefined` one — the
+ * same contract `copyDefinedFields` gave the LokiJS-era document.
  */
-function clearDecisionFields(document: ApprovalDocument): void {
-  for (const field of APPROVAL_DECISION_FIELDS) {
-    delete document[field];
-  }
-}
-
-function toApprovalRecord(document: ApprovalDocument): ApprovalRecord {
+function rowToRecord(row: Row): ApprovalRecord {
   const record: ApprovalRecord = {
-    schemaVersion: document.schemaVersion,
-    id: document.id,
-    containerId: document.containerId,
-    containerIdentityKey: document.containerIdentityKey,
-    containerName: document.containerName,
-    watcher: document.watcher,
-    image: document.image,
-    fromRef: document.fromRef,
-    toRef: document.toRef,
-    candidateRef: document.candidateRef,
-    updateKind: document.updateKind,
-    semverDiff: document.semverDiff,
-    createdAt: document.createdAt,
-    createdAtMs: document.createdAtMs,
-    decision: document.decision,
+    schemaVersion: Number(row.schema_version),
+    id: String(row.id),
+    containerId: String(row.container_id),
+    containerIdentityKey: String(row.container_identity_key),
+    containerName: String(row.container_name),
+    watcher: String(row.watcher),
+    image: String(row.image),
+    fromRef: String(row.from_ref),
+    toRef: String(row.to_ref),
+    candidateRef: String(row.candidate_ref),
+    updateKind: row.update_kind as ApprovalRecord['updateKind'],
+    semverDiff: row.semver_diff as ApprovalSemverDiff,
+    createdAt: String(row.created_at),
+    createdAtMs: Number(row.created_at_ms),
+    decision: row.decision as ApprovalRecord['decision'],
   };
 
-  copyDefinedFields(record, document, [
-    ...APPROVAL_OPTIONAL_INPUT_FIELDS,
-    ...APPROVAL_MUTABLE_FIELDS,
-  ]);
+  const agent = optionalString(row.agent);
+  if (agent !== undefined) record.agent = agent;
+  const releaseNotesUrl = optionalString(row.release_notes_url);
+  if (releaseNotesUrl !== undefined) record.releaseNotesUrl = releaseNotesUrl;
+  const scanCritical = optionalNumber(row.scan_critical);
+  if (scanCritical !== undefined) record.scanCritical = scanCritical;
+  const scanHigh = optionalNumber(row.scan_high);
+  if (scanHigh !== undefined) record.scanHigh = scanHigh;
+  const scanMedium = optionalNumber(row.scan_medium);
+  if (scanMedium !== undefined) record.scanMedium = scanMedium;
+  const scanLow = optionalNumber(row.scan_low);
+  if (scanLow !== undefined) record.scanLow = scanLow;
+  const scanUnknown = optionalNumber(row.scan_unknown);
+  if (scanUnknown !== undefined) record.scanUnknown = scanUnknown;
+  const scanAt = optionalString(row.scan_at);
+  if (scanAt !== undefined) record.scanAt = scanAt;
+  const decidedAt = optionalString(row.decided_at);
+  if (decidedAt !== undefined) record.decidedAt = decidedAt;
+  const decidedBy = optionalString(row.decided_by);
+  if (decidedBy !== undefined) record.decidedBy = decidedBy;
+  const decisionNote = optionalString(row.decision_note);
+  if (decisionNote !== undefined) record.decisionNote = decisionNote;
+  const deferredUntil = optionalString(row.deferred_until);
+  if (deferredUntil !== undefined) record.deferredUntil = deferredUntil;
+  const operationId = optionalString(row.operation_id);
+  if (operationId !== undefined) record.operationId = operationId;
+  const outcome = optionalString(row.outcome);
+  if (outcome !== undefined) record.outcome = outcome as ApprovalRecord['outcome'];
+  const resolvedAt = optionalString(row.resolved_at);
+  if (resolvedAt !== undefined) record.resolvedAt = resolvedAt;
+  const resolution = optionalString(row.resolution);
+  if (resolution !== undefined) record.resolution = resolution as ApprovalRecord['resolution'];
 
   return record;
-}
-
-function sortByCreatedAtDescending(records: ApprovalRecord[]): ApprovalRecord[] {
-  return [...records].sort((left, right) => right.createdAtMs - left.createdAtMs);
 }
 
 function stopPeriodicPruneTimer(): void {
@@ -206,13 +204,13 @@ function startPeriodicPruneTimer(): void {
 }
 
 /**
- * Create the approvals collection.
- * @param db
+ * Wire the approvals store to the shared SQLite database. Schema creation is
+ * the migration runner's job; this only captures the handle and starts the
+ * background prune timer.
+ * @param database
  */
-export function createCollections(db: ApprovalStoreDb): void {
-  approvalCollection = initCollection(db, 'approvals', {
-    indices: APPROVAL_COLLECTION_INDICES,
-  }) as ApprovalCollection;
+export function createCollections(database: Database): void {
+  db = database;
   approvalInsertsSincePrune = 0;
   pruneOldApprovals(APPROVAL_RETENTION_DAYS);
   startPeriodicPruneTimer();
@@ -228,47 +226,64 @@ export function insertApproval(
   input: ApprovalRecordInput,
   options: { now?: number } = {},
 ): ApprovalRecord {
-  if (!approvalCollection) {
+  if (!db) {
     throw new Error('approvals collection not initialized');
   }
+  const database = db;
 
-  const existing = approvalCollection.findOne({
-    containerId: input.containerId,
-    candidateRef: input.candidateRef,
-  });
+  const existing = database
+    .prepare('SELECT * FROM approvals WHERE container_id = ? AND candidate_ref = ?')
+    .get(input.containerId, input.candidateRef);
   if (existing) {
-    return toApprovalRecord(existing);
+    return rowToRecord(existing);
   }
 
   const createdAtMs = options.now ?? Date.now();
-  const record: ApprovalRecord = {
-    schemaVersion: APPROVAL_SCHEMA_VERSION,
-    id: crypto.randomUUID(),
-    containerId: input.containerId,
-    containerIdentityKey: input.containerIdentityKey,
-    containerName: input.containerName,
-    watcher: input.watcher,
-    image: input.image,
-    fromRef: input.fromRef,
-    toRef: input.toRef,
-    candidateRef: input.candidateRef,
-    updateKind: input.updateKind,
-    semverDiff: input.semverDiff,
-    createdAt: new Date(createdAtMs).toISOString(),
-    createdAtMs,
-    decision: 'pending',
-  };
+  const createdAt = new Date(createdAtMs).toISOString();
+  const id = crypto.randomUUID();
 
-  copyDefinedFields(record, input, APPROVAL_OPTIONAL_INPUT_FIELDS);
+  database
+    .prepare(
+      `INSERT INTO approvals
+         (id, schema_version, container_id, container_identity_key, container_name, watcher, agent,
+          image, from_ref, to_ref, candidate_ref, update_kind, semver_diff, release_notes_url,
+          scan_critical, scan_high, scan_medium, scan_low, scan_unknown, scan_at,
+          created_at, created_at_ms, decision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      APPROVAL_SCHEMA_VERSION,
+      input.containerId,
+      input.containerIdentityKey,
+      input.containerName,
+      input.watcher,
+      input.agent ?? null,
+      input.image,
+      input.fromRef,
+      input.toRef,
+      input.candidateRef,
+      input.updateKind,
+      input.semverDiff,
+      input.releaseNotesUrl ?? null,
+      input.scanCritical ?? null,
+      input.scanHigh ?? null,
+      input.scanMedium ?? null,
+      input.scanLow ?? null,
+      input.scanUnknown ?? null,
+      input.scanAt ?? null,
+      createdAt,
+      createdAtMs,
+      'pending',
+    );
 
-  approvalCollection.insert(record);
   approvalInsertsSincePrune += 1;
   if (approvalInsertsSincePrune >= APPROVAL_PRUNE_INSERT_INTERVAL) {
     pruneOldApprovals(APPROVAL_RETENTION_DAYS);
     approvalInsertsSincePrune = 0;
   }
 
-  return toApprovalRecord(record);
+  return getApprovalById(id) as ApprovalRecord;
 }
 
 /**
@@ -276,8 +291,11 @@ export function insertApproval(
  * @param id
  */
 export function getApprovalById(id: string): ApprovalRecord | undefined {
-  const document = approvalCollection?.findOne({ id });
-  return document ? toApprovalRecord(document) : undefined;
+  if (!db) {
+    return undefined;
+  }
+  const row = db.prepare('SELECT * FROM approvals WHERE id = ?').get(id);
+  return row ? rowToRecord(row) : undefined;
 }
 
 /**
@@ -286,18 +304,26 @@ export function getApprovalById(id: string): ApprovalRecord | undefined {
  * @param containerId
  */
 export function findApprovalsByContainerId(containerId: string): ApprovalRecord[] {
-  if (!approvalCollection) {
+  if (!db) {
     return [];
   }
-  return sortByCreatedAtDescending(approvalCollection.find({ containerId }).map(toApprovalRecord));
+  return db
+    .prepare('SELECT * FROM approvals WHERE container_id = ? ORDER BY created_at_ms DESC')
+    .all(containerId)
+    .map(rowToRecord);
 }
 
 export function findApprovalByContainerAndCandidate(
   containerId: string,
   candidateRef: string,
 ): ApprovalRecord | undefined {
-  const document = approvalCollection?.findOne({ containerId, candidateRef });
-  return document ? toApprovalRecord(document) : undefined;
+  if (!db) {
+    return undefined;
+  }
+  const row = db
+    .prepare('SELECT * FROM approvals WHERE container_id = ? AND candidate_ref = ?')
+    .get(containerId, candidateRef);
+  return row ? rowToRecord(row) : undefined;
 }
 
 /**
@@ -306,8 +332,28 @@ export function findApprovalByContainerAndCandidate(
  * @param operationId
  */
 export function findApprovalByOperationId(operationId: string): ApprovalRecord | undefined {
-  const document = approvalCollection?.findOne({ operationId });
-  return document ? toApprovalRecord(document) : undefined;
+  if (!db) {
+    return undefined;
+  }
+  const row = db.prepare('SELECT * FROM approvals WHERE operation_id = ?').get(operationId);
+  return row ? rowToRecord(row) : undefined;
+}
+
+/** Turn a patch into a `column = ?` list plus its bound values, skipping undefined fields. */
+function buildSetClause(
+  patch: ApprovalPatch,
+  fields: readonly ApprovalMutableField[],
+): { assignments: string[]; params: SqlBinding[] } {
+  const assignments: string[] = [];
+  const params: SqlBinding[] = [];
+  for (const field of fields) {
+    const value = patch[field];
+    if (value !== undefined) {
+      assignments.push(`${APPROVAL_COLUMN_BY_FIELD[field]} = ?`);
+      params.push(value as SqlBinding);
+    }
+  }
+  return { assignments, params };
 }
 
 /**
@@ -317,21 +363,34 @@ export function findApprovalByOperationId(operationId: string): ApprovalRecord |
  * @param patch
  */
 export function updateApproval(id: string, patch: ApprovalPatch): ApprovalRecord | undefined {
-  const document = approvalCollection?.findOne({ id });
-  if (!document || !approvalCollection) {
+  if (!db) {
+    return undefined;
+  }
+  const database = db;
+  const existing = database.prepare('SELECT 1 FROM approvals WHERE id = ?').get(id);
+  if (!existing) {
     return undefined;
   }
 
-  copyDefinedFields(document, patch, APPROVAL_MUTABLE_FIELDS);
+  const { assignments, params } = buildSetClause(patch, APPROVAL_MUTABLE_FIELDS);
+  if (assignments.length > 0) {
+    database
+      .prepare(`UPDATE approvals SET ${assignments.join(', ')} WHERE id = ?`)
+      .run(...params, id);
+  }
 
-  approvalCollection.update(document);
-  return toApprovalRecord(document);
+  return getApprovalById(id);
 }
 
 /**
  * Compare-and-set on semantic pending state: `decision === 'pending'`, or
  * `decision === 'deferred'` with an absent, unparseable or expired `deferredUntil`. The
  * row needs no sweep or normalization write before the compare.
+ *
+ * Runs inside `BEGIN IMMEDIATE` (the driver's default transaction mode): the read, the
+ * pending check and the write all happen under one write lock, so a second caller
+ * racing the first blocks until the first transaction commits rather than reading the
+ * same pending row the first one already claimed.
  *
  * This is what makes a double decision safe. A decision handler that only read the row,
  * awaited an admission and then wrote would let two operators both pass the read, and the
@@ -347,20 +406,51 @@ export function decideApprovalIfPending(
   patch: ApprovalPatch,
   options: { now?: number } = {},
 ): ApprovalDecisionTransition {
-  const document = approvalCollection?.findOne({ id });
-  if (!document || !approvalCollection) {
+  if (!db) {
     return { status: 'not-found' };
   }
+  const database = db;
+  const nowMs = options.now ?? Date.now();
 
-  const record = toApprovalRecord(document);
-  if (!isApprovalPending(record, options.now ?? Date.now())) {
-    return { status: 'already-decided', record };
-  }
+  return database.transaction((): ApprovalDecisionTransition => {
+    const row = database.prepare('SELECT * FROM approvals WHERE id = ?').get(id);
+    if (!row) {
+      return { status: 'not-found' };
+    }
 
-  clearDecisionFields(document);
-  copyDefinedFields(document, patch, APPROVAL_MUTABLE_FIELDS);
-  approvalCollection.update(document);
-  return { status: 'decided', record: toApprovalRecord(document) };
+    const record = rowToRecord(row);
+    if (!isApprovalPending(record, nowMs)) {
+      return { status: 'already-decided', record };
+    }
+
+    // Every decision field is cleared to NULL unless the patch itself supplies a new
+    // value, matching `clearDecisionFields` followed by `copyDefinedFields` against the
+    // LokiJS document: an expired deferral's note and expiry must not survive onto the
+    // decision that supersedes it.
+    const { assignments: clearedAssignments, params: clearedParams } = buildSetClause(
+      patch,
+      APPROVAL_DECISION_FIELDS,
+    );
+    for (const field of APPROVAL_DECISION_FIELDS) {
+      if (patch[field] === undefined) {
+        clearedAssignments.push(`${APPROVAL_COLUMN_BY_FIELD[field]} = ?`);
+        clearedParams.push(null);
+      }
+    }
+    const { assignments: otherAssignments, params: otherParams } = buildSetClause(
+      patch,
+      APPROVAL_OTHER_MUTABLE_FIELDS,
+    );
+
+    database
+      .prepare(
+        `UPDATE approvals SET ${[...clearedAssignments, ...otherAssignments].join(', ')} WHERE id = ?`,
+      )
+      .run(...clearedParams, ...otherParams, id);
+
+    const updatedRow = database.prepare('SELECT * FROM approvals WHERE id = ?').get(id);
+    return { status: 'decided', record: rowToRecord(updatedRow as Row) };
+  });
 }
 
 /**
@@ -376,62 +466,117 @@ export function decideApprovalIfPending(
  * @param record
  */
 export function restoreApproval(record: ApprovalRecord): ApprovalRecord | undefined {
-  const document = approvalCollection?.findOne({ id: record.id });
-  if (!document || !approvalCollection) {
+  if (!db) {
+    return undefined;
+  }
+  const database = db;
+  const existing = database.prepare('SELECT 1 FROM approvals WHERE id = ?').get(record.id);
+  if (!existing) {
     return undefined;
   }
 
-  document.decision = record.decision;
-  clearDecisionFields(document);
-  copyDefinedFields(document, record, APPROVAL_DECISION_FIELDS);
+  database
+    .prepare(
+      `UPDATE approvals SET
+         decision = ?, decided_at = ?, decided_by = ?, decision_note = ?, deferred_until = ?, operation_id = ?
+       WHERE id = ?`,
+    )
+    .run(
+      record.decision,
+      record.decidedAt ?? null,
+      record.decidedBy ?? null,
+      record.decisionNote ?? null,
+      record.deferredUntil ?? null,
+      record.operationId ?? null,
+      record.id,
+    );
 
-  approvalCollection.update(document);
-  return toApprovalRecord(document);
+  return getApprovalById(record.id);
 }
 
-function matchesStatus(
-  record: ApprovalRecord,
+/**
+ * SQL fragment matching rows awaiting an operator: never decided, or deferred past its
+ * expiry, and not resolved. `julianday()` returns NULL for a string it cannot parse as a
+ * timestamp, which is exactly how `isApprovalDeferred` treats an unparseable
+ * `deferredUntil` (`Number.isFinite(Date.parse(...))` is false): both read it as expired,
+ * so the row falls back to pending rather than staying deferred forever.
+ */
+const PENDING_PREDICATE_SQL = `(
+  resolved_at IS NULL
+  AND (
+    decision = 'pending'
+    OR (
+      decision = 'deferred'
+      AND (
+        deferred_until IS NULL
+        OR julianday(deferred_until) IS NULL
+        OR julianday(deferred_until) <= julianday(?)
+      )
+    )
+  )
+)`;
+
+/** SQL fragment matching rows under a live (unexpired, parseable) deferral. */
+const DEFERRED_PREDICATE_SQL = `(
+  resolved_at IS NULL
+  AND decision = 'deferred'
+  AND deferred_until IS NOT NULL
+  AND julianday(deferred_until) IS NOT NULL
+  AND julianday(deferred_until) > julianday(?)
+)`;
+
+function buildStatusPredicate(
   status: ApprovalStatusFilter,
-  nowMs: number,
-): boolean {
+  nowIso: string,
+  params: SqlBinding[],
+): string {
   if (status === 'all') {
-    return true;
+    return '1 = 1';
   }
   if (status === 'pending') {
-    return isApprovalPending(record, nowMs);
+    params.push(nowIso);
+    return PENDING_PREDICATE_SQL;
   }
   if (status === 'deferred') {
-    return isApprovalDeferred(record, nowMs);
+    params.push(nowIso);
+    return DEFERRED_PREDICATE_SQL;
   }
   // `decided` is the remainder of the partition: approved, rejected, and any row that
   // was resolved out of the queue without a human decision.
-  return !isApprovalPending(record, nowMs) && !isApprovalDeferred(record, nowMs);
+  params.push(nowIso, nowIso);
+  return `NOT ${PENDING_PREDICATE_SQL} AND NOT ${DEFERRED_PREDICATE_SQL}`;
 }
 
-function matchesFreeText(record: ApprovalRecord, needle: string): boolean {
-  return [record.containerName, record.image, record.fromRef, record.toRef].some((field) =>
-    field.toLowerCase().includes(needle),
-  );
-}
+function buildListApprovalsWhere(
+  query: ListApprovalsQuery,
+  nowMs: number,
+): { clause: string; params: SqlBinding[] } {
+  const params: SqlBinding[] = [];
+  const nowIso = new Date(nowMs).toISOString();
+  const conditions: string[] = [buildStatusPredicate(query.status ?? 'pending', nowIso, params)];
 
-function matchesQuery(record: ApprovalRecord, query: ListApprovalsQuery, nowMs: number): boolean {
-  if (!matchesStatus(record, query.status ?? 'pending', nowMs)) {
-    return false;
+  if (query.containerId !== undefined) {
+    conditions.push('container_id = ?');
+    params.push(query.containerId);
   }
-  if (query.containerId !== undefined && record.containerId !== query.containerId) {
-    return false;
+  if (query.agent !== undefined) {
+    conditions.push('agent = ?');
+    params.push(query.agent);
   }
-  if (query.agent !== undefined && record.agent !== query.agent) {
-    return false;
-  }
-  if (query.semverDiff !== undefined && record.semverDiff !== query.semverDiff) {
-    return false;
+  if (query.semverDiff !== undefined) {
+    conditions.push('semver_diff = ?');
+    params.push(query.semverDiff);
   }
   const needle = query.q?.trim().toLowerCase();
-  if (needle !== undefined && needle !== '' && !matchesFreeText(record, needle)) {
-    return false;
+  if (needle !== undefined && needle !== '') {
+    conditions.push(
+      '(LOWER(container_name) LIKE ? OR LOWER(image) LIKE ? OR LOWER(from_ref) LIKE ? OR LOWER(to_ref) LIKE ?)',
+    );
+    const pattern = `%${needle}%`;
+    params.push(pattern, pattern, pattern, pattern);
   }
-  return true;
+
+  return { clause: ` WHERE ${conditions.join(' AND ')}`, params };
 }
 
 /**
@@ -443,36 +588,25 @@ export function listApprovals(query: ListApprovalsQuery = {}): {
   records: ApprovalRecord[];
   total: number;
 } {
-  if (!approvalCollection) {
+  if (!db) {
     return { records: [], total: 0 };
   }
-
+  const database = db;
   const nowMs = query.now ?? Date.now();
-  const matched = sortByCreatedAtDescending(
-    approvalCollection
-      .find()
-      .map(toApprovalRecord)
-      .filter((record) => matchesQuery(record, query, nowMs)),
-  );
+  const { clause, params } = buildListApprovalsWhere(query, nowMs);
+
+  const totalRow = database
+    .prepare(`SELECT COUNT(*) AS count FROM approvals${clause}`)
+    .get(...params) as Row;
+  const total = Number(totalRow.count);
 
   const offset = query.offset ?? 0;
-  const records =
-    query.limit === undefined ? matched.slice(offset) : matched.slice(offset, offset + query.limit);
+  const limit = query.limit === undefined ? -1 : query.limit;
+  const rows = database
+    .prepare(`SELECT * FROM approvals${clause} ORDER BY created_at_ms DESC LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset);
 
-  return { records, total: matched.length };
-}
-
-function startOfUtcDay(nowMs: number): number {
-  const date = new Date(nowMs);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
-function wasDecidedSince(record: ApprovalRecord, sinceMs: number): boolean {
-  if (record.decision === 'pending' || record.decidedAt === undefined) {
-    return false;
-  }
-  const decidedAtMs = Date.parse(record.decidedAt);
-  return Number.isFinite(decidedAtMs) && decidedAtMs >= sinceMs;
+  return { records: rows.map(rowToRecord), total };
 }
 
 /**
@@ -480,27 +614,42 @@ function wasDecidedSince(record: ApprovalRecord, sinceMs: number): boolean {
  * @param now
  */
 export function countApprovals(now?: number): ApprovalCounts {
+  if (!db) {
+    return { pending: 0, deferred: 0, decidedToday: 0 };
+  }
+  const database = db;
   const nowMs = now ?? Date.now();
-  const counts: ApprovalCounts = { pending: 0, deferred: 0, decidedToday: 0 };
-  if (!approvalCollection) {
-    return counts;
-  }
+  const nowIso = new Date(nowMs).toISOString();
+  const date = new Date(nowMs);
+  const sinceIso = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  ).toISOString();
 
-  const sinceMs = startOfUtcDay(nowMs);
-  for (const document of approvalCollection.find()) {
-    const record = toApprovalRecord(document);
-    if (isApprovalPending(record, nowMs)) {
-      counts.pending += 1;
-    }
-    if (isApprovalDeferred(record, nowMs)) {
-      counts.deferred += 1;
-    }
-    if (wasDecidedSince(record, sinceMs)) {
-      counts.decidedToday += 1;
-    }
-  }
+  const pendingRow = database
+    .prepare(`SELECT COUNT(*) AS count FROM approvals WHERE ${PENDING_PREDICATE_SQL}`)
+    .get(nowIso) as Row;
+  const deferredRow = database
+    .prepare(`SELECT COUNT(*) AS count FROM approvals WHERE ${DEFERRED_PREDICATE_SQL}`)
+    .get(nowIso) as Row;
+  // Mirrors `wasDecidedSince`: not pending, has a decidedAt, and that decidedAt both
+  // parses and falls on or after UTC midnight. `julianday()` returning NULL for an
+  // unparseable decidedAt excludes it the same way `Number.isFinite(Date.parse(...))`
+  // does in the pre-migration JS.
+  const decidedTodayRow = database
+    .prepare(
+      `SELECT COUNT(*) AS count FROM approvals
+       WHERE decision != 'pending'
+         AND decided_at IS NOT NULL
+         AND julianday(decided_at) IS NOT NULL
+         AND julianday(decided_at) >= julianday(?)`,
+    )
+    .get(sinceIso) as Row;
 
-  return counts;
+  return {
+    pending: Number(pendingRow.count),
+    deferred: Number(deferredRow.count),
+    decidedToday: Number(decidedTodayRow.count),
+  };
 }
 
 /**
@@ -526,28 +675,29 @@ function getRetentionTimestampMs(record: ApprovalRecord): number {
  * @param now
  */
 export function pruneOldApprovals(days: number, now?: number): number {
-  if (!approvalCollection) {
+  if (!db) {
+    return 0;
+  }
+  const database = db;
+  const nowMs = now ?? Date.now();
+  const cutoff = nowMs - daysToMs(days);
+
+  const { records: decidedRecords } = listApprovals({ status: 'decided', now: nowMs });
+  const stale = decidedRecords.filter((record) => getRetentionTimestampMs(record) < cutoff);
+  if (stale.length === 0) {
     return 0;
   }
 
-  const collection = approvalCollection;
-  const nowMs = now ?? Date.now();
-  const cutoff = nowMs - daysToMs(days);
-  const stale = collection.find().filter((document) => {
-    const record = toApprovalRecord(document);
-    if (isApprovalPending(record, nowMs) || isApprovalDeferred(record, nowMs)) {
-      return false;
-    }
-    return getRetentionTimestampMs(record) < cutoff;
-  });
-
-  stale.forEach((document) => collection.remove(document));
+  const deleteStatement = database.prepare('DELETE FROM approvals WHERE id = ?');
+  for (const record of stale) {
+    deleteStatement.run(record.id);
+  }
   return stale.length;
 }
 
-/** Test helper: drop the collection handle and stop the retention timer. */
+/** Test helper: drop the database handle and stop the retention timer. */
 export function resetApprovalStoreForTests(): void {
   stopPeriodicPruneTimer();
-  approvalCollection = undefined;
+  db = undefined;
   approvalInsertsSincePrune = 0;
 }
