@@ -240,7 +240,7 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 
 ## Diagnosing a missed notification
 
-If a container has an update but the expected notification never arrives, turn on debug logging and read the fields drydock attaches to each skip decision rather than guessing at the cause.
+If a container has an update but the expected notification never arrives, turn on debug logging and read the fields drydock attaches to each cause rather than guessing -- a trigger skip, a detection failure, a provider error, or an outbox delivery state each carry different fields.
 
 ### Turn on debug logging
 
@@ -250,21 +250,24 @@ Set `DD_LOG_LEVEL=debug` (see [Logs](/docs/configuration/logs)). Every component
 - Per-container log lines from a trigger add a `container` field carrying the container's full name. Not every skip reason below goes through that per-container child logger, though -- some embed the container name directly in the message text instead (noted in the table).
 - A watcher's own registry-check failures log as `watcher.docker.<name>`, also with a `container` field -- worth checking first if the update was never detected at all, not just never notified.
 
-With `DD_LOG_FORMAT=json`, filter with your log aggregator or `grep`, e.g. `grep '"component":"trigger.slack.ops"'`. With the default text format, use the **Configuration > Logs** page in the UI and its **Component filter** box (see [Logs](/docs/configuration/logs#toolbar-controls)).
+With `DD_LOG_FORMAT=json`, filter with your log aggregator or `grep`, e.g. `grep '"component":"trigger.slack.ops"'`. With the default text format, use the **Configuration > Logs** page in the UI and its **Component filter** dropdown (see [Logs](/docs/configuration/logs#toolbar-controls)).
 
-### Skip reasons
+### Causes
 
-| Cause | Log line to look for | Level | Where the container/trigger name is |
-| --- | --- | --- | --- |
-| Below the configured `THRESHOLD` | `Threshold not reached => ignore (threshold=..., updateKind=..., semverDiff=...)` | debug | `container` field |
-| `ONCE=true` and this exact result was already sent | `Skipping update-available notification for <container> (once=..., updateAvailable=..., alreadyNotified=...)` | debug | embedded in the message |
-| Excluded by a `dd.notification.include`/`dd.notification.exclude` label (or `dd.action.*` for action triggers), an agent mismatch, or the action-policy resolver | `Trigger conditions not met => ignore (category=..., triggerInclude=..., triggerExclude=..., included=..., excluded=...)` | debug | `container` field |
-| The `update-available` notification rule is disabled, or this trigger isn't in that rule's trigger allow-list | `Skipping update-available notification for <container> (rule-disabled)` or `(excluded-from-allow-list)` | debug | embedded in the message |
-| The provider call failed (network error, bad credentials) or a `${...}` template failed to render | `Error (<message>)`, or `Suppressed repeated error (<message>)` once the same error already logged recently | warn (debug when suppressed) | `container` field |
-| A lifecycle event (`update-applied`, `update-failed`, `security-alert`, ...) failed delivery and was queued for retry | `Error handling <ruleId> event (<message>)` | warn | `container` field; the delivery then shows up in the outbox (below) |
-| Outbox retry backoff | `Outbox <id> (event=<eventName> trigger=<triggerId>) attempt <n> failed: <message>; retry at <timestamp>` | debug | embedded in the message |
-| Outbox dead-letter after 5 attempts | `Outbox <id> (event=<eventName> trigger=<triggerId>) → dead-letter after <n> attempts: <message>` | warn | embedded in the message |
-| The registry check itself failed, so no update was ever detected | `Error when processing (<message>)` | warn | `container` field; `component` is `watcher.docker.<name>` |
+Not every row below is a trigger deciding to skip. Registry-check failures are the watcher detecting nothing to report; outbox rows are what happens to a delivery *after* a trigger already tried and failed.
+
+| Kind | Cause | Log line to look for | Level | Where the container/trigger name is |
+| --- | --- | --- | --- | --- |
+| Trigger skip | Below the configured `THRESHOLD` | `Threshold not reached => ignore (threshold=..., updateKind=..., semverDiff=...)` | debug | `container` field |
+| Trigger skip | `ONCE=true` and this exact result was already sent | `Skipping update-available notification for <container> (once=..., updateAvailable=..., alreadyNotified=...)` | debug | embedded in the message |
+| Trigger skip | Excluded by a `dd.notification.include`/`dd.notification.exclude` label (or `dd.action.*` for action triggers), an agent mismatch, or the action-policy resolver | `Trigger conditions not met => ignore (category=..., triggerInclude=..., triggerExclude=..., included=..., excluded=...)` | debug | `container` field |
+| Trigger skip | The `update-available` notification rule is disabled, or this trigger isn't in that rule's trigger allow-list | `Skipping update-available notification for <container> (rule-disabled)` or `(excluded-from-allow-list)` | debug | embedded in the message |
+| Detection failure | The registry check itself failed, so no update was ever detected | `Error when processing (<message>)` | warn | `container` field; `component` is `watcher.docker.<name>` |
+| Provider error | The `update-available` send itself threw (network error, bad credentials) or a `${...}` template failed to render | `Error (<message>)`, or `Suppressed repeated error (<message>)` once the same error already logged recently | warn (debug when suppressed) | `container` field |
+| Provider error | A lifecycle event (`update-applied`, `update-failed`, `security-alert`, ...) failed delivery on the trigger's normal, non-batched dispatch path | `Error handling <ruleId> event (<message>)` | warn | not present -- neither a field nor embedded in the message; `component` names only the trigger. The failed delivery is then enqueued in the outbox (below) for retry. |
+| Provider error | The same kind of lifecycle event failed delivery through a batched `triggerBatch()` call (trigger configured for batch mode) | `Error handling <ruleId> event (<message>)` | warn | not present, same as above. Not enqueued in the outbox -- a batched failure is not retried. |
+| Outbox delivery state | Outbox retry backoff | `Outbox <id> (event=<eventName> trigger=<triggerId>) attempt <n> failed: <message>; retry at <timestamp>` | debug | embedded in the message |
+| Outbox delivery state | Outbox dead-letter after 5 attempts | `Outbox <id> (event=<eventName> trigger=<triggerId>) → dead-letter after <n> attempts: <message>` | warn | embedded in the message |
 
 The message text above is a stable log-line prefix, not a documented schema -- match on the leading words, not the whole line.
 
@@ -292,7 +295,7 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 
 | Variable | Description | Example value |
 | --- | --- | --- |
-| `container` | The full container object | _(object)_ |
+| `container` | The full container object | *(object)* |
 | `container.id` | Container ID | `sha256:abc123...` |
 | `container.name` | Container name | `my-app` |
 | `container.displayName` | Display name (from `dd.display.name` label, defaults to name) | `My App` |
@@ -337,7 +340,7 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 
 | Variable | Description | Example value |
 | --- | --- | --- |
-| `containers` | Array of container objects (each with the same properties as above) | _(array)_ |
+| `containers` | Array of container objects (each with the same properties as above) | *(array)* |
 | `containers.length` | Number of containers in the batch | `3` |
 
 ### Expression syntax
