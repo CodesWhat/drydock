@@ -677,28 +677,6 @@ describe('Backup Store', () => {
     expect(result).toBeUndefined();
   });
 
-  test('deleteBackup should remove a backup by id', () => {
-    backup.insertBackup({
-      id: 'b1',
-      containerId: 'c1',
-      containerName: 'nginx',
-      imageName: 'library/nginx',
-      imageTag: '1.24',
-      triggerName: 'docker.default',
-    } as never);
-
-    const deleted = backup.deleteBackup('b1');
-    expect(deleted).toBe(true);
-
-    const result = backup.getBackup('b1');
-    expect(result).toBeUndefined();
-  });
-
-  test('deleteBackup should return false for unknown id', () => {
-    const deleted = backup.deleteBackup('unknown');
-    expect(deleted).toBe(false);
-  });
-
   test('pruneOldBackups should keep only the N most recent backups', () => {
     backup.insertBackup({
       containerId: 'c1',
@@ -908,13 +886,6 @@ describe('Backup Store', () => {
     const freshBackup = await import('./backup.js');
     const result = freshBackup.getBackup('b1');
     expect(result).toBeUndefined();
-  });
-
-  test('deleteBackup should return false when the store is not initialized', async () => {
-    vi.resetModules();
-    const freshBackup = await import('./backup.js');
-    const result = freshBackup.deleteBackup('b1');
-    expect(result).toBe(false);
   });
 
   test('insertBackup should return generated values when the store is not initialized', async () => {

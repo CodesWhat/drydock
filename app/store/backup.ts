@@ -128,18 +128,6 @@ export function getBackup(id: string): ImageBackup | undefined {
 }
 
 /**
- * Delete a backup by id.
- * @param id
- */
-export function deleteBackup(id: string): boolean {
-  if (!db) {
-    return false;
-  }
-  const result = db.prepare('DELETE FROM backups WHERE id = ?').run(id);
-  return result.changes > 0;
-}
-
-/**
  * Prune old backups for a container's canonical identity, keeping only the N
  * most recent.
  * @param scope
