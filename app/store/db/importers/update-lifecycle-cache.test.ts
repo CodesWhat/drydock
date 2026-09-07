@@ -181,4 +181,29 @@ describe('store/db/importers/update-lifecycle-cache', () => {
   test('writes no rows when the store never had this collection', () => {
     expect(run([])).toBe(0);
   });
+
+  // Review finding 1 (roadmap 7-STORE slice 7): the sibling
+  // update-policy-retention-cache importer needed an upsert because a plain
+  // INSERT throws on a duplicate cacheKey. This importer's insert.run() is
+  // always gated on `!seenNewKeys.has(newKey)` immediately before it runs
+  // (see importInto above), so two legacy documents sharing a raw cacheKey
+  // resolve to the same container, the same derived newKey, and the second
+  // is skipped before any insert is attempted — no plain-INSERT throw is
+  // possible here, so no upsert was needed. This pins that down: the first
+  // document wins because it is the one that gets inserted, not the last.
+  test('does not throw on two legacy documents sharing a cacheKey — the dedup already prevents the second insert', () => {
+    expect(
+      run(
+        [
+          cacheDocument({ resultSignature: '{"tag":"first"}' }),
+          cacheDocument({ resultSignature: '{"tag":"second"}' }),
+        ],
+        [containerRecord()],
+      ),
+    ).toBe(1);
+
+    expect(db.prepare('SELECT result_signature FROM update_lifecycle_cache').get()).toEqual({
+      result_signature: '{"tag":"first"}',
+    });
+  });
 });

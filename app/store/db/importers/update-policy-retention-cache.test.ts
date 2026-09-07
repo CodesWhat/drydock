@@ -81,4 +81,36 @@ describe('store/db/importers/update-policy-retention-cache', () => {
   test('writes no rows when the store never had this collection', () => {
     expect(run([])).toBe(0);
   });
+
+  // Review finding 1 (roadmap 7-STORE slice 7): a plain INSERT throws on the
+  // second of two legacy documents sharing a cacheKey — a corrupted or
+  // hand-edited dd.json is exactly the case a first-start import must survive
+  // rather than failing the whole transaction. The upsert makes the later
+  // document win.
+  test('upserts on a duplicate legacy cacheKey instead of throwing, and the later document wins', () => {
+    expect(
+      run([
+        cacheDocument({
+          updatePolicyOverrides: { maturityMode: 'mature' },
+          expiresAt: 1_000,
+        }),
+        cacheDocument({
+          updatePolicyOverrides: { maturityMode: 'all' },
+          expiresAt: 2_000,
+        }),
+      ]),
+    ).toBe(2);
+
+    expect(db.prepare('SELECT COUNT(*) AS n FROM update_policy_retention_cache').get()).toEqual({
+      n: 1,
+    });
+    expect(
+      db
+        .prepare('SELECT update_policy_overrides, expires_at FROM update_policy_retention_cache')
+        .get(),
+    ).toEqual({
+      update_policy_overrides: '{"maturityMode":"all"}',
+      expires_at: 2_000,
+    });
+  });
 });

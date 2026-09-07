@@ -9,6 +9,14 @@
  * no remapping is needed: a stored document's `cacheKey` is carried across
  * as-is. `updatePolicyOverrides` is an opaque JSON blob (spec section 2.1,
  * rule 2) and is never inspected here, only re-serialised.
+ *
+ * `cache_key` is the table's primary key, but nothing here de-duplicates
+ * legacy documents the way the lifecycle importer's `seenNewKeys` does — a
+ * corrupted or hand-edited `dd.json` can hold two documents with the same
+ * `cacheKey`. This upserts (same shape as `upsertRecord` in
+ * `app/store/update-policy-retention-cache.ts`) so the later document wins
+ * instead of the whole first-start import transaction throwing on the second
+ * INSERT (review finding, roadmap 7-STORE slice 7).
  */
 import type { CollectionImporter, ImportContext } from '../import.js';
 
@@ -20,7 +28,11 @@ export const updatePolicyRetentionCacheImporter: CollectionImporter = {
   table: TARGET_TABLE,
   importInto({ db, snapshot }: ImportContext): number {
     const insert = db.prepare(
-      'INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at) VALUES (?, ?, ?)',
+      `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(cache_key) DO UPDATE SET
+         update_policy_overrides = excluded.update_policy_overrides,
+         expires_at = excluded.expires_at`,
     );
 
     let rows = 0;

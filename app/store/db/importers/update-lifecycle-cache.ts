@@ -63,6 +63,11 @@ export const updateLifecycleCacheImporter: CollectionImporter = {
   table: TARGET_TABLE,
   importInto({ db, snapshot }: ImportContext): number {
     const legacyKeyIndex = buildLegacyKeyIndex(snapshot.records(CONTAINERS_COLLECTION));
+    // A plain INSERT is safe here, unlike the retention-cache importer's: every
+    // insert.run() below is gated on `!seenNewKeys.has(newKey)` immediately
+    // before it runs, so this loop can never attempt two inserts for the same
+    // cache_key regardless of what raw legacy cacheKey produced it (review
+    // finding 1, roadmap 7-STORE slice 7 — checked, not applicable here).
     const insert = db.prepare(
       `INSERT INTO update_lifecycle_cache
          (cache_key, update_detected_at, first_seen_at, maturity_gate_pending_since, result_signature, expires_at)
