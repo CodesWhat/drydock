@@ -99,4 +99,30 @@ describe('App store', () => {
 
     expect(app.isUpgrade()).toBe(true);
   });
+
+  test('completeStartupInitialization propagates when migrate throws and never advances the stored version', () => {
+    db.prepare('INSERT INTO app_info (id, name, version) VALUES (1, ?, ?)').run('drydock', '1.0.0');
+    vi.mocked(migrate.migrate).mockImplementation(() => {
+      throw new Error('migrate failed');
+    });
+
+    app.createCollections(db);
+
+    expect(() => app.completeStartupInitialization()).toThrow('migrate failed');
+    expect(migrate.repairDataOnStartup).not.toHaveBeenCalled();
+    expect(app.getAppInfos()).toStrictEqual({ name: 'drydock', version: '1.0.0' });
+  });
+
+  test('completeStartupInitialization propagates when repairDataOnStartup throws and never advances the stored version', () => {
+    db.prepare('INSERT INTO app_info (id, name, version) VALUES (1, ?, ?)').run('drydock', '1.0.0');
+    vi.mocked(migrate.repairDataOnStartup).mockImplementation(() => {
+      throw new Error('repair failed');
+    });
+
+    app.createCollections(db);
+
+    expect(() => app.completeStartupInitialization()).toThrow('repair failed');
+    expect(migrate.migrate).toHaveBeenCalledWith('1.0.0', '2.0.0');
+    expect(app.getAppInfos()).toStrictEqual({ name: 'drydock', version: '1.0.0' });
+  });
 });
