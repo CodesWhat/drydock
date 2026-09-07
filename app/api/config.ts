@@ -211,10 +211,12 @@ function describeReload(
     return `Reloaded configuration: refused (${result.errors.length} error(s))`;
   }
   const summary = reconcileSummary as NonNullable<typeof reconcileSummary>;
+  const orphanedRuleCount = result.orphanedRules?.length ?? 0;
   return (
     `Reloaded configuration: applied (added ${summary.added}, ` +
     `changed ${summary.changed}, removed ${summary.removed}, ` +
-    `unchanged ${summary.unchanged}, errors ${summary.errors})`
+    `unchanged ${summary.unchanged}, errors ${summary.errors}, ` +
+    `orphaned notification rule references ${orphanedRuleCount})`
   );
 }
 
@@ -234,6 +236,7 @@ async function reloadEffectiveConfiguration(_req: Request, res: Response): Promi
       errors: result.errors,
       diff: result.diff,
       reconcile: reconcileSummary,
+      orphanedRules: result.orphanedRules,
     });
   } catch {
     sendErrorResponse(res, 500, 'Unable to reload the configuration');

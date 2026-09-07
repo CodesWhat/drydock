@@ -1,15 +1,23 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { setWarnLogger } from '../../log/warn.js';
 import type { ComponentReconcileResult } from '../../registry/index.js';
 import { getUpdateLockSnapshot, withContainerUpdateLocks } from '../../updates/update-locks.js';
 import { configFileSources, ddEnvVars } from '../index.js';
 import { getConfigFileInfo, getConfigFileLayer, resetConfigFileLayer } from './layer.js';
 
 const mockReconcile = vi.hoisted(() => vi.fn());
+const mockGetState = vi.hoisted(() => vi.fn(() => ({ trigger: {} }) as never));
 vi.mock('../../registry/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../registry/index.js')>();
-  return { ...actual, reconcileComponentsWithConfiguration: mockReconcile };
+  return { ...actual, reconcileComponentsWithConfiguration: mockReconcile, getState: mockGetState };
+});
+
+const mockGetNotificationRules = vi.hoisted(() => vi.fn(() => [] as never[]));
+vi.mock('../../store/notification.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../store/notification.js')>();
+  return { ...actual, getNotificationRules: mockGetNotificationRules };
 });
 
 const mockWithContainerUpdateLocks = vi.hoisted(() =>
@@ -212,5 +220,78 @@ describe('reloadConfiguration', () => {
 
     expect(callOrder).toEqual(['first-start', 'first-end', 'reload-end']);
     expect(result.applied).toBe(true);
+  });
+
+  describe('orphaned notification rule reporting', () => {
+    let warnMessages: string[];
+
+    beforeEach(() => {
+      warnMessages = [];
+      setWarnLogger({ warn: (message) => warnMessages.push(message) });
+    });
+
+    afterEach(() => {
+      setWarnLogger({ warn: () => {}, error: () => {} });
+    });
+
+    test('reports and logs a rule pointing at a trigger this reload removed', async () => {
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetNotificationRules.mockReturnValue([
+        { id: 'update-available', triggers: ['slack.ops'] },
+      ]);
+      writeConfig(
+        'notification:\n  discord:\n    myhook:\n      url: https://discord.example/hook\n',
+      );
+
+      const result = await reloadConfiguration();
+
+      expect(result.applied).toBe(true);
+      expect(result.orphanedRules).toEqual([
+        { ruleId: 'update-available', triggerId: 'slack.ops' },
+      ]);
+      expect(warnMessages).toHaveLength(1);
+      expect(warnMessages[0]).toContain('update-available');
+      expect(warnMessages[0]).toContain('slack.ops');
+    });
+
+    test('reports a rule pointing at a trigger this reload renamed', async () => {
+      mockGetState.mockReturnValue({ trigger: { 'slack.new-ops': { type: 'slack' } } });
+      mockGetNotificationRules.mockReturnValue([
+        { id: 'update-available', triggers: ['slack.old-ops'] },
+      ]);
+      writeConfig(
+        'notification:\n  discord:\n    myhook:\n      url: https://discord.example/hook\n',
+      );
+
+      const result = await reloadConfiguration();
+
+      expect(result.orphanedRules).toEqual([
+        { ruleId: 'update-available', triggerId: 'slack.old-ops' },
+      ]);
+    });
+
+    test('reports no orphans when every rule reference still resolves', async () => {
+      mockGetState.mockReturnValue({ trigger: { 'slack.ops': { type: 'slack' } } });
+      mockGetNotificationRules.mockReturnValue([
+        { id: 'update-available', triggers: ['slack.ops'] },
+      ]);
+      writeConfig(
+        'notification:\n  discord:\n    myhook:\n      url: https://discord.example/hook\n',
+      );
+
+      const result = await reloadConfiguration();
+
+      expect(result.orphanedRules).toEqual([]);
+      expect(warnMessages).toEqual([]);
+    });
+
+    test('omits orphanedRules when the reload is refused', async () => {
+      writeConfig('security:\n  scanner: bogus\n');
+
+      const result = await reloadConfiguration();
+
+      expect(result.applied).toBe(false);
+      expect(result.orphanedRules).toBeUndefined();
+    });
   });
 });

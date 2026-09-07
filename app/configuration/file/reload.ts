@@ -1,7 +1,15 @@
+import { logWarn } from '../../log/warn.js';
+import {
+  findOrphanedNotificationRuleReferences,
+  getNotificationTriggerIdsFromState,
+  type OrphanedNotificationRuleReference,
+} from '../../notifications/trigger-policy.js';
 import {
   type ComponentReconcileResult,
+  getState,
   reconcileComponentsWithConfiguration,
 } from '../../registry/index.js';
+import { getNotificationRules } from '../../store/notification.js';
 import { withContainerUpdateLocks } from '../../updates/update-locks.js';
 import { getErrorMessage } from '../../util/error.js';
 import { applyConfigurationReload } from '../index.js';
@@ -33,6 +41,12 @@ import { type ConfigurationValidationResult, validateConfiguration } from './val
  * file layer (`./layer.ts`) are never touched — rather than applying
  * whatever happened to validate. `applyConfigurationReload` only ever
  * receives the keys this function already decided are safe to move.
+ *
+ * After a successful reload, also checks every DB notification rule's
+ * trigger references against the reconciled registry state
+ * (`findAndLogOrphanedNotificationRules`) and reports/logs any that no
+ * longer resolve — the "one real coupling" section 3 calls out: a rule that
+ * renamed or removed trigger orphans is reported, never deleted or rewritten.
  */
 
 export interface ConfigurationReloadResult {
@@ -40,6 +54,35 @@ export interface ConfigurationReloadResult {
   errors: ConfigurationValidationResult['errors'];
   diff: ConfigurationValidationDiff;
   reconcile?: ComponentReconcileResult;
+  /** Notification rule references a removed or renamed trigger left behind
+   * (spec-7.1-config-file.md section 4.3) — set iff `applied` is true, since
+   * nothing in the registry changed otherwise. Never used to delete or
+   * rewrite a rule; reporting it is the whole contract. */
+  orphanedRules?: OrphanedNotificationRuleReference[];
+}
+
+/**
+ * Every currently-registered rule's trigger reference that no longer
+ * resolves against the just-reconciled registry state — reused by
+ * `runReload` after `reconcileComponentsWithConfiguration()` so the answer
+ * reflects the new state, not the one being replaced. Logged once per
+ * reference (`logWarn`, the same fs-free logging seam `loader.ts`/`watch.ts`
+ * already use at this level) so an operator sees it even if nothing ever
+ * reads the reload response.
+ */
+function findAndLogOrphanedNotificationRules(): OrphanedNotificationRuleReference[] {
+  const allowedTriggerIds = getNotificationTriggerIdsFromState(getState().trigger);
+  const orphanedRules = findOrphanedNotificationRuleReferences(
+    getNotificationRules(),
+    allowedTriggerIds,
+  );
+  for (const orphan of orphanedRules) {
+    logWarn(
+      `Notification rule "${orphan.ruleId}" references trigger "${orphan.triggerId}", ` +
+        'which no longer resolves after this reload; the rule was left unchanged.',
+    );
+  }
+  return orphanedRules;
 }
 
 function loadFailureError(message: string): ConfigurationValidationResult['errors'] {
@@ -110,8 +153,9 @@ async function runReload(): Promise<ConfigurationReloadResult> {
   setConfigFileLayer(newFileLayer, interpolatedKeys, fileInfo.current);
 
   const reconcile = await reconcileComponentsWithConfiguration();
+  const orphanedRules = findAndLogOrphanedNotificationRules();
 
-  return { applied: true, errors: [], diff, reconcile };
+  return { applied: true, errors: [], diff, reconcile, orphanedRules };
 }
 
 /**

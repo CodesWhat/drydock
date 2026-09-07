@@ -208,6 +208,22 @@ describe('configPaths', () => {
                 required: ['added', 'changed', 'removed', 'unchanged', 'errors'],
                 additionalProperties: false,
               },
+              orphanedRules: {
+                type: 'array',
+                description:
+                  'Present only when `applied` is true — every notification rule reference left orphaned by this reload (a trigger it named was renamed or removed).',
+                items: {
+                  type: 'object',
+                  description:
+                    'A DB notification rule whose trigger reference no longer resolves after this reload (spec-7.1-config-file.md section 3/4.3) — the rule itself is never deleted or rewritten, only reported.',
+                  properties: {
+                    ruleId: { type: 'string' },
+                    triggerId: { type: 'string' },
+                  },
+                  required: ['ruleId', 'triggerId'],
+                  additionalProperties: false,
+                },
+              },
             },
             required: ['applied', 'errors', 'diff'],
             additionalProperties: false,

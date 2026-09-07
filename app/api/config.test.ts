@@ -494,6 +494,7 @@ describe('Config Router', () => {
           restart: [],
         },
         reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+        orphanedRules: [],
       });
       configRouter.init();
       const handler = getHandler('/reload');
@@ -512,6 +513,7 @@ describe('Config Router', () => {
           restart: [],
         },
         reconcile: { added: 1, changed: 0, removed: 0, unchanged: 0, errors: 0 },
+        orphanedRules: [],
       });
       expect(mockRecordAuditEvent).toHaveBeenCalledWith({
         action: 'config-reloaded',
@@ -519,6 +521,35 @@ describe('Config Router', () => {
         status: 'info',
         details: expect.stringContaining('applied'),
       });
+    });
+
+    test('surfaces orphaned notification rule references in the applied result', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: reconcileResult({ removed: ['trigger:slack.ops'] }),
+        orphanedRules: [{ ruleId: 'update-available', triggerId: 'slack.ops' }],
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.orphanedRules).toEqual([
+        { ruleId: 'update-available', triggerId: 'slack.ops' },
+      ]);
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('orphaned notification rule references 1'),
+        }),
+      );
     });
 
     test('returns a refused result with no reconcile summary and records an error audit entry', async () => {
@@ -537,6 +568,7 @@ describe('Config Router', () => {
       const payload = (res.json as any).mock.calls[0][0];
       expect(payload.applied).toBe(false);
       expect(payload.reconcile).toBeUndefined();
+      expect(payload.orphanedRules).toBeUndefined();
       expect(mockRecordAuditEvent).toHaveBeenCalledWith({
         action: 'config-reloaded',
         containerName: 'diagnostics',
@@ -567,6 +599,7 @@ describe('Config Router', () => {
           restart: [],
         },
         reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+        orphanedRules: [{ ruleId: 'update-available', triggerId: 'slack.ops' }],
       });
       configRouter.init();
       const handler = getHandler('/reload');
