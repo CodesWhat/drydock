@@ -137,10 +137,26 @@ function createTestApp(store: LokiSessionStore): Application {
   return app;
 }
 
+/**
+ * Bind the loopback address, never the wildcard.
+ *
+ * `listen(0)` binds `::` dual-stack, and libuv sets SO_REUSEADDR on every
+ * listening socket, which makes the kernel's ephemeral-port picker check for an
+ * *exact* address+port conflict only. A wildcard listener can therefore be
+ * handed a port another process already holds on `127.0.0.1` — the app suite
+ * has two such binders, `healthcheck.binary.test.ts` and
+ * `agent/PortwingDockerBridge.ts`, and a second concurrent gate is running them
+ * — and the more specific binding wins every connection to `127.0.0.1`. Every
+ * request below then lands on that other server and comes back 404, which is
+ * DR-57. Naming `127.0.0.1` makes this server the most specific match for the
+ * address the tests fetch, and an exact conflict is the one case the picker
+ * does skip, so it cannot be handed a squatted port either.
+ * @param app
+ */
 function startServer(app: Application): Promise<RunningServer> {
   return new Promise((resolve) => {
     const server = http.createServer(app);
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
       resolve({ server, port });
