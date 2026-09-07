@@ -1,20 +1,30 @@
+/**
+ * Audit trail store. One row per event in the `audit` table (roadmap
+ * 7-STORE, slice 5).
+ *
+ * `timestamp_ms` is NOT NULL in the schema and is always computed at insert
+ * time, so the old dual chain/fallback read paths and the startup
+ * `migrateMissingTimestampIndex` backfill collapse to plain SQL: filtering,
+ * sorting and pagination are all one indexed query. A document imported from
+ * a pre-1.8 `dd.json` that was missing `timestampMs` gets it filled in once,
+ * by the audit importer (`store/db/importers/audit.ts`), not here.
+ *
+ * The hourly prune timer stays: entries older than the retention window are
+ * swept on every collection init, every 100 inserts, and once an hour in the
+ * background regardless of insert volume.
+ */
 import crypto from 'node:crypto';
 import type { AuditEntry } from '../model/audit.js';
 import { daysToMs } from '../model/maturity-policy.js';
-import { initCollection } from './util.js';
+import type { Database, Row, SqlBinding } from './db/driver.js';
 
-let auditCollection;
-const AUDIT_COLLECTION_INDICES = ['data.action', 'data.timestamp', 'timestampMs'];
 const AUDIT_RETENTION_DAYS = 30;
 const AUDIT_PRUNE_INSERT_INTERVAL = 100;
 const AUDIT_PRUNE_TIMER_INTERVAL_MS = 60 * 60 * 1000;
+
+let db: Database | undefined;
 let auditInsertsSincePrune = 0;
 let auditPruneTimer: ReturnType<typeof setInterval> | undefined;
-
-type AuditCollectionEntry = {
-  data: AuditEntry;
-  timestampMs?: number;
-};
 
 type GetAuditEntriesQuery = {
   action?: string;
@@ -31,20 +41,6 @@ function toTimestampMs(timestamp: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function ensureTimestampMs(entry: AuditCollectionEntry): number {
-  if (typeof entry.timestampMs === 'number') {
-    return entry.timestampMs;
-  }
-
-  const timestampMs = toTimestampMs(entry.data.timestamp);
-  entry.timestampMs = timestampMs;
-  if (typeof auditCollection?.update === 'function') {
-    auditCollection.update(entry);
-  }
-
-  return timestampMs;
-}
-
 function parseQueryTimestamp(value?: string): number | undefined {
   if (!value) {
     return undefined;
@@ -56,118 +52,60 @@ function hasInvalidDateRange(fromDate?: number, toDate?: number): boolean {
   return Number.isNaN(fromDate) || Number.isNaN(toDate);
 }
 
-function buildCollectionQuery(query: GetAuditEntriesQuery): Record<string, unknown> {
-  const collectionQuery: Record<string, unknown> = {};
+function optionalString(value: unknown): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+function rowToEntry(row: Row): AuditEntry {
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    action: row.action as AuditEntry['action'],
+    containerName: String(row.container_name),
+    containerIdentityKey: optionalString(row.container_identity_key),
+    containerImage: optionalString(row.container_image),
+    fromVersion: optionalString(row.from_version),
+    toVersion: optionalString(row.to_version),
+    updateKind: optionalString(row.update_kind) as AuditEntry['updateKind'],
+    semverDiff: optionalString(row.semver_diff) as AuditEntry['semverDiff'],
+    triggerName: optionalString(row.trigger_name),
+    status: row.status as AuditEntry['status'],
+    details: optionalString(row.details),
+  };
+}
+
+function buildWhereClause(
+  query: GetAuditEntriesQuery,
+  fromDate?: number,
+  toDate?: number,
+): { clause: string; params: SqlBinding[] } {
+  const conditions: string[] = [];
+  const params: SqlBinding[] = [];
+
   if (query.action) {
-    collectionQuery['data.action'] = query.action;
+    conditions.push('action = ?');
+    params.push(query.action);
   } else if (query.actions && query.actions.length > 0) {
-    collectionQuery['data.action'] = { $in: query.actions };
+    conditions.push(`action IN (${query.actions.map(() => '?').join(', ')})`);
+    params.push(...query.actions);
   }
   if (query.container) {
-    collectionQuery['data.containerName'] = query.container;
+    conditions.push('container_name = ?');
+    params.push(query.container);
   }
-  return collectionQuery;
-}
-
-function buildTimestampRangeQuery(
-  fromDate?: number,
-  toDate?: number,
-): { $gte?: number; $lte?: number } | undefined {
-  if (fromDate === undefined && toDate === undefined) {
-    return undefined;
-  }
-
-  const timestampRangeQuery: { $gte?: number; $lte?: number } = {};
   if (fromDate !== undefined) {
-    timestampRangeQuery.$gte = fromDate;
+    conditions.push('timestamp_ms >= ?');
+    params.push(fromDate);
   }
   if (toDate !== undefined) {
-    timestampRangeQuery.$lte = toDate;
+    conditions.push('timestamp_ms <= ?');
+    params.push(toDate);
   }
 
-  return timestampRangeQuery;
-}
-
-function getChainedAuditEntries(
-  collectionQuery: Record<string, unknown>,
-  fromDate?: number,
-  toDate?: number,
-): AuditCollectionEntry[] | undefined {
-  if (typeof auditCollection?.chain !== 'function') {
-    return undefined;
-  }
-
-  let chainedResults = auditCollection.chain().find(collectionQuery);
-  const timestampRangeQuery = buildTimestampRangeQuery(fromDate, toDate);
-  if (timestampRangeQuery) {
-    chainedResults = chainedResults.find({ timestampMs: timestampRangeQuery });
-  }
-
-  if (
-    typeof chainedResults.simplesort !== 'function' ||
-    typeof chainedResults.data !== 'function'
-  ) {
-    return undefined;
-  }
-
-  return chainedResults.simplesort('timestampMs', true).data() as AuditCollectionEntry[];
-}
-
-function applyDateFilters(
-  entries: AuditCollectionEntry[],
-  fromDate?: number,
-  toDate?: number,
-): AuditCollectionEntry[] {
-  return entries.filter((entry) => {
-    const timestampMs = ensureTimestampMs(entry);
-    if (fromDate !== undefined && timestampMs < fromDate) {
-      return false;
-    }
-    if (toDate !== undefined && timestampMs > toDate) {
-      return false;
-    }
-    return true;
-  });
-}
-
-function getFallbackAuditEntries(
-  collectionQuery: Record<string, unknown>,
-  fromDate?: number,
-  toDate?: number,
-): AuditCollectionEntry[] {
-  const entries = auditCollection.find(collectionQuery) as AuditCollectionEntry[];
-  const filteredEntries = applyDateFilters(entries, fromDate, toDate);
-
-  filteredEntries.sort((a, b) => ensureTimestampMs(b) - ensureTimestampMs(a));
-  return filteredEntries;
-}
-
-function paginateAuditEntries(
-  entries: AuditCollectionEntry[],
-  skip = 0,
-  limit = 50,
-): { entries: AuditEntry[]; total: number } {
-  const total = entries.length;
-  const paginatedEntries = entries
-    .slice(skip, skip + limit)
-    .map((entry) => entry.data as AuditEntry);
-
-  return { entries: paginatedEntries, total };
-}
-
-function migrateMissingTimestampIndex() {
-  if (!auditCollection || typeof auditCollection.find !== 'function') {
-    return;
-  }
-
-  const entries = auditCollection.find();
-  if (!Array.isArray(entries)) {
-    return;
-  }
-
-  entries.forEach((entry) => {
-    ensureTimestampMs(entry as AuditCollectionEntry);
-  });
+  return {
+    clause: conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '',
+    params,
+  };
 }
 
 function stopPeriodicPruneTimer() {
@@ -190,13 +128,14 @@ function startPeriodicPruneTimer() {
 }
 
 /**
- * Create audit collections.
- * @param db
+ * Wire the audit store to the shared SQLite database. Schema creation is the
+ * migration runner's job; this only captures the handle and starts the
+ * background prune timer.
+ * @param database
  */
-export function createCollections(db) {
-  auditCollection = initCollection(db, 'audit', { indices: AUDIT_COLLECTION_INDICES });
+export function createCollections(database: Database): void {
+  db = database;
   auditInsertsSincePrune = 0;
-  migrateMissingTimestampIndex();
   pruneOldEntries(AUDIT_RETENTION_DAYS);
   startPeriodicPruneTimer();
 }
@@ -213,8 +152,27 @@ export function insertAudit(entry: AuditEntry): AuditEntry {
     timestamp,
   };
 
-  if (auditCollection) {
-    auditCollection.insert({ data: entryToSave, timestampMs: toTimestampMs(timestamp) });
+  if (db) {
+    db.prepare(
+      `INSERT INTO audit
+         (id, timestamp, timestamp_ms, action, container_name, container_identity_key, container_image, from_version, to_version, update_kind, semver_diff, trigger_name, status, details)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      entryToSave.id,
+      entryToSave.timestamp,
+      toTimestampMs(timestamp),
+      entryToSave.action,
+      entryToSave.containerName,
+      entryToSave.containerIdentityKey ?? null,
+      entryToSave.containerImage ?? null,
+      entryToSave.fromVersion ?? null,
+      entryToSave.toVersion ?? null,
+      entryToSave.updateKind ?? null,
+      entryToSave.semverDiff ?? null,
+      entryToSave.triggerName ?? null,
+      entryToSave.status,
+      entryToSave.details ?? null,
+    );
     auditInsertsSincePrune += 1;
     if (auditInsertsSincePrune >= AUDIT_PRUNE_INSERT_INTERVAL) {
       pruneOldEntries(AUDIT_RETENTION_DAYS);
@@ -233,7 +191,7 @@ export function getAuditEntries(query: GetAuditEntriesQuery = {}): {
   entries: AuditEntry[];
   total: number;
 } {
-  if (!auditCollection) {
+  if (!db) {
     return { entries: [], total: 0 };
   }
 
@@ -243,11 +201,17 @@ export function getAuditEntries(query: GetAuditEntriesQuery = {}): {
     return { entries: [], total: 0 };
   }
 
-  const collectionQuery = buildCollectionQuery(query);
-  const results =
-    getChainedAuditEntries(collectionQuery, fromDate, toDate) ??
-    getFallbackAuditEntries(collectionQuery, fromDate, toDate);
-  return paginateAuditEntries(results, query.skip || 0, query.limit || 50);
+  const { clause, params } = buildWhereClause(query, fromDate, toDate);
+  const totalRow = db.prepare(`SELECT COUNT(*) AS count FROM audit${clause}`).get(...params);
+  const total = Number(totalRow?.count ?? 0);
+
+  const skip = query.skip || 0;
+  const limit = query.limit || 50;
+  const rows = db
+    .prepare(`SELECT * FROM audit${clause} ORDER BY timestamp_ms DESC, rowid ASC LIMIT ? OFFSET ?`)
+    .all(...params, limit, skip);
+
+  return { entries: rows.map(rowToEntry), total };
 }
 
 /**
@@ -263,34 +227,10 @@ export function getRecentEntries(limit: number): AuditEntry[] {
  * @param days
  */
 export function pruneOldEntries(days: number): number {
-  if (!auditCollection || typeof auditCollection.find !== 'function') {
+  if (!db) {
     return 0;
   }
-
   const cutoff = Date.now() - daysToMs(days);
-  if (typeof auditCollection.chain === 'function') {
-    const chained = auditCollection.chain().find({
-      timestampMs: { $lt: cutoff },
-    });
-
-    if (typeof chained?.data === 'function' && typeof chained?.remove === 'function') {
-      const toRemove = chained.data() as AuditCollectionEntry[];
-      const count = Array.isArray(toRemove) ? toRemove.length : 0;
-      if (count > 0) {
-        chained.remove();
-      }
-      return count;
-    }
-  }
-
-  const entries = auditCollection.find();
-  if (!Array.isArray(entries)) {
-    return 0;
-  }
-
-  const toRemove = entries.filter((item: AuditCollectionEntry) => ensureTimestampMs(item) < cutoff);
-  const count = toRemove.length;
-  toRemove.forEach((item) => auditCollection.remove(item));
-
-  return count;
+  const result = db.prepare('DELETE FROM audit WHERE timestamp_ms < ?').run(cutoff);
+  return result.changes;
 }

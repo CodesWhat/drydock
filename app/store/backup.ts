@@ -1,18 +1,35 @@
 import crypto from 'node:crypto';
 import type { ImageBackup } from '../model/backup.js';
 import type { ContainerBackupScope } from '../util/backup.js';
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
-let backupCollection: ReturnType<typeof initCollection> | undefined;
+let db: Database | undefined;
+
+function optionalString(value: unknown): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+function rowToBackup(row: Row): ImageBackup {
+  return {
+    id: String(row.id),
+    containerId: String(row.container_id),
+    containerName: String(row.container_name),
+    containerIdentityKey: optionalString(row.container_identity_key),
+    imageName: String(row.image_name),
+    imageTag: String(row.image_tag),
+    imageDigest: optionalString(row.image_digest),
+    timestamp: String(row.timestamp),
+    triggerName: String(row.trigger_name),
+  };
+}
 
 /**
- * Create backup collections.
- * @param db
+ * Wire the backup store to the shared SQLite database. Schema creation is the
+ * migration runner's job; this only captures the handle.
+ * @param database
  */
-export function createCollections(db: InstanceType<typeof import('lokijs')>): void {
-  backupCollection = initCollection(db, 'backups', {
-    indices: ['data.containerName', 'data.containerIdentityKey', 'data.id'],
-  });
+export function createCollections(database: Database): void {
+  db = database;
 }
 
 /**
@@ -25,8 +42,22 @@ export function insertBackup(backup: ImageBackup): ImageBackup {
     id: backup.id || crypto.randomUUID(),
     timestamp: backup.timestamp || new Date().toISOString(),
   };
-  if (backupCollection) {
-    backupCollection.insert({ data: backupToSave });
+  if (db) {
+    db.prepare(
+      `INSERT INTO backups
+         (id, container_identity_key, container_name, container_id, image_name, image_tag, image_digest, timestamp, trigger_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      backupToSave.id,
+      backupToSave.containerIdentityKey ?? null,
+      backupToSave.containerName,
+      backupToSave.containerId,
+      backupToSave.imageName,
+      backupToSave.imageTag,
+      backupToSave.imageDigest ?? null,
+      backupToSave.timestamp,
+      backupToSave.triggerName,
+    );
   }
   return backupToSave;
 }
@@ -35,16 +66,21 @@ export function insertBackup(backup: ImageBackup): ImageBackup {
  * Get all backups for a container by name, sorted by timestamp desc.
  * Uses containerName (stable across recreates) rather than containerId
  * (which changes every time Docker recreates the container).
+ *
+ * `backups` carries a `container_identity_key` column (roadmap 7-STORE,
+ * slice 5), populated on every write, but this reader stays a thin
+ * name-keyed wrapper until identity-based lookups replace it in a later
+ * slice — nothing above the store changes yet.
  * @param containerName
  */
 export function getBackupsByName(containerName: string): ImageBackup[] {
-  if (!backupCollection) {
+  if (!db) {
     return [];
   }
-  return backupCollection
-    .find({ 'data.containerName': containerName })
-    .map((item) => item.data as ImageBackup)
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return db
+    .prepare('SELECT * FROM backups WHERE container_name = ? ORDER BY timestamp DESC')
+    .all(containerName)
+    .map(rowToBackup);
 }
 
 /** Return whether a backup belongs to a container's canonical identity scope. */
@@ -67,13 +103,10 @@ export function getBackupsForContainer(scope: ContainerBackupScope): ImageBackup
  * Get all backups across all containers.
  */
 export function getAllBackups(): ImageBackup[] {
-  if (!backupCollection) {
+  if (!db) {
     return [];
   }
-  return backupCollection
-    .find()
-    .map((item) => item.data as ImageBackup)
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return db.prepare('SELECT * FROM backups ORDER BY timestamp DESC').all().map(rowToBackup);
 }
 
 /**
@@ -81,14 +114,11 @@ export function getAllBackups(): ImageBackup[] {
  * @param id
  */
 export function getBackup(id: string): ImageBackup | undefined {
-  if (!backupCollection) {
+  if (!db) {
     return undefined;
   }
-  const doc =
-    typeof backupCollection.findOne === 'function'
-      ? backupCollection.findOne({ 'data.id': id })
-      : backupCollection.find({ 'data.id': id })[0];
-  return doc ? (doc.data as ImageBackup) : undefined;
+  const row = db.prepare('SELECT * FROM backups WHERE id = ?').get(id);
+  return row ? rowToBackup(row) : undefined;
 }
 
 /**
@@ -96,30 +126,23 @@ export function getBackup(id: string): ImageBackup | undefined {
  * @param id
  */
 export function deleteBackup(id: string): boolean {
-  if (!backupCollection) {
+  if (!db) {
     return false;
   }
-  const doc =
-    typeof backupCollection.findOne === 'function'
-      ? backupCollection.findOne({ 'data.id': id })
-      : backupCollection.find({ 'data.id': id })[0];
-  if (doc) {
-    backupCollection.remove(doc);
-    return true;
-  }
-  return false;
+  const result = db.prepare('DELETE FROM backups WHERE id = ?').run(id);
+  return result.changes > 0;
 }
 
 /**
  * Prune old backups for a container, keeping only the N most recent.
- * @param containerName
+ * @param containerScope
  * @param maxCount
  */
 export function pruneOldBackups(
   containerScope: string | ContainerBackupScope,
   maxCount: number | undefined,
 ): number {
-  if (!backupCollection) {
+  if (!db) {
     return 0;
   }
   if (typeof maxCount !== 'number' || !Number.isFinite(maxCount)) {
@@ -127,15 +150,12 @@ export function pruneOldBackups(
   }
   const containerName =
     typeof containerScope === 'string' ? containerScope : containerScope.containerName;
-  const docs = backupCollection
-    .find({ 'data.containerName': containerName })
-    .filter(
-      (doc) =>
-        typeof containerScope === 'string' ||
-        isBackupInScope(doc.data as ImageBackup, containerScope),
-    );
-  docs.sort((a, b) => new Date(b.data.timestamp).getTime() - new Date(a.data.timestamp).getTime());
-  const toRemove = docs.slice(maxCount);
-  toRemove.forEach((doc) => backupCollection.remove(doc));
+  const backups = getBackupsByName(containerName).filter(
+    (backup) => typeof containerScope === 'string' || isBackupInScope(backup, containerScope),
+  );
+  const toRemove = backups.slice(maxCount);
+  for (const removed of toRemove) {
+    db.prepare('DELETE FROM backups WHERE id = ?').run(removed.id);
+  }
   return toRemove.length;
 }
