@@ -317,6 +317,50 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
+  test('reconcile recovers a match found via new_container_id instead of discarding it as an identity mismatch (review finding 6)', async () => {
+    // getInProgressOperationByContainerId matches on EITHER container_id or
+    // new_container_id. Here the container we're reconciling IS the
+    // operation's new_container_id (the post-update container), so the
+    // operation's own `containerId` field still holds the pre-update id and
+    // never equals container.id. That is the whole point of an id-based
+    // match, not a stale-identity collision, so it must not be discarded by
+    // the identity cross-check that exists for the identity-based fallback.
+    const pending = {
+      id: 'op-1',
+      containerId: 'old-container-id',
+      newContainerId: 'current-container-id',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerId.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({ container: {}, inspection: {} })
+      .mockResolvedValueOnce({ container: {}, inspection: {} });
+    vi.spyOn(executor, 'stopAndRemoveContainerBestEffort').mockResolvedValueOnce(false);
+    const log = createLog();
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({ id: 'current-container-id' }),
+      log,
+    );
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Found in-progress update operation op-1'),
+    );
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-cleanup-temp',
+      }),
+    );
+  });
+
   test('reconcile ignores same-name in-progress operations from a different agent (issue #411)', async () => {
     // With the single durable identityKey signature there is no filter object
     // to short-circuit on; the store call is scoped by the container's own

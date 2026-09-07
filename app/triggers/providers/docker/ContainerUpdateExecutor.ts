@@ -417,15 +417,25 @@ class ContainerUpdateExecutor {
     const pendingByContainerId = updateOperationStore.getInProgressOperationByContainerId(
       container.id,
     );
-    const pendingByContainerIdentity =
-      pendingByContainerId ??
-      updateOperationStore.getInProgressOperationByContainerIdentity(container.identityKey);
-    const pending =
+    // getInProgressOperationByContainerId matches on EITHER container_id or
+    // new_container_id. A new_container_id match (the post-update container,
+    // found by its own id) leaves the operation's own `containerId` pointed
+    // at the pre-update id, so it never equals `container.id` — that's the
+    // whole point of the match, not a mismatch. The identity cross-check
+    // below exists to reject a stale identity-key collision from the
+    // identity-based fallback lookup; applying it to an id-based match as
+    // well discarded every valid post-update recovery (roadmap 7-STORE
+    // slice 10 review finding 6).
+    const pendingByContainerIdentity = pendingByContainerId
+      ? undefined
+      : updateOperationStore.getInProgressOperationByContainerIdentity(container.identityKey);
+    const pendingByIdentityChecked =
       container.id &&
       pendingByContainerIdentity?.containerId &&
       pendingByContainerIdentity.containerId !== container.id
         ? undefined
         : pendingByContainerIdentity;
+    const pending = pendingByContainerId ?? pendingByIdentityChecked;
 
     if (!pending) {
       return;
