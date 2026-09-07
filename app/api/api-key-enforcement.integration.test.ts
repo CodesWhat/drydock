@@ -202,10 +202,25 @@ function createTestApp(store: SessionStore): Application {
   return app;
 }
 
+/**
+ * Bind the loopback address, never the wildcard.
+ *
+ * `listen(0)` binds `::` dual-stack, and libuv sets SO_REUSEADDR, which makes
+ * the kernel's ephemeral-port picker check for an *exact* address+port conflict
+ * only. A wildcard listener can be handed a port another process already holds
+ * on `127.0.0.1` (`healthcheck.binary.test.ts` and
+ * `agent/PortwingDockerBridge.ts` both bind that address), and the more
+ * specific binding wins every connection to `127.0.0.1`, so the requests below
+ * answer from a foreign server carrying none of this app's routes or
+ * middleware. That is how the limiter case a few hundred lines down came back
+ * with an empty RateLimit header set (DR-74), and the same collision reading as
+ * a 404 is DR-57.
+ * @param app
+ */
 function startServer(app: Application): Promise<RunningServer> {
   return new Promise((resolve) => {
     const server = http.createServer(app);
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
       resolve({ server, port });
@@ -542,6 +557,7 @@ describe('API key enforcement', () => {
  */
 describe('the pre-authentication limiter is not an existence oracle', () => {
   const OUTER_LIMIT = 3;
+  const WINDOW_MS = 60 * 1000;
   const openServers: http.Server[] = [];
 
   function buildLimiterApp(): Application {
@@ -549,7 +565,7 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
     app.set('trust proxy', 1);
     app.use(
       rateLimit({
-        windowMs: 60 * 1000,
+        windowMs: WINDOW_MS,
         max: OUTER_LIMIT,
         standardHeaders: true,
         legacyHeaders: false,
@@ -621,11 +637,28 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
       return rateLimitHeaders(await probe(limiterPort, credential));
     }
 
-    const unknownHeaders = await probeAfterPriming(unknownIdCredential);
-    const wrongSecretHeaders = await probeAfterPriming(wrongSecretCredential);
+    // `RateLimit-Reset` counts whole seconds down from the moment its window
+    // opened, so the two probes read 60 and 59 as soon as CPU contention puts
+    // more than a second between one pair's priming request and its probe.
+    // That is a difference in the wall clock, not in anything the limiter
+    // revealed about the credential, and comparing it as-is is DR-74. Freezing
+    // Date — and only Date, so the sockets underneath keep their real timers —
+    // pins both windows to the same reading and leaves every other header,
+    // `ratelimit-remaining` above all, doing the real work of the comparison.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const unknownHeaders = await probeAfterPriming(unknownIdCredential);
+      const wrongSecretHeaders = await probeAfterPriming(wrongSecretCredential);
 
-    expect(Object.keys(unknownHeaders).length).toBeGreaterThan(0);
-    expect(wrongSecretHeaders).toStrictEqual(unknownHeaders);
+      expect(Object.keys(unknownHeaders).length).toBeGreaterThan(0);
+      // The full window, proving the clock really is frozen: without it this
+      // reads 60 or 59 depending on load, and the freeze could stop working
+      // without the comparison below ever noticing.
+      expect(unknownHeaders['ratelimit-reset']).toBe(String(WINDOW_MS / 1000));
+      expect(wrongSecretHeaders).toStrictEqual(unknownHeaders);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('every failing credential is charged to one bucket, so probing cannot mint budgets', async () => {
