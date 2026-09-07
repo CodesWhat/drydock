@@ -26,7 +26,6 @@ describe('store first-start import from a v1.7 dd.json', () => {
 
     try {
       setStoreEnv(tempDir);
-      fs.copyFileSync(FIXTURE_PATH, path.join(tempDir, 'dd.json'));
       vi.resetModules();
 
       const store = await import('./index.js');
@@ -34,6 +33,22 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const secrets = await import('./secrets.js');
       const settings = await import('./settings.js');
       const uiPreferences = await import('./ui-preferences.js');
+      const agentKeys = await import('./agent-keys.js');
+      const nameBindings = await import('./name-bindings.js');
+      const apiKey = await import('./api-key.js');
+
+      // The fixture stores a placeholder secretHash for its api-keys rows
+      // (a real hash is a high-entropy string gitleaks flags as an API key
+      // in every commit that ever touches it); patch in a real hash for a
+      // low-entropy plaintext secret right before the import runs, the same
+      // way a real v1.7 install would have a real hash on disk.
+      const v17Secret = 'a'.repeat(43);
+      const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
+      const apiKeysCollection = fixture.collections.find(
+        (collection: { name: string }) => collection.name === 'api-keys',
+      );
+      apiKeysCollection.data[0].secretHash = apiKey.hashApiKeySecret(v17Secret);
+      fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
 
       await store.init();
 
@@ -58,6 +73,30 @@ describe('store first-start import from a v1.7 dd.json', () => {
         preferences: { theme: 'dark' },
         updatedAt: '2026-01-15T09:00:00.000Z',
       });
+
+      // agent-keys (roadmap 7-STORE slice 4): the imported key is returned by
+      // both getKey and listKeys.
+      expect(agentKeys.getKey('aabbccddeeff0011')).toEqual({
+        keyId: 'aabbccddeeff0011',
+        pubkey: 'ZInSz0Dj5w/lTBfVbfUds8CfETZrM0mrpWUdWSLtJZc=',
+        label: 'edge-node-1',
+        createdAt: '2026-01-10T00:00:00.000Z',
+        revokedAt: null,
+      });
+      expect(agentKeys.listKeys().map((key) => key.keyId)).toEqual(['aabbccddeeff0011']);
+
+      // name-bindings: deleteBindingsForKey releases the same name the fixture
+      // bound to the imported agent key.
+      expect(nameBindings.deleteBindingsForKey('aabbccddeeff0011')).toEqual(['edge-node-1']);
+
+      // api-keys: a ddk_ credential minted under v1.7 still verifies after the
+      // import, with its scopes carried across via the api_key_scope join
+      // table in the same order they were created in.
+      const verified = apiKey.verifyApiKey(`ddk_aaaaaaaaaaaa_${v17Secret}`);
+      expect(verified?.keyId).toBe('aaaaaaaaaaaa');
+      expect(verified?.scopes).toEqual(['read', 'write']);
+      // The minted child key's parent link survived the import too.
+      expect(apiKey.findApiKeyById('bbbbbbbbbbbb')?.parentKeyId).toBe('aaaaaaaaaaaa');
 
       // The untouched pre-1.8 backup is the whole rollback story, and the
       // SQLite database now exists alongside it.

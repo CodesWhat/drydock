@@ -3,8 +3,8 @@
  *
  * Backs the in-memory `nameToKeyId` cache in app/api/portwing-ws.ts (squat/theft
  * prevention for edge-agent display names — see the design note next to that
- * map). Mirrors agent-keys.ts: one LokiJS collection, loaded/autosaved by the
- * shared store, one document per binding.
+ * map). Backed by the `name_bindings` table (roadmap 7-STORE, slice 4), one
+ * row per binding.
  *
  * Without this, the binding cache lived only in a bare process-memory Map —
  * wiped on every restart, including the restart that deploys this very fix,
@@ -13,7 +13,7 @@
  * the bindings means a restarted server still knows which key owns which name
  * before any agent reconnects.
  */
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
 export interface NameBindingRecord {
   agentName: string; // sanitized/fallback display name (see computeAgentName)
@@ -21,63 +21,49 @@ export interface NameBindingRecord {
   lastSeenAt: number; // epoch ms of the most recent hello admitted under this binding
 }
 
-interface NameBindingCollection {
-  findOne(query: Record<string, unknown>): NameBindingRecord | null;
-  find(query?: Record<string, unknown>): NameBindingRecord[];
-  insert(document: NameBindingRecord): void;
-  update(document: NameBindingRecord): void;
-  remove(document: NameBindingRecord): void;
-}
+let db: Database | undefined;
 
-interface NameBindingStoreDb {
-  getCollection(name: string): NameBindingCollection | null;
-  addCollection(name: string, options?: Record<string, unknown>): NameBindingCollection;
+function rowToRecord(row: Row): NameBindingRecord {
+  return {
+    agentName: String(row.agent_name),
+    keyId: String(row.key_id),
+    lastSeenAt: Number(row.last_seen_at),
+  };
 }
-
-let nameBindingCollection: NameBindingCollection | undefined;
 
 /**
- * Create the name-bindings collection.
- * @param db
+ * Wire the name-bindings store to the shared SQLite database.
+ * @param database
  */
-export function createCollections(db: NameBindingStoreDb): void {
-  nameBindingCollection = initCollection(db, 'name-bindings', {
-    indices: ['agentName', 'keyId'],
-  }) as NameBindingCollection;
+export function createCollections(database: Database): void {
+  db = database;
 }
 
 /**
  * Insert or update the persisted binding for agentName.
- * A no-op (rather than a throw) when the collection has not been initialized
+ * A no-op (rather than a throw) when the store has not been initialized
  * yet — callers (portwing-ws.ts) run on every hello and must not fail admission
  * just because the durable store isn't wired up (e.g. in unit tests that only
  * exercise the in-memory cache).
  */
 export function upsertBinding(agentName: string, keyId: string, lastSeenAt: number): void {
-  if (!nameBindingCollection) {
+  if (!db) {
     return;
   }
-  const existing = nameBindingCollection.findOne({ agentName });
-  if (existing) {
-    existing.keyId = keyId;
-    existing.lastSeenAt = lastSeenAt;
-    nameBindingCollection.update(existing);
-    return;
-  }
-  nameBindingCollection.insert({ agentName, keyId, lastSeenAt });
+  db.prepare(
+    `INSERT INTO name_bindings (agent_name, key_id, last_seen_at) VALUES (?, ?, ?)
+     ON CONFLICT(agent_name) DO UPDATE SET key_id = excluded.key_id, last_seen_at = excluded.last_seen_at`,
+  ).run(agentName, keyId, lastSeenAt);
 }
 
 /**
  * Delete the persisted binding for agentName, if any.
  */
 export function deleteBinding(agentName: string): void {
-  if (!nameBindingCollection) {
+  if (!db) {
     return;
   }
-  const existing = nameBindingCollection.findOne({ agentName });
-  if (existing) {
-    nameBindingCollection.remove(existing);
-  }
+  db.prepare('DELETE FROM name_bindings WHERE agent_name = ?').run(agentName);
 }
 
 /**
@@ -86,14 +72,17 @@ export function deleteBinding(agentName: string): void {
  * disconnectByKeyId().
  */
 export function deleteBindingsForKey(keyId: string): string[] {
-  if (!nameBindingCollection) {
+  if (!db) {
     return [];
   }
-  const matches = nameBindingCollection.find({ keyId });
-  for (const doc of matches) {
-    nameBindingCollection.remove(doc);
+  const released = db
+    .prepare('SELECT agent_name FROM name_bindings WHERE key_id = ?')
+    .all(keyId)
+    .map((row) => String(row.agent_name));
+  if (released.length > 0) {
+    db.prepare('DELETE FROM name_bindings WHERE key_id = ?').run(keyId);
   }
-  return matches.map((doc) => doc.agentName);
+  return released;
 }
 
 /**
@@ -101,13 +90,16 @@ export function deleteBindingsForKey(keyId: string): string[] {
  * in-memory nameToKeyId cache — see rehydrateNameBindings() in portwing-ws.ts.
  */
 export function listBindings(): NameBindingRecord[] {
-  if (!nameBindingCollection) {
+  if (!db) {
     return [];
   }
-  return nameBindingCollection.find();
+  return db
+    .prepare('SELECT agent_name, key_id, last_seen_at FROM name_bindings')
+    .all()
+    .map(rowToRecord);
 }
 
 /** Exposed for tests to reset module state between cases. */
 export function clearCollectionForTesting(): void {
-  nameBindingCollection = undefined;
+  db = undefined;
 }

@@ -65,6 +65,82 @@
       "transactional": false,
       "cloneObjects": false,
       "disableChangesApi": true
+    },
+    {
+      "name": "agent-keys",
+      "data": [
+        {
+          "keyId": "aabbccddeeff0011",
+          "pubkey": "ZInSz0Dj5w/lTBfVbfUds8CfETZrM0mrpWUdWSLtJZc=",
+          "label": "edge-node-1",
+          "createdAt": "2026-01-10T00:00:00.000Z",
+          "revokedAt": null,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "name-bindings",
+      "data": [
+        {
+          "agentName": "edge-node-1",
+          "keyId": "aabbccddeeff0011",
+          "lastSeenAt": 1768435200000,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
+    },
+    {
+      "name": "api-keys",
+      "data": [
+        {
+          "schemaVersion": 1,
+          "keyId": "aaaaaaaaaaaa",
+          "name": "ci-fixture-key",
+          "secretHash": "sha256-placeholder-set-by-test",
+          "scopes": ["read", "write"],
+          "createdAt": "2026-01-05T00:00:00.000Z",
+          "createdBy": "user:alice",
+          "parentKeyId": null,
+          "expiresAt": null,
+          "lastUsedAt": null,
+          "revokedAt": null,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 1
+        },
+        {
+          "schemaVersion": 1,
+          "keyId": "bbbbbbbbbbbb",
+          "name": "ci-fixture-child-key",
+          "secretHash": "sha256-placeholder-child-key",
+          "scopes": ["read"],
+          "createdAt": "2026-01-06T00:00:00.000Z",
+          "createdBy": "api-key:aaaaaaaaaaaa",
+          "parentKeyId": "aaaaaaaaaaaa",
+          "expiresAt": null,
+          "lastUsedAt": null,
+          "revokedAt": null,
+          "meta": { "revision": 0, "created": 1751000000000, "version": 0 },
+          "$loki": 2
+        }
+      ],
+      "idIndex": null,
+      "binaryIndices": {},
+      "transactional": false,
+      "cloneObjects": false,
+      "disableChangesApi": true
     }
   ],
   "databaseVersion": 1.5,

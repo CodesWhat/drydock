@@ -6,7 +6,10 @@
  * table it points at. Slices 3 through 11 each add one entry here.
  */
 import type { CollectionImporter } from '../import.js';
+import { agentKeysImporter } from './agent-keys.js';
+import { apiKeysImporter } from './api-keys.js';
 import { appImporter } from './app.js';
+import { nameBindingsImporter } from './name-bindings.js';
 import { secretsImporter } from './secrets.js';
 import { settingsImporter } from './settings.js';
 import { uiPreferencesImporter } from './ui-preferences.js';
@@ -16,4 +19,9 @@ export const COLLECTION_IMPORTERS: readonly CollectionImporter[] = [
   secretsImporter,
   settingsImporter,
   uiPreferencesImporter,
+  // roadmap 7-STORE slice 4: agent-keys before name-bindings, since a binding
+  // names the agent key that owns it.
+  agentKeysImporter,
+  nameBindingsImporter,
+  apiKeysImporter,
 ];
