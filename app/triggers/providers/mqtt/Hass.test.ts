@@ -315,7 +315,7 @@ test('unique_id stays the same across a rename and a recreate for a compose-iden
   await hass.addContainerSensor(afterRecreate);
 
   const uniqueIds = mqttClientMock.publish.mock.calls
-    .filter(([topic]) => topic === 'homeassistant/update/topic_watcher-name_myapp-web/config')
+    .filter(([topic]) => topic === 'homeassistant/update/topic_watcher-name_myapp.web/config')
     .map(([, payload]) => JSON.parse(payload).unique_id);
 
   expect(uniqueIds).toHaveLength(3);
@@ -1912,7 +1912,7 @@ describe('hass discovery startup resync (#708)', () => {
     await getResyncDiscovery(cleanupHass)();
 
     // The pre-v1.8 topic was name-based (myapp_web_1 sanitized), the new one
-    // is identity-based (myapp-web) — the old discovery entity is retired.
+    // is identity-based (myapp.web) — the old discovery entity is retired.
     expect(cleanupClient.publish).toHaveBeenCalledWith(
       'homeassistant/update/topic_local_myapp_web_1/config',
       '',
@@ -1920,7 +1920,7 @@ describe('hass discovery startup resync (#708)', () => {
     );
     // The new identity-based entity is published (not retired).
     expect(cleanupClient.publish).not.toHaveBeenCalledWith(
-      'homeassistant/update/topic_local_myapp-web/config',
+      'homeassistant/update/topic_local_myapp.web/config',
       '',
       { retain: true },
     );

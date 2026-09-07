@@ -114,8 +114,10 @@ Through v1.7.x, a container's MQTT state topic (`<topic>/<watcher>/<container>`)
 
 As of v1.8.0:
 
-- The state topic is `<topic>/<watcher>/<identitySlug>`, where `identitySlug` is the Compose `project-service` pair (`getContainerIdentitySlug`, `app/triggers/providers/mqtt/naming.ts`) when the container carries both `com.docker.compose.project` and `com.docker.compose.service` labels, and the sanitized container name otherwise.
-- The Home Assistant `unique_id` is `dd_` followed by the first 12 hex characters of `sha256(identity_key)` (`getHassUniqueId`, `app/triggers/providers/mqtt/Hass.ts`), independent of the topic entirely. It no longer changes on a rename, and for a Compose-labeled container it does not change on a recreate either, since the identity key is derived from the Compose project/service pair rather than the container name or id.
+- The state topic is `<topic>/<watcher>/<identitySlug>`, where `identitySlug` is the Compose `project.service` pair (`getContainerIdentitySlug`, `app/triggers/providers/mqtt/naming.ts`) when the container carries both `com.docker.compose.project` and `com.docker.compose.service` labels, and the sanitized container name otherwise.
+- The Home Assistant `unique_id` is `dd_` followed by the first 12 hex characters of `sha256(identity_key)` (`getHassUniqueId`, `app/triggers/providers/mqtt/Hass.ts`), independent of the topic entirely.
+
+**Rename stability of both the state topic and the `unique_id` is a guarantee for Compose-labeled containers only.** For a container carrying both Compose labels, neither one changes on a rename, and for a Compose recreate either, since the identity key is derived from the Compose project/service pair rather than the container name or id. A container with no Compose labels is still identified by its name (`agent::watcher::name`), the same as before v1.8.0, so renaming it still changes both its state topic and its `unique_id`.
 
 **Unlike the v1.7.0 agent-topic-segment flip above, the old discovery entities are cleaned up automatically.** The first time a v1.8.0 controller starts, drydock publishes an empty retained message on every pre-v1.8 name-based discovery topic still known for a stored container, so Home Assistant prunes the old entity instead of leaving it duplicated alongside the new one. This runs at most once, guarded by a marker in the `store_metadata` table (`app/store/mqtt-hass.ts`), not once per restart.
 

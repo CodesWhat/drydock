@@ -145,6 +145,17 @@ function getHassEntityId(topic) {
  * the id from starting with a bare hex digit; 12 hex characters match the
  * length of a Docker short id for a familiar shape (the two are unrelated
  * otherwise — this is a hash of the identity key, not of any Docker id).
+ *
+ * Rename stability of both the topic and (when this falls through to
+ * `deriveContainerIdentityKey`, i.e. `container.identityKey` was never
+ * stored) `unique_id` is a Compose guarantee: `deriveContainerIdentityKey`
+ * only omits the container's own name from the key when Compose project/
+ * service labels are present, so a container with no Compose labels gets a
+ * key built from its current name and both the topic and this fallback
+ * `unique_id` change on every rename, same as before. `unique_id` derived
+ * from a stored `container.identityKey` is stable regardless of Compose,
+ * because that key was captured once and persisted rather than
+ * re-derived from the container's current name on every call.
  */
 function getHassUniqueId(container: Container): string {
   const identityKey = container.identityKey ?? deriveContainerIdentityKey(container);

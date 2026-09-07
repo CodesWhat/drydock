@@ -112,7 +112,7 @@ describe('naming', () => {
   });
 
   describe('getContainerIdentitySlug', () => {
-    test('returns the project-service pair when both compose labels are present', () => {
+    test('returns the project.service pair when both compose labels are present', () => {
       expect(
         getContainerIdentitySlug({
           id: 'abc123',
@@ -122,10 +122,10 @@ describe('naming', () => {
             'com.docker.compose.service': 'web',
           },
         }),
-      ).toBe('myapp-web');
+      ).toBe('myapp.web');
     });
 
-    test('sanitizes dots to dashes in the compose project-service pair', () => {
+    test('sanitizes dots to dashes in the compose project.service pair', () => {
       expect(
         getContainerIdentitySlug({
           id: 'abc123',
@@ -135,7 +135,38 @@ describe('naming', () => {
             'com.docker.compose.service': 'web.one',
           },
         }),
-      ).toBe('my-app-web-one');
+      ).toBe('my-app.web-one');
+    });
+
+    /**
+     * Review finding 4 (roadmap 7-STORE slice 10): before
+     * `encodeIdentitySlugComponent` escaped a literal `-` distinctly from a
+     * `.`, project `a.b` and project `a-b` both sanitised their dots/dashes
+     * to the same `a-b`, so pairing either with service `c` produced the
+     * identical slug `a-b-c` — two different Compose stacks colliding on one
+     * state topic and one discovery topic.
+     */
+    test('does not collide a dotted project name with a dashed one that sanitizes the same way', () => {
+      const dottedProject = getContainerIdentitySlug({
+        id: 'abc123',
+        name: 'app_web_1',
+        labels: {
+          'com.docker.compose.project': 'a.b',
+          'com.docker.compose.service': 'c',
+        },
+      });
+      const dashedProject = getContainerIdentitySlug({
+        id: 'def456',
+        name: 'app_web_2',
+        labels: {
+          'com.docker.compose.project': 'a-b',
+          'com.docker.compose.service': 'c',
+        },
+      });
+
+      expect(dottedProject).toBe('a-b.c');
+      expect(dashedProject).toBe('a--b.c');
+      expect(dottedProject).not.toBe(dashedProject);
     });
 
     test('falls back to the sanitized canonical name when compose labels are absent', () => {

@@ -453,7 +453,7 @@ test('trigger should key the state topic by compose project-service identity whe
   await mqtt.trigger(container);
 
   expect(mqtt.client.publish).toHaveBeenCalledWith(
-    'dd/container/local/myapp-web',
+    'dd/container/local/myapp.web',
     JSON.stringify(flatten(container)),
     {
       retain: true,
@@ -508,7 +508,7 @@ test('trigger should keep the compose-identity state topic stable across a conta
   await mqtt.trigger(renamedContainer);
 
   expect(mqtt.client.publish).toHaveBeenCalledWith(
-    'dd/container/local/myapp-web',
+    'dd/container/local/myapp.web',
     JSON.stringify(flatten(renamedContainer)),
     {
       retain: true,
