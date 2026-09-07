@@ -30,6 +30,7 @@ function createWatcher(
     },
     isCronWatchInProgress: false,
     isWatcherDeregistered: false,
+    scanGeneration: 0,
     maintenanceWindowWatchQueued: false,
     cronWatchInFlight: undefined,
     cronWatchRescanRequested: false,
@@ -70,6 +71,31 @@ describe('watchFromCronOrchestration', () => {
     expect(watcher.log?.info).toHaveBeenCalledWith(
       expect.stringContaining('2 containers watched, 1 errors, 1 available updates'),
     );
+  });
+
+  test('resets isCronWatchInProgress after a normal scan settles', async () => {
+    const watcher = createWatcher();
+
+    await watchFromCronOrchestration(watcher);
+
+    expect(watcher.isCronWatchInProgress).toBe(false);
+  });
+
+  // DR-72: a scan already inside watch() when the watcher is deregistered
+  // must not resurrect isCronWatchInProgress on the torn-down watcher once it
+  // settles. watch() itself bumps scanGeneration again on deregister; this
+  // simulates that by having the mocked watch() bump it before resolving.
+  test('leaves isCronWatchInProgress untouched when scanGeneration was bumped while watch() was in flight', async () => {
+    const watcher = createWatcher({
+      watch: vi.fn().mockImplementation(async () => {
+        watcher.scanGeneration++;
+        return [];
+      }),
+    });
+
+    await watchFromCronOrchestration(watcher);
+
+    expect(watcher.isCronWatchInProgress).toBe(true);
   });
 
   test('returns an empty result and skips watch() when the logger is unavailable', async () => {

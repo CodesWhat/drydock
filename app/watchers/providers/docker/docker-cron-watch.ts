@@ -47,6 +47,13 @@ export interface CronWatchOrchestrationWatcher {
   isCronWatchInProgress: boolean;
   isWatcherDeregistered: boolean;
   /**
+   * Bumped at the start of every watch() scan and again on deregister; see
+   * its declaration on Docker for the full contract (DR-72). Read/written
+   * here so the isCronWatchInProgress reset below shares the same scan
+   * identity watch() itself gates its report/snapshot emission on.
+   */
+  scanGeneration: number;
+  /**
    * Whether a maintenance-window catch-up is armed. Read before the clear below so the scan
    * that consumes the arm can announce the opening; the arming site is outside watch()
    * (a digest flush, a webhook, a manual single-container scan), so nothing else knows.
@@ -62,7 +69,7 @@ export interface CronWatchOrchestrationWatcher {
   queueMaintenanceWindowWatch: () => void;
   clearMaintenanceWindowQueue: () => void;
   announceMaintenanceWindowOpened: () => Promise<void>;
-  watch: () => Promise<ContainerReport[]>;
+  watch: (options?: { scanGeneration?: number }) => Promise<ContainerReport[]>;
   getNextScheduledRunDate: (fromDate?: Date) => Date | undefined;
 }
 
@@ -391,11 +398,19 @@ async function runCronWatch(
 
   // Get container reports
   watcher.isCronWatchInProgress = true;
+  // Minted here (not inside watch()) so this scan's identity is known before
+  // the await below, and the finally can tell whether deregisterComponent()
+  // bumped it again while watch() was still running (DR-72).
+  const scanGeneration = ++watcher.scanGeneration;
   let containerReports: ContainerReport[] = [];
   try {
-    containerReports = await watcher.watch();
+    containerReports = await watcher.watch({ scanGeneration });
   } finally {
-    watcher.isCronWatchInProgress = false;
+    // A stale scan settling after deregistration must not resurrect
+    // isCronWatchInProgress on the torn-down watcher.
+    if (scanGeneration === watcher.scanGeneration) {
+      watcher.isCronWatchInProgress = false;
+    }
   }
 
   // Count container reports

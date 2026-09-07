@@ -920,6 +920,7 @@ describe('Docker Watcher', () => {
 
       expect(docker.watchContainer).toHaveBeenCalledWith(container, {
         useRegistryPollCache: true,
+        scanGeneration: 1,
       });
     });
 
@@ -1131,11 +1132,70 @@ describe('Docker Watcher', () => {
       expect(docker.watchContainer).toHaveBeenCalledTimes(1);
       expect(docker.watchContainer).toHaveBeenCalledWith(regularContainer, {
         useRegistryPollCache: true,
+        scanGeneration: 1,
       });
       expect(result).toHaveLength(1);
       expect(docker.log.debug).toHaveBeenCalledWith(
         expect.stringContaining('Skipping scheduled poll'),
       );
+    });
+
+    // DR-72: a scan already inside watch() when the watcher is deregistered
+    // must not let its per-container processing or its final aggregate step
+    // land any side effect once the stale scan settles.
+    test('discards a stale scan settling after deregistration without emitting a report, a snapshot, or a store write', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'stale-container', name: 'stale-container' };
+      let resolveGetContainers: (value: unknown[]) => void = () => undefined;
+      const pendingGetContainers = new Promise<unknown[]>((resolve) => {
+        resolveGetContainers = resolve;
+      });
+      docker.getContainers = vi.fn().mockReturnValue(pendingGetContainers);
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn((c) => ({ container: c, changed: false }));
+
+      const watchPromise = docker.watch();
+
+      // Settles after the scan has already claimed a generation and is
+      // sitting on the pending container listing.
+      await docker.deregisterComponent();
+      resolveGetContainers([container]);
+
+      const result = await watchPromise;
+
+      expect(result).toEqual([]);
+      expect(docker.mapContainerToContainerReport).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).not.toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(docker.lastRunAt).toBeUndefined();
+    });
+
+    // Control for the test above: the same scan, same container, but no
+    // deregistration — every side effect still lands normally.
+    test('a scan that settles without deregistration still emits the report and writes the snapshot', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'live-container', name: 'live-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn((c) => ({ container: c, changed: false }));
+
+      const result = await docker.watch();
+
+      expect(result).toHaveLength(1);
+      expect(docker.mapContainerToContainerReport).toHaveBeenCalledTimes(1);
+      expect(event.emitContainerReport).toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).toHaveBeenCalled();
+      expect(docker.lastRunAt).toBeDefined();
     });
   });
 

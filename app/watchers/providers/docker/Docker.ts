@@ -359,6 +359,14 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   // right to record the claim set (see recordControllerLocalEnumeration()
   // guard in getContainers()).
   private controllerLocalEnumerationGeneration: number = 0;
+  // Bumped at the start of every watch() scan and again in
+  // deregisterComponent(), so a scan still processing containers when the
+  // watcher is torn down can tell its captured generation is stale and skip
+  // emitting reports, writing the snapshot, and updating lastRunAt (DR-72).
+  // Threaded into watchContainer() as well, so a per-container store write
+  // mid-scan is gated the same way (see container-processing.ts's
+  // isScanStale).
+  private scanGeneration: number = 0;
   // Single-flight state for watchFromCron; see watchFromCronOrchestration()
   // in docker-cron-watch.ts for the coalescing contract.
   public cronWatchInFlight?: Promise<ContainerReport[]>;
@@ -1031,6 +1039,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async deregisterComponent() {
     this.isWatcherDeregistered = true;
     this.isDockerEventsListenerActive = false;
+    // See scanGeneration's declaration: invalidates any scan already in
+    // flight so it discards its results instead of emitting them (DR-72).
+    this.scanGeneration++;
     forgetControllerLocalEnumeration(this);
 
     if (this.watchCron) {
@@ -1220,10 +1231,16 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
   /**
    * Watch main method.
+   * @param options.scanGeneration - Only supplied by runCronWatch() in
+   *   docker-cron-watch.ts, which mints it before calling in so its own
+   *   isCronWatchInProgress reset shares this scan's identity (DR-72). Any
+   *   other caller mints its own.
    * @returns {Promise<*[]>}
    */
-  async watch() {
+  async watch(options: { scanGeneration?: number } = {}) {
     this.ensureLogger();
+    // Captured before any await; see scanGeneration's declaration.
+    const scanGeneration = options.scanGeneration ?? ++this.scanGeneration;
     let containers: Container[] = [];
     let containerEnumerationFailed = false;
     const enumerationDiagnostics: { enrichmentErrors: number } = { enrichmentErrors: 0 };
@@ -1261,8 +1278,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
       const containerReportsSettled = await allSettledWithDockerWatchConcurrency(
         containers,
-        (container) => this.watchContainer(container, { useRegistryPollCache: true }),
+        (container) =>
+          this.watchContainer(container, { useRegistryPollCache: true, scanGeneration }),
       );
+      if (scanGeneration !== this.scanGeneration) {
+        this.log.debug(
+          'Discarding the results of this scan because the watcher was deregistered while it was still processing containers',
+        );
+        return [];
+      }
       const containerReports: ContainerReport[] = [];
       for (const [index, containerReport] of containerReportsSettled.entries()) {
         if (containerReport.status === 'fulfilled') {
@@ -1303,7 +1327,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       endDigestCachePollCycleForRegistries(digestCachePollCycle);
       // Dispatch event to notify stop watching
       event.emitWatcherStop(this);
-      this.lastRunAt = new Date().toISOString();
+      // Stale scan (see scanGeneration's declaration): leave lastRunAt as the
+      // torn-down watcher last set it rather than overwrite it here.
+      if (scanGeneration === this.scanGeneration) {
+        this.lastRunAt = new Date().toISOString();
+      }
     }
   }
 
@@ -1315,6 +1343,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    *   standalone per-container scans. Must be false (default) when called
    *   from the bulk `watch()` loop because that path emits its own
    *   `emitContainerReports` for the full set at the end.
+   * @param options.scanGeneration - Only supplied by the bulk `watch()` loop;
+   *   see scanGeneration's declaration. When present, a mismatch against the
+   *   live generation at emission time (i.e. the watcher was deregistered
+   *   mid-scan) skips the store write and report emission (DR-72).
    * @returns {Promise<*>}
    */
   async watchContainer(
@@ -1322,7 +1354,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     {
       emitBatchEvent = false,
       useRegistryPollCache = false,
-    }: { emitBatchEvent?: boolean; useRegistryPollCache?: boolean } = {},
+      scanGeneration,
+    }: {
+      emitBatchEvent?: boolean;
+      useRegistryPollCache?: boolean;
+      scanGeneration?: number;
+    } = {},
   ) {
     this.ensureLogger();
     return watchContainerState(container, {
@@ -1333,6 +1370,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
         this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
       emitBatchEvent,
+      isScanStale:
+        scanGeneration === undefined ? undefined : () => scanGeneration !== this.scanGeneration,
     });
   }
 
