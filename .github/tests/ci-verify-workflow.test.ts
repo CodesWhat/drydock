@@ -573,8 +573,8 @@ test('the ui coverage step bounds memory and worker count so the runner cannot k
   // runner's budget so nobody can silently drop them later.
   const step = getTestJobStep('Run ui tests');
 
-  expect(step?.env?.NODE_OPTIONS).toContain('--max-old-space-size=');
-  expect(step?.run).toContain('--maxWorkers=1');
+  expect(step?.env?.NODE_OPTIONS).toContain('--max-old-space-size=1536');
+  expect(step?.run).toMatch(/(?:^|\s)--maxWorkers=1(?:\s|$)/);
 });
 
 test('build job checks base image pins before building, for the platforms it smoke-builds', () => {
