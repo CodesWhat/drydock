@@ -1766,7 +1766,25 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
 });
 
-test('triggerBatch should limit concurrent container updates to 3', async () => {
+test('triggerBatch defaults to concurrency 1 (serialises) when nothing is configured', async () => {
+  const containers = Array.from({ length: 4 }, (_, index) => ({ name: `c${index}` }));
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight -= 1;
+  });
+
+  await docker.triggerBatch(containers);
+
+  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(maxInFlight).toBe(1);
+});
+
+test('triggerBatch runs up to the configured concurrency at once and never above it', async () => {
+  docker.configuration = { ...configurationValid, concurrency: 3 };
   const containers = Array.from({ length: 8 }, (_, index) => ({ name: `c${index}` }));
   let inFlight = 0;
   let maxInFlight = 0;
@@ -1780,7 +1798,60 @@ test('triggerBatch should limit concurrent container updates to 3', async () => 
   await docker.triggerBatch(containers);
 
   expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(maxInFlight).toBe(3);
   expect(maxInFlight).toBeLessThanOrEqual(3);
+});
+
+test('triggerBatch: a per-action concurrency override wins over the global default', async () => {
+  const prev = process.env.DD_UPDATE_CONCURRENCY;
+  process.env.DD_UPDATE_CONCURRENCY = '1';
+  vi.resetModules();
+  try {
+    const { default: DockerModule } = await import('./Docker.js?override-wins');
+    const dockerWithOverride = new DockerModule();
+    dockerWithOverride.configuration = { ...configurationValid, concurrency: 3 };
+    dockerWithOverride.log = log;
+
+    const containers = Array.from({ length: 6 }, (_, index) => ({ name: `c${index}` }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.spyOn(dockerWithOverride, 'trigger').mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+    });
+
+    await dockerWithOverride.triggerBatch(containers);
+
+    expect(maxInFlight).toBe(3);
+  } finally {
+    if (prev === undefined) {
+      delete process.env.DD_UPDATE_CONCURRENCY;
+    } else {
+      process.env.DD_UPDATE_CONCURRENCY = prev;
+    }
+    vi.resetModules();
+  }
+});
+
+test('triggerBatch releases a failing container update slot so the remaining queue still runs', async () => {
+  docker.configuration = { ...configurationValid, concurrency: 1 };
+  const containers = [{ name: 'fails' }, { name: 'c1' }, { name: 'c2' }];
+  const triggerSpy = vi
+    .spyOn(docker, 'trigger')
+    .mockImplementation(async (container: { name: string }) => {
+      if (container.name === 'fails') {
+        throw new Error('update failed');
+      }
+    });
+
+  await expect(docker.triggerBatch(containers)).rejects.toThrow('update failed');
+  // Give the still-in-flight limiter callbacks (queued behind the rejected
+  // one) a turn to run and release their slot.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
 });
 
 test('triggerBatch should forward runtimeContext when provided', async () => {

@@ -35,6 +35,7 @@ import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import { isMemoryStore, save as saveStore } from '../../../store/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
@@ -70,7 +71,6 @@ const DEFAULT_PULL_TIMEOUT_MS = 600_000;
 const MAX_SIGNED_32_BIT_TIMEOUT_MS = 2_147_483_647;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
-const TRIGGER_BATCH_CONCURRENCY = 3;
 
 type ComposeRollbackTerminalPatch =
   | {
@@ -797,6 +797,7 @@ class Docker<
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
+      concurrency: this.joi.number().integer().positive().optional(),
     });
   }
 
@@ -2619,11 +2620,17 @@ class Docker<
 
   /**
    * Update the containers.
+   *
+   * The fan-out limit is DD_UPDATE_CONCURRENCY (default 1), or this action's
+   * own DD_ACTION_DOCKER_<NAME>_CONCURRENCY override when set. This is the
+   * single choke point where the docker action executes container updates
+   * concurrently; Dockercompose.triggerBatch resolves the same value for its
+   * own (compose-file-scoped) fan-out.
    * @param containers
    * @returns {Promise<unknown[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<unknown[]> {
-    const limit = pLimit(TRIGGER_BATCH_CONCURRENCY);
+    const limit = pLimit(resolveActionConcurrency(this.configuration));
     return Promise.all(
       containers.map((container) =>
         limit(() =>

@@ -1,6 +1,7 @@
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import pLimit from 'p-limit';
 import yaml from 'yaml';
 import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
 import type { ContainerImage } from '../../../model/container.js';
@@ -8,6 +9,7 @@ import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
 import {
   buildComposeFileLockKeys,
   buildComposeProjectLockKey,
@@ -2240,38 +2242,42 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       this.log.warn('No containers matched any compose file for this trigger');
     }
 
-    // Process each compose file group
-    const batchResults: boolean[] = [];
-    for (const {
-      composeFile,
-      composeFiles,
-      containers: containersInFile,
-    } of containersByComposeFile.values()) {
-      if (composeFiles.length > 1) {
-        batchResults.push(
-          sanitizedRuntimeContext === undefined
-            ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
-            : await this.processComposeFile(
-                composeFile,
-                containersInFile,
-                composeFiles,
-                sanitizedRuntimeContext,
-              ),
-        );
-      } else {
-        batchResults.push(
-          sanitizedRuntimeContext === undefined
-            ? await this.processComposeFile(composeFile, containersInFile)
-            : await this.processComposeFile(
-                composeFile,
-                containersInFile,
-                undefined,
-                sanitizedRuntimeContext,
-              ),
-        );
-      }
-    }
-    return batchResults;
+    // Process each compose file group, up to DD_UPDATE_CONCURRENCY (or this
+    // action's own DD_ACTION_DOCKERCOMPOSE_<NAME>_CONCURRENCY override)
+    // groups at once. This only unlocks concurrency ACROSS independent
+    // compose files/projects: each group still runs processComposeFile()
+    // to completion as one unit — a single withContainerUpdateLocks()
+    // critical section, one docker-compose invocation, one write to the
+    // group's compose file(s) — so a compose-file-once batch keeps its
+    // existing serial ordering guarantees inside that unit. Concurrent
+    // groups never collide because their lock keys and compose object/
+    // document caches are both keyed by file path (see
+    // buildComposeFileLockKeys() and _composeObjectCache).
+    const limit = pLimit(resolveActionConcurrency(this.configuration));
+    return Promise.all(
+      Array.from(containersByComposeFile.values()).map(
+        ({ composeFile, composeFiles, containers: containersInFile }) =>
+          limit(() =>
+            composeFiles.length > 1
+              ? sanitizedRuntimeContext === undefined
+                ? this.processComposeFile(composeFile, containersInFile, composeFiles)
+                : this.processComposeFile(
+                    composeFile,
+                    containersInFile,
+                    composeFiles,
+                    sanitizedRuntimeContext,
+                  )
+              : sanitizedRuntimeContext === undefined
+                ? this.processComposeFile(composeFile, containersInFile)
+                : this.processComposeFile(
+                    composeFile,
+                    containersInFile,
+                    undefined,
+                    sanitizedRuntimeContext,
+                  ),
+          ),
+      ),
+    );
   }
 
   /**

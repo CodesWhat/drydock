@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 
 import { flatten } from '../../../model/container.js';
+import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
+import { Semaphore } from '../../../updates/lock-primitives.js';
 import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 let hasLoggedShellExecutionWarning = false;
@@ -124,6 +126,23 @@ export function resetShellExecutionWarningStateForTests() {
  * Command Trigger implementation
  */
 class Command extends Trigger<CommandConfiguration> {
+  private updateSemaphore?: Semaphore;
+
+  /**
+   * The single choke point where the command action executes an update:
+   * runCommand() (both trigger() and triggerBatch() funnel through it) holds
+   * a permit for the duration of the child process. Created lazily so it
+   * reads DD_UPDATE_CONCURRENCY / this action's own
+   * DD_ACTION_COMMAND_<NAME>_CONCURRENCY override once Joi has finished
+   * validating this.configuration, not at class construction time.
+   */
+  private getUpdateSemaphore(): Semaphore {
+    if (!this.updateSemaphore) {
+      this.updateSemaphore = new Semaphore(resolveActionConcurrency(this.configuration));
+    }
+    return this.updateSemaphore;
+  }
+
   private logShellExecutionWarningOnce() {
     if (hasLoggedShellExecutionWarning) {
       return;
@@ -156,6 +175,7 @@ class Command extends Trigger<CommandConfiguration> {
           this.joi.array().items(this.joi.string()),
         )
         .default([]),
+      concurrency: this.joi.number().integer().positive().optional(),
     });
   }
 
@@ -228,41 +248,46 @@ class Command extends Trigger<CommandConfiguration> {
    * @param {*} extraEnvVars
    */
   async runCommand(extraEnvVars: Record<string, unknown>) {
-    this.logShellExecutionWarningOnce();
-
-    const commandOptions = {
-      env: this.buildCommandEnvironment(sanitizeCommandEnvVars(extraEnvVars)),
-      timeout: this.configuration.timeout,
-    };
+    const releaseUpdateSemaphore = await this.getUpdateSemaphore().acquire();
     try {
-      const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
-        (resolve, reject) => {
-          // Intentional admin-controlled shell execution from DD_ACTION_COMMAND_* env configuration.
-          execFile(
-            this.configuration.shell,
-            ['-c', this.configuration.cmd],
-            commandOptions,
-            (error, stdoutOutput, stderrOutput) => {
-              if (error) {
-                reject(error);
-                return;
-              }
-              resolve({
-                stdout: typeof stdoutOutput === 'string' ? stdoutOutput : '',
-                stderr: typeof stderrOutput === 'string' ? stderrOutput : '',
-              });
-            },
-          );
-        },
-      );
-      if (stdout) {
-        this.log.info('Command completed with stdout');
+      this.logShellExecutionWarningOnce();
+
+      const commandOptions = {
+        env: this.buildCommandEnvironment(sanitizeCommandEnvVars(extraEnvVars)),
+        timeout: this.configuration.timeout,
+      };
+      try {
+        const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
+          (resolve, reject) => {
+            // Intentional admin-controlled shell execution from DD_ACTION_COMMAND_* env configuration.
+            execFile(
+              this.configuration.shell,
+              ['-c', this.configuration.cmd],
+              commandOptions,
+              (error, stdoutOutput, stderrOutput) => {
+                if (error) {
+                  reject(error);
+                  return;
+                }
+                resolve({
+                  stdout: typeof stdoutOutput === 'string' ? stdoutOutput : '',
+                  stderr: typeof stderrOutput === 'string' ? stderrOutput : '',
+                });
+              },
+            );
+          },
+        );
+        if (stdout) {
+          this.log.info('Command completed with stdout');
+        }
+        if (stderr) {
+          this.log.warn('Command completed with stderr');
+        }
+      } catch {
+        this.log.warn('Command execution failed');
       }
-      if (stderr) {
-        this.log.warn('Command completed with stderr');
-      }
-    } catch {
-      this.log.warn('Command execution failed');
+    } finally {
+      releaseUpdateSemaphore();
     }
   }
 }
