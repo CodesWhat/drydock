@@ -65,6 +65,8 @@ node dist/index.js config migrate --source trigger --file .env --file compose.ya
 
 The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible. It runs as a standalone text-rewriting tool over local config files — it is unaffected by the runtime removal above and stays available indefinitely as the migration path off `DD_TRIGGER_*` / `dd.trigger.*`.
 
+The v1.8.0 [config file](https://getdrydock.com/docs/configuration/config-file) (`drydock.yml`) does not reopen this door: its two trigger sections are `action:` and `notification:`, mirroring `DD_ACTION_*` / `DD_NOTIFICATION_*` exactly, and there is no `trigger:` section. A file can't carry `DD_TRIGGER_*` under any name.
+
 ---
 
 ### Manual updates bypassing `dd.action.include` / `dd.action.exclude`
