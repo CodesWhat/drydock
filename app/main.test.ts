@@ -368,7 +368,11 @@ describe('entrypoint', () => {
   test('exits 1 and logs each error when the config file fails validation', async () => {
     const harness = await loadEntryPoint({
       configurationValidationErrors: [
-        { path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: '"security.scanner" must be one of [trivy]' },
+        {
+          path: 'security.scanner',
+          envKey: 'DD_SECURITY_SCANNER',
+          message: '"security.scanner" must be one of [trivy]',
+        },
       ],
     });
 
