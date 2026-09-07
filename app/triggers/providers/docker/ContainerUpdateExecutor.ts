@@ -68,6 +68,7 @@ type ContainerForUpdate = {
   name: string;
   identityKey?: string;
   image: {
+    name?: string;
     tag: {
       value: string;
     };
@@ -92,6 +93,37 @@ type ContainerForUpdate = {
  */
 function withoutImageDigest(imageReference: string): string {
   return imageReference.split('@')[0];
+}
+
+/**
+ * DR-122: a same-identity, different-id match from
+ * getInProgressOperationByContainerIdentity is ambiguous. It's either our
+ * own replacement — found by identity because getContainerIdBestEffort()
+ * never persisted newContainerId — or a genuine same-identity-key collision
+ * with an unrelated container something else recreated during the outage.
+ * The operation record has nothing else to tell the two apart with (no
+ * discriminator narrower than the image survives past the id itself), so
+ * this reuses the same targetImage-vs-running-image check
+ * reconcileWithActiveContainerOnly already applies to the equivalent
+ * ambiguity on the by-name fallback path.
+ */
+function matchesReplacementTargetImage(
+  pending: PendingContainerUpdateOperation,
+  container: ContainerForUpdate,
+): boolean {
+  if (pending.targetImage === undefined) {
+    return false;
+  }
+  const imageName = container.image?.name;
+  const imageTag = container.image?.tag?.value;
+  if (!imageName || !imageTag) {
+    return false;
+  }
+  const currentImage = `${imageName}:${imageTag}`;
+  return (
+    currentImage === pending.targetImage ||
+    withoutImageDigest(currentImage) === withoutImageDigest(pending.targetImage)
+  );
 }
 
 type ContainerUpdateContext = {
@@ -429,10 +461,19 @@ class ContainerUpdateExecutor {
     const pendingByContainerIdentity = pendingByContainerId
       ? undefined
       : updateOperationStore.getInProgressOperationByContainerIdentity(container.identityKey);
+    const identityIdMismatch =
+      !!container.id &&
+      !!pendingByContainerIdentity?.containerId &&
+      pendingByContainerIdentity.containerId !== container.id;
+    // A mismatch here is ambiguous, not automatically a collision: when the
+    // update path never persisted `newContainerId` (getContainerIdBestEffort()
+    // best-effort id capture failed), the replacement container is found by
+    // identity with its own fresh id, which never equals the operation's
+    // recorded `containerId` either. Accept it anyway when the operation's
+    // target image confirms this is that replacement; otherwise it's a real
+    // same-identity-key collision and stays discarded (DR-122).
     const pendingByIdentityChecked =
-      container.id &&
-      pendingByContainerIdentity?.containerId &&
-      pendingByContainerIdentity.containerId !== container.id
+      identityIdMismatch && !matchesReplacementTargetImage(pendingByContainerIdentity, container)
         ? undefined
         : pendingByContainerIdentity;
     const pending = pendingByContainerId ?? pendingByIdentityChecked;

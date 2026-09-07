@@ -361,6 +361,124 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('reconcile accepts a same-identity fallback match as the replacement when the target image confirms it (DR-122)', async () => {
+    // getContainerIdBestEffort() never captured newContainerId, so the
+    // operation is only found via the identity fallback and its own
+    // containerId still holds the pre-update id — it can never equal the
+    // replacement container's fresh id. The target image is the only
+    // discriminator left to tell this apart from a real identity-key
+    // collision, and it matches here, so the fallback must be accepted
+    // rather than discarded.
+    const pending = {
+      id: 'op-replacement',
+      containerId: 'old-container-id',
+      newContainerId: undefined,
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'ghcr.io/acme/web:1.0.1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({ container: {}, inspection: {} })
+      .mockResolvedValueOnce({ container: {}, inspection: {} });
+    vi.spyOn(executor, 'stopAndRemoveContainerBestEffort').mockResolvedValueOnce(false);
+    const log = createLog();
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({
+        id: 'replacement-container-id',
+        image: { name: 'ghcr.io/acme/web', tag: { value: '1.0.1' } },
+      }),
+      log,
+    );
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Found in-progress update operation op-replacement'),
+    );
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-replacement',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-cleanup-temp',
+      }),
+    );
+  });
+
+  test('reconcile rejects a same-identity fallback match as a collision when the target image does not match (DR-122)', async () => {
+    // Same shape as the accepted-replacement case above — no newContainerId,
+    // a different id found by identity — but this time the running image
+    // does not match what the operation was updating to, so it's a genuine
+    // same-identity-key collision with an unrelated container, not our own
+    // replacement, and must stay discarded.
+    const pending = {
+      id: 'op-collision',
+      containerId: 'other-container-id',
+      newContainerId: undefined,
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'ghcr.io/acme/web:1.0.1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    const inspectSpy = vi.spyOn(executor, 'inspectContainerByIdentifier');
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({
+        id: 'unrelated-container-id',
+        image: { name: 'ghcr.io/acme/web', tag: { value: '2.0.0' } },
+      }),
+      createLog(),
+    );
+
+    expect(inspectSpy).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('reconcile rejects a same-identity fallback match when the container has no image name to compare (DR-122)', async () => {
+    // Same ambiguous shape again, but this time the container we're
+    // reconciling has no image.name to build a comparable reference from —
+    // the discriminator can't confirm a replacement, so it must not accept
+    // the fallback on the strength of nothing.
+    const pending = {
+      id: 'op-no-image',
+      containerId: 'other-container-id',
+      newContainerId: undefined,
+      oldName: 'web',
+      tempName: 'web-old-1',
+      targetImage: 'ghcr.io/acme/web:1.0.1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    const inspectSpy = vi.spyOn(executor, 'inspectContainerByIdentifier');
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({
+        id: 'unrelated-container-id',
+        image: { tag: { value: '1.0.1' } },
+      }),
+      createLog(),
+    );
+
+    expect(inspectSpy).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
   test('reconcile ignores same-name in-progress operations from a different agent (issue #411)', async () => {
     // With the single durable identityKey signature there is no filter object
     // to short-circuit on; the store call is scoped by the container's own
