@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The weekly ZAP full scan of getdrydock.com ran into its 60-minute job timeout on every run, so it never produced a report.** The scan step now caps the spider at 10 minutes and the active scan at 35 minutes (5 per rule), leaving room for startup, the passive scan and the report inside the job budget; a workflow test pins the arithmetic.
+
 ## [1.7.0-rc.12] — 2026-09-06
 
 ### Fixed

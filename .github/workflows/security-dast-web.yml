@@ -64,6 +64,18 @@ jobs:
           rules_file_name: .zap/rules.tsv
           allow_issue_writing: false
           fail_action: true
+          # Bound every phase so the scan finishes inside the job budget.
+          # Unbounded, the spider plus the full active scan against the docs
+          # site outgrew 60 minutes and both weekly runs to date (32948622205,
+          # 33630040351) were cancelled at the job timeout with no report
+          # written. -m caps the spider; the two -config values cap the
+          # active scan overall and per rule (ZAP's "Max scan duration" and
+          # "Max rule duration" options). 10 + 35 leaves ~15 minutes for
+          # startup, the passive scan and the report inside the 60-minute
+          # job. The workflow test pins that arithmetic.
+          cmd_options: >-
+            -m 10
+            -z "-config scanner.maxScanDurationInMins=35 -config scanner.maxRuleDurationInMins=5"
 
       - name: Convert ZAP JSON report to SARIF
         if: always() && hashFiles('report_json.json') != ''
