@@ -5610,6 +5610,51 @@ describe('updateContainerFields (roadmap 7-STORE slice 9)', () => {
     expect(emittedUpdated).toHaveBeenCalledTimes(1);
     expect(emittedUpdated).toHaveBeenCalledWith(expect.objectContaining({ name: 'app1' }));
   });
+
+  // CodeRabbit: patch is typed `Partial<Container>`, so a stray `id` on the
+  // patch object would be merged onto the row read by the lookup id and used
+  // in `WHERE id = ?`, writing a different row (or reporting a change under
+  // an id nothing here actually wrote) than the one the caller named. The
+  // `Omit<Partial<Container>, 'id'>` patch type stops this at compile time;
+  // this test exercises the runtime backstop for a caller that bypasses the
+  // type (an untyped object, `as any`, etc.).
+  test('ignores a stray id on the patch and writes only the row named by the lookup id', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'id-protection-target',
+        name: 'target-before',
+        displayName: 'target-before',
+        status: 'running',
+        result: undefined,
+      }),
+    );
+    seedContainer(
+      createContainerFixture({
+        id: 'id-protection-decoy',
+        name: 'decoy-before',
+        displayName: 'decoy-before',
+        status: 'running',
+        result: undefined,
+      }),
+    );
+
+    const result = container.updateContainerFields('id-protection-target', {
+      status: 'exited',
+      id: 'id-protection-decoy',
+    } as any);
+
+    expect(result?.id).toBe('id-protection-target');
+    expect(result?.status).toBe('exited');
+    expect(container.getContainer('id-protection-target')).toMatchObject({
+      id: 'id-protection-target',
+      status: 'exited',
+    });
+    expect(container.getContainer('id-protection-decoy')).toMatchObject({
+      id: 'id-protection-decoy',
+      name: 'decoy-before',
+      status: 'running',
+    });
+  });
 });
 
 describe('field-level write interleave (roadmap 7-STORE slice 9 / spec 4.3)', () => {

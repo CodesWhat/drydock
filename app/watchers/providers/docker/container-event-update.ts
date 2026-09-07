@@ -185,7 +185,7 @@ interface UpdateContainerFromInspectDependencies {
    * silently revert whatever an in-flight watch cycle wrote to `result`,
    * `image` etc. in the gap between that read and this write.
    */
-  updateContainer: (id: string, patch: Partial<Container>) => void;
+  updateContainer: (id: string, patch: Omit<Partial<Container>, 'id'>) => void;
   logInfo?: (message: string) => void;
   /**
    * Re-derive label-driven fields (tagFamily, includeTags, etc.) from a fresh

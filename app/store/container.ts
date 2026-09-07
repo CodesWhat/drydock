@@ -1621,7 +1621,7 @@ export function updateContainer(
  */
 export function updateContainerFields(
   id: string,
-  patch: Partial<container.Container>,
+  patch: Omit<Partial<container.Container>, 'id'>,
 ): container.Container | undefined {
   if (!db) {
     return undefined;
@@ -1634,7 +1634,13 @@ export function updateContainerFields(
       return undefined;
     }
     const containerCurrent = rowToContainer(containerCurrentRow);
-    const containerMerged = { ...containerCurrent, ...patch };
+    // A stray `id` on `patch` at runtime (the type above rules it out at
+    // compile time, but callers can still hand in an untyped object) must
+    // never win the merge below — this row was looked up by `id`, and
+    // `updateContainerRow` writes it into `WHERE id = ?`, so a merged `id`
+    // that drifted from the lookup key would write a different row or emit
+    // an update under an id nothing here actually wrote.
+    const containerMerged = { ...containerCurrent, ...patch, id: containerCurrent.id };
     const containerToReturn = validateContainer(containerMerged);
     normalizeContainerTriggerLabelFields(containerToReturn);
     containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
