@@ -52,7 +52,8 @@ type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
 // The SQLite database opened alongside Loki (roadmap 7-STORE, slice 2).
 // `app`, `secrets`, `settings` and `ui-preferences` read and write it
-// directly as of slice 3; every other collection still lives in Loki.
+// directly as of slice 3, joined by `agent-keys`, `name-bindings` and
+// `api-key` in slice 4; every other collection still lives in Loki.
 let sqliteDb: Database | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
@@ -170,11 +171,11 @@ function dropLegacySessionsCollection(): boolean {
 
 function createCollections(): boolean {
   const droppedLegacySessionsCollection = dropLegacySessionsCollection();
-  agentKeys.createCollections(db);
-  apiKey.createCollections(db);
-  // app, secrets, settings and ui-preferences moved onto SQLite (roadmap
-  // 7-STORE, slice 3): they read and write sqliteDb directly rather than a
-  // LokiJS collection.
+  // app, secrets, settings, ui-preferences (slice 3), and agent-keys,
+  // name-bindings, api-keys (roadmap 7-STORE, slice 4) read and write
+  // sqliteDb directly rather than a LokiJS collection.
+  agentKeys.createCollections(sqliteDb as Database);
+  apiKey.createCollections(sqliteDb as Database);
   app.createCollections(sqliteDb as Database);
   approval.createCollections(db);
   audit.createCollections(db);
@@ -189,7 +190,7 @@ function createCollections(): boolean {
   // in-memory Map from it.
   updatePolicyRetentionCacheStore.createCollections(db);
   container.rehydrateUpdatePolicyRetentionCacheFromStore();
-  nameBindings.createCollections(db);
+  nameBindings.createCollections(sqliteDb as Database);
   notification.createCollections(db);
   notificationHistory.createCollections(db);
   notificationOutbox.createCollections(db);
@@ -424,7 +425,7 @@ export interface StoreDebugCollectionStats {
 export interface StoreDebugSnapshot {
   memoryMode: boolean;
   path?: string;
-  /** The SQLite database opened alongside `path` (roadmap 7-STORE, slice 2), holding `app`/`secrets`/`settings`/`ui-preferences` as of slice 3. */
+  /** The SQLite database opened alongside `path` (roadmap 7-STORE, slice 2), holding `app`/`secrets`/`settings`/`ui-preferences` as of slice 3 and `agent-keys`/`name-bindings`/`api-key` as of slice 4. */
   sqlitePath?: string;
   collectionCount: number;
   documentCount: number;

@@ -3,7 +3,7 @@
  *
  * Everything below the HTTP boundary is real: the express-session +
  * connect-loki store, the real Basic provider with a real argon2id hash, the
- * real api-keys LokiJS collection with real SHA-256 digests, the real
+ * real api-keys SQLite table with real SHA-256 digests, the real
  * authenticator chain, the real `requireAuthentication`, and routes declared
  * with the real `scoped()`.
  *
@@ -21,7 +21,6 @@ import ConnectLoki from 'connect-loki';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import Loki from 'lokijs';
 
 vi.mock('./audit-events.js', () => ({ recordAuditEvent: vi.fn() }));
 vi.mock('../log/index.js', () => ({
@@ -36,6 +35,8 @@ vi.mock('../log/index.js', () => ({
 
 import Basic from '../authentications/providers/basic/Basic.js';
 import * as apiKeyStore from '../store/api-key.js';
+import type { Database } from '../store/db/driver.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { apiKeyAuthenticator } from './api-key-auth.js';
 import { requireAuthentication } from './auth.js';
 import type { AuthRequest } from './auth-types.js';
@@ -253,6 +254,8 @@ describe('API key enforcement', () => {
   let basic: Basic;
   let port: number;
 
+  let apiKeyDb: Database | undefined;
+
   beforeAll(async () => {
     basic = await createBasicAuthenticator();
     sessionStore = createStore();
@@ -268,13 +271,15 @@ describe('API key enforcement', () => {
   });
 
   beforeEach(async () => {
-    apiKeyStore.createCollections(new Loki('api-key-enforcement.test.db') as never);
+    apiKeyDb = createMigratedMemoryDatabase();
+    apiKeyStore.createCollections(apiKeyDb);
     await clearSessionStore(sessionStore);
     registerStandardAuthenticators(basic);
   });
 
   afterEach(() => {
     clearAuthenticators();
+    apiKeyDb?.close();
   });
 
   function call(
@@ -597,11 +602,13 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
   let knownKeyId: string;
   let validCredential: string;
   let wrongSecretCredential: string;
+  let apiKeyDb: Database | undefined;
   const unknownIdCredential = `ddk_${'f'.repeat(12)}_${'A'.repeat(43)}`;
   const otherUnknownIdCredential = `ddk_${'e'.repeat(12)}_${'A'.repeat(43)}`;
 
   beforeEach(() => {
-    apiKeyStore.createCollections(new Loki('api-key-oracle.test.db') as never);
+    apiKeyDb = createMigratedMemoryDatabase();
+    apiKeyStore.createCollections(apiKeyDb);
     validCredential = mintKey('probe-target', ['read']);
     knownKeyId = validCredential.slice('ddk_'.length, 'ddk_'.length + 12);
     wrongSecretCredential = `ddk_${knownKeyId}_${'B'.repeat(43)}`;
@@ -609,6 +616,7 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
 
   afterEach(async () => {
     await Promise.all(openServers.splice(0).map((server) => closeServer(server)));
+    apiKeyDb?.close();
   });
 
   test('an unknown id and a known id with a wrong secret get identical RateLimit headers', async () => {
