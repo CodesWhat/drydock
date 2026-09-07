@@ -21,6 +21,75 @@ const KEY_SEGMENT_PATTERN = /^[A-Za-z0-9_]+$/;
 const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 const FILE_MARKER_KEY = '_file';
 
+/**
+ * `DD_*` env vars that 21 non-test files read straight from the real
+ * environment, bypassing `ddEnvVars`/`get()` entirely — see the "direct
+ * (the real environment's) DD_ readers" test in `../index.test.ts`, which
+ * enumerates those 21 files and is the source of truth this list is derived
+ * from (same 65 read sites,
+ * minus the DD_SELF_UPDATE_* ones below). The file layer only ever reaches
+ * `ddEnvVars`, so a file-only value for one of these keys would be merged
+ * in and then silently never consumed by the code that actually reads it —
+ * e.g. a file-only `agent.secret` would leave `agent/api/index.ts` still
+ * asking for `DD_AGENT_SECRET`. Rejecting it at flatten time turns that
+ * silent no-op into a load-time error naming the YAML path.
+ *
+ * `DD_SELF_UPDATE_*` is deliberately excluded even though those files are
+ * among the 21: every `DD_SELF_UPDATE_*` variable is a handoff value the
+ * app writes itself as environment for a helper container it spawns
+ * (`SelfUpdateTransitionShared.ts` and `self-update-controller.ts`'s own
+ * `-e` argument lists), never something an operator configures. Rejecting
+ * them from `drydock.yml` would be describing a mechanism that isn't
+ * configuration at all.
+ *
+ * Keep this in sync with the 21-file list by hand; `../index.test.ts`'s
+ * recompute test fails loudly if the two drift.
+ */
+export const UNSUPPORTED_FILE_KEYS: readonly string[] = [
+  'DD_AGENT_ALLOW_INSECURE_SECRET',
+  'DD_AGENT_SECRET',
+  'DD_AGENT_SECRET_FILE',
+  'DD_ALLOW_INSECURE_ROOT',
+  'DD_ANONYMOUS_AUTH_CONFIRM',
+  'DD_AUTH_ANONYMOUS_CONFIRM',
+  'DD_CONTAINERS_QUERY_CACHE_MAX_ENTRIES',
+  'DD_DEFAULT_CACHE_MAX_ENTRIES',
+  'DD_EVENT_HANDLER_TIMEOUT_MS',
+  'DD_GHCR_VERSIONS_MAX_PAGES',
+  'DD_HOOKS_ALLOWED_COMMANDS',
+  'DD_HOOKS_ENABLED',
+  'DD_ICON_CACHE_ENFORCEMENT_INTERVAL_MS',
+  'DD_ICON_CACHE_MAX_BYTES',
+  'DD_ICON_CACHE_MAX_FILES',
+  'DD_ICON_CACHE_TTL_MS',
+  'DD_ICON_IN_FLIGHT_TIMEOUT_MS',
+  'DD_ICON_PROXY_RATE_LIMIT_MAX',
+  'DD_ICON_PROXY_RATE_LIMIT_WINDOW_MS',
+  'DD_OUTBOUND_HTTP_TIMEOUT_MS',
+  'DD_RUN_AS_ROOT',
+  'DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES',
+  'DD_SECURITY_STATE_CACHE_MAX_ENTRIES',
+  'DD_SECURITY_STATE_CACHE_TTL_MS',
+  'DD_SSE_DEBUG_LOG_IP',
+  'DD_SSE_MAX_CLIENTS',
+  'DD_STATS_HISTORY_SIZE',
+  'DD_STATS_INTERVAL',
+  'DD_UI_MATURITY_THRESHOLD_DAYS',
+  'DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS',
+  'DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES',
+  'DD_UPDATE_LIFECYCLE_CACHE_TTL_MS',
+  'DD_UPDATE_MAX_CONCURRENT',
+  'DD_UPDATE_OPERATION_ACTIVE_TTL_MS',
+  'DD_UPDATE_OPERATION_MAX_ENTRIES',
+  'DD_UPDATE_OPERATION_RETENTION_DAYS',
+  'DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES',
+  'DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS',
+  'DD_UPDATE_POST_START_LIVENESS_GRACE_MS',
+  'DD_UPDATE_RECOVERY_BOOT_CONCURRENCY',
+].sort();
+
+const UNSUPPORTED_FILE_KEYS_SET = new Set(UNSUPPORTED_FILE_KEYS);
+
 interface FlattenEntry {
   key: string;
   value: string;
@@ -163,13 +232,19 @@ function walkMapping(
 }
 
 /**
- * Collapse the flattened entry list into the final `DD_*` map, applying the
- * one hardening rule that can only be checked once every entry is known: a
- * `_file` node's flattened key (`..._X__FILE`) must not collide with another
- * path in the *same file* that sets the base key (`..._X`) directly. The
- * env-vs-file case is not an error — that's ordinary precedence, resolved by
- * the merge step in `../index.ts` dropping the `__FILE` key the same as any
- * other file key the environment already covers.
+ * Collapse the flattened entry list into the final `DD_*` map, applying two
+ * hardening rules that can only be checked once every entry is known.
+ *
+ * First: no flattened key (or its `_file`-node `..._X__FILE` form) may name
+ * a variable in `UNSUPPORTED_FILE_KEYS` — one of the real environment's
+ * direct `DD_*` readers this file layer can never reach.
+ *
+ * Second: a `_file` node's flattened key (`..._X__FILE`) must not collide
+ * with another path in the *same file* that sets the base key (`..._X`)
+ * directly. The env-vs-file case is not an error — that's ordinary
+ * precedence, resolved by the merge step in `../index.ts` dropping the
+ * `__FILE` key the same as any other file key the environment already
+ * covers.
  *
  * An ordinary collision between two differently-shaped paths that flatten to
  * the same non-secret key (the underscore/nesting ambiguity documented in the
@@ -184,6 +259,19 @@ function buildFlattenedMap(entries: FlattenEntry[]): Record<string, string> {
   for (const entry of entries) {
     result[entry.key] = entry.value;
     yamlPathByKey[entry.key] = entry.yamlPath;
+  }
+
+  for (const key of Object.keys(result)) {
+    // A "_file" node's key carries the __FILE suffix, so check the same
+    // base key an ordinary scalar for this setting would produce — a
+    // secret-file pointer is exactly as unsupported here as a literal value.
+    const baseKey = key.endsWith(VAR_FILE_SUFFIX) ? key.slice(0, -VAR_FILE_SUFFIX.length) : key;
+    if (UNSUPPORTED_FILE_KEYS_SET.has(baseKey)) {
+      throw new Error(
+        `${yamlPathByKey[key]}: ${baseKey} is only read from the environment in this release, ` +
+          'not from a config file; set it as an environment variable instead',
+      );
+    }
   }
 
   for (const key of Object.keys(result)) {

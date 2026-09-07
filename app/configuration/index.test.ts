@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import log from '../log/index.js';
 import appPackageJson from '../package.json';
+import { UNSUPPORTED_FILE_KEYS } from './file/flatten.js';
 import * as configuration from './index.js';
 
 function getTestDirectory() {
@@ -3596,35 +3597,38 @@ describe('drydock.yml loading', () => {
   });
 });
 
-describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
-  // The file layer only reaches ddEnvVars/get() consumers. These 21 files
-  // read process.env.DD_* directly and are not covered by drydock.yml in
-  // v1.8. This test enumerates them so a new direct reader shows up as a
-  // failing assertion instead of a silent coverage gap.
-  const DIRECT_ENV_READER_FILES = [
-    'agent/AgentClient.ts',
-    'agent/api/index.ts',
-    'api/container/maturity-filter.ts',
-    'api/icons/settings.ts',
-    'api/sse.ts',
-    'authentications/providers/anonymous/Anonymous.ts',
-    'configuration/runtime-defaults.ts',
-    'event/index.ts',
-    'main.ts',
-    'registries/providers/ghcr/Ghcr.ts',
-    'security/scan.ts',
-    'stats/config.ts',
-    'store/container.ts',
-    'store/update-operation.ts',
-    'triggers/hooks/HookRunner.ts',
-    'triggers/providers/docker/self-update-controller.ts',
-    'triggers/providers/docker/self-update-finalize-entrypoint.ts',
-    'updates/health-gate-heartbeat.ts',
-    'updates/post-start-liveness.ts',
-    'updates/recovery.ts',
-    'updates/update-locks.ts',
-  ].sort();
+// The file layer only reaches ddEnvVars/get() consumers. These 21 files read
+// process.env.DD_* directly and are not covered by drydock.yml in v1.8.
+// Shared between the enumeration test below and the UNSUPPORTED_FILE_KEYS
+// recompute test after it, so the two can't drift into disagreement about
+// which files count as direct readers.
+const DIRECT_ENV_READER_FILES = [
+  'agent/AgentClient.ts',
+  'agent/api/index.ts',
+  'api/container/maturity-filter.ts',
+  'api/icons/settings.ts',
+  'api/sse.ts',
+  'authentications/providers/anonymous/Anonymous.ts',
+  'configuration/runtime-defaults.ts',
+  'event/index.ts',
+  'main.ts',
+  'registries/providers/ghcr/Ghcr.ts',
+  'security/scan.ts',
+  'stats/config.ts',
+  'store/container.ts',
+  'store/update-operation.ts',
+  'triggers/hooks/HookRunner.ts',
+  'triggers/providers/docker/self-update-controller.ts',
+  'triggers/providers/docker/self-update-finalize-entrypoint.ts',
+  'updates/health-gate-heartbeat.ts',
+  'updates/post-start-liveness.ts',
+  'updates/recovery.ts',
+  'updates/update-locks.ts',
+].sort();
 
+describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
+  // This test enumerates the 21 files so a new direct reader shows up as a
+  // failing assertion instead of a silent coverage gap.
   const DIRECT_ENV_PATTERN = /process\.env(?:\.DD_|\[['"]DD_)/;
   const SKIPPED_DIRECTORY_NAMES = new Set(['node_modules', 'dist', 'coverage']);
 
@@ -3652,5 +3656,32 @@ describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)',
       .sort();
 
     expect(actual).toStrictEqual(DIRECT_ENV_READER_FILES);
+  });
+});
+
+describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
+  // Every DD_* variable actually read via process.env(.DD_ / ['DD_...']) in
+  // the 21 direct-reader files above, minus DD_SELF_UPDATE_*: every one of
+  // those is a handoff value the app writes itself as environment for a
+  // helper container it spawns (SelfUpdateTransitionShared.ts and
+  // self-update-controller.ts's own `-e` argument lists), never something an
+  // operator configures. file/flatten.ts's UNSUPPORTED_FILE_KEYS is meant to
+  // hold exactly this set; recomputed here from the tree so it can't drift.
+  const DIRECT_ENV_VAR_NAME_PATTERN =
+    /process\.env\.(DD_[A-Z0-9_]+)|process\.env\[['"](DD_[A-Z0-9_]+)['"]\]/g;
+
+  test('is exactly the direct readers minus DD_SELF_UPDATE_*, recomputed from the tree', () => {
+    const appRoot = path.resolve(TEST_DIRECTORY, '..');
+    const varNames = new Set<string>();
+
+    for (const relativeFilePath of DIRECT_ENV_READER_FILES) {
+      const contents = fs.readFileSync(path.join(appRoot, relativeFilePath), 'utf-8');
+      for (const match of contents.matchAll(DIRECT_ENV_VAR_NAME_PATTERN)) {
+        varNames.add((match[1] ?? match[2]) as string);
+      }
+    }
+
+    const actual = [...varNames].filter((name) => !name.startsWith('DD_SELF_UPDATE_')).sort();
+    expect(actual).toStrictEqual([...UNSUPPORTED_FILE_KEYS]);
   });
 });

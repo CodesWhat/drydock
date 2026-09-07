@@ -205,4 +205,29 @@ describe('flattenConfigTree', () => {
     tree.dnsMode = 'hostgateway';
     expect(flattenConfigTree(tree)).toStrictEqual({ DD_DNSMODE: 'hostgateway' });
   });
+
+  describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
+    test('rejects a scalar that flattens to an unsupported key, naming the YAML path', () => {
+      expect(() => flattenConfigTree({ agent: { secret: 'shh' } })).toThrow(
+        /agent\.secret: DD_AGENT_SECRET is only read from the environment in this release/,
+      );
+    });
+
+    test('rejects a _file node whose base key is unsupported', () => {
+      expect(() => flattenConfigTree({ agent: { secret: { _file: '/run/secrets/x' } } })).toThrow(
+        /agent\.secret\._file: DD_AGENT_SECRET is only read from the environment in this release/,
+      );
+    });
+
+    test('does not reject an ordinary supported key', () => {
+      expect(flattenConfigTree({ server: { port: 3000 } })).toStrictEqual({
+        DD_SERVER_PORT: '3000',
+      });
+    });
+
+    test('does not reject a DD_SELF_UPDATE_* key: it is app-written handoff state, not configuration', () => {
+      const result = flattenConfigTree({ self: { update: { poll_interval_ms: 5000 } } });
+      expect(result).toStrictEqual({ DD_SELF_UPDATE_POLL_INTERVAL_MS: '5000' });
+    });
+  });
 });
