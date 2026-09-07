@@ -118,7 +118,7 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('copy failed'));
   });
 
-  test('writeComposeFile should log error and throw on write failure', async () => {
+  test('writeComposeFile should log error and throw when lock acquisition fails outright', async () => {
     fs.writeFile.mockRejectedValueOnce(new Error('write failed'));
 
     await expect(trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data')).rejects.toThrow(
@@ -126,6 +126,24 @@ describe('Dockercompose Trigger', () => {
     );
 
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('write failed'));
+  });
+
+  test('writeComposeFile should propagate and leave the compose file untouched when the temp file write fails', async () => {
+    const composeFilePath = '/opt/drydock/test/compose.yml';
+    const temporaryWriteError = new Error('temp write failed');
+    // First fs.writeFile call is the lock file (wx flag); it must succeed so
+    // the failure below is attributed to the temp-file write, not the lock.
+    fs.writeFile.mockResolvedValueOnce(undefined).mockRejectedValueOnce(temporaryWriteError);
+
+    await expect(trigger.writeComposeFile(composeFilePath, 'data')).rejects.toThrow(
+      'temp write failed',
+    );
+
+    // The rejected write must be the temp file, not a direct write to the
+    // final compose path that happened to fail before the rename.
+    expect(fs.writeFile.mock.calls[1]![0]).not.toBe(composeFilePath);
+    expect(fs.rename).not.toHaveBeenCalled();
+    expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('temp write failed'));
   });
 
   test('writeComposeFile should stringify non-object write failures in logs', async () => {
