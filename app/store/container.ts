@@ -1593,6 +1593,105 @@ export function updateContainer(
   return containerToReturn;
 }
 
+/**
+ * Write only the named fields (roadmap 7-STORE, slice 9; see 4.3 in
+ * `spec-7-store-sqlite.md`).
+ *
+ * `updateContainer` above takes a whole record from the caller and merges it
+ * onto the stored row, which is exactly the bug: the caller's copy of every
+ * field it did not intend to touch is whatever it read at some earlier
+ * point, and a second writer's change to one of those fields lands in the
+ * gap between that read and this write, then gets silently reverted. This
+ * function does not have that gap, because the fields it writes are limited
+ * to `patch`'s own keys — every other field is inherited from the row this
+ * same call just read, not from anything the caller was holding onto.
+ *
+ * The whole read-merge-write sequence runs inside one `BEGIN IMMEDIATE`
+ * transaction (the driver's default), so the derived fields below
+ * (`updateDetectedAt`/`firstSeenAt`/`maturityGatePendingSince`, the security
+ * hash, and the changed-detection that decides whether to emit
+ * `containerUpdated`) are always computed from a single consistent snapshot
+ * of current-row-plus-patch.
+ *
+ * Returns `undefined` when `id` does not name a stored container: there is
+ * no record to patch, and (unlike `updateContainer`) this function never
+ * falls back to an insert — every patch caller already knows the row exists.
+ * @param id
+ * @param patch
+ */
+export function updateContainerFields(
+  id: string,
+  patch: Omit<Partial<container.Container>, 'id'>,
+): container.Container | undefined {
+  if (!db) {
+    return undefined;
+  }
+  const database = db;
+
+  return database.transaction((): container.Container | undefined => {
+    const containerCurrentRow = database.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
+    if (!containerCurrentRow) {
+      return undefined;
+    }
+    const containerCurrent = rowToContainer(containerCurrentRow);
+    // A stray `id` on `patch` at runtime (the type above rules it out at
+    // compile time, but callers can still hand in an untyped object) must
+    // never win the merge below — this row was looked up by `id`, and
+    // `updateContainerRow` writes it into `WHERE id = ?`, so a merged `id`
+    // that drifted from the lookup key would write a different row or emit
+    // an update under an id nothing here actually wrote.
+    const containerMerged = { ...containerCurrent, ...patch, id: containerCurrent.id };
+    const containerToReturn = validateContainer(containerMerged);
+    normalizeContainerTriggerLabelFields(containerToReturn);
+    containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
+    containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
+    containerToReturn.maturityGatePendingSince = getMaturityGatePendingSince(
+      containerCurrent,
+      containerToReturn,
+    );
+    const containerCurrentSecurityHash = getStoredContainerSecurityStateHash(containerCurrent);
+    const containerNextSecurityHash = Object.hasOwn(patch, 'security')
+      ? storeContainerSecurityStateHash(containerToReturn)
+      : containerCurrentSecurityHash;
+
+    updateContainerRow(containerToReturn, containerNextSecurityHash);
+    invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
+
+    const wasRollback = isRollbackContainerName(containerCurrent.name);
+    const isRollback = isRollbackContainerName(containerToReturn.name);
+    const healthTransition = getHealthTransition(containerCurrent, containerToReturn);
+    if (healthTransition && !isRollback) {
+      // Independent of hasContainerChangedWithSecurityHashes below — a
+      // health-only transition may be the only thing that changed, and must
+      // still notify. Mirrors updateContainer's health-transition handling.
+      void emitContainerHealthTransition({
+        containerName: containerToReturn.name,
+        container: redactContainerRuntimeEnv({ ...containerToReturn }),
+        previousHealth: containerCurrent.health,
+        health: 'unhealthy',
+      });
+    }
+    if (isRollback && !wasRollback) {
+      emitContainerRemoved(redactContainerRuntimeEnv({ ...containerCurrent }));
+    } else if (
+      !isRollback &&
+      (wasRollback ||
+        hasContainerChangedWithSecurityHashes(
+          containerCurrent,
+          containerToReturn,
+          containerCurrentSecurityHash,
+          containerNextSecurityHash,
+        ))
+    ) {
+      const containerUpdatedEventPayload: ContainerLifecycleEventPayload =
+        redactContainerRuntimeEnv({ ...containerToReturn });
+      emitContainerUpdated(containerUpdatedEventPayload);
+    }
+
+    return containerToReturn;
+  });
+}
+
 function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {}) {
   if (!db) {
     return [];

@@ -5,6 +5,7 @@ import { createContainerFixture } from '../test/helpers.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
+import { mapContainerToContainerReport } from '../watchers/providers/docker/container-processing.js';
 import * as container from './container.js';
 import type { Database } from './db/driver.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
@@ -5423,5 +5424,341 @@ describe('rollback rename policy retention regression (#535)', () => {
     );
 
     expect(inserted.updatePolicy).toEqual(updatePolicy);
+  });
+});
+
+describe('updateContainerFields (roadmap 7-STORE slice 9)', () => {
+  test('returns undefined when the store has not been initialized', async () => {
+    vi.resetModules();
+    const freshContainer = await import('./container.js');
+    expect(freshContainer.updateContainerFields('missing', { status: 'running' })).toBeUndefined();
+  });
+
+  test('returns undefined when the id does not name a stored container', () => {
+    expect(
+      container.updateContainerFields('does-not-exist', { status: 'running' }),
+    ).toBeUndefined();
+  });
+
+  test('writes only the named field and leaves every other field untouched', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'field-patch',
+        name: 'app',
+        displayName: 'app',
+        status: 'running',
+        result: undefined,
+      }),
+    );
+
+    const result = container.updateContainerFields('field-patch', { status: 'exited' });
+
+    expect(result?.status).toBe('exited');
+    expect(result?.name).toBe('app');
+    expect(result?.displayName).toBe('app');
+    expect(container.getContainer('field-patch')).toMatchObject({
+      status: 'exited',
+      name: 'app',
+      displayName: 'app',
+    });
+  });
+
+  test('writes multiple named fields in one call', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'multi-field',
+        name: 'old-name',
+        displayName: 'old-name',
+        status: 'running',
+        result: undefined,
+      }),
+    );
+
+    const result = container.updateContainerFields('multi-field', {
+      name: 'new-name',
+      displayName: 'new-name',
+    });
+
+    expect(result).toMatchObject({ name: 'new-name', displayName: 'new-name', status: 'running' });
+  });
+
+  test('recomputes updateDetectedAt inside the write when a raw update first appears', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'lifecycle',
+        result: undefined,
+        updateDetectedAt: undefined,
+      }),
+    );
+
+    const result = container.updateContainerFields('lifecycle', {
+      result: { tag: 'newer' },
+    });
+
+    expect(result?.updateDetectedAt).toEqual(expect.any(String));
+  });
+
+  test('DR-24: a name-only delta emits exactly one containerUpdated', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'dr24',
+        name: 'old-name',
+        displayName: 'old-name',
+        result: undefined,
+      }),
+    );
+    const emitted = vi.spyOn(event, 'emitContainerUpdated');
+
+    container.updateContainerFields('dr24', { name: 'new-name' });
+
+    expect(emitted).toHaveBeenCalledTimes(1);
+    expect(emitted).toHaveBeenCalledWith(expect.objectContaining({ name: 'new-name' }));
+  });
+
+  test('does not emit containerUpdated when the patch does not change anything comparable', () => {
+    seedContainer(createContainerFixture({ id: 'no-op', status: 'running', result: undefined }));
+    const emitted = vi.spyOn(event, 'emitContainerUpdated');
+
+    container.updateContainerFields('no-op', { status: 'running' });
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('emits a health transition independent of other patched fields', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'health-only',
+        health: 'healthy',
+        result: undefined,
+        details: { startedAt: '2026-01-01T00:00:00.000Z', ports: [], volumes: [], env: [] },
+      }),
+    );
+    const emittedHealth = vi.spyOn(event, 'emitContainerHealthTransition');
+
+    container.updateContainerFields('health-only', { health: 'unhealthy' });
+
+    expect(emittedHealth).toHaveBeenCalledWith(
+      expect.objectContaining({ previousHealth: 'healthy', health: 'unhealthy' }),
+    );
+  });
+
+  test('recomputes the security hash only when the patch includes security', () => {
+    const scan = (critical: number) => ({
+      scanner: 'trivy',
+      image: 'registry/image:1.2.3',
+      scannedAt: '2024-01-01T00:00:00.000Z',
+      status: 'passed',
+      blockSeverities: [],
+      blockingCount: 0,
+      summary: { unknown: 0, low: 0, medium: 0, high: 0, critical },
+      vulnerabilities: [],
+    });
+    seedContainer(
+      createContainerFixture({
+        id: 'security-patch',
+        result: undefined,
+        security: { scan: scan(0) },
+      }),
+    );
+
+    const unrelatedPatch = container.updateContainerFields('security-patch', {
+      status: 'exited',
+    });
+    expect(unrelatedPatch?.security).toEqual({ scan: scan(0) });
+
+    const emitted = vi.spyOn(event, 'emitContainerUpdated');
+    emitted.mockClear();
+    const securityPatch = container.updateContainerFields('security-patch', {
+      security: { scan: scan(1) },
+    });
+
+    expect(securityPatch?.security).toEqual({ scan: scan(1) });
+    expect(emitted).toHaveBeenCalledTimes(1);
+  });
+
+  test('emits containerRemoved instead of containerUpdated when a patch renames into rollback shape', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'rollback-in',
+        name: 'app1',
+        displayName: 'app1',
+        result: undefined,
+      }),
+    );
+    const emittedRemoved = vi.spyOn(event, 'emitContainerRemoved');
+    const emittedUpdated = vi.spyOn(event, 'emitContainerUpdated');
+
+    container.updateContainerFields('rollback-in', { name: 'app1-old-1752019200000' });
+
+    expect(emittedRemoved).toHaveBeenCalledWith(expect.objectContaining({ name: 'app1' }));
+    expect(emittedUpdated).not.toHaveBeenCalled();
+  });
+
+  test('emits containerUpdated when a patch renames a container out of rollback shape', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'rollback-out',
+        name: 'app1-old-1752019200000',
+        displayName: 'app1-old-1752019200000',
+        result: undefined,
+      }),
+    );
+    const emittedUpdated = vi.spyOn(event, 'emitContainerUpdated');
+
+    container.updateContainerFields('rollback-out', { name: 'app1', displayName: 'app1' });
+
+    expect(emittedUpdated).toHaveBeenCalledTimes(1);
+    expect(emittedUpdated).toHaveBeenCalledWith(expect.objectContaining({ name: 'app1' }));
+  });
+
+  // CodeRabbit: patch is typed `Partial<Container>`, so a stray `id` on the
+  // patch object would be merged onto the row read by the lookup id and used
+  // in `WHERE id = ?`, writing a different row (or reporting a change under
+  // an id nothing here actually wrote) than the one the caller named. The
+  // `Omit<Partial<Container>, 'id'>` patch type stops this at compile time;
+  // this test exercises the runtime backstop for a caller that bypasses the
+  // type (an untyped object, `as any`, etc.).
+  test('ignores a stray id on the patch and writes only the row named by the lookup id', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'id-protection-target',
+        name: 'target-before',
+        displayName: 'target-before',
+        status: 'running',
+        result: undefined,
+      }),
+    );
+    seedContainer(
+      createContainerFixture({
+        id: 'id-protection-decoy',
+        name: 'decoy-before',
+        displayName: 'decoy-before',
+        status: 'running',
+        result: undefined,
+      }),
+    );
+
+    const result = container.updateContainerFields('id-protection-target', {
+      status: 'exited',
+      id: 'id-protection-decoy',
+    } as any);
+
+    expect(result?.id).toBe('id-protection-target');
+    expect(result?.status).toBe('exited');
+    expect(container.getContainer('id-protection-target')).toMatchObject({
+      id: 'id-protection-target',
+      status: 'exited',
+    });
+    expect(container.getContainer('id-protection-decoy')).toMatchObject({
+      id: 'id-protection-decoy',
+      name: 'decoy-before',
+      status: 'running',
+    });
+  });
+});
+
+describe('field-level write interleave (roadmap 7-STORE slice 9 / spec 4.3)', () => {
+  const containerProcessingDependencies = {
+    ensureLogger: () => {},
+    log: {
+      child: () => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+    },
+  };
+
+  /**
+   * Before this slice, both the event path (`updateContainerFromInspect`) and
+   * the watch path (`mapContainerToContainerReport`) wrote the *whole*
+   * container record they had in memory, built from a read that predates
+   * the other path's write. Whichever one wrote last silently reverted
+   * whatever the other had just persisted. Section 4.3 of
+   * spec-7-store-sqlite.md calls this out explicitly: this test failed
+   * against the pre-slice-9 `updateContainer`-based wiring (confirmed by
+   * hand before the store change landed, per the slice's own acceptance
+   * criteria) and must keep passing now that both paths write field-level
+   * patches instead.
+   */
+  test('a rename applied by the event path during an in-flight watch cycle survives that cycle completion', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'interleave-rename-then-scan',
+        watcher: 'docker',
+        name: 'old-name',
+        displayName: 'old-name',
+        status: 'running',
+        labels: {},
+        result: undefined,
+      }),
+    );
+
+    // The watch cycle "starts": it reads the container before anything else
+    // happens, the way container-processing.ts's caller does before the
+    // async registry lookup that produces `result`.
+    const watchCycleContainer = container.getContainer('interleave-rename-then-scan');
+
+    // The event path independently reads its own copy and, "mid-cycle",
+    // completes a rename through the real dependency wiring Docker.ts uses.
+    const eventPathContainer = container.getContainer('interleave-rename-then-scan');
+    updateContainerFromInspect(
+      eventPathContainer as any,
+      {
+        Name: '/new-name',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer: (id, patch) => container.updateContainerFields(id, patch),
+      },
+    );
+
+    // The watch cycle now "finishes": the registry lookup it was awaiting
+    // resolved to a fresh result, computed on the stale pre-rename snapshot.
+    (watchCycleContainer as any).result = { tag: 'newer', digest: 'sha256:newer' };
+    mapContainerToContainerReport(watchCycleContainer as any, containerProcessingDependencies);
+
+    const stored = container.getContainer('interleave-rename-then-scan');
+    expect(stored?.name).toBe('new-name');
+    expect(stored?.result?.tag).toBe('newer');
+  });
+
+  test('the watch cycle result survives a rename applied by the event path after the cycle completes', () => {
+    seedContainer(
+      createContainerFixture({
+        id: 'interleave-scan-then-rename',
+        watcher: 'docker',
+        name: 'old-name',
+        displayName: 'old-name',
+        status: 'running',
+        labels: {},
+        result: undefined,
+      }),
+    );
+
+    // Both paths take their stale snapshot up front, before either writes.
+    const watchCycleContainer = container.getContainer('interleave-scan-then-rename');
+    const eventPathContainer = container.getContainer('interleave-scan-then-rename');
+
+    // The watch cycle finishes first and persists its fresh result.
+    (watchCycleContainer as any).result = { tag: 'newer', digest: 'sha256:newer' };
+    mapContainerToContainerReport(watchCycleContainer as any, containerProcessingDependencies);
+
+    // The event path, still holding its pre-scan snapshot, completes its
+    // rename afterwards.
+    updateContainerFromInspect(
+      eventPathContainer as any,
+      {
+        Name: '/new-name',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer: (id, patch) => container.updateContainerFields(id, patch),
+      },
+    );
+
+    const stored = container.getContainer('interleave-scan-then-rename');
+    expect(stored?.result?.tag).toBe('newer');
+    expect(stored?.name).toBe('new-name');
   });
 });

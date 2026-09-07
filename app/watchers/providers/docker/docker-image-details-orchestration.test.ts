@@ -542,6 +542,91 @@ describe('docker image details orchestration module', () => {
     },
   );
 
+  // Playwright v16-health-preferences.spec.ts regression: a scan-observed
+  // health flip (the cron #198 fallback, or the targeted
+  // POST /api/v1/containers/:id/watch refresh) must land in the store the
+  // moment it's observed here, not only if/when the container's `result`
+  // patch happens to write later. `addImageDetailsToContainerOrchestration`
+  // never itself does a registry lookup — that only happens in the caller's
+  // separate `findNewVersion` step, once this promise has already resolved
+  // — so a synchronous-with-this-call `updateContainerFields` write is, by
+  // construction, before the registry work runs.
+  test('persists a scan-observed health flip to the store during discovery, before the registry lookup', async () => {
+    const stored = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      health: 'healthy',
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: { name: 'ghcr', url: 'ghcr.io' },
+        tag: { value: 'latest', semver: false },
+        digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+    const updateContainerFields = vi
+      .spyOn(storeContainer, 'updateContainerFields')
+      .mockReturnValue(undefined);
+    const { watcher, inspectContainer } = createWatcher();
+    inspectContainer.mockResolvedValue({ State: { Health: { Status: 'unhealthy' } } });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.health).toBe('unhealthy');
+    expect(updateContainerFields).toHaveBeenCalledWith(
+      'container-1',
+      expect.objectContaining({ health: 'unhealthy' }),
+    );
+  });
+
+  test('a discovery pass with no successful inspect and nothing else observed does not write to the store', async () => {
+    const stored = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      health: 'healthy',
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: { name: 'ghcr', url: 'ghcr.io' },
+        tag: { value: 'latest', semver: false },
+        digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+    const updateContainerFields = vi
+      .spyOn(storeContainer, 'updateContainerFields')
+      .mockReturnValue(undefined);
+    const { watcher, inspectContainer } = createWatcher();
+    // Same name and status as the summary, and a failed inspect (so health
+    // is never observed and details fall back to the cached/summary merge
+    // this stored fixture already matches) — nothing this block owns
+    // actually changed.
+    inspectContainer.mockRejectedValue(new Error('gone'));
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(updateContainerFields).not.toHaveBeenCalled();
+  });
+
   test('failed stored-container inspect preserves the previous health value', async () => {
     const stored = {
       id: 'container-1',

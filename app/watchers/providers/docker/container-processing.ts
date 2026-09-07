@@ -175,8 +175,25 @@ export function mapContainerToContainerReport(
   const containerInDb = storeContainer.getContainer(containerToPersist.id);
 
   if (containerInDb) {
-    // Found in DB? => update it
-    const updatedContainer = storeContainer.updateContainer(containerToPersist);
+    // Found in DB? Write only the fields this scan cycle owns (roadmap
+    // 7-STORE, slice 9 / spec 4.3): `result`, `image`, `error` and the
+    // release notes derived from `result`. `containerToPersist` also still
+    // carries whatever runtime fields (name, status, health, labels,
+    // details) this container object had when the cycle started, which can
+    // be stale by the time a long registry lookup finishes — a
+    // whole-record write here would silently revert an event-path rename or
+    // health change that landed mid-cycle. Everything not in this patch is
+    // inherited from the row `updateContainerFields` reads fresh.
+    // Cast: `containerInDb` was just read synchronously above with no
+    // intervening await, so the row cannot have disappeared by the time this
+    // patch runs — `updateContainerFields` only returns undefined when the id
+    // is not found.
+    const updatedContainer = storeContainer.updateContainerFields(containerToPersist.id, {
+      result: containerToPersist.result,
+      image: containerToPersist.image,
+      error: containerToPersist.error,
+      currentReleaseNotes: containerToPersist.currentReleaseNotes,
+    }) as Container;
     return {
       container: updatedContainer,
       changed: containerInDb.resultChanged(updatedContainer) && containerToPersist.updateAvailable,
