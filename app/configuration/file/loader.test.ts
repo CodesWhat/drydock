@@ -170,7 +170,19 @@ describe('loadConfigFile', () => {
       try {
         const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  port: 3000\n', 0o666);
         await expect(loadConfigFile({ DD_CONFIG_FILE: filePath })).rejects.toThrow(
-          /is world-writable/,
+          /is group- or world-writable/,
+        );
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('is fatal when the config file is group-writable', async () => {
+      const tempDir = makeTempDir('drydock-config-groupwritable-');
+      try {
+        const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  port: 3000\n', 0o620);
+        await expect(loadConfigFile({ DD_CONFIG_FILE: filePath })).rejects.toThrow(
+          /is group- or world-writable/,
         );
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -188,6 +200,22 @@ describe('loadConfigFile', () => {
           expect.stringContaining(`Config file "${filePath}" is readable by group or others`),
         );
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(`chmod 600 "${filePath}"`));
+      } finally {
+        warnSpy.mockRestore();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('warns when the config file is group-readable only (0640)', async () => {
+      const tempDir = makeTempDir('drydock-config-groupreadable-');
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => undefined as never);
+      try {
+        const filePath = writeFile(tempDir, 'drydock.yml', 'server:\n  port: 3000\n', 0o640);
+        const result = await loadConfigFile({ DD_CONFIG_FILE: filePath });
+        expect(result).toStrictEqual({ DD_SERVER_PORT: '3000' });
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining(`Config file "${filePath}" is readable by group or others`),
+        );
       } finally {
         warnSpy.mockRestore();
         fs.rmSync(tempDir, { recursive: true, force: true });

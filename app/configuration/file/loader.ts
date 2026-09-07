@@ -1,5 +1,5 @@
 import type { Stats } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import os from 'node:os';
 import yaml from 'yaml';
 import { logWarn } from '../../log/warn.js';
@@ -39,7 +39,6 @@ export interface LoadConfigFileOptions {
 
 interface ResolvedConfigFile {
   path: string;
-  stats: Stats;
 }
 
 function configFileError(message: string): Error {
@@ -70,7 +69,7 @@ async function resolveConfigFile(
         `DD_CONFIG_FILE points at "${resolvedOverridePath}", which does not exist`,
       );
     }
-    return { path: resolvedOverridePath, stats };
+    return { path: resolvedOverridePath };
   }
 
   const [ymlPath, yamlPath] = defaultPaths;
@@ -82,10 +81,10 @@ async function resolveConfigFile(
     );
   }
   if (ymlStats) {
-    return { path: ymlPath, stats: ymlStats };
+    return { path: ymlPath };
   }
   if (yamlStats) {
-    return { path: yamlPath, stats: yamlStats };
+    return { path: yamlPath };
   }
   return undefined;
 }
@@ -99,15 +98,15 @@ function checkConfigFilePermissions(resolvedPath: string, stats: Stats): void {
 
   const modeOctal = (stats.mode & 0o777).toString(8).padStart(3, '0');
 
-  if ((stats.mode & 0o002) !== 0) {
+  if ((stats.mode & 0o022) !== 0) {
     throw configFileError(
-      `Config file "${resolvedPath}" is world-writable (mode 0${modeOctal}). ` +
-        `Any local process could rewrite it between two starts. ` +
-        `Restrict permissions with: chmod 600 "${resolvedPath}"`,
+      `Config file "${resolvedPath}" is group- or world-writable (mode 0${modeOctal}). ` +
+        `Any local process in that group, or any local process at all, could rewrite it ` +
+        `between two starts. Restrict permissions with: chmod 600 "${resolvedPath}"`,
     );
   }
 
-  if ((stats.mode & 0o077) !== 0) {
+  if ((stats.mode & 0o044) !== 0) {
     logWarn(
       `Config file "${resolvedPath}" is readable by group or others ` +
         `(mode 0${modeOctal}). Restrict permissions with: chmod 600 "${resolvedPath}"`,
@@ -125,20 +124,32 @@ export async function loadConfigFile(
     return {};
   }
 
-  const { path: resolvedPath, stats } = resolved;
+  const { path: resolvedPath } = resolved;
 
-  if (!stats.isFile()) {
-    throw configFileError(`Config file "${resolvedPath}" must be a regular file`);
+  // Discovery above only decides which path to use; every check that gates
+  // what actually gets read runs against the same open handle below, so
+  // nothing about the file (its target, size, or permissions) can change
+  // between the check and the read.
+  const handle = await open(resolvedPath, 'r');
+  let raw: string;
+  try {
+    const stats = await handle.stat();
+
+    if (!stats.isFile()) {
+      throw configFileError(`Config file "${resolvedPath}" must be a regular file`);
+    }
+    if (stats.size > MAX_CONFIG_FILE_SIZE_BYTES) {
+      throw configFileError(
+        `Config file "${resolvedPath}" exceeds maximum size of ${MAX_CONFIG_FILE_SIZE_BYTES} bytes`,
+      );
+    }
+
+    checkConfigFilePermissions(resolvedPath, stats);
+
+    raw = await handle.readFile({ encoding: 'utf-8' });
+  } finally {
+    await handle.close();
   }
-  if (stats.size > MAX_CONFIG_FILE_SIZE_BYTES) {
-    throw configFileError(
-      `Config file "${resolvedPath}" exceeds maximum size of ${MAX_CONFIG_FILE_SIZE_BYTES} bytes`,
-    );
-  }
-
-  checkConfigFilePermissions(resolvedPath, stats);
-
-  const raw = await readFile(resolvedPath, 'utf-8');
 
   let parsed: unknown;
   try {
