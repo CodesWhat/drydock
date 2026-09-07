@@ -96,17 +96,22 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 // dropped, and isUpdateSuppressed() reads an absent policy as "no gating" rather than
 // "default gating", so the very next update fires with no soak at all.
 //
-// Unlike the security-state and lifecycle caches this is deliberately NOT gated behind
-// isLocalContainer: the #386 exclusion exists because runtime state is meaningless across
-// agents, whereas updatePolicy is set on the controller and must survive for agent-owned
-// containers too — that is precisely the topology #496 was reported against.
+// Unlike the security-state cache this is deliberately NOT gated behind isLocalContainer:
+// the #386 exclusion exists because runtime state is meaningless across agents, whereas
+// updatePolicy is set on the controller and must survive for agent-owned containers too —
+// that is precisely the topology #496 was reported against.
 //
 // Because it does hold agent-owned containers it must key on deriveContainerIdentityKey
 // (`${agent}::${watcher}::${name}`, or the compose project/service form), not on the
-// `watcher::name` toCacheKey the other two caches use. Those can get away with the shorter
-// key precisely because they only ever hold local containers; here, two agents each running
-// a `local` watcher with a container named `myapp` would otherwise share one slot and leak
-// one deployment's update policy into another's.
+// `watcher::name` toCacheKey the security-state cache still uses. That one can get away
+// with the shorter key precisely because it only ever holds local containers; here, two
+// agents each running a `local` watcher with a container named `myapp` would otherwise
+// share one slot and leak one deployment's update policy into another's. The lifecycle
+// cache below used to key on the shorter `watcher::name` form too — it is gated behind
+// isLocalContainer, so two agents never collided — but roadmap 7-STORE slice 7 unified it
+// onto the same identity key, so a container recreated under a new name (a compose service
+// redeployed with a new container name, for instance) now inherits its predecessor's
+// maturity clock the same way it already inherited the retained update policy.
 type UpdatePolicyRetentionCacheEntry = {
   updatePolicyOverrides: container.ContainerUpdatePolicy;
   expiresAt: number;
@@ -1148,8 +1153,10 @@ export function insertContainer(container) {
       container.security = cachedSecurity;
       clearCachedSecurityState(container.watcher, container.name);
     }
-    const lifecycleCacheKey = toCacheKey(container.watcher, container.name);
-    const lifecycleEntry = updateLifecycleCache.get(lifecycleCacheKey);
+    const lifecycleCacheKey = deriveContainerIdentityKey(container);
+    const lifecycleEntry = lifecycleCacheKey
+      ? updateLifecycleCache.get(lifecycleCacheKey)
+      : undefined;
     if (lifecycleEntry) {
       if (lifecycleEntry.expiresAt <= Date.now()) {
         updateLifecycleCache.delete(lifecycleCacheKey);
@@ -1608,45 +1615,50 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       typeof containerRaw?.updateDetectedAt === 'string' &&
       containerRaw.updateDetectedAt.length > 0
     ) {
-      const lifecycleCacheKey = toCacheKey(containerRaw.watcher, containerRaw.name);
-      updateLifecycleCache.delete(lifecycleCacheKey);
-      const lifecycleEntry: UpdateLifecycleCacheEntry = {
-        updateDetectedAt: containerRaw.updateDetectedAt,
-        firstSeenAt:
-          typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
-            ? containerRaw.firstSeenAt
-            : undefined,
-        maturityGatePendingSince:
-          typeof containerRaw.maturityGatePendingSince === 'string' &&
-          containerRaw.maturityGatePendingSince.length > 0
-            ? containerRaw.maturityGatePendingSince
-            : undefined,
-        resultSignature: getResultSignature(containerRaw),
-        expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,
-      };
-      updateLifecycleCache.set(lifecycleCacheKey, lifecycleEntry);
-      // #556: write-through to the durable store so this stash survives the
-      // cross-process recreation that IS drydock's own self-update (recreate
-      // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
-      // rehydrateUpdateLifecycleCacheFromStore()).
-      updateLifecycleCacheStore.upsertRecord({ cacheKey: lifecycleCacheKey, ...lifecycleEntry });
-      if (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
-        const nowMs = Date.now();
-        for (const [expiredKey, expiredEntry] of updateLifecycleCache.entries()) {
-          if (expiredEntry.expiresAt <= nowMs) {
-            updateLifecycleCache.delete(expiredKey);
-            updateLifecycleCacheStore.deleteRecord(expiredKey);
+      const lifecycleCacheKey = deriveContainerIdentityKey(containerRaw);
+      /* istanbul ignore else -- unreachable: containerRaw is the just-deleted stored
+         document, so watcher and name are already schema-validated non-empty strings
+         and a key always derives. */
+      if (lifecycleCacheKey !== undefined) {
+        updateLifecycleCache.delete(lifecycleCacheKey);
+        const lifecycleEntry: UpdateLifecycleCacheEntry = {
+          updateDetectedAt: containerRaw.updateDetectedAt,
+          firstSeenAt:
+            typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
+              ? containerRaw.firstSeenAt
+              : undefined,
+          maturityGatePendingSince:
+            typeof containerRaw.maturityGatePendingSince === 'string' &&
+            containerRaw.maturityGatePendingSince.length > 0
+              ? containerRaw.maturityGatePendingSince
+              : undefined,
+          resultSignature: getResultSignature(containerRaw),
+          expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,
+        };
+        updateLifecycleCache.set(lifecycleCacheKey, lifecycleEntry);
+        // #556: write-through to the durable store so this stash survives the
+        // cross-process recreation that IS drydock's own self-update (recreate
+        // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
+        // rehydrateUpdateLifecycleCacheFromStore()).
+        updateLifecycleCacheStore.upsertRecord({ cacheKey: lifecycleCacheKey, ...lifecycleEntry });
+        if (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
+          const nowMs = Date.now();
+          for (const [expiredKey, expiredEntry] of updateLifecycleCache.entries()) {
+            if (expiredEntry.expiresAt <= nowMs) {
+              updateLifecycleCache.delete(expiredKey);
+              updateLifecycleCacheStore.deleteRecord(expiredKey);
+            }
           }
         }
-      }
-      while (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
-        const oldestLifecycleKey = updateLifecycleCache.keys().next().value;
-        /* istanbul ignore next */
-        if (oldestLifecycleKey === undefined) {
-          break;
+        while (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
+          const oldestLifecycleKey = updateLifecycleCache.keys().next().value;
+          /* istanbul ignore next */
+          if (oldestLifecycleKey === undefined) {
+            break;
+          }
+          updateLifecycleCache.delete(oldestLifecycleKey);
+          updateLifecycleCacheStore.deleteRecord(oldestLifecycleKey);
         }
-        updateLifecycleCache.delete(oldestLifecycleKey);
-        updateLifecycleCacheStore.deleteRecord(oldestLifecycleKey);
       }
     }
     if (!isRollbackContainerName(container.name)) {
@@ -1664,6 +1676,13 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
  * after both the containers collection and the update-lifecycle-cache collection
  * have been created. Drops any record whose TTL already lapsed while the process
  * was down rather than resurrecting a stale stash (#556).
+ *
+ * listRecords() returns rows oldest-refreshed first (ORDER BY refresh_order),
+ * so inserting straight from it in order reproduces the Map insertion order
+ * the stash path's size-cap eviction reads as an LRU. Before finding 2
+ * (roadmap 7-STORE slice 7 review) this iterated the SELECT's undefined
+ * order instead, so a just-refreshed entry could resurface ahead of the row
+ * it should have outlived.
  */
 export function rehydrateUpdateLifecycleCacheFromStore(): void {
   const nowMs = Date.now();
@@ -1691,6 +1710,15 @@ export function rehydrateUpdateLifecycleCacheFromStore(): void {
  * after both the containers collection and the update-policy-retention-cache
  * collection have been created. Drops any record whose TTL already lapsed while
  * the process was down rather than resurrecting a stale stash (#565).
+ *
+ * listRecords() returns rows oldest-refreshed first (ORDER BY refresh_order),
+ * which is the order the stash path's Map-insertion-order eviction reads as
+ * an LRU. This used to be reconstructed here by re-sorting on expiresAt —
+ * every stash uses the same TTL, so ascending expiresAt approximated
+ * ascending stash time — but that ties on equal timestamps and stops
+ * approximating anything the moment the TTL changes between two stashes
+ * (finding 2, roadmap 7-STORE slice 7 review). refresh_order is exact, so
+ * the extra sort is gone and `surviving` is used in listRecords() order.
  */
 export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
   const nowMs = Date.now();
@@ -1705,12 +1733,6 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
     }
     surviving.push(record);
   }
-  // Oldest first. Every stash uses the same TTL, so ascending expiresAt is
-  // ascending stash time, which is the order the stash path's Map-insertion-order
-  // eviction assumes. listRecords() returns LokiJS document order, so inserting
-  // straight from it would leave the next eviction dropping an arbitrary entry
-  // instead of the oldest one.
-  surviving.sort((a, b) => a.expiresAt - b.expiresAt);
   // Re-apply the cap here rather than leaving it to the next stash: lowering
   // DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
   // store holding more rows than the new limit allows, and the stash path only
