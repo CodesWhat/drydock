@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A maintenance cut labeled the shipped image with `main`'s commit instead of the commit it was built from.** Both `docker/metadata-action` steps in `release-cut.yml` left `org.opencontainers.image.revision` at its default, `github.sha`, which is the workflow run's own checkout rather than the dev-branch source commit the build used. The v1.6.1-rc.9 staging image carried `5ae315227` in that label instead of `2969675ef`. Both steps now set the label from the release source SHA.
+
 ## [1.7.0-rc.13] — 2026-09-08
 
 ### Fixed
