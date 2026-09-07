@@ -254,6 +254,15 @@ vi.mock('./update-operation', createCollectionsMock);
 vi.mock('./update-policy-retention-cache', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
+/** The child logger store/index.ts created for itself, selected by component rather than
+ * by call order, since other store modules loaded through it create their own children. */
+function storeScopedLog(logger: { child: ReturnType<typeof vi.fn> }) {
+  const index = logger.child.mock.calls.findIndex(
+    (call: unknown[]) => (call[0] as { component?: string } | undefined)?.component === 'store',
+  );
+  return logger.child.mock.results[index].value;
+}
+
 describe('Store Module', () => {
   const originalUmask = process.umask();
 
@@ -513,7 +522,7 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const Loki = (await import('lokijs')).default;
     const logger = (await import('../log/index.js')).default;
-    const scopedLog = logger.child.mock.results[0].value;
+    const scopedLog = storeScopedLog(logger);
     expect(container.updateContainer).toHaveBeenCalledWith(migratedContainer);
     expect(Loki.mock.results[0].value.saveDatabase).toHaveBeenCalledOnce();
     expect(scopedLog.info).toHaveBeenCalledWith(
@@ -720,7 +729,7 @@ describe('Store Module', () => {
       await expect(storeWithBadDirPermissions.init()).resolves.toBeUndefined();
 
       const logger = (await import('../log/index.js')).default;
-      const scopedLog = logger.child.mock.results[0].value;
+      const scopedLog = storeScopedLog(logger);
       expect(scopedLog.warn).toHaveBeenCalledOnce();
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
       expect(chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
@@ -750,7 +759,7 @@ describe('Store Module', () => {
       await expect(storeWithBadFilePermissions.init()).resolves.toBeUndefined();
 
       const logger = (await import('../log/index.js')).default;
-      const scopedLog = logger.child.mock.results[0].value;
+      const scopedLog = storeScopedLog(logger);
       expect(scopedLog.warn).toHaveBeenCalledOnce();
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
     },
@@ -892,7 +901,7 @@ describe('Store Module', () => {
       await expect(storeWithBadSqlitePermissions.init()).resolves.toBeUndefined();
 
       const logger = (await import('../log/index.js')).default;
-      const scopedLog = logger.child.mock.results[0].value;
+      const scopedLog = storeScopedLog(logger);
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
     },
   );
