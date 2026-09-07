@@ -1,3 +1,6 @@
+import type { ConfigurationReloadResult } from '../configuration/file/reload.js';
+import type { ConfigWriteOutcome } from '../configuration/file/write.js';
+import type { ComponentReconcileResult } from '../registry/index.js';
 import { getSettingsSchemaKeys } from '../store/settings.js';
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
@@ -11,12 +14,16 @@ const {
   mockGetConfigFileInfo,
   mockDdEnvVars,
   mockConfigFileSources,
+  mockReloadConfiguration,
+  mockWriteConfigurationSection,
 } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn(), put: vi.fn() },
   mockGetServerConfiguration: vi.fn(() => ({}) as Record<string, unknown>),
   mockGetConfigFileInfo: vi.fn(() => undefined as { path: string; modifiedAt: string } | undefined),
   mockDdEnvVars: {} as Record<string, string | undefined>,
   mockConfigFileSources: {} as Record<string, string>,
+  mockReloadConfiguration: vi.fn(),
+  mockWriteConfigurationSection: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -59,17 +66,34 @@ vi.mock('../configuration/file/layer.js', async (importOriginal) => {
   };
 });
 
+vi.mock('../configuration/file/reload.js', () => ({
+  reloadConfiguration: () => mockReloadConfiguration(),
+}));
+
+vi.mock('../configuration/file/write.js', () => ({
+  writeConfigurationSection: (...args: unknown[]) => mockWriteConfigurationSection(...args),
+}));
+
 import * as configRouter from './config.js';
 
 function createResponse() {
   return createMockResponse();
 }
 
+const POST_PATHS = new Set(['/validate', '/reload']);
+
 function getHandler(path: string) {
-  if (path === '/validate') {
+  if (POST_PATHS.has(path)) {
     return mockRouter.post.mock.calls.find((call) => call[0] === path)?.at(-1);
   }
   return mockRouter.get.mock.calls.find((call) => call[0] === path)?.at(-1);
+}
+
+// GET and PUT both register under the same '/:section' path string, so
+// getHandler's GET/POST-only dispatch can't disambiguate them — a dedicated
+// helper reads the PUT registration specifically.
+function getPutHandler(path: string) {
+  return mockRouter.put.mock.calls.find((call) => call[0] === path)?.at(-1);
 }
 
 describe('Config Router', () => {
@@ -77,6 +101,8 @@ describe('Config Router', () => {
     vi.clearAllMocks();
     mockGetServerConfiguration.mockReturnValue({});
     mockGetConfigFileInfo.mockReturnValue(undefined);
+    mockReloadConfiguration.mockReset();
+    mockWriteConfigurationSection.mockReset();
 
     for (const key of Object.keys(mockDdEnvVars)) {
       delete mockDdEnvVars[key];
@@ -424,5 +450,476 @@ describe('Config Router', () => {
     for (const settingsKey of getSettingsSchemaKeys()) {
       expect(configSectionKeys.has(settingsKey)).toBe(false);
     }
+  });
+
+  describe('POST /reload', () => {
+    function reconcileResult(overrides: Partial<ComponentReconcileResult> = {}) {
+      return {
+        added: [],
+        changed: [],
+        removed: [],
+        unchanged: [],
+        errors: [],
+        ...overrides,
+      };
+    }
+
+    test('registers a rate-limited admin route', () => {
+      configRouter.init();
+      expect(mockRouter.post).toHaveBeenCalledWith(
+        '/reload',
+        { rateLimiter: expect.objectContaining({ windowMs: 60_000, max: 5 }) },
+        expect.any(Function),
+      );
+    });
+
+    test('rejects an API key without admin scope', async () => {
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({ principal: { kind: 'api-key', scopes: ['read'] } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(mockReloadConfiguration).not.toHaveBeenCalled();
+    });
+
+    test('is reachable by an API key holding admin', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: { changed: [], reload: [], restart: [] },
+        reconcile: reconcileResult(),
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({ principal: { kind: 'api-key', scopes: ['admin'] } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('returns the applied result with a reconcile summary and records an info audit entry', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+        orphanedRules: [],
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload).toStrictEqual({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: { added: 1, changed: 0, removed: 0, unchanged: 0, errors: 0 },
+        orphanedRules: [],
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'config-reloaded',
+        containerName: 'diagnostics',
+        status: 'info',
+        details: expect.stringContaining('applied'),
+      });
+    });
+
+    test('surfaces orphaned notification rule references in the applied result', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: reconcileResult({ removed: ['trigger:slack.ops'] }),
+        orphanedRules: [{ ruleId: 'update-available', triggerId: 'slack.ops' }],
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.orphanedRules).toEqual([
+        { ruleId: 'update-available', triggerId: 'slack.ops' },
+      ]);
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('orphaned notification rule references 1'),
+        }),
+      );
+    });
+
+    test('returns a refused result with no reconcile summary and records an error audit entry', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: false,
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+        diff: { changed: [], reload: [], restart: [] },
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.applied).toBe(false);
+      expect(payload.reconcile).toBeUndefined();
+      expect(payload.orphanedRules).toBeUndefined();
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'config-reloaded',
+        containerName: 'diagnostics',
+        status: 'error',
+        details: expect.stringContaining('refused'),
+      });
+    });
+
+    test('fails with a 500 when the reload engine throws', async () => {
+      mockReloadConfiguration.mockRejectedValue(new Error('boom'));
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to reload the configuration' });
+    });
+
+    test('applied response satisfies the OpenAPI contract', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: true,
+        errors: [],
+        diff: {
+          changed: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+          reload: ['notification'],
+          restart: [],
+        },
+        reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+        orphanedRules: [{ ruleId: 'update-available', triggerId: 'slack.ops' }],
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/v1/config/reload',
+        method: 'post',
+        statusCode: '200',
+        payload: (res.json as any).mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
+    });
+
+    test('refused response satisfies the OpenAPI contract', async () => {
+      mockReloadConfiguration.mockResolvedValue({
+        applied: false,
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+        diff: { changed: [], reload: [], restart: [] },
+      });
+      configRouter.init();
+      const handler = getHandler('/reload');
+      const res = createResponse();
+
+      await handler({}, res);
+
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/v1/config/reload',
+        method: 'post',
+        statusCode: '200',
+        payload: (res.json as any).mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
+    });
+  });
+
+  describe('PUT /:section', () => {
+    function defaultReloadResult(): ConfigurationReloadResult {
+      return {
+        applied: true,
+        errors: [],
+        diff: { changed: [], reload: [], restart: [] },
+        reconcile: reconcileResult(),
+        orphanedRules: [],
+      };
+    }
+
+    function reconcileResult(overrides: Partial<ComponentReconcileResult> = {}) {
+      return {
+        added: [],
+        changed: [],
+        removed: [],
+        unchanged: [],
+        errors: [],
+        ...overrides,
+      };
+    }
+
+    function writtenOutcome(
+      overrides: Partial<Extract<ConfigWriteOutcome, { kind: 'written' }>> = {},
+    ) {
+      return {
+        kind: 'written' as const,
+        changedKeys: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+        restartRequired: false,
+        reload: defaultReloadResult(),
+        ...overrides,
+      };
+    }
+
+    test('registers a rate-limited admin route', () => {
+      configRouter.init();
+      expect(mockRouter.put).toHaveBeenCalledWith(
+        '/:section',
+        { rateLimiter: expect.objectContaining({ windowMs: 60_000, max: 5 }) },
+        expect.any(Function),
+      );
+    });
+
+    test('rejects an API key without admin scope', async () => {
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler(
+        { params: { section: 'notification' }, principal: { kind: 'api-key', scopes: ['read'] } },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(mockWriteConfigurationSection).not.toHaveBeenCalled();
+    });
+
+    test('is reachable by an API key holding admin', async () => {
+      mockWriteConfigurationSection.mockResolvedValue(writtenOutcome());
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler(
+        {
+          params: { section: 'notification' },
+          body: { discord: { myhook: { url: 'https://new.example/hook' } } },
+          principal: { kind: 'api-key', scopes: ['admin'] },
+        },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('a written outcome returns 200 with the section, changed keys, and reload summary', async () => {
+      mockWriteConfigurationSection.mockResolvedValue(
+        writtenOutcome({
+          reload: {
+            ...defaultReloadResult(),
+            reconcile: reconcileResult({ added: ['trigger:discord.myhook'] }),
+          },
+        }),
+      );
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+      const body = { discord: { myhook: { url: 'https://new.example/hook' } } };
+
+      await handler({ params: { section: 'notification' }, body }, res);
+
+      expect(mockWriteConfigurationSection).toHaveBeenCalledWith('notification', body);
+      expect(res.status).toHaveBeenCalledWith(200);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload).toStrictEqual({
+        applied: true,
+        section: 'notification',
+        changedKeys: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+        restartRequired: false,
+        reload: {
+          applied: true,
+          diff: { changed: [], reload: [], restart: [] },
+          reconcile: { added: 1, changed: 0, removed: 0, unchanged: 0, errors: 0 },
+          orphanedRules: [],
+        },
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: 'info',
+        details: expect.stringContaining('1 key(s) changed'),
+      });
+    });
+
+    test('reports restart required in the audit details when the section is restart-only', async () => {
+      mockWriteConfigurationSection.mockResolvedValue(writtenOutcome({ restartRequired: true }));
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'server' }, body: { port: 4000 } }, res);
+
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.restartRequired).toBe(true);
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ details: expect.stringContaining('restart required') }),
+      );
+    });
+
+    test('a no-file outcome refuses with 409 and records an error audit entry, never a value', async () => {
+      mockWriteConfigurationSection.mockResolvedValue({ kind: 'no-file' });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.error).toContain('No configuration file exists');
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: 'error',
+        details: expect.stringContaining('no configuration file exists'),
+      });
+    });
+
+    test('an invalid outcome refuses with 400 and the Joi-shaped errors, file untouched', async () => {
+      mockWriteConfigurationSection.mockResolvedValue({
+        kind: 'invalid',
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+      });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'security' }, body: { scanner: 'bogus' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'error',
+          details: expect.stringContaining('1 error(s)'),
+        }),
+      );
+    });
+
+    test('an env-sourced outcome refuses with 409 naming the offending keys, never their values', async () => {
+      mockWriteConfigurationSection.mockResolvedValue({
+        kind: 'env-sourced',
+        keys: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
+      });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler(
+        {
+          params: { section: 'notification' },
+          body: { discord: { myhook: { url: 'https://new.example/hook' } } },
+        },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.error).toContain('DD_NOTIFICATION_DISCORD_MYHOOK_URL');
+      expect(payload.error).not.toContain('https://new.example/hook');
+      const auditCall = mockRecordAuditEvent.mock.calls[0][0];
+      expect(auditCall.details).not.toContain('https://new.example/hook');
+    });
+
+    test('a db-owned outcome refuses with 409 pointing at PATCH /api/v1/settings', async () => {
+      mockWriteConfigurationSection.mockResolvedValue({ kind: 'db-owned', section: 'settings' });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'settings' }, body: { updateMode: 'auto' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.error).toContain('PATCH /api/v1/settings');
+    });
+
+    test('fails with a 500 when the write engine throws', async () => {
+      mockWriteConfigurationSection.mockRejectedValue(new Error('boom'));
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to write the configuration section' });
+    });
+
+    test('a written response satisfies the OpenAPI contract', async () => {
+      mockWriteConfigurationSection.mockResolvedValue(writtenOutcome());
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler(
+        {
+          params: { section: 'notification' },
+          body: { discord: { myhook: { url: 'https://new.example/hook' } } },
+        },
+        res,
+      );
+
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/v1/config/{section}',
+        method: 'put',
+        statusCode: '200',
+        payload: (res.json as any).mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
+    });
+
+    test('an invalid response satisfies the OpenAPI contract', async () => {
+      mockWriteConfigurationSection.mockResolvedValue({
+        kind: 'invalid',
+        errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
+      });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'security' }, body: { scanner: 'bogus' } }, res);
+
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/v1/config/{section}',
+        method: 'put',
+        statusCode: '400',
+        payload: (res.json as any).mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
+    });
   });
 });

@@ -4,6 +4,7 @@ import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
 import * as approvalReconciler from './approvals/reconcile.js';
 import { renderBanner } from './banner/index.js';
+import { startConfigFileWatch } from './configuration/file/watch.js';
 import { getDnsMode, validateStartupConfiguration } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
 import log from './log/index.js';
@@ -60,6 +61,16 @@ if (commandExitCode !== null) {
       log.error(`Invalid configuration at ${error.path} (${error.envKey}): ${error.message}`);
     }
     process.exit(1);
+  }
+
+  // Auto-reload on file change, opt-in behind DD_CONFIG_WATCH (default
+  // false, roadmap 7.1 slice 6, decision D2). POST /api/v1/config/reload is
+  // always available regardless of this flag; this only wires an
+  // `fs.watch` on top of it. The flag is read here, not inside
+  // startConfigFileWatch itself, which stays a pure state machine with no
+  // env read of its own.
+  if (process.env.DD_CONFIG_WATCH === 'true') {
+    await startConfigFileWatch();
   }
 
   // Init store

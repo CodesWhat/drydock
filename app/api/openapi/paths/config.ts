@@ -94,6 +94,126 @@ const validateConfigurationResponseSchema = {
   additionalProperties: false,
 } as const;
 
+const reconcileSummarySchema = {
+  type: 'object',
+  description:
+    'Present only when `applied` is true — the component reconciliation outcome for this reload (roadmap 7.1 slice 6), counted rather than named: how many components were added, changed, removed, left unchanged, or errored while being reconciled to the new configuration.',
+  properties: {
+    added: { type: 'integer' },
+    changed: { type: 'integer' },
+    removed: { type: 'integer' },
+    unchanged: { type: 'integer' },
+    errors: { type: 'integer' },
+  },
+  required: ['added', 'changed', 'removed', 'unchanged', 'errors'],
+  additionalProperties: false,
+} as const;
+
+const orphanedNotificationRuleReferenceSchema = {
+  type: 'object',
+  description:
+    'A DB notification rule whose trigger reference no longer resolves after this reload (spec-7.1-config-file.md section 3/4.3) — the rule itself is never deleted or rewritten, only reported.',
+  properties: {
+    ruleId: { type: 'string' },
+    triggerId: { type: 'string' },
+  },
+  required: ['ruleId', 'triggerId'],
+  additionalProperties: false,
+} as const;
+
+const reloadConfigurationResponseSchema = {
+  type: 'object',
+  properties: {
+    applied: { type: 'boolean' },
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+    diff: {
+      type: 'object',
+      description:
+        'Keys that changed between the previous and newly re-read file, and which sections that implies reloaded versus need a restart (spec-7.1-config-file.md section 4.3).',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+    reconcile: { ...reconcileSummarySchema },
+    orphanedRules: {
+      type: 'array',
+      description:
+        'Present only when `applied` is true — every notification rule reference left orphaned by this reload (a trigger it named was renamed or removed).',
+      items: { ...orphanedNotificationRuleReferenceSchema },
+    },
+  },
+  required: ['applied', 'errors', 'diff'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationSectionRequestBody = {
+  required: true,
+  content: {
+    'application/json': {
+      schema: {
+        ...genericObjectSchema,
+        description:
+          'The section tree to write, the same shape one entry of GET /api/v1/config\'s "sections" map has.',
+      },
+    },
+  },
+} as const;
+
+const writeConfigurationReloadSummarySchema = {
+  type: 'object',
+  description: 'The reload this write triggers (roadmap 7.1 slice 6) — same engine, same shape.',
+  properties: {
+    applied: { type: 'boolean' },
+    diff: {
+      type: 'object',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+    reconcile: { ...reconcileSummarySchema },
+    orphanedRules: {
+      type: 'array',
+      items: { ...orphanedNotificationRuleReferenceSchema },
+    },
+  },
+  required: ['applied', 'diff'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationSectionResponseSchema = {
+  type: 'object',
+  properties: {
+    applied: { type: 'boolean' },
+    section: { type: 'string' },
+    changedKeys: { type: 'array', items: { type: 'string' } },
+    restartRequired: {
+      type: 'boolean',
+      description:
+        'True when this section only takes effect after a restart (spec-7.1-config-file.md section 4.3) — the file was still written.',
+    },
+    reload: { ...writeConfigurationReloadSummarySchema },
+  },
+  required: ['applied', 'section', 'changedKeys', 'restartRequired', 'reload'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationInvalidResponseSchema = {
+  type: 'object',
+  properties: {
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+  },
+  required: ['errors'],
+  additionalProperties: false,
+} as const;
+
 export const configPaths = {
   '/api/v1/config': {
     get: {
@@ -128,6 +248,31 @@ export const configPaths = {
         500: errorResponse('Unable to build the effective configuration'),
       },
     },
+    put: {
+      tags: ['System'],
+      summary: 'Write a configuration section through the file',
+      description:
+        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched.',
+      operationId: 'writeConfigurationSection',
+      parameters: [configSectionPathParam],
+      requestBody: writeConfigurationSectionRequestBody,
+      responses: {
+        200: jsonResponse('Write result', { ...writeConfigurationSectionResponseSchema }),
+        400: jsonResponse('Invalid candidate section', {
+          ...writeConfigurationInvalidResponseSchema,
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        409: errorResponse(
+          'No configuration file exists, a key in this section is sourced from the environment, or this section is DB-owned',
+        ),
+        413: errorResponse(
+          'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
+        ),
+        429: errorResponse('Config write rate limit exceeded'),
+        500: errorResponse('Unable to write the configuration section'),
+      },
+    },
   },
   '/api/v1/config/validate': {
     post: {
@@ -146,6 +291,22 @@ export const configPaths = {
         ),
         429: errorResponse('Config validate rate limit exceeded'),
         500: errorResponse('Unable to validate the candidate configuration'),
+      },
+    },
+  },
+  '/api/v1/config/reload': {
+    post: {
+      tags: ['System'],
+      summary: 'Re-read the configuration file and reconcile components against it',
+      description:
+        'Re-reads drydock.yml, validates the merged result exactly like /validate, and — only on success — reconciles registered components by difference against the new desired state (roadmap 7.1 slice 6, spec-7.1-config-file.md section 4.3). A restart-only key (server port, store path, log settings, and other module-load-read values) is reported in diff.restart but never applied; refuses the whole reload on any validation error, applying nothing.',
+      operationId: 'reloadEffectiveConfiguration',
+      responses: {
+        200: jsonResponse('Reload result', { ...reloadConfigurationResponseSchema }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        429: errorResponse('Config reload rate limit exceeded'),
+        500: errorResponse('Unable to reload the configuration'),
       },
     },
   },

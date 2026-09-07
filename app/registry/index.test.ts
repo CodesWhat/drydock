@@ -146,6 +146,31 @@ test('registerComponent should resolve agent component path when agent option is
   ).rejects.toThrow(/Unknown watcher provider|Error when registering component/);
 });
 
+test('registerComponent should not track raw configuration for an agent-owned component, and reconcile should never see it', async () => {
+  // Mirrors AgentClient.ts's own registerAgentComponents() call shape: a
+  // real, successful agent-owned registration (unlike the two tests above,
+  // which only exercise the throwing paths) — the only way to reach
+  // registerComponent's `if (!agent)` skip and reconcile's own
+  // `!(component as Component).agent` filter on a real, non-mocked
+  // component.
+  const component = await registry.testable_registerComponent({
+    kind: 'trigger',
+    provider: 'mock',
+    name: 'agent-owned',
+    configuration: {},
+    componentPath: 'agent/components',
+    agent: 'agent-1',
+  });
+
+  expect(registry.getState().trigger['agent-1.mock.agent-owned']).toBe(component);
+
+  const result = await registry.reconcileComponentsWithConfiguration();
+
+  expect([...result.added, ...result.changed, ...result.removed, ...result.unchanged]).not.toEqual(
+    expect.arrayContaining([expect.stringContaining('agent-owned')]),
+  );
+});
+
 test('registerComponent should execute module fallback branch when module has no default export', async () => {
   const tempProviderPath = path.join(process.cwd(), 'tmp-test-providers');
   const providerDir = path.join(tempProviderPath, 'nodefault');
@@ -1746,6 +1771,16 @@ test('registerTriggers in agent mode should warn when registration fails', async
   expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('Some triggers failed to register'));
 });
 
+test('registerTriggers in agent mode should tolerate a falsy trigger configuration map', async () => {
+  const state = registry.getState();
+  Object.keys(state.trigger).forEach((key) => delete state.trigger[key]);
+  mockGetTriggerConfigurations.mockReturnValueOnce(null as unknown as typeof triggers);
+
+  await registry.testable_registerTriggers({ agent: true });
+
+  expect(Object.keys(registry.getState().trigger)).toEqual([]);
+});
+
 test('init should handle agent registration failures gracefully', async () => {
   agents = {
     badagent: {
@@ -1865,4 +1900,277 @@ test('init should log and continue when pruneOrphanedAgentContainers throws', as
     'Unable to prune orphaned agent containers (store unavailable)',
   );
   expect(debugSpy).toHaveBeenCalled();
+});
+
+describe('reconcileComponentsWithConfiguration', () => {
+  // A handful of earlier tests in this file ('deregisterTriggers should
+  // throw when errors occurred' and its siblings around line 1350) register
+  // a fixture component under a key that doesn't match its own getId(), with
+  // a deregister() that always throws. That component's individual
+  // finally-block cleanup (registry/index.ts's deregisterComponent) never
+  // fires for it, because it keys on getId() rather than the map key it was
+  // inserted under, so it survives every subsequent global afterEach for the
+  // rest of the file. This block's diff-based assertions are the first ones
+  // sensitive to that leftover, so — matching the direct-reset pattern
+  // other tests in this file already use to force a clean slate (e.g. lines
+  // ~1282, ~1337) — reset every component map before each test here rather
+  // than relying on the global afterEach alone.
+  beforeEach(() => {
+    registry.getState().trigger = {};
+    registry.getState().watcher = {};
+    registry.getState().registry = {};
+    registry.getState().authentication = {};
+  });
+
+  async function registerBaseline() {
+    await registry.testable_registerWatchers();
+    await registry.testable_registerRegistries();
+    await registry.testable_registerTriggers();
+  }
+
+  test('leaves an unchanged component untouched: same instance, reported unchanged, never deregistered', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registerBaseline();
+    const before = registry.getState().trigger['mock.mock1'];
+    const deregisterSpy = vi.spyOn(before, 'deregisterComponent');
+
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(registry.getState().trigger['mock.mock1']).toBe(before);
+    expect(deregisterSpy).not.toHaveBeenCalled();
+    expect(result.unchanged).toContain('trigger:mock.mock1');
+    expect(result.changed).not.toContain('trigger:mock.mock1');
+    expect(result.removed).not.toContain('trigger:mock.mock1');
+  });
+
+  test('registers an added trigger', async () => {
+    triggers = {};
+    await registerBaseline();
+
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.added).toContain('trigger:mock.mock1');
+    expect(registry.getState().trigger['mock.mock1']).toBeDefined();
+  });
+
+  test('deregisters a removed trigger', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registerBaseline();
+
+    triggers = {};
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.removed).toContain('trigger:mock.mock1');
+    expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
+  });
+
+  test('a removed component whose deregister throws is reported as a remove error', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registerBaseline();
+    const before = registry.getState().trigger['mock.mock1'];
+    vi.spyOn(before, 'deregisterComponent').mockRejectedValueOnce(new Error('teardown boom'));
+
+    triggers = {};
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.errors).toContainEqual({
+      kind: 'trigger',
+      id: 'mock.mock1',
+      action: 'remove',
+      message: expect.stringContaining('teardown boom'),
+    });
+    expect(result.removed).not.toContain('trigger:mock.mock1');
+  });
+
+  test('deregisters the old instance and registers a new one when a trigger changes configuration', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registerBaseline();
+    const before = registry.getState().trigger['mock.mock1'];
+    const deregisterSpy = vi.spyOn(before, 'deregisterComponent');
+
+    triggers = { mock: { mock1: { mock: 'b' } } };
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    const after = registry.getState().trigger['mock.mock1'];
+    // Complete teardown ran on exactly the old instance — Trigger.ts's real
+    // deregisterComponent() (unmocked here) is what clears every event
+    // subscription the old instance held, so a spy proving it was invoked on
+    // this specific object is the direct causal link to "old subscriptions
+    // are gone".
+    expect(deregisterSpy).toHaveBeenCalledTimes(1);
+    expect(after).not.toBe(before);
+    expect((after as unknown as { configuration: { mock: string } }).configuration.mock).toEqual(
+      'b',
+    );
+    expect(result.changed).toContain('trigger:mock.mock1');
+  });
+
+  test('skips a trigger provider whose value is not an object (no name segment) rather than throwing', async () => {
+    triggers = {};
+    await registerBaseline();
+
+    triggers = { mock: 'not-an-object' } as unknown as typeof triggers;
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.errors).toStrictEqual([]);
+    expect(result.added.filter((id) => id.startsWith('trigger:'))).toStrictEqual([]);
+  });
+
+  test('a deregister that throws is reported and does not block re-registering the changed component', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registerBaseline();
+    const before = registry.getState().trigger['mock.mock1'];
+    vi.spyOn(before, 'deregisterComponent').mockRejectedValueOnce(new Error('teardown boom'));
+
+    triggers = { mock: { mock1: { mock: 'b' } } };
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.errors).toContainEqual({
+      kind: 'trigger',
+      id: 'mock.mock1',
+      action: 'remove',
+      message: expect.stringContaining('teardown boom'),
+    });
+    const after = registry.getState().trigger['mock.mock1'];
+    expect(after).not.toBe(before);
+    expect((after as unknown as { configuration: { mock: string } }).configuration.mock).toEqual(
+      'b',
+    );
+    expect(result.changed).toContain('trigger:mock.mock1');
+  });
+
+  test('a component that fails to register is reported as an add error', async () => {
+    triggers = {};
+    await registerBaseline();
+
+    triggers = { trigger1: { fail: true } };
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ kind: 'trigger', id: 'trigger1.fail', action: 'add' }),
+    );
+    expect(result.added.filter((id) => id.startsWith('trigger:'))).toStrictEqual([]);
+  });
+
+  test('a component that fails to re-register on change is reported, and ends up absent (no rollback)', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registerBaseline();
+
+    triggers = { mock: { mock1: { mock: { nested: true } } } };
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ kind: 'trigger', id: 'mock.mock1', action: 'change' }),
+    );
+    // No rollback: the old instance was already torn down before the
+    // replacement's register() rejected, so the id is left absent rather
+    // than restored to its previous configuration.
+    expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
+  });
+
+  test('reconciles watchers by difference: configuring an explicit watcher drops the implicit default and adds the new one', async () => {
+    watchers = {};
+    await registerBaseline();
+    expect(registry.getState().watcher['docker.local']).toBeDefined();
+
+    watchers = { remote: { host: 'example.invalid', port: 2375, protocol: 'http' } };
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.removed).toContain('watcher:docker.local');
+    expect(result.added).toContain('watcher:docker.remote');
+    expect(registry.getState().watcher['docker.local']).toBeUndefined();
+    expect(registry.getState().watcher['docker.remote']).toBeDefined();
+  });
+
+  test('reconciling a removed watcher does not prune its container rows', async () => {
+    watchers = { remote: { host: 'example.invalid', port: 2375, protocol: 'http' } };
+    await registerBaseline();
+
+    mockGetContainersRaw.mockReturnValue([{ id: 'c1', watcher: 'docker.remote' }]);
+
+    watchers = {};
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.removed).toContain('watcher:docker.remote');
+    expect(mockDeleteContainer).not.toHaveBeenCalled();
+  });
+
+  test('reconciling with no configuration change leaves every default registry unchanged', async () => {
+    await registerBaseline();
+
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    const registryChanges = [...result.added, ...result.changed, ...result.removed].filter((id) =>
+      id.startsWith('registry:'),
+    );
+    expect(registryChanges).toStrictEqual([]);
+    expect(result.unchanged.filter((id) => id.startsWith('registry:')).length).toBeGreaterThan(0);
+  });
+
+  test('never invokes local or agent orphan pruning', async () => {
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    watchers = { remote: { host: 'example.invalid', port: 2375, protocol: 'http' } };
+    await registerBaseline();
+    // The Docker watcher's own registration reads getContainersRaw() to seed
+    // its in-memory image set (Docker.ts) — real activity that happens
+    // before reconcile is even called. Clear it here so the assertions
+    // below scope to what reconcile itself does, not baseline setup.
+    mockGetContainersRaw.mockClear();
+    mockDeleteContainer.mockClear();
+
+    triggers = {};
+    watchers = {};
+    await registry.reconcileComponentsWithConfiguration();
+
+    // pruneOrphanedLocalContainers/pruneOrphanedAgentContainers both read
+    // via getContainersRaw and, when there's anything to prune, call
+    // deleteContainer — neither is exported, so absence of any
+    // store-container call is the observable proof reconcile never reaches
+    // them, matching the equivalent watcher-removal assertion above.
+    expect(mockGetContainersRaw).not.toHaveBeenCalled();
+    expect(mockDeleteContainer).not.toHaveBeenCalled();
+  });
+
+  test('treats a component present in state but never registered through registerComponent as absent from the current set', async () => {
+    // A component can end up in getState() without a componentRawConfigurations
+    // entry only by bypassing registerComponent entirely (as several
+    // pre-existing tests elsewhere in this file do to build fixtures
+    // directly). Reconcile has to tolerate that rather than crash on a
+    // missing raw-configuration lookup — this exercises the `raw !==
+    // undefined` guard's false branch.
+    const orphanComponent = new Component();
+    orphanComponent.type = 'mock';
+    orphanComponent.name = 'untracked';
+    registry.getState().trigger[orphanComponent.getId()] = orphanComponent;
+
+    triggers = {};
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.unchanged).not.toContain('trigger:mock.untracked');
+    expect(result.removed).not.toContain('trigger:mock.untracked');
+  });
+
+  test('a reload after init({ agent: true }) never desires the controller-only local watcher or a disallowed trigger', async () => {
+    // Regression test for buildDesiredEntriesForKind passing a hardcoded `{}`
+    // to buildWatcherProviderConfigurations/buildTriggerProviderConfigurations
+    // instead of the options init() was actually called with: with the bug,
+    // a reload's desired state is computed as if the process were never
+    // started in agent mode, so it would report the controller-only
+    // docker.local watcher and the disallowed 'mock' trigger as things to
+    // ADD even though init() itself never registered either of them.
+    watchers = {};
+    triggers = { mock: { mock1: { mock: 'a' } } };
+    await registry.init({ agent: true });
+
+    expect(registry.getState().watcher['docker.local']).toBeUndefined();
+    expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
+
+    const result = await registry.reconcileComponentsWithConfiguration();
+
+    expect(result.added).not.toContain('watcher:docker.local');
+    expect(result.added).not.toContain('trigger:mock.mock1');
+    expect(registry.getState().watcher['docker.local']).toBeUndefined();
+    expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
+  });
 });

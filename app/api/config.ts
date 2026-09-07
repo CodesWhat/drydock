@@ -4,6 +4,11 @@ import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
 import { getConfigFileInfo } from '../configuration/file/layer.js';
+import { reloadConfiguration } from '../configuration/file/reload.js';
+import {
+  type ConfigWriteOutcome,
+  writeConfigurationSection as writeConfigurationSectionToFile,
+} from '../configuration/file/write.js';
 import { configFileSources, ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import { redactConfigurationTree } from '../debug/redact.js';
 import { recordAuditEvent } from './audit-events.js';
@@ -171,6 +176,175 @@ function getConfigurationSection(req: Request<{ section: string }>, res: Respons
   }
 }
 
+/**
+ * `POST /api/v1/config/reload` — re-read `drydock.yml` and reconcile
+ * registered components by difference (roadmap 7.1 slice 6,
+ * spec-7.1-config-file.md section 4.1). The engine
+ * (`configuration/file/reload.ts`'s `reloadConfiguration`) owns every I/O
+ * and mutation step; this handler's only job is the HTTP/audit wrapping
+ * every other route in this file already follows — always `200` with an
+ * outcome field in the body (`applied`), matching `/validate`'s
+ * `valid`/errors shape, rather than a 4xx/5xx for "the candidate didn't
+ * validate", which is an expected, well-formed outcome, not a request error.
+ */
+function summarizeReconcile(
+  reconcile: Awaited<ReturnType<typeof reloadConfiguration>>['reconcile'],
+) {
+  if (!reconcile) {
+    return undefined;
+  }
+  return {
+    added: reconcile.added.length,
+    changed: reconcile.changed.length,
+    removed: reconcile.removed.length,
+    unchanged: reconcile.unchanged.length,
+    errors: reconcile.errors.length,
+  };
+}
+
+// `reconcileSummary` is only ever undefined when `result.applied` is false
+// (`reloadConfiguration`'s own contract: `reconcile` is set iff the reload
+// applied), so the applied branch below can read it directly rather than
+// guard against a case the type system can't rule out but the contract
+// already does.
+function describeReload(
+  result: Awaited<ReturnType<typeof reloadConfiguration>>,
+  reconcileSummary: ReturnType<typeof summarizeReconcile>,
+): string {
+  if (!result.applied) {
+    return `Reloaded configuration: refused (${result.errors.length} error(s))`;
+  }
+  const summary = reconcileSummary as NonNullable<typeof reconcileSummary>;
+  const orphanedRuleCount = result.orphanedRules?.length ?? 0;
+  return (
+    `Reloaded configuration: applied (added ${summary.added}, ` +
+    `changed ${summary.changed}, removed ${summary.removed}, ` +
+    `unchanged ${summary.unchanged}, errors ${summary.errors}, ` +
+    `orphaned notification rule references ${orphanedRuleCount})`
+  );
+}
+
+async function reloadEffectiveConfiguration(_req: Request, res: Response): Promise<void> {
+  try {
+    const result = await reloadConfiguration();
+    const reconcileSummary = summarizeReconcile(result.reconcile);
+    const details = describeReload(result, reconcileSummary);
+    recordAuditEvent({
+      action: 'config-reloaded',
+      containerName: 'diagnostics',
+      status: result.applied ? 'info' : 'error',
+      details,
+    });
+    res.status(200).json({
+      applied: result.applied,
+      errors: result.errors,
+      diff: result.diff,
+      reconcile: reconcileSummary,
+      orphanedRules: result.orphanedRules,
+    });
+  } catch {
+    sendErrorResponse(res, 500, 'Unable to reload the configuration');
+  }
+}
+
+/**
+ * `PUT /api/v1/config/:section` — write a configuration section through the
+ * file (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). The
+ * engine (`configuration/file/write.ts`'s `writeConfigurationSection`) owns
+ * every I/O, validation, and mutation step, exactly as `reload.ts` does for
+ * `/reload`; this handler is the same HTTP/audit wrapping.
+ *
+ * `admin`, same reasoning as `/validate` and `/reload`: never returns a raw
+ * configuration value, only a section name, key names, counts, and error
+ * text. The audit `details` built below follow the same rule — key *names*
+ * only, never a value — even for the refusal branches, none of which
+ * include anything a caller supplied.
+ */
+function describeWrite(section: string, outcome: ConfigWriteOutcome): string {
+  switch (outcome.kind) {
+    case 'written':
+      return (
+        `Wrote configuration section "${section}": ${outcome.changedKeys.length} key(s) changed` +
+        (outcome.restartRequired ? ' (restart required)' : '')
+      );
+    case 'no-file':
+      return `Wrote configuration section "${section}": refused (no configuration file exists)`;
+    case 'invalid':
+      return `Wrote configuration section "${section}": refused (${outcome.errors.length} error(s))`;
+    case 'env-sourced':
+      return (
+        `Wrote configuration section "${section}": refused ` +
+        `(env-sourced keys: ${outcome.keys.join(', ')})`
+      );
+    case 'db-owned':
+      return `Wrote configuration section "${section}": refused (DB-owned section)`;
+  }
+}
+
+async function writeConfigurationSection(
+  req: Request<{ section: string }>,
+  res: Response,
+): Promise<void> {
+  const { section } = req.params;
+  try {
+    const outcome = await writeConfigurationSectionToFile(section, req.body);
+    // Audited before the body is sent, matching every other route in this
+    // file, and unconditionally — a refusal is as much an "attempt" as a
+    // success, exactly as `/reload` audits both `applied` and refused.
+    recordAuditEvent({
+      action: 'config-written',
+      containerName: 'diagnostics',
+      status: outcome.kind === 'written' ? 'info' : 'error',
+      details: describeWrite(section, outcome),
+    });
+
+    switch (outcome.kind) {
+      case 'written':
+        res.status(200).json({
+          applied: true,
+          section,
+          changedKeys: outcome.changedKeys,
+          restartRequired: outcome.restartRequired,
+          reload: {
+            applied: outcome.reload.applied,
+            diff: outcome.reload.diff,
+            reconcile: summarizeReconcile(outcome.reload.reconcile),
+            orphanedRules: outcome.reload.orphanedRules,
+          },
+        });
+        return;
+      case 'no-file':
+        sendErrorResponse(
+          res,
+          409,
+          'No configuration file exists to write to. Mount one at /config/drydock.yml ' +
+            '(or wherever DD_CONFIG_FILE points) before writing a section through this endpoint.',
+        );
+        return;
+      case 'invalid':
+        res.status(400).json({ errors: outcome.errors });
+        return;
+      case 'env-sourced':
+        sendErrorResponse(
+          res,
+          409,
+          `Cannot write section "${section}": the following keys are set by the environment ` +
+            `and would not take effect: ${outcome.keys.join(', ')}`,
+        );
+        return;
+      case 'db-owned':
+        sendErrorResponse(
+          res,
+          409,
+          `Section "${section}" is managed through PATCH /api/v1/settings, not the configuration file.`,
+        );
+        return;
+    }
+  } catch {
+    sendErrorResponse(res, 500, 'Unable to write the configuration section');
+  }
+}
+
 export function init() {
   const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
   const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
@@ -201,6 +375,30 @@ export function init() {
     message: 'Config validate rate limit exceeded. Max 5 per 60 seconds.',
     ...identityAwareRateLimitOptions,
   });
+  // Same shape again: a reload is heavier than a validate (it also
+  // reconciles every registered component), so if anything it deserves a
+  // tighter cap, but 5/60s already bounds the expensive path and there is no
+  // reason for this route's limit to diverge from its two siblings.
+  const configReloadRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: 'Config reload rate limit exceeded. Max 5 per 60 seconds.',
+    ...identityAwareRateLimitOptions,
+  });
+  // Same shape again: a write does everything reload does, plus a disk
+  // write, so it is at least as expensive and no reason to diverge either.
+  const configWriteRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: 'Config write rate limit exceeded. Max 5 per 60 seconds.',
+    ...identityAwareRateLimitOptions,
+  });
 
   router.use(nocache());
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
@@ -214,5 +412,13 @@ export function init() {
     configValidateRateLimit,
     scoped('admin', validateCandidateConfiguration),
   );
+  // `admin`, same reasoning as `/validate` above: reload's response is the
+  // same paths/env-key-names/error-text/counts shape, never a raw
+  // configuration value.
+  router.post('/reload', configReloadRateLimit, scoped('admin', reloadEffectiveConfiguration));
+  // `admin`, same reasoning again: the response is a section name, key
+  // names, counts and error text — never a raw configuration value, so this
+  // never widens past what `/validate` and `/reload` already allow.
+  router.put('/:section', configWriteRateLimit, scoped('admin', writeConfigurationSection));
   return router;
 }

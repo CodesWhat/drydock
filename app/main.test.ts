@@ -71,6 +71,7 @@ async function loadEntryPoint({
     abandoned: 0,
   }));
   const recoverQueuedOperationsOnStartup = vi.fn();
+  const startConfigFileWatch = vi.fn(async () => undefined);
   let deliverOutboxEntry: ((entry: NotificationOutboxEntry) => Promise<void>) | undefined;
 
   vi.doMock('node:dns', () => ({
@@ -78,6 +79,7 @@ async function loadEntryPoint({
   }));
   vi.doMock('./banner/index.js', () => ({ renderBanner }));
   vi.doMock('./configuration/index.js', () => ({ getDnsMode, validateStartupConfiguration }));
+  vi.doMock('./configuration/file/watch.js', () => ({ startConfigFileWatch }));
   vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
   vi.doMock('./log/index.js', () => ({
     default: {
@@ -137,6 +139,7 @@ async function loadEntryPoint({
     startOutboxWorker,
     recoverInProgressOperationsOnStartup,
     recoverQueuedOperationsOnStartup,
+    startConfigFileWatch,
     get deliverOutboxEntry() {
       return deliverOutboxEntry;
     },
@@ -384,6 +387,35 @@ describe('entrypoint', () => {
     );
     expect(harness.exitSpy).toHaveBeenCalledWith(1);
     expect(harness.storeInit).not.toHaveBeenCalled();
+  });
+
+  test('does not start the config file watch when DD_CONFIG_WATCH is unset', async () => {
+    const harness = await loadEntryPoint();
+
+    await harness.imported;
+
+    expect(harness.startConfigFileWatch).not.toHaveBeenCalled();
+  });
+
+  test('starts the config file watch when DD_CONFIG_WATCH=true', async () => {
+    const harness = await loadEntryPoint({ env: { DD_CONFIG_WATCH: 'true' } });
+
+    await harness.imported;
+
+    expect(harness.startConfigFileWatch).toHaveBeenCalledOnce();
+  });
+
+  test('does not start the config file watch when configuration validation fails, even with DD_CONFIG_WATCH=true', async () => {
+    const harness = await loadEntryPoint({
+      env: { DD_CONFIG_WATCH: 'true' },
+      configurationValidationErrors: [
+        { path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' },
+      ],
+    });
+
+    await expect(harness.imported).rejects.toThrow('process.exit(1) called');
+
+    expect(harness.startConfigFileWatch).not.toHaveBeenCalled();
   });
 
   test('handles undefined trigger state in outbox worker delivery', async () => {

@@ -3782,6 +3782,86 @@ describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
   });
 });
 
+describe('applyConfigurationReload', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET;
+    delete configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET;
+    configuration.configFileInterpolatedKeys.delete('DD_WATCHER_LOCAL_SOCKET');
+  });
+
+  test('sets a new key in both ddEnvVars and configFileSources', () => {
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+    );
+
+    expect(configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET).toEqual('/reloaded/socket.sock');
+    expect(configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET).toEqual('file');
+  });
+
+  test('deletes a key whose delta value is undefined, rather than leaving it present and undefined', () => {
+    configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET = '/old/socket.sock';
+    configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET = 'file';
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+    );
+
+    expect(Object.hasOwn(configuration.ddEnvVars, 'DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+    expect(Object.hasOwn(configuration.configFileSources, 'DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+
+  test('leaves every key outside the delta untouched', () => {
+    configuration.ddEnvVars.DD_SERVER_PORT = '3000';
+    configuration.configFileSources.DD_SERVER_PORT = 'env';
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+    );
+
+    expect(configuration.ddEnvVars.DD_SERVER_PORT).toEqual('3000');
+    expect(configuration.configFileSources.DD_SERVER_PORT).toEqual('env');
+    delete configuration.ddEnvVars.DD_SERVER_PORT;
+    delete configuration.configFileSources.DD_SERVER_PORT;
+  });
+
+  test('adds a touched key to configFileInterpolatedKeys when newInterpolatedKeys names it', () => {
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'env' },
+      new Set(['DD_WATCHER_LOCAL_SOCKET']),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(true);
+  });
+
+  test('removes a touched key from configFileInterpolatedKeys once it is no longer named in newInterpolatedKeys', () => {
+    configuration.configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/literal/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+      new Set(),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+
+  test('removes a touched key from configFileInterpolatedKeys when its delta value is undefined (removed), even if newInterpolatedKeys still names it', () => {
+    configuration.configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      new Set(['DD_WATCHER_LOCAL_SOCKET']),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+});
+
 describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
   // This test enumerates the 21 files so a new direct reader shows up as a
   // failing assertion instead of a silent coverage gap.

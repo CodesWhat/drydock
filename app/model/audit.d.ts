@@ -40,6 +40,8 @@ export interface AuditEntry {
     | 'debug-dump'
     | 'config-read'
     | 'config-validated'
+    | 'config-reloaded'
+    | 'config-written'
     | 'auto-update-blocked'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'

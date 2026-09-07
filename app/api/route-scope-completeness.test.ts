@@ -101,6 +101,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/approvals/:id/approve → containers:update',
   'POST /api/v1/approvals/:id/defer → containers:update',
   'POST /api/v1/approvals/:id/reject → containers:update',
+  'POST /api/v1/config/reload → admin',
   'POST /api/v1/config/validate → admin',
   'POST /api/v1/containers/:id/env/reveal → session-only',
   'POST /api/v1/containers/:id/preview → containers:watch',
@@ -131,6 +132,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/webhook/watch → session-only',
   'POST /api/v1/webhook/watch/:containerName → session-only',
   'POST /api/v1/webhooks/registry → session-only',
+  'PUT /api/v1/config/:section → admin',
   'PUT /api/v1/settings → admin',
 ];
 

@@ -37,6 +37,11 @@ import {
   resolveComponentRoot,
 } from './component-resolution.js';
 import {
+  canonicalConfigurationJSON,
+  diffComponentConfigurations,
+  type ReconcilePlan,
+} from './reconcile.js';
+import {
   applySharedTriggerConfigurationByName as applySharedTriggerConfigurationByNameHelper,
   applyTriggerGroupDefaults as applyTriggerGroupDefaultsHelper,
 } from './trigger-shared-config.js';
@@ -99,6 +104,40 @@ const state: RegistryState = {
 
 const registrationWarnings: string[] = [];
 const authenticationRegistrationErrors: AuthenticationRegistrationError[] = [];
+
+/**
+ * The options the running process was actually started with — `init`'s own
+ * argument, remembered here so a later reload's `buildDesiredEntriesForKind`
+ * (roadmap 7.1 slice 6) can recompute desired watcher/trigger state under the
+ * same `{ agent: true }` restriction real registration used, instead of the
+ * `{}` it used to pass unconditionally. Passing `{}` there let a reload in
+ * agent mode compute (and reconcile in) a controller-only `docker.local`
+ * watcher or a trigger outside `AGENT_ALLOWED_TRIGGER_PROVIDERS`, since
+ * neither builder had any way to know the process was ever started with
+ * `agent: true`.
+ */
+let registrationOptions: RegistrationOptions = {};
+
+/**
+ * The canonical JSON of the *raw* configuration passed to `registerComponent`
+ * for every currently-registered non-agent component, keyed by
+ * `${kind}:${id}`. Roadmap 7.1 slice 6's reload reconciliation
+ * (spec-7.1-config-file.md section 4.3) diffs this against a freshly
+ * computed desired-state map to decide what to leave alone, deregister, or
+ * (re-)register — hashing `component.configuration` instead would not work,
+ * since that field holds the *validated* value with Joi defaults applied
+ * (`Component.ts`), which never equals the raw desired input and would read
+ * every component as changed on every reload.
+ *
+ * The `kind` prefix exists because `Component.getId()` is `type.name` with no
+ * kind segment, and a `type`/`name` pair can collide across kinds — e.g. a
+ * `docker` watcher and a `docker` action trigger can both be named `local`.
+ */
+const componentRawConfigurations = new Map<string, string>();
+
+function rawConfigurationKey(kind: ComponentKind, id: string): string {
+  return `${kind}:${id}`;
+}
 
 export function getState(): Readonly<RegistryState> {
   return state;
@@ -164,6 +203,17 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
     );
 
     addComponentToState(kind, component);
+    // Only tracked for controller-owned (non-agent) components: an
+    // agent-owned watcher/trigger is already reconciled by
+    // `AgentClient._doHandshake()`'s own deregister-all-then-re-register
+    // cycle on every reconnect, not by a file reload, so it has no desired
+    // state for `reconcileComponentsWithConfiguration` to compare against.
+    if (!agent) {
+      componentRawConfigurations.set(
+        rawConfigurationKey(kind, componentRegistered.getId()),
+        canonicalConfigurationJSON(configuration),
+      );
+    }
     return componentRegistered;
   } catch (e: unknown) {
     const availableProviders = getAvailableProviders(componentPath, (message) =>
@@ -294,10 +344,64 @@ function applyTriggerGroupDefaults(
  * @param options
  * @returns {Promise<Set<string>>}
  */
+interface WatcherRegistrationEntry {
+  name: string;
+  configuration: ComponentConfiguration;
+}
+
+/**
+ * The set of `docker` watcher entries `registerWatchers` would register, and
+ * the local watcher names `pruneOrphanedLocalContainers` needs — pulled out
+ * of `registerWatchers` so roadmap 7.1 slice 6's reload reconciliation
+ * (`buildDesiredEntriesForKind`) can compute the *desired* watcher state the
+ * same way real registration does, without also registering anything or
+ * exiting the process. Pure: no logging, no I/O, no `registerComponent` call.
+ */
+function buildWatcherProviderConfigurations(
+  configurations: Record<string, Record<string, unknown>>,
+  options: RegistrationOptions,
+): {
+  entries: WatcherRegistrationEntry[];
+  configuredLocalWatcherNames: Set<string>;
+} {
+  const configuredLocalWatcherNames = new Set<string>();
+  if (Object.keys(configurations).length === 0) {
+    if (options.agent || !getLocalWatcherEnabled()) {
+      return { entries: [], configuredLocalWatcherNames };
+    }
+    configuredLocalWatcherNames.add('local');
+    return {
+      entries: [{ name: 'local', configuration: {} }],
+      configuredLocalWatcherNames,
+    };
+  }
+  const entries = Object.keys(configurations).map((watcherKey) => {
+    const watcherKeyNormalize = watcherKey.toLowerCase();
+    configuredLocalWatcherNames.add(watcherKeyNormalize);
+    return {
+      name: watcherKeyNormalize,
+      configuration: configurations[watcherKeyNormalize] as ComponentConfiguration,
+    };
+  });
+  return { entries, configuredLocalWatcherNames };
+}
+
+/**
+ * Register watchers.
+ *
+ * Resolves to the names of the local watchers registration was attempted for,
+ * which `pruneOrphanedLocalContainers` needs: a watcher the operator still has
+ * configured is coming back once whatever broke it is fixed, whether or not it
+ * registered this time, so its container records are not orphans.
+ * @param options
+ * @returns {Promise<Set<string>>}
+ */
 async function registerWatchers(options: RegistrationOptions = {}): Promise<Set<string>> {
   const configurations = getWatcherConfigurations();
-  const configuredLocalWatcherNames = new Set<string>();
-  let watchersToRegister: Promise<Component>[] = [];
+  const { entries, configuredLocalWatcherNames } = buildWatcherProviderConfigurations(
+    configurations,
+    options,
+  );
   try {
     if (Object.keys(configurations).length === 0) {
       if (options.agent) {
@@ -308,32 +412,17 @@ async function registerWatchers(options: RegistrationOptions = {}): Promise<Set<
         log.info('Default local watcher disabled (DD_LOCAL_WATCHER=false)');
       } else {
         log.info('No Watcher configured => Init a default one (Docker with default options)');
-        configuredLocalWatcherNames.add('local');
-        watchersToRegister.push(
-          registerComponent({
-            kind: 'watcher',
-            provider: 'docker',
-            name: 'local',
-            configuration: {},
-            componentPath: 'watchers/providers',
-          }),
-        );
       }
-    } else {
-      watchersToRegister = watchersToRegister.concat(
-        Object.keys(configurations).map((watcherKey) => {
-          const watcherKeyNormalize = watcherKey.toLowerCase();
-          configuredLocalWatcherNames.add(watcherKeyNormalize);
-          return registerComponent({
-            kind: 'watcher',
-            provider: 'docker',
-            name: watcherKeyNormalize,
-            configuration: configurations[watcherKeyNormalize],
-            componentPath: 'watchers/providers',
-          });
-        }),
-      );
     }
+    const watchersToRegister = entries.map((entry) =>
+      registerComponent({
+        kind: 'watcher',
+        provider: 'docker',
+        name: entry.name,
+        configuration: entry.configuration,
+        componentPath: 'watchers/providers',
+      }),
+    );
     // allSettled rather than all: Promise.all settles the await on the first
     // rejection while the other registrations are still in flight, so a watcher
     // that registers perfectly well can land in the registry after init has
@@ -457,11 +546,21 @@ function pruneOrphanedAgentContainers() {
   }
 }
 
+const AGENT_ALLOWED_TRIGGER_PROVIDERS = new Set(['docker', 'dockercompose']);
+
 /**
- * Register triggers.
- * @param options
+ * The trigger provider configurations `registerTriggers` would register
+ * (`action.*`/`notification.*`, group defaults and same-name shared
+ * threshold applied, agent-mode's provider allow-list applied) — pulled out
+ * of `registerTriggers` for the same reason `buildWatcherProviderConfigurations`
+ * is pulled out of `registerWatchers`: roadmap 7.1 slice 6's reload
+ * reconciliation needs the desired trigger state without registering
+ * anything. Pure: no logging beyond what's needed to explain a dropped
+ * agent-mode provider, no I/O, no `registerComponent` call.
  */
-async function registerTriggers(options: RegistrationOptions = {}) {
+function buildTriggerProviderConfigurations(
+  options: RegistrationOptions,
+): ProviderConfigurationsByProvider {
   const rawConfigurations = getTriggerConfigurations() as
     | ProviderConfigurationsByProvider
     | null
@@ -471,26 +570,28 @@ async function registerTriggers(options: RegistrationOptions = {}) {
     'triggers/providers',
   );
   const configurations = applySharedTriggerConfigurationByName(configurationsWithGroupDefaults);
-  const allowedTriggers = new Set(['docker', 'dockercompose']);
 
-  if (options.agent && configurations) {
-    const filteredConfigurations: ProviderConfigurationsByProvider = {};
-    Object.keys(configurations).forEach((provider) => {
-      if (allowedTriggers.has(provider.toLowerCase())) {
-        filteredConfigurations[provider] = configurations[provider];
-      } else {
-        log.warn(`Trigger type '${provider}' is not supported in Agent mode and will be ignored.`);
-      }
-    });
-    try {
-      await registerComponents('trigger', filteredConfigurations, 'triggers/providers');
-    } catch (e: unknown) {
-      log.warn(`Some triggers failed to register (${getErrorMessage(e)})`);
-      log.debug(e);
-    }
-    return;
+  if (!options.agent || !configurations) {
+    return configurations ?? {};
   }
 
+  const filteredConfigurations: ProviderConfigurationsByProvider = {};
+  Object.keys(configurations).forEach((provider) => {
+    if (AGENT_ALLOWED_TRIGGER_PROVIDERS.has(provider.toLowerCase())) {
+      filteredConfigurations[provider] = configurations[provider];
+    } else {
+      log.warn(`Trigger type '${provider}' is not supported in Agent mode and will be ignored.`);
+    }
+  });
+  return filteredConfigurations;
+}
+
+/**
+ * Register triggers.
+ * @param options
+ */
+async function registerTriggers(options: RegistrationOptions = {}) {
+  const configurations = buildTriggerProviderConfigurations(options);
   try {
     await registerComponents('trigger', configurations, 'triggers/providers');
   } catch (e: unknown) {
@@ -544,68 +645,79 @@ function providerHasCredentialedInstance(
   return Object.values(providerConfig).some(isCredentialedInstance);
 }
 
+const DEFAULT_REGISTRIES: ProviderConfigurationsByProvider = {
+  alicr: { public: '' },
+  codeberg: { public: '' },
+  dhi: { public: '' },
+  docr: { public: '' },
+  ecr: { public: '' },
+  gar: { public: '' },
+  gcr: { public: '' },
+  ghcr: { public: '' },
+  hub: { public: '' },
+  ibmcr: { public: '' },
+  lscr: { public: '' },
+  mau: { public: '' },
+  ocir: { public: '' },
+  quay: { public: '' },
+  trueforge: { public: '' },
+};
+
 /**
- * Register registries.
- * @returns {Promise}
+ * The registry provider configurations `registerRegistries` would register
+ * (every default anonymous-public seed, merged with whatever the operator
+ * configured, with a provider's anonymous default dropped once a credentialed
+ * instance is configured for it) — pulled out of `registerRegistries` for
+ * the same reason `buildWatcherProviderConfigurations` is pulled out of
+ * `registerWatchers`: roadmap 7.1 slice 6's reload reconciliation needs the
+ * desired registry state without registering anything.
  */
-async function registerRegistries() {
-  const defaultRegistries = {
-    alicr: { public: '' },
-    codeberg: { public: '' },
-    dhi: { public: '' },
-    docr: { public: '' },
-    ecr: { public: '' },
-    gar: { public: '' },
-    gcr: { public: '' },
-    ghcr: { public: '' },
-    hub: { public: '' },
-    ibmcr: { public: '' },
-    lscr: { public: '' },
-    mau: { public: '' },
-    ocir: { public: '' },
-    quay: { public: '' },
-    trueforge: { public: '' },
-  };
+function buildRegistryProviderConfigurations(): ProviderConfigurationsByProvider {
   const configuredRegistries = getRegistryConfigurations() as
     | ProviderConfigurationsByProvider
     | null
     | undefined;
   const providers = new Set([
-    ...Object.keys(defaultRegistries),
+    ...Object.keys(DEFAULT_REGISTRIES),
     ...Object.keys(configuredRegistries || {}),
   ]);
-  const registriesToRegister = {
-    ...Array.from(providers).reduce((mergedRegistries, provider) => {
-      const rawDefaultProviderConfiguration = toNamedConfigurationMap(
-        (defaultRegistries as Record<string, unknown>)[provider],
+  return Array.from(providers).reduce((mergedRegistries, provider) => {
+    const rawDefaultProviderConfiguration = toNamedConfigurationMap(
+      (DEFAULT_REGISTRIES as Record<string, unknown>)[provider],
+    );
+    const configuredProviderConfiguration = toNamedConfigurationMap(
+      (configuredRegistries as Record<string, unknown>)?.[provider],
+    );
+    // Skip the anonymous 'public' default when the user has configured at
+    // least one credentialed instance for this provider. The credentialed
+    // instance(s) will handle all traffic; keeping the public seed would
+    // create a second, anonymous instance that can win the routing race and
+    // send authenticated users through the anonymous tier (→ 429s).
+    let defaultProviderConfiguration = rawDefaultProviderConfiguration;
+    if (
+      'public' in rawDefaultProviderConfiguration &&
+      providerHasCredentialedInstance(provider, configuredRegistries)
+    ) {
+      const { public: _dropped, ...rest } = rawDefaultProviderConfiguration;
+      defaultProviderConfiguration = rest;
+      log.info(
+        `Skipping anonymous '${provider}.public' default because credentialed instance(s) are configured`,
       );
-      const configuredProviderConfiguration = toNamedConfigurationMap(
-        (configuredRegistries as Record<string, unknown>)?.[provider],
-      );
-      // Skip the anonymous 'public' default when the user has configured at
-      // least one credentialed instance for this provider. The credentialed
-      // instance(s) will handle all traffic; keeping the public seed would
-      // create a second, anonymous instance that can win the routing race and
-      // send authenticated users through the anonymous tier (→ 429s).
-      let defaultProviderConfiguration = rawDefaultProviderConfiguration;
-      if (
-        'public' in rawDefaultProviderConfiguration &&
-        providerHasCredentialedInstance(provider, configuredRegistries)
-      ) {
-        const { public: _dropped, ...rest } = rawDefaultProviderConfiguration;
-        defaultProviderConfiguration = rest;
-        log.info(
-          `Skipping anonymous '${provider}.public' default because credentialed instance(s) are configured`,
-        );
-      }
-      mergedRegistries[provider] = mergeProviderConfigurations(
-        defaultProviderConfiguration,
-        configuredProviderConfiguration,
-      );
-      return mergedRegistries;
-    }, {} as ProviderConfigurationsByProvider),
-  };
+    }
+    mergedRegistries[provider] = mergeProviderConfigurations(
+      defaultProviderConfiguration,
+      configuredProviderConfiguration,
+    );
+    return mergedRegistries;
+  }, {} as ProviderConfigurationsByProvider);
+}
 
+/**
+ * Register registries.
+ * @returns {Promise}
+ */
+async function registerRegistries() {
+  const registriesToRegister = buildRegistryProviderConfigurations();
   try {
     await registerComponents('registry', registriesToRegister, 'registries/providers');
   } catch (e: unknown) {
@@ -771,6 +883,7 @@ async function deregisterComponent(component: Component, kind: ComponentKind) {
     const components = getState()[kind];
     if (components?.[component.getId()] === component) {
       delete components[component.getId()];
+      componentRawConfigurations.delete(rawConfigurationKey(kind, component.getId()));
     }
   }
 }
@@ -855,6 +968,223 @@ async function deregisterAll() {
   }
 }
 
+interface DesiredComponentEntry {
+  provider: string;
+  name: string;
+  configuration: ComponentConfiguration;
+  componentPath: string;
+}
+
+type ReloadableComponentKind = 'watcher' | 'registry' | 'trigger';
+
+/**
+ * `authentication` and `agent` are excluded: both are restart-required in
+ * v1.8 (spec-7.1-config-file.md section 4.3's table — auth strategies are
+ * consulted per request and rebuilding mid-request is an auth bypass
+ * surface; an `AgentClient` owns a live SSE connection). Reload only ever
+ * reconciles the three kinds whose teardown is a complete, generation- or
+ * subscription-guarded no-op for anything in flight.
+ */
+const RELOADABLE_COMPONENT_KINDS: ReloadableComponentKind[] = ['watcher', 'registry', 'trigger'];
+
+const COMPONENT_PATH_BY_RELOADABLE_KIND: Record<ReloadableComponentKind, string> = {
+  watcher: 'watchers/providers',
+  registry: 'registries/providers',
+  trigger: 'triggers/providers',
+};
+
+/**
+ * The desired state for one reloadable kind, keyed by `provider.name` (the
+ * same shape `Component.getId()` produces for a non-agent component) —
+ * computed the same way real registration would (`buildWatcherProviderConfigurations`,
+ * `buildRegistryProviderConfigurations`, `buildTriggerProviderConfigurations`),
+ * from whatever `ddEnvVars` holds right now.
+ */
+function buildDesiredEntriesForKind(
+  kind: ReloadableComponentKind,
+): Map<string, DesiredComponentEntry> {
+  const entries = new Map<string, DesiredComponentEntry>();
+  const componentPath = COMPONENT_PATH_BY_RELOADABLE_KIND[kind];
+
+  if (kind === 'watcher') {
+    const { entries: watcherEntries } = buildWatcherProviderConfigurations(
+      getWatcherConfigurations(),
+      registrationOptions,
+    );
+    for (const entry of watcherEntries) {
+      entries.set(`docker.${entry.name}`, {
+        provider: 'docker',
+        name: entry.name,
+        configuration: entry.configuration,
+        componentPath,
+      });
+    }
+    return entries;
+  }
+
+  const providerConfigurations =
+    kind === 'registry'
+      ? buildRegistryProviderConfigurations()
+      : buildTriggerProviderConfigurations(registrationOptions);
+
+  for (const [provider, instances] of Object.entries(providerConfigurations)) {
+    if (!isObjectRecord(instances)) {
+      continue;
+    }
+    for (const [name, configuration] of Object.entries(instances)) {
+      entries.set(`${provider}.${name}`, {
+        provider,
+        name,
+        configuration: configuration as ComponentConfiguration,
+        componentPath,
+      });
+    }
+  }
+  return entries;
+}
+
+export interface ComponentReconcileError {
+  kind: ReloadableComponentKind;
+  id: string;
+  action: 'add' | 'change' | 'remove';
+  message: string;
+}
+
+export interface ComponentReconcileResult {
+  /** `${kind}:${id}` for every component newly registered. */
+  added: string[];
+  /** `${kind}:${id}` for every component deregistered then re-registered with a new configuration. */
+  changed: string[];
+  /** `${kind}:${id}` for every component deregistered with no replacement. */
+  removed: string[];
+  /** `${kind}:${id}` for every component whose configuration is unchanged — never torn down. */
+  unchanged: string[];
+  errors: ComponentReconcileError[];
+}
+
+/**
+ * `plan.remove`/`plan.change` ids come from `diffComponentConfigurations`
+ * over `currentJsonById`, whose keys are always a subset of `currentState`'s
+ * own keys (`reconcileComponentsWithConfiguration` builds it from
+ * `Object.entries(getState()[kind])`); `plan.change`/`plan.add` ids come
+ * from the same `desiredEntries` this function is handed. Both lookups
+ * below are therefore always defined — asserted, not guarded, so a broken
+ * invariant fails loudly (a thrown `TypeError`, caught by the same
+ * try/catch every other per-component failure already goes through) rather
+ * than silently skipping a component reload was supposed to reconcile.
+ */
+async function applyReconcilePlanForKind(
+  kind: ReloadableComponentKind,
+  plan: ReconcilePlan,
+  desiredEntries: Map<string, DesiredComponentEntry>,
+  result: ComponentReconcileResult,
+): Promise<void> {
+  const currentState = getState()[kind] as Record<string, Component>;
+
+  for (const id of plan.remove) {
+    try {
+      await deregisterComponent(currentState[id], kind);
+      result.removed.push(rawConfigurationKey(kind, id));
+    } catch (e: unknown) {
+      result.errors.push({ kind, id, action: 'remove', message: getErrorMessage(e) });
+    }
+  }
+
+  for (const id of plan.change) {
+    try {
+      await deregisterComponent(currentState[id], kind);
+    } catch (e: unknown) {
+      result.errors.push({ kind, id, action: 'remove', message: getErrorMessage(e) });
+    }
+    try {
+      await registerComponent({ kind, ...desiredEntries.get(id)! });
+      result.changed.push(rawConfigurationKey(kind, id));
+    } catch (e: unknown) {
+      result.errors.push({ kind, id, action: 'change', message: getErrorMessage(e) });
+    }
+  }
+
+  for (const id of plan.add) {
+    try {
+      await registerComponent({ kind, ...desiredEntries.get(id)! });
+      result.added.push(rawConfigurationKey(kind, id));
+    } catch (e: unknown) {
+      result.errors.push({ kind, id, action: 'add', message: getErrorMessage(e) });
+    }
+  }
+
+  result.unchanged.push(...plan.unchanged.map((id) => rawConfigurationKey(kind, id)));
+}
+
+/**
+ * Diff-based reload reconciliation (spec-7.1-config-file.md section 4.3):
+ * recompute the desired watcher/registry/trigger configuration from whatever
+ * `ddEnvVars` holds right now — the caller, `configuration/file/reload.ts`,
+ * has already applied a validated reload's reloadable-section changes to it
+ * before calling this — and reconcile the registry's current state against
+ * it by difference. Never deregisters everything and starts over: a
+ * component whose raw configuration is unchanged is never touched
+ * (`unchanged`); a removed/changed one is torn down via the same complete
+ * `deregisterComponent()` every other deregistration path already uses; an
+ * added/changed one is (re-)registered via the same `registerComponent()`
+ * every other registration path uses.
+ *
+ * Deliberately never calls `pruneOrphanedLocalContainers` or
+ * `pruneOrphanedAgentContainers` (see `init()` below for those): a watcher
+ * that reads as momentarily absent mid-reload must not delete its container
+ * rows (section 4.3's first hazard). The caller is responsible for wrapping
+ * this in the exclusive update-lifecycle lock (section 4.3's second hazard);
+ * this function has no lock awareness of its own.
+ *
+ * A per-component failure (a deregister or register call throwing) is
+ * collected in `errors` and reconciliation continues with the next
+ * component — there is no whole-reconcile rollback. Rolling back would mean
+ * re-registering an already-torn-down component with its old configuration,
+ * itself a register call that can fail no less than the first one did, and
+ * `deregisterComponent` already unconditionally removes a component from
+ * `state` in its `finally` block regardless of whether teardown itself
+ * threw — so by the time an error reaches this function the registry's own
+ * bookkeeping for that component is never left half-applied, only that
+ * component's own internal teardown may be incomplete, which re-registering
+ * it cannot undo either. Continuing keeps one component's teardown failure
+ * from blocking every other, independent component's reconciliation —
+ * the same reasoning that makes this diff-based rather than
+ * deregister-all-and-reinit in the first place.
+ */
+export async function reconcileComponentsWithConfiguration(): Promise<ComponentReconcileResult> {
+  const result: ComponentReconcileResult = {
+    added: [],
+    changed: [],
+    removed: [],
+    unchanged: [],
+    errors: [],
+  };
+
+  for (const kind of RELOADABLE_COMPONENT_KINDS) {
+    const desiredEntries = buildDesiredEntriesForKind(kind);
+    const desiredJsonById = new Map<string, string>();
+    for (const [id, entry] of desiredEntries) {
+      desiredJsonById.set(id, canonicalConfigurationJSON(entry.configuration));
+    }
+
+    const currentIds = Object.entries(getState()[kind])
+      .filter(([, component]) => !(component as Component).agent)
+      .map(([id]) => id);
+    const currentJsonById = new Map<string, string>();
+    for (const id of currentIds) {
+      const raw = componentRawConfigurations.get(rawConfigurationKey(kind, id));
+      if (raw !== undefined) {
+        currentJsonById.set(id, raw);
+      }
+    }
+
+    const plan = diffComponentConfigurations(currentJsonById, desiredJsonById);
+    await applyReconcilePlanForKind(kind, plan, desiredEntries, result);
+  }
+
+  return result;
+}
+
 async function shutdown() {
   try {
     securityScheduler.shutdown();
@@ -869,6 +1199,7 @@ async function shutdown() {
 }
 
 export async function init(options: RegistrationOptions = {}) {
+  registrationOptions = options;
   // Register triggers
   await registerTriggers(options);
 

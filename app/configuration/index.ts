@@ -148,8 +148,21 @@ Object.keys(process.env)
 // the keys whose file value came from `${NAME}` substitution (decision D1)
 // rather than literal file text, so the merge below can attribute them as
 // `env` even though they physically arrived via the file layer.
+//
+// Exported (and mutable) rather than the plain local `const` a one-shot
+// bootstrap read would otherwise be: `file/layer.ts`'s own copy of this set
+// is kept current on every reload (`setConfigFileLayer`), but a snapshot
+// taken once here at import time would silently go stale the moment the
+// file changed underneath it. `applyConfigurationReload` below is what
+// keeps this singleton current after that point, mutating it in place for
+// the same reason `ddEnvVars`/`configFileSources` are mutated rather than
+// reassigned — every module that imported this binding keeps seeing live
+// values. `file/diff.ts`'s `buildCandidateEnvAndDiff` is why it needs to
+// stay current at all: an interpolated key's `configFileSources` entry
+// reads `'env'` exactly like a genuinely environment-owned key's does, and
+// this is the only way it can tell the two apart on a *later* reload.
 const configFileLayer = getConfigFileLayer();
-const configFileInterpolatedKeys = getConfigFileInterpolatedKeys();
+export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInterpolatedKeys());
 
 // 3. Merge the file layer beneath the real environment: a key already set in
 // step 1 wins, an unset one is filled in from the file, and Joi defaults are
@@ -205,6 +218,65 @@ export async function validateStartupConfiguration(): Promise<{
   }
   const { validateConfiguration } = await import('./file/validate.js');
   return validateConfiguration(ddEnvVars);
+}
+
+/**
+ * Apply the per-key delta a successful configuration reload computed
+ * (roadmap 7.1 slice 6, `configuration/file/reload.ts`) to the running
+ * `ddEnvVars`/`configFileSources` singletons, in place — the same mutate-
+ * don't-reassign discipline step 3 above already follows, so every module
+ * that imported either binding at its own import time keeps seeing live
+ * values.
+ *
+ * Deliberately narrow: `envDelta`/`sourcesDelta` carry only the keys
+ * `reload.ts` decided to actually apply (reloadable-section keys that
+ * changed), never every key in the new file — a restart-required key that
+ * changed is reported in the reload's `restart` diff but must never reach
+ * here, and an unchanged key has no reason to. A `value`/`source` of
+ * `undefined` for a key means the key is gone in the new file (and not
+ * re-supplied by the real environment either): deleted outright, rather
+ * than left present with an `undefined` value, so a later
+ * `Object.keys(ddEnvVars)` walk (`get()` above, every section getter) never
+ * sees it.
+ *
+ * `newInterpolatedKeys` — `reload.ts`'s full, whole-file interpolated-keys
+ * set for the reload just applied (the same set it hands `setConfigFileLayer`)
+ * — keeps `configFileInterpolatedKeys` in sync for exactly the keys this
+ * call already touches: a touched key present in `newInterpolatedKeys` is
+ * added, and one that's absent (no longer interpolated, now a literal file
+ * value, genuinely environment-owned, or removed outright) is deleted.
+ * Reading the *whole-file* set rather than a pre-narrowed one is safe
+ * precisely because the loop below only ever looks up keys already in
+ * `envDelta`'s narrow domain — a restart-required key's interpolation
+ * status in the new file is never consulted here, matching every other
+ * per-key mutation in this function.
+ */
+export function applyConfigurationReload(
+  envDelta: Record<string, string | undefined>,
+  sourcesDelta: Record<string, ConfigValueSource | undefined>,
+  newInterpolatedKeys: ReadonlySet<string> = new Set(),
+): void {
+  for (const [key, value] of Object.entries(envDelta)) {
+    if (value === undefined) {
+      delete ddEnvVars[key];
+    } else {
+      ddEnvVars[key] = value;
+    }
+  }
+  for (const [key, source] of Object.entries(sourcesDelta)) {
+    if (source === undefined) {
+      delete configFileSources[key];
+    } else {
+      configFileSources[key] = source;
+    }
+  }
+  for (const key of Object.keys(envDelta)) {
+    if (envDelta[key] !== undefined && newInterpolatedKeys.has(key)) {
+      configFileInterpolatedKeys.add(key);
+    } else {
+      configFileInterpolatedKeys.delete(key);
+    }
+  }
 }
 
 export function getVersion() {
