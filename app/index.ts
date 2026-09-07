@@ -1,4 +1,3 @@
-import { runConfigCommandIfRequested } from './configuration/config-cli.js';
 import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
 
 /**
@@ -49,10 +48,21 @@ import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
  * existing dispatch site in `main.js`, after the load below, unchanged.
  */
 async function bootstrap(): Promise<void> {
-  const commandExitCode = await runConfigCommandIfRequested(process.argv.slice(2));
-  if (commandExitCode !== null) {
-    process.exitCode = commandExitCode;
-    return;
+  const argv = process.argv.slice(2);
+  // `config-cli.ts` reaches `configuration/index.ts` through
+  // `file/validate.ts`, and that module merges the file layer the moment it
+  // evaluates. A static import of the CLI here evaluated that chain before
+  // `loadConfigFileIntoLayer` had run, so every file-sourced value was
+  // missing from the merged configuration at runtime while the file still
+  // reported as present (caught by e2e `api-config.feature`). Only import it
+  // when a `config` subcommand was actually asked for.
+  if (argv[0] === 'config') {
+    const { runConfigCommandIfRequested } = await import('./configuration/config-cli.js');
+    const commandExitCode = await runConfigCommandIfRequested(argv);
+    if (commandExitCode !== null) {
+      process.exitCode = commandExitCode;
+      return;
+    }
   }
 
   try {

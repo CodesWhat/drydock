@@ -367,6 +367,7 @@ const routes = [
   "/docs/v1.7/configuration/authentications/api-keys",
   "/docs/v1.7/configuration/authentications/basic",
   "/docs/v1.7/configuration/authentications/oidc",
+  "/docs/v1.7/configuration/config-file",
   "/docs/v1.7/configuration/dashboard",
   "/docs/v1.7/configuration/dns",
   "/docs/v1.7/configuration/hooks",

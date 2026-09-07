@@ -1,0 +1,274 @@
+---
+title: "Config file"
+description: "drydock.yml lets you set DD_* configuration from a file instead of (or alongside) environment variables."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every `DD_*` environment variable documented on the other [Configuration](/docs/configuration) pages can also be set from a file, `drydock.yml`, mounted into the container. The file sits beneath the environment: an environment variable always wins, a file value fills in whatever the environment didn't set, and a Joi schema default still applies when neither one does.
+
+<Callout type="info">The config file is new in v1.8.0. Nothing about an environment-only deployment changes: with no file present, drydock behaves exactly as it did in v1.7.</Callout>
+
+## The one mapping rule
+
+A YAML key path mirrors the same env var's segments, joined by underscores: `registry.ghcr.private.token` is `DD_REGISTRY_GHCR_PRIVATE_TOKEN`. Nesting one level deeper is the same as adding one more underscore, so there is one rule for the whole file rather than a table of exceptions:
+
+```yaml
+registry:
+  ghcr:
+    private:
+      username: scott
+      token: mytoken
+```
+
+is the same configuration as:
+
+```bash
+DD_REGISTRY_GHCR_PRIVATE_USERNAME=scott
+DD_REGISTRY_GHCR_PRIVATE_TOKEN=mytoken
+```
+
+Keys are matched case-insensitively and normalized to lowercase before flattening, so `maintenanceWindowTz` and `maintenance_window_tz` both produce the same variable. Every key segment must match `^[A-Za-z0-9_]+$` after that normalization — no punctuation, since no `DD_*` variable contains any — and `__proto__`, `constructor` and `prototype` are rejected outright. A sequence (YAML list) value is always an error: no `DD_*` variable is a list, and the settings that look like one (`DD_SECURITY_BLOCK_SEVERITY`, `DD_HOOKS_ALLOWED_COMMANDS`, ...) are comma-delimited strings owned by their existing parsers, unchanged by this file. A `null` value means "leave this to the environment or the default," not "set it to empty" — the key is simply omitted from the file layer.
+
+### The underscore/nesting ambiguity
+
+Because flattening joins every segment with `_`, a YAML key that already contains an underscore is indistinguishable from one more level of nesting. `watcher.local.maintenance_window_scope` and `watcher.local.maintenance.window.scope` both flatten to `DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE`. This is useful for the alias-style variable names already in use elsewhere in the docs, and it reproduces an ambiguity environment variables already have — a trigger instance named `my_slack` is indistinguishable from an instance `my` with a field starting `slack`, exactly as it already is with env vars. The file does not fix that ambiguity; fixing it would need a hand-designed schema instead of a mechanical mirror of the env tree, which is out of scope for v1.8.
+
+## Secrets: a `_file` node
+
+A secret value never goes inline. Point at a file instead with a nested `_file` key:
+
+```yaml
+registry:
+  ghcr:
+    private:
+      token:
+        _file: /run/secrets/ghcr
+```
+
+This flattens to `DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE=/run/secrets/ghcr`, which resolves through the same reader every `DD_*__FILE` env var already uses: a 1 MiB size cap, a chunked bounded read, a regular-file check, a group/other-readable warning, and `trimEnd()` on the loaded value. No secret-file reader is written twice.
+
+`_file` is a marker, not a suffix, specifically so it can never collide with a real field. `cafile`, `certfile` and `keyfile` are real agent and watcher fields, and `DD_STORE_FILE` is a real variable — a `_file`-as-suffix convention would silently misread `cafile` as `ca` plus a secret-file reference. Rules the loader enforces:
+
+- A mapping whose keys include `_file` must contain `_file` and nothing else. `{ _file: x, value: y }` is a validation error naming the offending YAML path.
+- `_file` may only appear at a leaf, and its value must be a non-empty string.
+- Setting both a `_file` node and its own base key in the same file is an error — a value can't be both a literal and a reference to one. Setting the base key through the *environment* while the file sets `_file` is not an error: that's ordinary precedence, and the environment value wins.
+
+## Interpolating an environment variable
+
+A scalar whose entire value matches `${NAME}` or `${NAME:-default}` is replaced by that environment variable, or by the default after `:-` when the variable isn't set:
+
+```yaml
+registry:
+  ghcr:
+    private:
+      token:
+        _file: ${GHCR_TOKEN_FILE:-/run/secrets/ghcr}
+notification:
+  slack:
+    myslack:
+      channel: ${SLACK_CHANNEL}
+```
+
+Only a scalar whose **whole value** matches the pattern is substituted — `prefix-${NAME}` is left exactly as written, and a resolved value is never re-scanned, so a default or environment value that itself looks like `${OTHER}` is not substituted again. `${NAME}` with the variable unset and no `:-default` fails startup, naming the YAML path and the missing variable; `${NAME:-}` with an empty default resolves to an empty string. A key resolved this way attributes as source `env`, not `file` — the value came from the environment even though it physically arrived through the file.
+
+## Precedence, and why the environment wins
+
+**Environment > file > Joi schema default.** The file is the deployment's committed baseline; the environment is the per-instance override an operator reaches for when something is on fire. Compose sets environment variables from `.env` files and from the shell at `docker compose up` time, so an operator who exports `DD_LOG_LEVEL=debug` to chase a bug expects it to win over a file they didn't touch — the reverse ordering would make that export a silent no-op, the worst possible failure mode for a debugging aid. It also means every existing environment-only deployment upgrades to v1.8 unchanged: with no file mounted, nothing about behavior differs from v1.7.
+
+### Strict validation once a file is present
+
+With no file, drydock keeps its historical tolerance: a component whose variables fail its schema is logged and skipped, and the rest of the process starts. The moment a file contributes at least one value, startup validates the **whole merged configuration** (environment included) against every component schema and exits with the failing YAML path, variable name and Joi message. Adding a one-line file to a deployment that has been running with a silently skipped component therefore turns that component's error into a startup failure. Check `node dist/index.js config validate` before mounting a file for the first time.
+
+## Discovery and `DD_CONFIG_FILE`
+
+| Setting | Value |
+| --- | --- |
+| Default path | `/config/drydock.yml`, then `/config/drydock.yaml` |
+| Override | `DD_CONFIG_FILE` (absolute, or relative to the working directory) |
+| Default path, file absent | Silent — no file mounted is a normal environment-only deployment |
+| `DD_CONFIG_FILE` set, file absent | **Fatal** — startup throws, naming the path |
+| Both `.yml` and `.yaml` present at the default path | **Fatal** — which one wins would be ambiguous, so neither is picked silently |
+
+The default location is `/config`, not `/store`: `/store` is drydock's own mutable state (the SQLite database, its WAL sidecars, the pre-upgrade backup file), while configuration is operator-owned input, usually a read-only bind mount. Mixing the two means a `docker volume rm` of the data volume takes the configuration with it.
+
+### File permissions
+
+The same permission check `_FILE`-referenced secrets already get, plus one addition. World-writable (`mode & 0o002`) is a **fatal error**, not a warning — any local process could rewrite drydock's registry credentials or watcher sockets between two starts, which is a privilege-escalation path into the Docker socket. Group-or-other-readable is a warning, the same as for a secret file.
+
+## What the file does not cover
+
+41 `DD_*` variables are read directly from `process.env` by code that never goes through the merged configuration map the file populates, so the file layer can never reach them — `UNSUPPORTED_FILE_KEYS` in `app/configuration/file/flatten.ts` names them. Setting one of these in `drydock.yml` is **not** a silent no-op: the loader rejects the file at load time, naming the YAML path and the variable, and startup fails before anything else runs:
+
+```text
+Config file "/config/drydock.yml": agent.secret: DD_AGENT_SECRET is only read from the environment in this release, not from a config file; set it as an environment variable instead
+```
+
+The rejected keys, grouped by what they configure:
+
+- **Config file bootstrap** — `DD_CONFIG_WATCH` (the flag that decides whether the file is watched cannot live in the file it watches; `DD_CONFIG_FILE` is env-only for the same reason, it is read before any file exists)
+- **Agent secret handling** — `DD_AGENT_SECRET`, `DD_AGENT_SECRET_FILE`, `DD_AGENT_ALLOW_INSECURE_SECRET`
+- **Privilege guards** — `DD_ALLOW_INSECURE_ROOT`, `DD_RUN_AS_ROOT`
+- **Anonymous-auth confirmation** — `DD_ANONYMOUS_AUTH_CONFIRM`, `DD_AUTH_ANONYMOUS_CONFIRM`
+- **Hooks** — `DD_HOOKS_ENABLED`, `DD_HOOKS_ALLOWED_COMMANDS`
+- **Stats sampling** — `DD_STATS_INTERVAL`, `DD_STATS_HISTORY_SIZE`
+- **Registry pagination** — `DD_GHCR_VERSIONS_MAX_PAGES`
+- **SSE debug logging** — `DD_SSE_DEBUG_LOG_IP`
+- **UI maturity threshold** — `DD_UI_MATURITY_THRESHOLD_DAYS`
+- **Update-operation bookkeeping and concurrency** — `DD_UPDATE_MAX_CONCURRENT`, `DD_UPDATE_OPERATION_MAX_ENTRIES`, `DD_UPDATE_OPERATION_RETENTION_DAYS`, `DD_UPDATE_RECOVERY_BOOT_CONCURRENCY`
+- **Cache sizes, TTLs, timeouts and rate limits** — `DD_CONTAINERS_QUERY_CACHE_MAX_ENTRIES`, `DD_DEFAULT_CACHE_MAX_ENTRIES`, `DD_EVENT_HANDLER_TIMEOUT_MS`, `DD_ICON_CACHE_ENFORCEMENT_INTERVAL_MS`, `DD_ICON_CACHE_MAX_BYTES`, `DD_ICON_CACHE_MAX_FILES`, `DD_ICON_CACHE_TTL_MS`, `DD_ICON_IN_FLIGHT_TIMEOUT_MS`, `DD_ICON_PROXY_RATE_LIMIT_MAX`, `DD_ICON_PROXY_RATE_LIMIT_WINDOW_MS`, `DD_OUTBOUND_HTTP_TIMEOUT_MS`, `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`, `DD_SECURITY_STATE_CACHE_MAX_ENTRIES`, `DD_SECURITY_STATE_CACHE_TTL_MS`, `DD_SSE_MAX_CLIENTS`, `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS`, `DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES`, `DD_UPDATE_LIFECYCLE_CACHE_TTL_MS`, `DD_UPDATE_OPERATION_ACTIVE_TTL_MS`, `DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES`, `DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS`, `DD_UPDATE_POST_START_LIVENESS_GRACE_MS`
+
+`DD_SELF_UPDATE_*` is deliberately not on this list, even though the code that reads it has the same direct-`process.env` shape: those variables are handoff state drydock writes itself for a helper container it spawns during a self-update, never something an operator sets, so a `self.update.*` key in `drydock.yml` doesn't get rejected — it's just inert, since nothing operator-facing reads it back.
+
+A test recomputes the rejected-key list from every direct `process.env.DD_*` reader in the codebase and fails if the two drift, so a new direct reader shows up as a failing assertion rather than a silent gap. Migrating these onto the merged configuration map is a later release's follow-up, not part of v1.8.
+
+## Reload and what needs a restart
+
+`POST /api/v1/config/reload` re-reads the file and reconciles running components by difference — an unchanged component is left running, a changed or removed one is torn down, and an added or changed one is (re)constructed and registered — rather than tearing everything down and starting over. A section either reloads live or needs a restart to take effect:
+
+| Section | Takes effect | Why |
+| --- | --- | --- |
+| `watcher.*` | On reload | Teardown is a complete, generation-guarded stop |
+| `registry.*` | On reload | Stateless lookups, resolved per image |
+| `action.*`, `notification.*` | On reload | Teardown unregisters every event listener |
+| `server.*` (including `server.tls.*`, `server.cors.*`, `server.compression.*`) | Restart required | The HTTP server is already listening; middleware binds at startup |
+| `auth.*` | Restart required | Strategies are consulted per request; rebuilding mid-request is an auth-bypass surface, not a convenience |
+| `store.*` | Restart required | The database is already open |
+| `agent.*` | Restart required (v1.8) | An agent connection owns a live SSE/WS session; reloading it is planned for a later release |
+| `prometheus.*`, `security.*`, `log.*`, `dns.*`, and any flat top-level scalar | Restart required | Read once into module state at startup |
+
+A reload that finds a change in a restart-required section applies every reloadable change and reports the restart-required section names in the response; it never partially applies a restart-required section.
+
+<Callout type="warn">A reload only tears down the component that actually changed, so an unchanged trigger is never interrupted mid-send. There is no guarantee against a duplicate notification if a component is reloaded while it happens to be mid-scan; the risk is proportional to how often you reload, not something the reload path eliminates outright.</Callout>
+
+Auto-reload on every file change is opt-in, not automatic:
+
+```yaml
+environment:
+  - DD_CONFIG_WATCH=true
+```
+
+With `DD_CONFIG_WATCH=true` (default `false`), drydock watches the file it loaded at boot and calls the same reload path whenever it changes, debounced so an editor's write-then-truncate save produces one reload instead of several. `POST /api/v1/config/reload` stays available either way — leaving the flag off just means a change to the file waits for that manual call. A reload is always validate-before-apply: a broken edit is refused and logged, never partially applied.
+
+## CLI
+
+`node dist/index.js config validate [--file <path>]` loads and validates a file against every real component schema, without starting anything — no Docker socket, store, or network required, so it works as a CI check on a committed `drydock.yml`. Each failure prints as `<yaml.path>: <message>`; a clean file prints a single OK line. Exit code is `0` on success, `1` on a validation failure.
+
+`node dist/index.js config export [--out <path>]` writes the environment's current `DD_*` values as a `drydock.yml`, printed to stdout unless `--out` is given. A secret value is never inlined: it's replaced by a `_file` node pointing at a placeholder path with a `# TODO` comment, so the output is safe to inspect or commit before filling the stubs in with real secret file paths. A value that already arrived through a `_file`/`__FILE` convention round-trips as that same node.
+
+`node dist/index.js config migrate` is unrelated to the file — it rewrites legacy env var and label prefixes in local config files — and is unaffected by everything on this page.
+
+## API
+
+Every route below is under `/api/v1/config`, mounted after authentication.
+
+| Route | Scope | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/config` | `SESSION_ONLY` | The effective, merged configuration, redacted, with each key's source (`env` or `file`) |
+| `GET /api/v1/config/:section` | `SESSION_ONLY` | One section of the same response |
+| `POST /api/v1/config/validate` | `admin` | Validate a candidate document against every component schema; applies nothing |
+| `POST /api/v1/config/reload` | `admin` | Re-read the file and reconcile components by difference |
+| `PUT /api/v1/config/:section` | `admin` | Write a section to the file, then reload |
+
+Both `GET` routes are `SESSION_ONLY` — unreachable with an API key, even one holding `admin` — the same restriction the diagnostic debug dump and the container env-reveal endpoint already carry, since this is an environment reveal rather than an ordinary read. Every route in this table is rate-limited to 5 requests per 60 seconds.
+
+`GET /api/v1/config` returns:
+
+```jsonc
+{
+  "file": { "path": "/config/drydock.yml", "present": true, "modifiedAt": "..." },
+  "sections": {
+    "server": { /* ... */ },
+    "watcher": { "local": { /* masked component configuration */ } },
+    "registry": { "ghcr": { "private": { "username": "scott", "token": "[REDACTED]" } } },
+    "action": { /* ... */ },
+    "notification": { /* ... */ }
+  },
+  "sources": { "DD_SERVER_PORT": "env", "DD_REGISTRY_GHCR_PRIVATE_TOKEN": "file" },
+  "restartRequired": []
+}
+```
+
+`sources` is built at merge time, so it's observed rather than inferred: a key present in a section but absent from `sources` came from a Joi schema default, not from either layer.
+
+`POST /api/v1/config/validate` accepts either `{ "yaml": "<document text>" }` or the configuration tree itself as JSON, and returns `{ valid, errors, diff }` — `diff` names which keys would change, and which of the affected sections would reload live versus need a restart, without writing or applying anything.
+
+`POST /api/v1/config/reload` returns `{ applied, errors, diff, reconcile, orphanedRules }`. `reconcile` counts how many components were added, changed, removed, or left unchanged. `orphanedRules` — present only when `applied` is true — lists every DB notification rule whose trigger reference no longer resolves once a renamed or removed trigger has been reconciled away. The rule itself is never deleted or rewritten, only reported; an operator's routing choice is not this endpoint's to erase.
+
+`PUT /api/v1/config/:section` writes the given section's tree back into `drydock.yml`, preserving every other key's comments and formatting, then reloads. It refuses with **409** in three cases:
+
+- **A key in the write is actually sourced from the environment.** Writing it to the file would be a silent no-op, since the environment still wins — the response names the offending keys.
+- **The section is owned by the database, not the file** (settings, notification rules, API keys, approvals, containers) — the response points at `PATCH /api/v1/settings`.
+- **No configuration file exists to write to.** This endpoint never creates `drydock.yml`; mount one first.
+
+An invalid candidate body is a `400` with the same `path`/`envKey`/`message` shape `/validate` uses, and the file on disk is left byte-identical. A successful write reports `restartRequired` when the section it wrote needs a restart to take effect.
+
+## Coexistence with the settings database
+
+The file and the SQLite `settings` table are disjoint by design: no `DD_*` variable sets a database-owned value (`internetlessMode`, `updateMode`, UI preferences, notification rules, API keys, approvals), and no database row names a component. A test pins that the section keys `GET /api/v1/config` can report never overlap the settings schema's own keys.
+
+## Agents
+
+An agent (`--agent`) reads its own `drydock.yml` from its own `/config`, exactly the same shape and sections a standalone instance uses for `watcher.*`, `action.*`, `notification.*`, `registry.*` and `server.*`. The agent secret is the exception: `DD_AGENT_SECRET` (or `DD_AGENT_SECRET_FILE`) is one of the rejected keys above, so every agent still takes it from the environment. The controller does not push configuration to an agent in v1.8 — see [Agents](/docs/configuration/agents) for the controller/agent split.
+
+## Complete example
+
+This example is `drydock.example.yml`, shipped at the repository root:
+
+{/*drydock.example.yml*/}
+
+```yaml
+# drydock.yml
+#
+# Every key here mirrors a DD_* environment variable: nesting joins segments
+# with an underscore, so registry.ghcr.private.token is the same setting as
+# DD_REGISTRY_GHCR_PRIVATE_TOKEN. A key set in the environment always wins
+# over the same key set here, and a key set here always wins over its Joi
+# default — see the configuration file docs for the full mapping rule.
+#
+# Validate a file like this one without starting anything:
+#   node dist/index.js config validate --file drydock.yml
+#
+# Secrets never go inline. A `_file` node points at a file drydock reads at
+# startup instead, the same convention `DD_*_FILE` env vars already use.
+
+server:
+  port: 3000
+  tls:
+    enabled: true
+    cert: /certs/drydock.crt
+    key:
+      _file: /run/secrets/drydock-tls-key
+
+watcher:
+  local:
+    socket: /var/run/docker.sock
+    cron: "0 */6 * * *"
+    maintenance_window: "* 22-23 * * *"
+    maintenance_window_scope: install
+
+registry:
+  ghcr:
+    private:
+      username: scott
+      token:
+        _file: /run/secrets/ghcr
+
+notification:
+  slack:
+    myslack:
+      token:
+        _file: /run/secrets/slack
+      channel: "#updates"
+
+action:
+  docker:
+    local:
+      prune: true
+```
+
+Validate it without starting anything:
+
+```bash
+node dist/index.js config validate --file drydock.example.yml
+```
