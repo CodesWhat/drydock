@@ -6,8 +6,10 @@ import type { NotificationOutboxEntry } from '../model/notification-outbox.js';
 import { OutboxWorker } from '../notifications/outbox-worker.js';
 import * as registry from '../registry/index.js';
 import * as containerStore from '../store/container.js';
+import type { Database } from '../store/db/driver.js';
 import * as notificationOutboxStore from '../store/notification-outbox.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { recoverQueuedOperationsOnStartup } from './recovery.js';
 import {
@@ -170,6 +172,8 @@ class FlakyNotificationTrigger extends Trigger {
 }
 
 describe('startup recovery lock and cancel integration', () => {
+  let outboxDb: Database | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     event.clearAllListenersForTests();
@@ -194,6 +198,8 @@ describe('startup recovery lock and cancel integration', () => {
     sseRouter._connectionsPerSession.clear();
     sseRouter._clearPendingSelfUpdateAcks();
     notificationOutboxStore._resetOutboxStoreForTests();
+    outboxDb?.close();
+    outboxDb = undefined;
   });
 
   test('recovers a queued compose update through keyed FIFO locks and honours mid-flight cancellation before a solo container update', async () => {
@@ -449,7 +455,8 @@ describe('startup recovery lock and cancel integration', () => {
     containerStore.createCollections(db);
     containerStore.insertContainer(container);
     updateOperationStore.createCollections(db);
-    notificationOutboxStore.createCollections(db);
+    outboxDb = createMigratedMemoryDatabase();
+    notificationOutboxStore.createCollections(outboxDb);
 
     const notificationTrigger = new FlakyNotificationTrigger();
     await notificationTrigger.register('trigger', 'webhook', 'ops', {

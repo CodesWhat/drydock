@@ -1,5 +1,5 @@
-import Loki from 'lokijs';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import * as notificationHistory from './notification-history.js';
 
 vi.mock('../log/index.js', () => ({
@@ -13,17 +13,18 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+let db: Database;
+
+beforeEach(() => {
+  db = createMigratedMemoryDatabase();
+  notificationHistory.createCollections(db);
+});
+
+afterEach(() => {
+  db.close();
+});
+
 describe('notification-history store', () => {
-  beforeEach(() => {
-    const db = new Loki('test.db', { autosave: false });
-    notificationHistory.createCollections(db);
-    notificationHistory.resetForTesting();
-  });
-
-  afterEach(() => {
-    notificationHistory.resetForTesting();
-  });
-
   test('createCollections tolerates undefined db gracefully', () => {
     expect(() => notificationHistory.createCollections(undefined)).not.toThrow();
   });

@@ -178,8 +178,10 @@ function createCollections(): boolean {
   apiKey.createCollections(sqliteDb as Database);
   app.createCollections(sqliteDb as Database);
   approval.createCollections(db);
-  audit.createCollections(db);
-  backup.createCollections(db);
+  // audit, backups, notification-history and the notification outbox
+  // (roadmap 7-STORE, slice 5) read and write sqliteDb directly.
+  audit.createCollections(sqliteDb as Database);
+  backup.createCollections(sqliteDb as Database);
   container.createCollections(db);
   // #556: the update-lifecycle-cache collection must exist before rehydration
   // repopulates container.ts's in-memory Map from it.
@@ -192,8 +194,8 @@ function createCollections(): boolean {
   container.rehydrateUpdatePolicyRetentionCacheFromStore();
   nameBindings.createCollections(sqliteDb as Database);
   notification.createCollections(db);
-  notificationHistory.createCollections(db);
-  notificationOutbox.createCollections(db);
+  notificationHistory.createCollections(sqliteDb as Database);
+  notificationOutbox.createCollections(sqliteDb as Database);
   secrets.createCollections(sqliteDb as Database);
   uiPreferences.createCollections(sqliteDb as Database);
   settings.createCollections(sqliteDb as Database);

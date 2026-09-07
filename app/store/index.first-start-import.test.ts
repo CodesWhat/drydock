@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { openDatabase } from './db/driver.js';
 
 /**
  * End-to-end coverage for the roadmap 7-STORE slice 3 first-start import: a
@@ -36,6 +37,9 @@ describe('store first-start import from a v1.7 dd.json', () => {
       const agentKeys = await import('./agent-keys.js');
       const nameBindings = await import('./name-bindings.js');
       const apiKey = await import('./api-key.js');
+      const audit = await import('./audit.js');
+      const backup = await import('./backup.js');
+      const notificationOutbox = await import('./notification-outbox.js');
 
       // The fixture stores a placeholder secretHash for its api-keys rows
       // (a real hash is a high-entropy string gitleaks flags as an API key
@@ -48,6 +52,30 @@ describe('store first-start import from a v1.7 dd.json', () => {
         (collection: { name: string }) => collection.name === 'api-keys',
       );
       apiKeysCollection.data[0].secretHash = apiKey.hashApiKeySecret(v17Secret);
+
+      // The audit fixture rows carry fixed 2026-01 timestamps for
+      // readability, but `audit.createCollections()` prunes anything older
+      // than the 30-day retention window the moment `store.init()` wires it
+      // up. Move both rows to "just now" so they survive that prune — the
+      // point of the test is the import's timestampMs backfill, not the
+      // prune timer, and a row that had NOT been backfilled would still be
+      // pruned here (an unfilled timestamp_ms falls back to 0, which is far
+      // older than the retention window). Neither row keeps an explicit
+      // timestampMs sibling: both exercise the importer's backfill-from-
+      // `timestamp` path end to end, which the assertions below check
+      // directly against the SQLite row rather than inferring it from
+      // pruning survival alone. The explicit-timestampMs pass-through path
+      // is covered separately by store/db/importers/audit.test.ts.
+      const auditCollection = fixture.collections.find(
+        (collection: { name: string }) => collection.name === 'audit',
+      );
+      const auditNow = Date.now();
+      const auditFirstTimestamp = new Date(auditNow - 60 * 60 * 1000).toISOString();
+      const auditSecondTimestamp = new Date(auditNow - 2 * 60 * 60 * 1000).toISOString();
+      auditCollection.data[0].data.timestamp = auditFirstTimestamp;
+      delete auditCollection.data[0].timestampMs;
+      auditCollection.data[1].data.timestamp = auditSecondTimestamp;
+
       fs.writeFileSync(path.join(tempDir, 'dd.json'), JSON.stringify(fixture), 'utf8');
 
       await store.init();
@@ -97,6 +125,42 @@ describe('store first-start import from a v1.7 dd.json', () => {
       expect(verified?.scopes).toEqual(['read', 'write']);
       // The minted child key's parent link survived the import too.
       expect(apiKey.findApiKeyById('bbbbbbbbbbbb')?.parentKeyId).toBe('aaaaaaaaaaaa');
+
+      // audit (roadmap 7-STORE slice 5): both fixture rows survive the
+      // retention prune above, newest first — proving the importer
+      // backfilled timestamp_ms for the row that arrived without one.
+      const auditPage = audit.getAuditEntries();
+      expect(auditPage.total).toBe(2);
+      expect(auditPage.entries.map((entry) => entry.containerName)).toEqual(['web', 'app']);
+
+      // Both rows arrived without an explicit timestampMs sibling, so this
+      // checks the importer's backfill-from-timestamp path directly against
+      // the raw column rather than only inferring it from pruning survival.
+      const auditDb = openDatabase(path.join(tempDir, 'dd.sqlite'), { readOnly: true });
+      try {
+        const firstRow = auditDb
+          .prepare('SELECT timestamp_ms FROM audit WHERE id = ?')
+          .get('audit-fixture-first');
+        const secondRow = auditDb
+          .prepare('SELECT timestamp_ms FROM audit WHERE id = ?')
+          .get('audit-fixture-second');
+        expect(firstRow?.timestamp_ms).toBe(Date.parse(auditFirstTimestamp));
+        expect(secondRow?.timestamp_ms).toBe(Date.parse(auditSecondTimestamp));
+      } finally {
+        auditDb.close();
+      }
+
+      // notification outbox (roadmap 7-STORE slice 5): the pending fixture
+      // entry is ready for delivery (its nextAttemptAt is in the past); the
+      // dead-letter entry is excluded from the ready-for-delivery scan.
+      const readyOutboxEntries = notificationOutbox.findReadyForDelivery();
+      expect(readyOutboxEntries.map((entry) => entry.id)).toEqual(['outbox-fixture-pending']);
+
+      // backups (roadmap 7-STORE slice 5): the by-name reader still finds
+      // the imported backup, keyed on container name as it was pre-import.
+      expect(backup.getBackupsByName('web')).toEqual([
+        expect.objectContaining({ id: 'backup-fixture-one', containerName: 'web' }),
+      ]);
 
       // The untouched pre-1.8 backup is the whole rollback story, and the
       // SQLite database now exists alongside it.

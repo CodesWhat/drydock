@@ -1,12 +1,11 @@
 import crypto from 'node:crypto';
-import type Loki from 'lokijs';
 import {
   type Container,
   type ContainerUpdateKind,
   getCandidateIdentityFields,
   isTagUpdateKind,
 } from '../model/container.js';
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
 export type NotificationEventKind =
   | 'update-available'
@@ -29,18 +28,30 @@ export interface NotificationHistoryEntry {
   notifiedAt: string;
 }
 
-type LokiDatabase = InstanceType<typeof Loki>;
-type HistoryCollection = ReturnType<typeof initCollection>;
+let db: Database | undefined;
 
-let historyCollection: HistoryCollection | undefined;
+function rowToEntry(row: Row): NotificationHistoryEntry {
+  return {
+    key: String(row.key),
+    triggerId: String(row.trigger_id),
+    containerId: String(row.container_identity_key),
+    eventKind: row.event_kind as NotificationEventKind,
+    resultHash: String(row.result_hash),
+    notifiedAt: String(row.notified_at),
+  };
+}
 
-export function createCollections(db: LokiDatabase | undefined): void {
-  if (!db) {
+/**
+ * Wire the notification-history store to the shared SQLite database.
+ * A no-op when database is undefined, so callers that never initialize the
+ * store (e.g. unit tests exercising unrelated code) do not have to guard it.
+ * @param database
+ */
+export function createCollections(database: Database | undefined): void {
+  if (!database) {
     return;
   }
-  historyCollection = initCollection(db, 'notifications_history', {
-    indices: ['data.key', 'data.triggerId', 'data.containerId'],
-  });
+  db = database;
 }
 
 function buildKey(
@@ -101,25 +112,20 @@ export function recordNotification(
   resultHash: string,
   notifiedAt: string = new Date().toISOString(),
 ): void {
-  if (!historyCollection) {
+  if (!db) {
     return;
   }
   const key = buildKey(triggerId, containerId, eventKind);
-  const existingDoc = historyCollection.findOne({ 'data.key': key });
-  const entry: NotificationHistoryEntry = {
-    key,
-    triggerId,
-    containerId,
-    eventKind,
-    resultHash,
-    notifiedAt,
-  };
-  if (existingDoc) {
-    existingDoc.data = entry;
-    historyCollection.update(existingDoc);
-  } else {
-    historyCollection.insert({ data: entry });
-  }
+  db.prepare(
+    `INSERT INTO notification_history (key, trigger_id, container_identity_key, event_kind, result_hash, notified_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       trigger_id = excluded.trigger_id,
+       container_identity_key = excluded.container_identity_key,
+       event_kind = excluded.event_kind,
+       result_hash = excluded.result_hash,
+       notified_at = excluded.notified_at`,
+  ).run(key, triggerId, containerId, eventKind, resultHash, notifiedAt);
 }
 
 export function getLastNotifiedHash(
@@ -127,58 +133,61 @@ export function getLastNotifiedHash(
   containerId: string,
   eventKind: NotificationEventKind,
 ): string | undefined {
-  if (!historyCollection) {
+  if (!db) {
     return undefined;
   }
-  const doc = historyCollection.findOne({
-    'data.key': buildKey(triggerId, containerId, eventKind),
-  });
-  return doc ? (doc.data as NotificationHistoryEntry).resultHash : undefined;
+  const row = db
+    .prepare('SELECT result_hash FROM notification_history WHERE key = ?')
+    .get(buildKey(triggerId, containerId, eventKind));
+  return row ? String(row.result_hash) : undefined;
 }
 
 export function clearNotificationsForContainer(containerId: string): number {
-  if (!historyCollection) {
+  if (!db) {
     return 0;
   }
-  const docs = historyCollection.find({ 'data.containerId': containerId });
-  docs.forEach((doc) => historyCollection?.remove(doc));
-  return docs.length;
+  const result = db
+    .prepare('DELETE FROM notification_history WHERE container_identity_key = ?')
+    .run(containerId);
+  return result.changes;
 }
 
 export function clearNotificationsForTrigger(triggerId: string): number {
-  if (!historyCollection) {
+  if (!db) {
     return 0;
   }
-  const docs = historyCollection.find({ 'data.triggerId': triggerId });
-  docs.forEach((doc) => historyCollection?.remove(doc));
-  return docs.length;
+  const result = db.prepare('DELETE FROM notification_history WHERE trigger_id = ?').run(triggerId);
+  return result.changes;
 }
 
 export function clearNotificationsForContainerAndEvent(
   containerId: string,
   eventKind: NotificationEventKind,
 ): number {
-  if (!historyCollection) {
+  if (!db) {
     return 0;
   }
-  const docs = historyCollection
-    .find({ 'data.containerId': containerId })
-    .filter((doc) => (doc.data as NotificationHistoryEntry).eventKind === eventKind);
-  docs.forEach((doc) => historyCollection?.remove(doc));
-  return docs.length;
+  const result = db
+    .prepare('DELETE FROM notification_history WHERE container_identity_key = ? AND event_kind = ?')
+    .run(containerId, eventKind);
+  return result.changes;
 }
 
 export function getAllForTesting(): NotificationHistoryEntry[] {
-  if (!historyCollection) {
+  if (!db) {
     return [];
   }
-  return historyCollection.find().map((doc) => doc.data as NotificationHistoryEntry);
+  return db
+    .prepare(
+      'SELECT key, trigger_id, container_identity_key, event_kind, result_hash, notified_at FROM notification_history',
+    )
+    .all()
+    .map(rowToEntry);
 }
 
 export function resetForTesting(): void {
-  if (!historyCollection) {
+  if (!db) {
     return;
   }
-  const docs = historyCollection.find();
-  docs.forEach((doc) => historyCollection?.remove(doc));
+  db.prepare('DELETE FROM notification_history').run();
 }

@@ -2,6 +2,7 @@ vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
 }));
 
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import {
   buildRollbackImageReference,
   createContainerBackupScope,
@@ -9,69 +10,31 @@ import {
   resolveRollbackImageReference,
 } from '../util/backup.js';
 import * as backup from './backup.js';
-
-function getPathValue(document: Record<string, any>, path: string) {
-  return path.split('.').reduce((value, key) => value?.[key], document);
-}
-
-function matchesQuery(document: Record<string, any>, query: Record<string, any> | undefined) {
-  if (!query || Object.keys(query).length === 0) {
-    return true;
-  }
-  return Object.entries(query).every(
-    ([path, expected]) => getPathValue(document, path) === expected,
-  );
-}
-
-function createDb() {
-  const collections = {};
-  return {
-    getCollection: (name) => collections[name] || null,
-    addCollection: (name) => {
-      const docs = [];
-      collections[name] = {
-        insert: (doc) => {
-          doc.$loki = docs.length;
-          docs.push(doc);
-        },
-        find: (query = undefined) => docs.filter((doc) => matchesQuery(doc, query)),
-        findOne: (query = undefined) => docs.find((doc) => matchesQuery(doc, query)) ?? null,
-        ensureIndex: vi.fn(),
-        remove: (doc) => {
-          const idx = docs.indexOf(doc);
-          if (idx >= 0) docs.splice(idx, 1);
-        },
-      };
-      return collections[name];
-    },
-  };
-}
+import type { Database } from './db/driver.js';
 
 describe('Backup Store', () => {
+  let db: Database;
+
   beforeEach(() => {
-    const db = createDb();
+    db = createMigratedMemoryDatabase();
     backup.createCollections(db);
   });
 
-  test('createCollections should create backups collection when not exist', () => {
-    const db = {
-      getCollection: () => null,
-      addCollection: vi.fn(() => ({ insert: vi.fn(), find: vi.fn() })),
-    };
-    backup.createCollections(db);
-    expect(db.addCollection).toHaveBeenCalledWith('backups', {
-      indices: ['data.containerName', 'data.containerIdentityKey', 'data.id'],
-    });
+  afterEach(() => {
+    db.close();
   });
 
-  test('createCollections should not create collection when already exists', () => {
-    const existing = { insert: vi.fn(), find: vi.fn() };
-    const db = {
-      getCollection: () => existing,
-      addCollection: vi.fn(),
-    };
-    backup.createCollections(db);
-    expect(db.addCollection).not.toHaveBeenCalled();
+  test('createCollections wires the store to the given database', () => {
+    expect(() =>
+      backup.insertBackup({
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+        triggerName: 'docker.default',
+      } as never),
+    ).not.toThrow();
+    expect(backup.getAllBackups()).toHaveLength(1);
   });
 
   test('insertBackup should insert a backup and return it with id', () => {
@@ -82,7 +45,7 @@ describe('Backup Store', () => {
       imageTag: '1.24',
       triggerName: 'docker.default',
     };
-    const result = backup.insertBackup(entry);
+    const result = backup.insertBackup(entry as never);
     expect(result.id).toBeDefined();
     expect(result.timestamp).toBeDefined();
     expect(result.containerId).toBe('c1');
@@ -100,8 +63,25 @@ describe('Backup Store', () => {
       imageTag: '1.24',
       triggerName: 'docker.default',
     };
-    const result = backup.insertBackup(entry);
+    const result = backup.insertBackup(entry as never);
     expect(result.id).toBe('custom-id');
+  });
+
+  test('insertBackup persists the containerIdentityKey when provided', () => {
+    backup.insertBackup({
+      id: 'with-identity',
+      containerId: 'c1',
+      containerName: 'nginx',
+      containerIdentityKey: '::local::nginx',
+      imageName: 'library/nginx',
+      imageTag: '1.24',
+      triggerName: 'docker.default',
+    } as never);
+
+    const row = db
+      .prepare('SELECT container_identity_key FROM backups WHERE id = ?')
+      .get('with-identity');
+    expect(row?.container_identity_key).toBe('::local::nginx');
   });
 
   test('getBackupsByName should return backups for a specific container sorted by timestamp desc', () => {
@@ -112,7 +92,7 @@ describe('Backup Store', () => {
       imageTag: '1.22',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
@@ -120,7 +100,7 @@ describe('Backup Store', () => {
       imageTag: '1.23',
       triggerName: 'docker.default',
       timestamp: '2024-06-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c2',
       containerName: 'redis',
@@ -128,7 +108,7 @@ describe('Backup Store', () => {
       imageTag: '7.0',
       triggerName: 'docker.default',
       timestamp: '2024-03-01T00:00:00.000Z',
-    });
+    } as never);
 
     const result = backup.getBackupsByName('nginx');
     expect(result).toHaveLength(2);
@@ -528,7 +508,7 @@ describe('Backup Store', () => {
       imageTag: '1.0.0',
       triggerName: 'docker.update',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'watcher-a-new',
       containerName: 'web',
@@ -537,7 +517,7 @@ describe('Backup Store', () => {
       imageTag: '1.1.0',
       triggerName: 'docker.update',
       timestamp: '2024-02-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'watcher-b',
       containerName: 'web',
@@ -546,7 +526,7 @@ describe('Backup Store', () => {
       imageTag: '9.0.0',
       triggerName: 'docker.update',
       timestamp: '2024-03-01T00:00:00.000Z',
-    });
+    } as never);
 
     const result = backup.getBackupsForContainer({
       containerName: 'web',
@@ -564,7 +544,7 @@ describe('Backup Store', () => {
       imageName: 'registry.example/legacy-web',
       imageTag: '0.9.0',
       triggerName: 'docker.update',
-    });
+    } as never);
 
     const ambiguous = backup.getBackupsForContainer({
       containerName: 'web',
@@ -590,7 +570,7 @@ describe('Backup Store', () => {
       imageTag: '1.22',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c2',
       containerName: 'redis',
@@ -598,7 +578,7 @@ describe('Backup Store', () => {
       imageTag: '7.0',
       triggerName: 'docker.default',
       timestamp: '2024-06-01T00:00:00.000Z',
-    });
+    } as never);
 
     const result = backup.getAllBackups();
     expect(result).toHaveLength(2);
@@ -613,12 +593,12 @@ describe('Backup Store', () => {
       imageName: 'library/nginx',
       imageTag: '1.24',
       triggerName: 'docker.default',
-    });
+    } as never);
 
     const result = backup.getBackup('b1');
     expect(result).toBeDefined();
-    expect(result.id).toBe('b1');
-    expect(result.imageTag).toBe('1.24');
+    expect(result?.id).toBe('b1');
+    expect(result?.imageTag).toBe('1.24');
   });
 
   test('getBackup should return undefined for unknown id', () => {
@@ -634,7 +614,7 @@ describe('Backup Store', () => {
       imageName: 'library/nginx',
       imageTag: '1.24',
       triggerName: 'docker.default',
-    });
+    } as never);
 
     const deleted = backup.deleteBackup('b1');
     expect(deleted).toBe(true);
@@ -648,44 +628,6 @@ describe('Backup Store', () => {
     expect(deleted).toBe(false);
   });
 
-  test('getBackup/deleteBackup should fall back to find() when findOne is unavailable', () => {
-    const docs = [] as Array<{ data: Record<string, unknown> }>;
-    const db = {
-      getCollection: vi.fn(() => null),
-      addCollection: vi.fn(() => ({
-        ensureIndex: vi.fn(),
-        insert: (doc) => {
-          docs.push(doc);
-        },
-        find: (query = {}) =>
-          docs.filter((doc) =>
-            Object.entries(query).every(([key, expected]) => {
-              const [, path] = key.split('.');
-              return (doc.data as Record<string, unknown>)[path] === expected;
-            }),
-          ),
-        remove: (doc) => {
-          const idx = docs.indexOf(doc);
-          if (idx >= 0) docs.splice(idx, 1);
-        },
-      })),
-    };
-
-    backup.createCollections(db as any);
-    backup.insertBackup({
-      id: 'legacy-find-path',
-      containerId: 'c1',
-      containerName: 'nginx',
-      imageName: 'library/nginx',
-      imageTag: '1.24',
-      triggerName: 'docker.default',
-    });
-
-    expect(backup.getBackup('legacy-find-path')?.id).toBe('legacy-find-path');
-    expect(backup.deleteBackup('legacy-find-path')).toBe(true);
-    expect(backup.getBackup('legacy-find-path')).toBeUndefined();
-  });
-
   test('pruneOldBackups should keep only the N most recent backups', () => {
     backup.insertBackup({
       containerId: 'c1',
@@ -694,7 +636,7 @@ describe('Backup Store', () => {
       imageTag: '1.20',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
@@ -702,7 +644,7 @@ describe('Backup Store', () => {
       imageTag: '1.21',
       triggerName: 'docker.default',
       timestamp: '2024-03-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
@@ -710,7 +652,7 @@ describe('Backup Store', () => {
       imageTag: '1.22',
       triggerName: 'docker.default',
       timestamp: '2024-06-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
@@ -718,7 +660,7 @@ describe('Backup Store', () => {
       imageTag: '1.23',
       triggerName: 'docker.default',
       timestamp: '2024-09-01T00:00:00.000Z',
-    });
+    } as never);
 
     const pruned = backup.pruneOldBackups('nginx', 2);
     expect(pruned).toBe(2);
@@ -737,7 +679,7 @@ describe('Backup Store', () => {
       imageTag: '1.20',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c2',
       containerName: 'redis',
@@ -745,7 +687,7 @@ describe('Backup Store', () => {
       imageTag: '7.0',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
 
     backup.pruneOldBackups('nginx', 0);
 
@@ -762,7 +704,7 @@ describe('Backup Store', () => {
       imageTag: '1.0.0',
       triggerName: 'docker.update',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'a-new',
       containerName: 'web',
@@ -771,7 +713,7 @@ describe('Backup Store', () => {
       imageTag: '1.1.0',
       triggerName: 'docker.update',
       timestamp: '2024-02-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'b-only',
       containerName: 'web',
@@ -780,7 +722,7 @@ describe('Backup Store', () => {
       imageTag: '9.0.0',
       triggerName: 'docker.update',
       timestamp: '2024-03-01T00:00:00.000Z',
-    });
+    } as never);
 
     const pruned = backup.pruneOldBackups(
       {
@@ -820,7 +762,7 @@ describe('Backup Store', () => {
       imageTag: '1.20',
       triggerName: 'docker.default',
       timestamp: '2024-01-01T00:00:00.000Z',
-    });
+    } as never);
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
@@ -828,7 +770,7 @@ describe('Backup Store', () => {
       imageTag: '1.21',
       triggerName: 'docker.default',
       timestamp: '2024-03-01T00:00:00.000Z',
-    });
+    } as never);
 
     const pruned = backup.pruneOldBackups('nginx', undefined as any);
 
@@ -836,42 +778,42 @@ describe('Backup Store', () => {
     expect(backup.getBackupsByName('nginx')).toHaveLength(2);
   });
 
-  test('pruneOldBackups should return 0 when collection not initialized', async () => {
+  test('pruneOldBackups should return 0 when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
     const count = freshBackup.pruneOldBackups('c1', 3);
     expect(count).toBe(0);
   });
 
-  test('getBackupsByName should return empty when collection not initialized', async () => {
+  test('getBackupsByName should return empty when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
     const result = freshBackup.getBackupsByName('nginx');
     expect(result).toEqual([]);
   });
 
-  test('getAllBackups should return empty when collection not initialized', async () => {
+  test('getAllBackups should return empty when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
     const result = freshBackup.getAllBackups();
     expect(result).toEqual([]);
   });
 
-  test('getBackup should return undefined when collection not initialized', async () => {
+  test('getBackup should return undefined when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
     const result = freshBackup.getBackup('b1');
     expect(result).toBeUndefined();
   });
 
-  test('deleteBackup should return false when collection not initialized', async () => {
+  test('deleteBackup should return false when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
     const result = freshBackup.deleteBackup('b1');
     expect(result).toBe(false);
   });
 
-  test('insertBackup should return generated values when collection not initialized', async () => {
+  test('insertBackup should return generated values when the store is not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
     const result = freshBackup.insertBackup({
@@ -880,7 +822,7 @@ describe('Backup Store', () => {
       imageName: 'library/nginx',
       imageTag: '1.24',
       triggerName: 'docker.default',
-    });
+    } as never);
     expect(result.id).toBeDefined();
     expect(result.timestamp).toBeDefined();
   });
