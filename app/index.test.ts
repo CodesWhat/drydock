@@ -1,378 +1,52 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import type { NotificationOutboxEntry } from './model/notification-outbox.js';
 
-const originalArgv = process.argv;
-const originalExitCode = process.exitCode;
-const originalGetuid = process.getuid;
-
-interface EntryPointOptions {
-  argv?: string[];
-  env?: Record<string, string | undefined>;
-  getuid?: number | 'unavailable';
-  migrateExitCode?: number | null;
-  triggerState?: Record<string, unknown>;
-}
-
-async function loadEntryPoint({
-  argv = ['node', 'index.js'],
-  env = {},
-  getuid = 501,
-  migrateExitCode = null,
-  triggerState = {},
-}: EntryPointOptions = {}) {
-  vi.resetModules();
-  vi.clearAllMocks();
-  vi.unstubAllEnvs();
-
-  process.argv = argv;
-  process.exitCode = undefined;
-  for (const [key, value] of Object.entries(env)) {
-    vi.stubEnv(key, value);
-  }
-  if (getuid === 'unavailable') {
-    Object.defineProperty(process, 'getuid', {
-      configurable: true,
-      value: undefined,
-    });
-  } else {
-    vi.spyOn(process, 'getuid').mockReturnValue(getuid);
-  }
-
-  const setDefaultResultOrder = vi.fn();
-  const getDnsMode = vi.fn(() => 'ipv4first');
-  const runConfigMigrateCommandIfRequested = vi.fn(() => migrateExitCode);
-  const renderBanner = vi.fn();
-  const logInfo = vi.fn();
-  const logWarn = vi.fn();
-  const storeInit = vi.fn(async () => undefined);
-  const prometheusInit = vi.fn();
-  const registryState = { trigger: triggerState };
-  const registryInit = vi.fn(async () => undefined);
-  const registryGetState = vi.fn(() => registryState);
-  const agentServerInit = vi.fn(async () => undefined);
-  const agentManagerInit = vi.fn(async () => undefined);
-  const apiInit = vi.fn(async () => undefined);
-  const securitySchedulerInit = vi.fn();
-  const maturitySchedulerInit = vi.fn();
-  const approvalReconcilerInit = vi.fn();
-  const warmTrivyDatabase = vi.fn(async () => 'ready');
-  const startOutboxWorker = vi.fn();
-  const recoverInProgressOperationsOnStartup = vi.fn(async () => ({
-    reconciled: 0,
-    abandoned: 0,
-  }));
-  const recoverQueuedOperationsOnStartup = vi.fn();
-  let deliverOutboxEntry: ((entry: NotificationOutboxEntry) => Promise<void>) | undefined;
-
-  vi.doMock('node:dns', () => ({
-    default: { setDefaultResultOrder },
-  }));
-  vi.doMock('./banner/index.js', () => ({ renderBanner }));
-  vi.doMock('./configuration/index.js', () => ({ getDnsMode }));
-  vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
-  vi.doMock('./log/index.js', () => ({
-    default: {
-      info: logInfo,
-      warn: logWarn,
-    },
-  }));
-  vi.doMock('./store/index.js', () => ({ init: storeInit }));
-  vi.doMock('./prometheus/index.js', () => ({ init: prometheusInit }));
-  vi.doMock('./registry/index.js', () => ({
-    init: registryInit,
-    getState: registryGetState,
-  }));
-  vi.doMock('./agent/api/index.js', () => ({ init: agentServerInit }));
-  vi.doMock('./agent/index.js', () => ({ init: agentManagerInit }));
-  vi.doMock('./api/index.js', () => ({ init: apiInit }));
-  vi.doMock('./security/scheduler.js', () => ({ init: securitySchedulerInit }));
-  vi.doMock('./maturity/scheduler.js', () => ({ init: maturitySchedulerInit }));
-  vi.doMock('./approvals/reconcile.js', () => ({ init: approvalReconcilerInit }));
-  vi.doMock('./security/scan.js', () => ({ warmTrivyDatabase }));
-  vi.doMock('./notifications/outbox-worker.js', () => ({
-    startOutboxWorker: vi.fn((options: { deliver: typeof deliverOutboxEntry }) => {
-      deliverOutboxEntry = options.deliver;
-      startOutboxWorker(options);
-    }),
-  }));
-  vi.doMock('./updates/recovery.js', () => ({
-    recoverInProgressOperationsOnStartup,
-    recoverQueuedOperationsOnStartup,
-  }));
-
-  const imported = import('./index.js');
-
-  return {
-    imported,
-    setDefaultResultOrder,
-    getDnsMode,
-    runConfigMigrateCommandIfRequested,
-    renderBanner,
-    logInfo,
-    logWarn,
-    storeInit,
-    prometheusInit,
-    registryInit,
-    registryGetState,
-    agentServerInit,
-    agentManagerInit,
-    apiInit,
-    securitySchedulerInit,
-    maturitySchedulerInit,
-    approvalReconcilerInit,
-    warmTrivyDatabase,
-    startOutboxWorker,
-    recoverInProgressOperationsOnStartup,
-    recoverQueuedOperationsOnStartup,
-    get deliverOutboxEntry() {
-      return deliverOutboxEntry;
-    },
-  };
-}
-
-describe('entrypoint', () => {
+describe('bootstrap', () => {
   afterEach(() => {
-    process.argv = originalArgv;
-    process.exitCode = originalExitCode;
-    Object.defineProperty(process, 'getuid', {
-      configurable: true,
-      value: originalGetuid,
-    });
-    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
-  test('exits with the migration command status when config migration is requested', async () => {
-    const harness = await loadEntryPoint({ migrateExitCode: 7 });
-
-    await harness.imported;
-
-    expect(harness.setDefaultResultOrder).toHaveBeenCalledWith('ipv4first');
-    expect(harness.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith([]);
-    expect(process.exitCode).toBe(7);
-    expect(harness.storeInit).not.toHaveBeenCalled();
-    expect(harness.prometheusInit).not.toHaveBeenCalled();
-    expect(harness.registryInit).not.toHaveBeenCalled();
-    expect(harness.apiInit).not.toHaveBeenCalled();
-    expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
-    expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
-    expect(harness.approvalReconcilerInit).not.toHaveBeenCalled();
-    expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
-    expect(harness.startOutboxWorker).not.toHaveBeenCalled();
-    expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
-    expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
-  });
-
-  test('does not set process exitCode for successful config migration commands', async () => {
-    const harness = await loadEntryPoint({
-      argv: ['node', 'index.js', 'config', 'migrate'],
-      migrateExitCode: 0,
+  test('loads the config file layer before importing main', async () => {
+    const calls: string[] = [];
+    const loadConfigFileIntoLayer = vi.fn(async () => {
+      calls.push('loadConfigFileIntoLayer');
+    });
+    const mainFactory = vi.fn(() => {
+      calls.push('main');
+      return {};
     });
 
-    await harness.imported;
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./main.js', mainFactory);
 
-    expect(harness.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(['config', 'migrate']);
-    expect(process.exitCode).toBeUndefined();
-    expect(harness.storeInit).not.toHaveBeenCalled();
-    expect(harness.prometheusInit).not.toHaveBeenCalled();
-    expect(harness.registryInit).not.toHaveBeenCalled();
-    expect(harness.apiInit).not.toHaveBeenCalled();
-    expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
-    expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
-    expect(harness.approvalReconcilerInit).not.toHaveBeenCalled();
-    expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
-    expect(harness.startOutboxWorker).not.toHaveBeenCalled();
-    expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
-    expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
+    await import('./index.js');
+
+    expect(loadConfigFileIntoLayer).toHaveBeenCalledTimes(1);
+    expect(mainFactory).toHaveBeenCalledTimes(1);
+    expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'main']);
   });
 
-  test('starts the controller runtime and dispatches outbox entries through registered triggers', async () => {
-    const dispatchOutboxEntry = vi.fn(async () => undefined);
-    const harness = await loadEntryPoint({
-      triggerState: {
-        'webhook.ops': { dispatchOutboxEntry },
-        inert: {},
-      },
+  test('on a load failure, prints the loader message to stderr, sets exit code 1, and never imports main', async () => {
+    const loadError = new Error('DD_CONFIG_FILE points at "/nope.yml", which does not exist');
+    const loadConfigFileIntoLayer = vi.fn(async () => {
+      throw loadError;
     });
+    const mainFactory = vi.fn(() => ({}));
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const originalExitCode = process.exitCode;
 
-    await harness.imported;
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./main.js', mainFactory);
 
-    expect(harness.renderBanner).toHaveBeenCalledWith({ mode: 'controller' });
-    expect(harness.logInfo).toHaveBeenCalledWith('drydock is starting');
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
-    expect(harness.prometheusInit).toHaveBeenCalledOnce();
-    expect(harness.registryInit).toHaveBeenCalledWith({ agent: false });
-    expect(harness.agentManagerInit).toHaveBeenCalledOnce();
-    expect(harness.apiInit).toHaveBeenCalledOnce();
-    expect(harness.securitySchedulerInit).toHaveBeenCalledOnce();
-    expect(harness.maturitySchedulerInit).toHaveBeenCalledOnce();
-    expect(harness.approvalReconcilerInit).toHaveBeenCalledOnce();
-    expect(harness.warmTrivyDatabase).toHaveBeenCalledOnce();
-    expect(harness.startOutboxWorker).toHaveBeenCalledOnce();
-    expect(harness.recoverInProgressOperationsOnStartup).toHaveBeenCalledOnce();
-    expect(harness.recoverQueuedOperationsOnStartup).toHaveBeenCalledOnce();
-    expect(harness.agentManagerInit.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.recoverInProgressOperationsOnStartup.mock.invocationCallOrder[0],
-    );
-    expect(harness.recoverInProgressOperationsOnStartup.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.apiInit.mock.invocationCallOrder[0],
-    );
-    expect(harness.recoverInProgressOperationsOnStartup.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.recoverQueuedOperationsOnStartup.mock.invocationCallOrder[0],
-    );
+    try {
+      await import('./index.js');
 
-    const entry = {
-      id: 'entry-1',
-      triggerId: 'webhook.ops',
-    } as NotificationOutboxEntry;
-    await expect(harness.deliverOutboxEntry?.(entry)).resolves.toBeUndefined();
-    expect(dispatchOutboxEntry).toHaveBeenCalledWith(entry);
-
-    await expect(harness.deliverOutboxEntry?.({ ...entry, triggerId: 'missing' })).rejects.toThrow(
-      'Trigger missing not registered for outbox delivery',
-    );
-    await expect(harness.deliverOutboxEntry?.({ ...entry, triggerId: 'inert' })).rejects.toThrow(
-      'Trigger inert not registered for outbox delivery',
-    );
-  });
-
-  test('starts the agent runtime without controller services', async () => {
-    const harness = await loadEntryPoint({ argv: ['node', 'index.js', '--agent'] });
-
-    await harness.imported;
-
-    expect(harness.renderBanner).toHaveBeenCalledWith({ mode: 'agent' });
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: true });
-    expect(harness.prometheusInit).not.toHaveBeenCalled();
-    expect(harness.registryInit).toHaveBeenCalledWith({ agent: true });
-    expect(harness.agentServerInit).toHaveBeenCalledOnce();
-    expect(harness.agentManagerInit).not.toHaveBeenCalled();
-    expect(harness.apiInit).not.toHaveBeenCalled();
-    expect(harness.approvalReconcilerInit).not.toHaveBeenCalled();
-    expect(harness.warmTrivyDatabase).toHaveBeenCalledOnce();
-    expect(harness.startOutboxWorker).not.toHaveBeenCalled();
-    expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
-    expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
-  });
-
-  test('blocks insecure root mode unless explicitly acknowledged', async () => {
-    const harness = await loadEntryPoint({
-      getuid: 0,
-      env: {
-        DD_RUN_AS_ROOT: 'true',
-        DD_ALLOW_INSECURE_ROOT: 'false',
-      },
-    });
-
-    await expect(harness.imported).rejects.toThrow(
-      'DD_RUN_AS_ROOT=true requires DD_ALLOW_INSECURE_ROOT=true',
-    );
-    expect(harness.storeInit).not.toHaveBeenCalled();
-  });
-
-  test('does not enforce root mode when getuid is unavailable', async () => {
-    const harness = await loadEntryPoint({
-      getuid: 'unavailable',
-      env: {
-        DD_RUN_AS_ROOT: 'true',
-        DD_ALLOW_INSECURE_ROOT: 'false',
-      },
-    });
-
-    await harness.imported;
-
-    expect(harness.logWarn).not.toHaveBeenCalled();
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
-  });
-
-  test('does not warn when running as root without DD_RUN_AS_ROOT', async () => {
-    const harness = await loadEntryPoint({ getuid: 0 });
-
-    await harness.imported;
-
-    expect(harness.logWarn).not.toHaveBeenCalled();
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
-  });
-
-  test('allows acknowledged root mode and warns operators', async () => {
-    const harness = await loadEntryPoint({
-      getuid: 0,
-      env: {
-        DD_RUN_AS_ROOT: 'true',
-        DD_ALLOW_INSECURE_ROOT: 'true',
-      },
-    });
-
-    await harness.imported;
-
-    expect(harness.logWarn).toHaveBeenCalledWith(
-      'Running in insecure root mode (DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true); use socket-proxy mode when possible.',
-    );
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
-  });
-
-  test('non-root with DD_RUN_AS_ROOT and DD_ALLOW_INSECURE_ROOT does not warn', async () => {
-    // Kills:
-    // - Line 29:65 ConditionalExpression: process.getuid() === 0 => true (would make non-root appear as root)
-    // - Line 40:7 ConditionalExpression: true && insecureRootAcknowledged (ignores runningAsRoot)
-    // - Line 40:7 LogicalOperator: runningAsRoot || runAsRootEnabled && insecureRootAcknowledged
-    const harness = await loadEntryPoint({
-      getuid: 1000, // not root
-      env: {
-        DD_RUN_AS_ROOT: 'true',
-        DD_ALLOW_INSECURE_ROOT: 'true',
-      },
-    });
-
-    await harness.imported;
-
-    // Non-root with these env vars should NOT warn (runningAsRoot is false)
-    expect(harness.logWarn).not.toHaveBeenCalled();
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
-  });
-
-  test('non-root with DD_RUN_AS_ROOT and no acknowledgement does not throw', async () => {
-    // Kills Line 40:7 LogicalOperator: runningAsRoot && runAsRootEnabled || insecureRootAcknowledged
-    // With the mutant, insecureRootAcknowledged=false would still evaluate to false,
-    // but runAsRootEnabled=true + insecureRootAcknowledged=false on the FIRST check (line 34)
-    // would be different with mutant on line 34
-    // Also kills line 29:65 (getuid === 0 => true for non-root)
-    const harness = await loadEntryPoint({
-      getuid: 1000, // not root
-      env: {
-        DD_RUN_AS_ROOT: 'true',
-        DD_ALLOW_INSECURE_ROOT: 'false',
-      },
-    });
-
-    await harness.imported;
-
-    // Non-root should NOT throw even with DD_RUN_AS_ROOT=true
-    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
-    expect(harness.logWarn).not.toHaveBeenCalled();
-  });
-
-  test('handles undefined trigger state in outbox worker delivery', async () => {
-    // Kills OptionalChaining line 82: triggers?.[entry.triggerId] => triggers[entry.triggerId]
-    // When triggers is undefined, optional chain returns undefined safely; without ?. it throws TypeError
-    // We need to avoid the default parameter substituting {} for undefined
-    const harness = await loadEntryPoint();
-
-    // Override registryGetState to return no trigger field (makes triggers undefined)
-    harness.registryGetState.mockReturnValue({} as ReturnType<typeof harness.registryGetState>);
-
-    await harness.imported;
-
-    const entry = {
-      id: 'entry-1',
-      triggerId: 'some-trigger',
-    } as NotificationOutboxEntry;
-
-    // With triggers === undefined:
-    // - triggers?.[id] safely returns undefined → throws "not registered"
-    // - triggers[id] throws TypeError (mutant)
-    await expect(harness.deliverOutboxEntry?.(entry)).rejects.toThrow(
-      'Trigger some-trigger not registered for outbox delivery',
-    );
+      expect(stderrWrite).toHaveBeenCalledWith(`${loadError.message}\n`);
+      expect(process.exitCode).toBe(1);
+      expect(mainFactory).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = originalExitCode;
+    }
   });
 });

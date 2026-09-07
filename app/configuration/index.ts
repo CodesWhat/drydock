@@ -6,6 +6,8 @@ import setValue from 'set-value';
 import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { toPositiveInteger } from '../util/parse.js';
+import { getConfigFileLayer } from './file/layer.js';
+import { type ConfigValueSource, mergeConfigLayers } from './file/sources.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
@@ -136,7 +138,28 @@ Object.keys(process.env)
     ddEnvVars[envVar] = process.env[envVar];
   });
 
-// 2. Replace all secret files referenced by their secret values
+// 2. Read whatever drydock.yml layer app/index.ts's bootstrap already loaded
+// (if any) into file/layer.ts. Loading and its own failure modes — silent
+// when the default path is absent, fatal (naming the path) when an explicit
+// DD_CONFIG_FILE is absent or the file fails parsing or its own hardening
+// checks — live entirely in file/loader.ts, which this module never imports:
+// that keeps this module free of fs calls at import time, since it's
+// imported by nearly every test file.
+const configFileLayer = getConfigFileLayer();
+
+// 3. Merge the file layer beneath the real environment: a key already set in
+// step 1 wins, an unset one is filled in from the file, and Joi defaults are
+// untouched either way — the whole env > file > defaults precedence is this
+// one `=== undefined` test, done in mergeConfigLayers. Records which layer
+// supplied each key.
+export const configFileSources: Record<string, ConfigValueSource> = mergeConfigLayers(
+  ddEnvVars,
+  configFileLayer,
+);
+
+// 4. Replace all secret files referenced by their secret values. Runs after
+// the merge so a file-sourced `_file` node — flattened to the same `__FILE`
+// suffix an env-set secret uses — resolves through this one path either way.
 await replaceSecrets(ddEnvVars);
 
 export function getVersion() {
