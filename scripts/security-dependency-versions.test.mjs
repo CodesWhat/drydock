@@ -22,6 +22,22 @@ function resolvedVersion(lockfile, packageName) {
   return lockfile.packages?.[`node_modules/${packageName}`]?.version;
 }
 
+test('every baseline-browser-mapping resolution includes the invalid-input fix', () => {
+  let resolutions = 0;
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      if (!path.endsWith('node_modules/baseline-browser-mapping')) continue;
+      resolutions += 1;
+      assert.ok(
+        compareSemver(entry.version, '2.11.0') >= 0,
+        `${workspace}/${path} ${entry.version} predates the GHSA-w5vr-8v7q-w6rv fix`,
+      );
+    }
+  }
+  assert.ok(resolutions > 0, 'expected baseline-browser-mapping resolutions in workspace locks');
+});
+
 test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
   const manifest = readJson('e2e/package.json');
   const lockfile = readJson('e2e/package-lock.json');
