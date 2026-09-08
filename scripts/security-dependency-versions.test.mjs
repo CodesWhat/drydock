@@ -193,7 +193,9 @@ test('Next.js is pinned past the Windows server execution advisory', () => {
   const manifestNext = manifest.dependencies?.next;
   assert.ok(manifestNext?.startsWith('16.'), 'apps/web next must stay on the vetted 16.x line');
   assert.ok(compareSemver(manifestNext, '16.3.3') >= 0);
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'next'), '16.3.3') >= 0);
+  const resolvedNext = resolvedVersion(lockfile, 'next');
+  assert.match(resolvedNext, /^16\./, 'apps/web lockfile next must stay on the vetted 16.x line');
+  assert.ok(compareSemver(resolvedNext, '16.3.3') >= 0);
 });
 
 test('the rc.5 changelog records the Next.js security refresh', () => {
