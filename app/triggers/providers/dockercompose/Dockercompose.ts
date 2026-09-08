@@ -1473,16 +1473,28 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
-  async resolveComposeFilesForContainer(container: ComposeContainerReference): Promise<string[]> {
+  /**
+   * @param container the container
+   * @param runtimeDefaultComposeFilePath the already-resolved default compose
+   * file when the caller has one (triggerBatch resolves it once per batch);
+   * undefined resolves it here, which probes the filesystem.
+   */
+  async resolveComposeFilesForContainer(
+    container: ComposeContainerReference,
+    runtimeDefaultComposeFilePath?: string | null,
+  ): Promise<string[]> {
     await this.ensureHostToContainerBindMountsLoaded(container);
+
+    const resolveRuntimeDefaultComposeFilePath = async (): Promise<string | null> =>
+      runtimeDefaultComposeFilePath !== undefined
+        ? runtimeDefaultComposeFilePath
+        : this.resolveDefaultComposeFilePathForRuntime();
 
     // Only the mount-prefix fallback needs the resolved default up front, and
     // resolving it touches the filesystem, so leave the default path alone
     // unless that opt-in flag is on.
     const context = this.createComposeLabelResolutionContext(
-      this.configuration.mountPrefixFallback
-        ? await this.resolveDefaultComposeFilePathForRuntime()
-        : null,
+      this.configuration.mountPrefixFallback ? await resolveRuntimeDefaultComposeFilePath() : null,
     );
     const composeFilesFromConfiguration = this.getConfiguredComposeFilesForContainer(container, {
       includeDefaultComposeFile: false,
@@ -1504,8 +1516,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
 
     const composeFileFromDefault =
-      context.runtimeDefaultComposeFilePath ??
-      (await this.resolveDefaultComposeFilePathForRuntime());
+      context.runtimeDefaultComposeFilePath ?? (await resolveRuntimeDefaultComposeFilePath());
     if (!composeFileFromDefault) {
       return [];
     }
@@ -2305,7 +2316,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container: ComposeContainerReference,
     configuredComposeFilePath: string | null,
   ): Promise<string[] | null> {
-    const composeFiles = await this.resolveComposeFilesForContainer(container);
+    const composeFiles = await this.resolveComposeFilesForContainer(
+      container,
+      configuredComposeFilePath,
+    );
     if (composeFiles.length === 0) {
       this.log.warn(
         `No compose file found for container ${container.name} (no label '${this.configuration.composeFileLabel}' or '${COMPOSE_PROJECT_CONFIG_FILES_LABEL}' and no default file configured)`,
