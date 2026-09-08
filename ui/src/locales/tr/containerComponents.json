@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Geçersiz normal ifade"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Şuna bağlı",
+      "requiredBy": "Şunun tarafından gerekli",
+      "cycle": "Bir bağımlılık döngüsünün parçası",
+      "toggle": "Bağımlılıkları göster",
+      "updateGroup": "Bağımlılık grubunu güncelle ({count})",
+      "staleParentsWarning": "{name}, bekleyen bir güncellemesi olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan bir üst öğeye karşı çalışır durumda bırakabilir. | {name}, bekleyen güncellemeleri olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan üst öğelere karşı çalışır durumda bırakabilir.",
+      "staleParentsOverflow": "ve {count} tane daha",
+      "staleParentsAccept": "Yine de güncelle"
     }
   }
 }

@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Ungültiger regulärer Ausdruck"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Abhängig von",
+      "requiredBy": "Benötigt von",
+      "cycle": "Teil eines Abhängigkeitszyklus",
+      "toggle": "Abhängigkeiten anzeigen",
+      "updateGroup": "Abhängigkeitsgruppe aktualisieren ({count})",
+      "staleParentsWarning": "{name} hängt von {parents} ab, das ebenfalls ein ausstehendes Update hat. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen ein veraltetes übergeordnetes Element. | {name} hängt von {parents} ab, die ebenfalls ausstehende Updates haben. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen veraltete übergeordnete Elemente.",
+      "staleParentsOverflow": "und {count} weitere",
+      "staleParentsAccept": "Trotzdem aktualisieren"
     }
   }
 }

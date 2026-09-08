@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "تعبير نمطي غير صالح"
+    },
+    "dependencyGraph": {
+      "dependsOn": "يعتمد على",
+      "requiredBy": "مطلوب من قِبل",
+      "cycle": "جزء من دورة تبعيات",
+      "toggle": "إظهار التبعيات",
+      "updateGroup": "تحديث مجموعة التبعيات ({count})",
+      "staleParentsWarning": "{name} يعتمد على {parents}، الذي لديه أيضًا تحديث معلق. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عنصر أصلي قديم. | {name} يعتمد على {parents}، التي لديها أيضًا تحديثات معلقة. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عناصر أصلية قديمة.",
+      "staleParentsOverflow": "و{count} إضافية",
+      "staleParentsAccept": "التحديث على أي حال"
     }
   }
 }

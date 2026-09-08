@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "無效的正規表示式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依賴於",
+      "requiredBy": "被以下依賴",
+      "cycle": "屬於依賴循環的一部分",
+      "toggle": "顯示依賴關係",
+      "updateGroup": "更新依賴群組 ({count})",
+      "staleParentsWarning": "{name} 依賴於 {parents}，該容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。 | {name} 依賴於 {parents}，這些容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。",
+      "staleParentsOverflow": "還有 {count} 個",
+      "staleParentsAccept": "仍然更新"
     }
   }
 }

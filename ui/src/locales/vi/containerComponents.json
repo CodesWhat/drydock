@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Biểu thức chính quy không hợp lệ"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Phụ thuộc vào",
+      "requiredBy": "Được yêu cầu bởi",
+      "cycle": "Là một phần của chu trình phụ thuộc",
+      "toggle": "Hiển thị phụ thuộc",
+      "updateGroup": "Cập nhật nhóm phụ thuộc ({count})",
+      "staleParentsWarning": "{name} phụ thuộc vào {parents}, hiện cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên container cha đã lỗi thời. | {name} phụ thuộc vào {parents}, các mục này cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên các container cha đã lỗi thời.",
+      "staleParentsOverflow": "và {count} mục khác",
+      "staleParentsAccept": "Vẫn cập nhật"
     }
   }
 }
