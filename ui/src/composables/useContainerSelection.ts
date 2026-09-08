@@ -1,7 +1,7 @@
 import { type ComputedRef, computed, type Ref, ref } from 'vue';
 
 // Module-level singleton state shared by every composable consumer (roadmap
-// 6.1.1) — selection is a single global resource across container views, so
+// 6.1.1). Selection is a single global resource across container views, so
 // every consumer shares one selection set, in the same style as
 // useDependencyGraph's expandedIds.
 const selectedIds = ref<Set<string>>(new Set());

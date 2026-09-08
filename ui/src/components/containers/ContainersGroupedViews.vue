@@ -241,7 +241,7 @@ const selectedContainerKey = computed(() =>
   selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
 );
 
-// Selection (roadmap 6.1.1) — pruned to the currently visible/filtered set so a
+// Selection (roadmap 6.1.1), pruned to the currently visible/filtered set so a
 // selection made under one filter doesn't silently keep dispatching against
 // rows a later filter change has hidden.
 const visibleIds = computed(() => filteredContainers.value.map((c) => c.id));
