@@ -1207,14 +1207,14 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   private updateContainerFromInspect(
     containerFound: Container,
     containerInspect: DockerContainerInspectPayload,
+    context?: event.ContainerLifecycleEventContext,
   ) {
-    const logContainer = this.log.child({
-      container: fullName(containerFound),
-    });
+    const logContainer = this.log.child({ container: fullName(containerFound) });
 
     updateContainerFromInspectState(containerFound, containerInspect, {
       getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName),
-      updateContainer: (id, patch) => storeContainer.updateContainerFields(id, patch),
+      updateContainer: (id, patch) =>
+        storeContainer.updateContainerFields(id, patch, ...(context ? [context] : [])),
       logInfo: (message) => logContainer.info(message),
       applyDerivedLabelFieldsToContainer: (container, labels) =>
         applyEffectiveDockerConfigFromLabels(

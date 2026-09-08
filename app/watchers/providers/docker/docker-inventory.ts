@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type Dockerode from 'dockerode';
+import type { ContainerLifecycleEventContext } from '../../../event/index.js';
 import { type Container, getCanonicalContainerName } from '../../../model/container.js';
 import * as store from '../../../store/container.js';
 import { getErrorMessage } from '../../../util/error.js';
@@ -35,6 +37,7 @@ export interface DockerInventoryWatcher
   updateContainerFromInspect: (
     container: Container,
     inspect: DockerContainerInspectPayload,
+    context?: ContainerLifecycleEventContext,
   ) => void;
 }
 
@@ -49,11 +52,17 @@ export function refreshDockerInventoryForWatcher(
   const scanGeneration = watcher.scanGeneration;
   const name = watcher.name;
   const agent = watcher.agent || undefined;
+  const context: ContainerLifecycleEventContext = {
+    origin: 'inventory',
+    operationId: randomUUID(),
+    source: { type: 'docker', name, ...(agent ? { agent } : {}) },
+  };
   const source = getDockerWatcherSourceKey(watcher);
   const sourceProbe = { name, agent, configuration: { ...watcher.configuration } };
   const dockerApi = watcher.dockerApi;
   const serviceLabels = new Map<string, Promise<Record<string, string>>>();
   return refreshDockerInventory({
+    context,
     isCurrent: () =>
       !watcher.isWatcherDeregistered &&
       scanGeneration === watcher.scanGeneration &&
@@ -84,7 +93,7 @@ export function refreshDockerInventoryForWatcher(
       if (discovered) discovered.agent = agent;
       return discovered;
     },
-    update: (container, inspect) => watcher.updateContainerFromInspect(container, inspect),
+    update: (container, inspect) => watcher.updateContainerFromInspect(container, inspect, context),
     recordEnumeration: (ids) => recordControllerLocalEnumeration(watcher, ids),
     watchByDefault: watcher.configuration.watchbydefault,
   });
@@ -104,6 +113,7 @@ export interface InventoryRefreshResult {
 }
 
 interface InventoryDependencies {
+  context: ContainerLifecycleEventContext;
   isCurrent: () => boolean;
   getSourceContainers: () => Container[];
   owns: (container: Container) => boolean;
@@ -303,7 +313,7 @@ async function refreshDockerInventory(
         continue;
       }
       if (remove) {
-        store.deleteContainer(id, { replacementExpected: true });
+        store.deleteContainer(id, { replacementExpected: true, context: deps.context });
         result.removedIds.push(id);
       } else if (latest) deps.update(latest, inspect!);
       else {
@@ -316,7 +326,7 @@ async function refreshDockerInventory(
           fail('ownership', 'Cannot confirm replacement while the prior container remains', id);
           continue;
         }
-        store.insertContainer(discovered!);
+        store.insertContainer(discovered!, deps.context);
       }
     } catch (error) {
       fail('persist', error, id);

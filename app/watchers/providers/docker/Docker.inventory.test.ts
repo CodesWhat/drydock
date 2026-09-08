@@ -1,4 +1,6 @@
 import type Dockerode from 'dockerode';
+import type { Request, Response } from 'express';
+import * as agentEvent from '../../../agent/api/event.js';
 import * as sse from '../../../api/sse.js';
 import * as event from '../../../event/index.js';
 import * as registry from '../../../registry/index.js';
@@ -71,10 +73,98 @@ beforeEach(() => {
 
 afterEach(() => {
   sse._resetInitializationStateForTests();
+  agentEvent._resetAgentEventStateForTests();
   for (const stop of unsubscribe) stop();
+  event.clearAllListenersForTests();
   db.close();
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test('forwards inventory recreation and updates separately from ordinary scan lifecycle', async () => {
+  seed('old', { updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' } });
+  const write = vi.fn(() => true);
+  agentEvent.initEvents();
+  agentEvent.subscribeEvents(
+    { ip: '127.0.0.1', on: vi.fn() } as unknown as Request,
+    { writeHead: vi.fn(), write } as unknown as Response,
+  );
+  write.mockClear();
+  const reports = vi.spyOn(event, 'emitContainerReports');
+  const report = vi.spyOn(event, 'emitContainerReport');
+  inspect.mockImplementation(async (id) => {
+    if (id === 'old') throw Object.assign(new Error('not found'), { statusCode: 404 });
+    return inspection(id);
+  });
+  await docker.refreshInventory();
+  inspect.mockImplementation(async () => {
+    store.updateContainerFields('new', { result: { tag: '2.0.0' } });
+    return inspection('new', 'service', 'exited');
+  });
+  await docker.refreshInventory();
+  const frames = write.mock.calls.map(([frame]) => JSON.parse(String(frame).slice(6).trim()));
+  expect(frames.map((frame) => frame.type)).toEqual([
+    'dd:inventory-removed',
+    'dd:inventory-added',
+    'dd:container-updated',
+    'dd:inventory-updated',
+  ]);
+  const firstContext = frames[0].data.context;
+  expect(firstContext).toEqual({
+    origin: 'inventory',
+    operationId: expect.any(String),
+    source: { type: 'docker', name: 'local' },
+  });
+  expect(frames[1].data.context).toEqual(firstContext);
+  expect(frames[3].data.context.operationId).not.toBe(firstContext.operationId);
+  expect(frames[0].data.container).toEqual({ id: 'old' });
+  expect(frames[1].data.container.id).toBe('new');
+  expect(frames[1].data.container.details.env).toEqual([
+    { key: 'PASSWORD', value: 'secret' },
+    { key: 'PUBLIC', value: 'value' },
+  ]);
+  expect(frames[2].data.context).toBeUndefined();
+  expect(store.getContainer('new')).toMatchObject({
+    status: 'exited',
+    result: { tag: '2.0.0' },
+    updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' },
+  });
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(report).not.toHaveBeenCalled();
+  expect(reports).not.toHaveBeenCalled();
+});
+
+test('does not attach inventory provenance to a reentrant ordinary store mutation', async () => {
+  docker.agent = 'edge';
+  const added = vi.fn();
+  unsubscribe.push(
+    event.registerContainerAdded((container) => {
+      if (container.id === 'new') seed('scan', { agent: 'edge', name: 'scan' });
+    }),
+    event.registerContainerAdded(added),
+  );
+  await docker.refreshInventory();
+  expect(added).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'scan' }));
+  expect(added).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ id: 'new' }),
+    expect.objectContaining({ source: { type: 'docker', name: 'local', agent: 'edge' } }),
+  );
+  expect(store.getContainerRaw('new')).not.toHaveProperty('context');
+  expect(store.getContainerRaw('new')).not.toHaveProperty('operationId');
+});
+
+test('carries provenance when runtime inspection hides a rollback container', async () => {
+  seed();
+  list.mockResolvedValue([summary('known')]);
+  inspect.mockResolvedValue(inspection('known', 'other-old-1770000000000'));
+  const removed = vi.fn();
+  unsubscribe.push(event.registerContainerRemoved(removed));
+  await docker.refreshInventory();
+  expect(removed).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'known' }),
+    expect.objectContaining({ origin: 'inventory' }),
+  );
 });
 
 test('persists immediate discovery without registry checks, reports, full watches, or settle timers', async () => {
@@ -248,7 +338,10 @@ test('carries retained policy into a confirmed recreation and emits real-store l
   expect(store.getContainer('new')).toMatchObject({
     updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' },
   });
-  expect(removed).toHaveBeenCalledWith(expect.objectContaining({ id: 'old' }));
+  expect(removed).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'old' }),
+    expect.objectContaining({ origin: 'inventory' }),
+  );
   expect(added.mock.calls[0][0]).toMatchObject({
     id: 'new',
     details: {
@@ -262,7 +355,10 @@ test('carries retained policy into a confirmed recreation and emits real-store l
   });
   inspect.mockResolvedValue(inspection('new', 'service', 'exited'));
   await docker.refreshInventory();
-  expect(updated).toHaveBeenCalledWith(expect.objectContaining({ id: 'new', status: 'exited' }));
+  expect(updated).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'new', status: 'exited' }),
+    expect.objectContaining({ origin: 'inventory' }),
+  );
   expect(broadcast.mock.calls.map((call) => call[1])).toEqual([
     'dd:container-removed',
     'dd:container-added',

@@ -277,6 +277,12 @@ export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> &
   replacementExpected?: boolean;
 };
 
+export interface ContainerLifecycleEventContext {
+  origin: 'inventory';
+  operationId: string;
+  source: { type: 'docker'; name: string; agent?: string };
+}
+
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();
 const containerReportsHandlers = new Map<number, OrderedEventHandler<ContainerReport[]>>();
 const watcherSnapshotHandlers = new Map<number, OrderedEventHandler<WatcherSnapshotEventPayload>>();
@@ -704,8 +710,11 @@ export function registerAgentStatsChanged(
  * Emit container added.
  * @param containerAdded
  */
-export function emitContainerAdded(containerAdded: ContainerLifecycleEventPayload): void {
-  eventEmitter.emit(DD_CONTAINER_ADDED, containerAdded);
+export function emitContainerAdded(
+  containerAdded: ContainerLifecycleEventPayload,
+  context?: ContainerLifecycleEventContext,
+): void {
+  eventEmitter.emit(DD_CONTAINER_ADDED, containerAdded, ...(context ? [context] : []));
 }
 
 /**
@@ -713,7 +722,10 @@ export function emitContainerAdded(containerAdded: ContainerLifecycleEventPayloa
  * @param handler
  */
 export function registerContainerAdded(
-  handler: (payload: ContainerLifecycleEventPayload) => void,
+  handler: (
+    payload: ContainerLifecycleEventPayload,
+    context?: ContainerLifecycleEventContext,
+  ) => void,
 ): () => void {
   eventEmitter.on(DD_CONTAINER_ADDED, handler as (payload: unknown) => void);
   return () => {
@@ -725,8 +737,11 @@ export function registerContainerAdded(
  * Emit container added.
  * @param containerUpdated
  */
-export function emitContainerUpdated(containerUpdated: ContainerLifecycleEventPayload): void {
-  eventEmitter.emit(DD_CONTAINER_UPDATED, containerUpdated);
+export function emitContainerUpdated(
+  containerUpdated: ContainerLifecycleEventPayload,
+  context?: ContainerLifecycleEventContext,
+): void {
+  eventEmitter.emit(DD_CONTAINER_UPDATED, containerUpdated, ...(context ? [context] : []));
 }
 
 /**
@@ -734,7 +749,10 @@ export function emitContainerUpdated(containerUpdated: ContainerLifecycleEventPa
  * @param handler
  */
 export function registerContainerUpdated(
-  handler: (payload: ContainerLifecycleEventPayload) => void,
+  handler: (
+    payload: ContainerLifecycleEventPayload,
+    context?: ContainerLifecycleEventContext,
+  ) => void,
 ): () => void {
   eventEmitter.on(DD_CONTAINER_UPDATED, handler as (payload: unknown) => void);
   return () => {
@@ -746,8 +764,11 @@ export function registerContainerUpdated(
  * Emit container removed.
  * @param containerRemoved
  */
-export function emitContainerRemoved(containerRemoved: ContainerLifecycleEventPayload): void {
-  eventEmitter.emit(DD_CONTAINER_REMOVED, containerRemoved);
+export function emitContainerRemoved(
+  containerRemoved: ContainerLifecycleEventPayload,
+  context?: ContainerLifecycleEventContext,
+): void {
+  eventEmitter.emit(DD_CONTAINER_REMOVED, containerRemoved, ...(context ? [context] : []));
 }
 
 /**
@@ -755,7 +776,10 @@ export function emitContainerRemoved(containerRemoved: ContainerLifecycleEventPa
  * @param handler
  */
 export function registerContainerRemoved(
-  handler: (payload: ContainerLifecycleEventPayload) => void,
+  handler: (
+    payload: ContainerLifecycleEventPayload,
+    context?: ContainerLifecycleEventContext,
+  ) => void,
 ): () => void {
   eventEmitter.on(DD_CONTAINER_REMOVED, handler as (payload: unknown) => void);
   return () => {
