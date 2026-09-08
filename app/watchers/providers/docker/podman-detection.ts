@@ -69,7 +69,10 @@ export interface PodmanDetectionWatcher {
  * API/UI work to read. Best-effort: a failed `version()` call (e.g. a
  * blocked remote watcher) leaves both fields unset rather than throwing,
  * matching `detectLocalDaemonServerName`'s best-effort contract in
- * docker-remote-auth.ts. Docker itself never triggers the warning.
+ * docker-remote-auth.ts. Docker itself never triggers the warning. Warns
+ * only on the transition into Podman, not on every call, so a second
+ * `detectPodmanCompatibility` on a watcher that was already Podman doesn't
+ * re-log the same warning.
  */
 export async function detectPodmanCompatibility(watcher: PodmanDetectionWatcher): Promise<void> {
   if (typeof watcher.dockerApi?.version !== 'function') {
@@ -83,11 +86,12 @@ export async function detectPodmanCompatibility(watcher: PodmanDetectionWatcher)
     return;
   }
 
+  const wasPodman = watcher.isPodman === true;
   const { isPodman, podmanVersion } = detectPodmanFromVersionPayload(payload);
   watcher.isPodman = isPodman;
   watcher.podmanVersion = podmanVersion;
 
-  if (isPodman) {
+  if (isPodman && !wasPodman) {
     watcher.log.warn(
       `Podman detected (${podmanVersion ?? 'unknown version'}): Drydock uses the Docker-compatible API; ` +
         'known limits: rootless networking, volume driver differences, containers managed by a systemd ' +

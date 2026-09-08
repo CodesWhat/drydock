@@ -152,6 +152,24 @@ describe('detectPodmanCompatibility', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  test('warns exactly once across repeated detections on the same watcher', async () => {
+    const warn = vi.fn();
+    const watcher: any = {
+      dockerApi: {
+        version: vi
+          .fn()
+          .mockResolvedValue({ Version: '5.6.0', Components: [{ Name: 'Podman Engine' }] }),
+      },
+      log: { warn },
+    };
+
+    await detectPodmanCompatibility(watcher);
+    await detectPodmanCompatibility(watcher);
+
+    expect(watcher.isPodman).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   test('is a best-effort no-op when version() rejects', async () => {
     const warn = vi.fn();
     const watcher: any = {

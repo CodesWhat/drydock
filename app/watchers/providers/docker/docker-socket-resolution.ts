@@ -4,7 +4,13 @@ import log from '../../../log/index.js';
 export const DEFAULT_DOCKER_SOCKET_PATH = '/var/run/docker.sock';
 export const ROOTFUL_PODMAN_SOCKET_PATH = '/run/podman/podman.sock';
 
-function defaultFsAccess(path: string): boolean {
+/**
+ * Stat-backed default `fsAccess` implementation: true only when `path`
+ * exists and is a unix socket. Exported so tests can exercise the real
+ * `fs.statSync` behavior directly instead of depending on host state (a
+ * candidate path existing, or not, on whatever machine runs the suite).
+ */
+export function isUnixSocket(path: string): boolean {
   try {
     const stats = fs.statSync(path);
     if (!stats.isSocket()) {
@@ -64,7 +70,7 @@ export function resolveDockerSocketPath(
   configuredSocket: string,
   options: DockerSocketResolutionOptions = {},
 ): string {
-  const fsAccess = options.fsAccess ?? defaultFsAccess;
+  const fsAccess = options.fsAccess ?? isUnixSocket;
   const onInfo = options.onInfo ?? ((message: string) => log.info(message));
   const onError = options.onError ?? ((message: string) => log.error(message));
 

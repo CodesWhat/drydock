@@ -5,6 +5,7 @@ import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import {
   DEFAULT_DOCKER_SOCKET_PATH,
+  isUnixSocket,
   ROOTFUL_PODMAN_SOCKET_PATH,
   resolveDockerSocketPath,
 } from './docker-socket-resolution.js';
@@ -146,6 +147,15 @@ describe('resolveDockerSocketPath', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  test('defaults fsAccess to the real isUnixSocket implementation without invoking it on the early-return path', () => {
+    // No fsAccess override: exercises the `options.fsAccess ?? isUnixSocket`
+    // default assignment. The explicit non-default socket short-circuits
+    // before fsAccess is ever called, so this stays host-independent.
+    const result = resolveDockerSocketPath('/run/docker-local.sock');
+
+    expect(result).toBe('/run/docker-local.sock');
+  });
+
   test('uses process.env.XDG_RUNTIME_DIR when no override is supplied', () => {
     const previousXdgRuntimeDir = process.env.XDG_RUNTIME_DIR;
     process.env.XDG_RUNTIME_DIR = '/run/user/2000';
@@ -172,62 +182,47 @@ describe('resolveDockerSocketPath', () => {
 
     expect(result).toBe(DEFAULT_DOCKER_SOCKET_PATH);
   });
+});
 
-  test('rejects a plain file at a candidate path via the default fsAccess implementation (#10.4 finding 3)', () => {
-    const previousXdgRuntimeDir = process.env.XDG_RUNTIME_DIR;
+describe('isUnixSocket', () => {
+  test('returns false for a plain file at the candidate path (#10.4 finding 3)', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-podman-socket-'));
-    const podmanDir = path.join(tempDir, 'podman');
-    fs.mkdirSync(podmanDir);
-    const rootlessSocketPath = path.join(podmanDir, 'podman.sock');
+    const filePath = path.join(tempDir, 'podman.sock');
     // A stale plain file must never be treated as a usable socket, even
     // though it exists at the exact candidate path.
-    fs.writeFileSync(rootlessSocketPath, '');
-    process.env.XDG_RUNTIME_DIR = tempDir;
+    fs.writeFileSync(filePath, '');
 
     try {
-      // No fsAccess override: exercises the real fs.statSync-backed default,
-      // both its "exists but not a socket" branch (this candidate) and
-      // "absent" branch (the Docker default and rootful Podman paths,
-      // neither present on a test box).
-      const result = resolveDockerSocketPath(DEFAULT_DOCKER_SOCKET_PATH);
-
-      expect(result).toBe(DEFAULT_DOCKER_SOCKET_PATH);
+      expect(isUnixSocket(filePath)).toBe(false);
     } finally {
-      if (previousXdgRuntimeDir === undefined) {
-        delete process.env.XDG_RUNTIME_DIR;
-      } else {
-        process.env.XDG_RUNTIME_DIR = previousXdgRuntimeDir;
-      }
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  test('accepts a real unix socket at a candidate path via the default fsAccess implementation (#10.4 finding 3)', async () => {
-    const previousXdgRuntimeDir = process.env.XDG_RUNTIME_DIR;
+  test('returns true for a real unix socket at the candidate path (#10.4 finding 3)', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-podman-socket-'));
-    const podmanDir = path.join(tempDir, 'podman');
-    fs.mkdirSync(podmanDir);
-    const rootlessSocketPath = path.join(podmanDir, 'podman.sock');
+    const socketPath = path.join(tempDir, 'podman.sock');
     const server = net.createServer();
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(rootlessSocketPath, () => resolve());
+      server.listen(socketPath, () => resolve());
     });
-    process.env.XDG_RUNTIME_DIR = tempDir;
 
     try {
-      // No fsAccess override: exercises the real fs.statSync-backed default's
-      // "exists and is a socket" branch.
-      const result = resolveDockerSocketPath(DEFAULT_DOCKER_SOCKET_PATH);
-
-      expect(result).toBe(rootlessSocketPath);
+      expect(isUnixSocket(socketPath)).toBe(true);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      if (previousXdgRuntimeDir === undefined) {
-        delete process.env.XDG_RUNTIME_DIR;
-      } else {
-        process.env.XDG_RUNTIME_DIR = previousXdgRuntimeDir;
-      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('returns false for a nonexistent path', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-podman-socket-'));
+    const missingPath = path.join(tempDir, 'does-not-exist.sock');
+
+    try {
+      expect(isUnixSocket(missingPath)).toBe(false);
+    } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
