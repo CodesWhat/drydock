@@ -40,14 +40,17 @@ interface ImageHostSummary {
   name: string;
   agent?: string;
   supported: boolean;
+  reason?: 'agent-transport-unsupported';
   error?: string;
 }
 
 /**
- * Build a host summary for the `hosts` field of the list response. Only ever
- * called for a target host that already passed `findSupportedHostOrRespond`
- * (or was pre-filtered to `supported`), so `host.reason` is always unset here
- * and is deliberately not carried onto the summary.
+ * Build a host summary for the `hosts` field of the list response. Called
+ * for every host `listImageHosts` returns, not only the ones fetched: an
+ * unsupported agent host carries its `reason` through so the UI can list it
+ * disabled with the "agent does not expose the Docker API" notice, while
+ * `error` is only ever set by `fetchHostInventory` for a host that was
+ * actually queried and failed.
  */
 function toHostSummary(host: ImageHost, error?: string): ImageHostSummary {
   const summary: ImageHostSummary = {
@@ -57,6 +60,9 @@ function toHostSummary(host: ImageHost, error?: string): ImageHostSummary {
   };
   if (host.agent) {
     summary.agent = host.agent;
+  }
+  if (host.reason) {
+    summary.reason = host.reason;
   }
   if (error) {
     summary.error = error;
@@ -116,7 +122,10 @@ function sortInventory(items: ImageInventoryItem[]): ImageInventoryItem[] {
  * List the image inventory across every supported host, or a single host
  * when `host` is provided. A per-host fetch failure is isolated to that
  * host's summary (`error` set, no images contributed) rather than failing
- * the whole request.
+ * the whole request. `hosts` in the response always lists every host
+ * `listImageHosts` knows about, including unsupported agent hosts that were
+ * never fetched, so the UI's host select can show them disabled with the
+ * unsupported-transport notice instead of silently dropping them.
  */
 async function listImages(req: Request, res: Response) {
   const hosts = listImageHosts(registry.getState().watcher);
@@ -135,7 +144,8 @@ async function listImages(req: Request, res: Response) {
 
   const results = await Promise.all(targetHosts.map((host) => fetchHostInventory(host)));
   const items = sortInventory(results.flatMap((result) => result.items));
-  const hostSummaries = results.map((result) => result.summary);
+  const summaryByHostId = new Map(results.map((result) => [result.summary.id, result.summary]));
+  const hostSummaries = hosts.map((host) => summaryByHostId.get(host.id) ?? toHostSummary(host));
 
   res.status(200).json({ data: items, total: items.length, hosts: hostSummaries });
 }

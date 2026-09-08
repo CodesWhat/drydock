@@ -148,6 +148,13 @@ describe('Images Router', () => {
       expect(body.hosts).toStrictEqual([
         { id: 'docker.local', name: 'local', supported: true },
         { id: 'edge.docker.remote', name: 'remote', agent: 'edge', supported: true },
+        {
+          id: 'edge2.docker.remote2',
+          name: 'remote2',
+          agent: 'edge2',
+          supported: false,
+          reason: 'agent-transport-unsupported',
+        },
       ]);
       expect(body.hosts.every((host: Record<string, unknown>) => !('dockerApi' in host))).toBe(
         true,
@@ -167,7 +174,7 @@ describe('Images Router', () => {
       ]);
     });
 
-    test('scopes to a single host when host is provided', async () => {
+    test('scopes to a single host when host is provided, but still lists every host', async () => {
       localDockerApi.listImages.mockResolvedValue([makeImage()]);
 
       const res = await invokeGet('/', createMockRequest({ query: { host: 'docker.local' } }));
@@ -175,7 +182,17 @@ describe('Images Router', () => {
       expect(agentDockerApi.listImages).not.toHaveBeenCalled();
       const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(body.total).toBe(1);
-      expect(body.hosts).toStrictEqual([{ id: 'docker.local', name: 'local', supported: true }]);
+      expect(body.hosts).toStrictEqual([
+        { id: 'docker.local', name: 'local', supported: true },
+        { id: 'edge.docker.remote', name: 'remote', agent: 'edge', supported: true },
+        {
+          id: 'edge2.docker.remote2',
+          name: 'remote2',
+          agent: 'edge2',
+          supported: false,
+          reason: 'agent-transport-unsupported',
+        },
+      ]);
     });
 
     test('isolates a per-host failure to that host summary without a 500', async () => {
