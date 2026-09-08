@@ -3797,3 +3797,251 @@ describe('hass install commands (#210)', () => {
     });
   });
 });
+
+// ── roadmap 7.8 (#210): one HA device per watched container ──────────────────
+
+describe('devicepercontainer flag', () => {
+  const DEFAULT_ENTITY_PICTURE =
+    'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png';
+  const VALUE_TEMPLATE =
+    '{% if value_json.update_state is defined %}{{ value_json.update_state | to_json }}{% else %}{{ value_json.image_tag_value }}{% endif %}';
+  const LATEST_VERSION_TEMPLATE =
+    '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] if value_json.result_digest else value_json.image_tag_value }}{% else %}{{ value_json.result_tag if value_json.result_tag else value_json.image_tag_value }}{% endif %}';
+  const DRYDOCK_DEVICE = {
+    identifiers: ['drydock'],
+    manufacturer: 'drydock',
+    model: 'drydock',
+    name: 'drydock',
+    sw_version: MOCK_VERSION,
+  };
+
+  let clientMock: { publish: ReturnType<typeof vi.fn> };
+
+  function makeHass(devicepercontainer: boolean) {
+    return new Hass({
+      client: clientMock,
+      configuration: {
+        topic: 'topic',
+        hass: {
+          discovery: true,
+          prefix: 'homeassistant',
+          devicepercontainer,
+        },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+  }
+
+  function discoveryPayloads(topicPrefix: string) {
+    return clientMock.publish.mock.calls
+      .filter(([topic, payload]) => topic.startsWith(topicPrefix) && payload !== '')
+      .map(([, payload]) => JSON.parse(payload));
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    clientMock = { publish: vi.fn(() => {}) };
+  });
+
+  test('flag ON — the container update entity carries its own device with via_device', async () => {
+    const hassOn = makeHass(true);
+    vi.spyOn(hassOn, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await hassOn.addContainerSensor({
+      id: 'container-id-1',
+      name: 'container-name',
+      displayName: 'Container Name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+      image: { name: 'library/nginx' },
+    });
+
+    expect(clientMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_watcher-name_container-name/config',
+      JSON.stringify({
+        unique_id: 'dd_7e333fb0b11c',
+        default_entity_id: 'update.topic_watcher-name_container-name',
+        // null marks the update entity as its device's main feature, so HA
+        // shows the device name ("Container Name") instead of concatenating
+        // the two into "Container Name Container Name".
+        name: null,
+        device: {
+          identifiers: ['drydock_dd_7e333fb0b11c'],
+          manufacturer: 'drydock',
+          model: 'library/nginx',
+          name: 'Container Name',
+          via_device: 'drydock',
+        },
+        icon: 'mdi:docker',
+        entity_picture: DEFAULT_ENTITY_PICTURE,
+        state_topic: 'topic/watcher-name/container-name',
+        force_update: true,
+        value_template: VALUE_TEMPLATE,
+        latest_version_topic: 'topic/watcher-name/container-name',
+        latest_version_template: LATEST_VERSION_TEMPLATE,
+        json_attributes_topic: 'topic/watcher-name/container-name',
+      }),
+      { retain: true },
+    );
+  });
+
+  test('flag ON — the entity is unnamed so HA does not double the device name', async () => {
+    const hassOn = makeHass(true);
+    vi.spyOn(hassOn, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await hassOn.addContainerSensor({
+      name: 'container-name',
+      displayName: 'Container Name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    });
+
+    const [payload] = discoveryPayloads('homeassistant/update/');
+    expect(payload.name).toBeNull();
+    expect(payload.device.name).toBe('Container Name');
+  });
+
+  test('flag ON — device name falls back to the entity id and model is omitted without an image name', async () => {
+    const hassOn = makeHass(true);
+    vi.spyOn(hassOn, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await hassOn.addContainerSensor({
+      name: 'container-name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    });
+
+    const [payload] = discoveryPayloads('homeassistant/update/');
+    expect(payload.device).toStrictEqual({
+      identifiers: ['drydock_dd_7e333fb0b11c'],
+      manufacturer: 'drydock',
+      name: 'topic_watcher-name_container-name',
+      via_device: 'drydock',
+    });
+    expect(Object.hasOwn(payload.device, 'model')).toBe(false);
+  });
+
+  test('flag ON — an empty image name is dropped rather than published as a blank model', async () => {
+    const hassOn = makeHass(true);
+    vi.spyOn(hassOn, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await hassOn.addContainerSensor({
+      name: 'container-name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+      image: { name: '' },
+    });
+
+    const [payload] = discoveryPayloads('homeassistant/update/');
+    expect(Object.hasOwn(payload.device, 'model')).toBe(false);
+  });
+
+  test('flag OFF — the container discovery payload is byte-for-byte the pre-v1.8 one', async () => {
+    const hassOff = makeHass(false);
+    vi.spyOn(hassOff, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await hassOff.addContainerSensor({
+      name: 'container-name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+      image: { name: 'library/nginx' },
+    });
+
+    expect(clientMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_watcher-name_container-name/config',
+      JSON.stringify({
+        unique_id: 'dd_7e333fb0b11c',
+        default_entity_id: 'update.topic_watcher-name_container-name',
+        name: 'topic_watcher-name_container-name',
+        device: DRYDOCK_DEVICE,
+        icon: 'mdi:docker',
+        entity_picture: DEFAULT_ENTITY_PICTURE,
+        state_topic: 'topic/watcher-name/container-name',
+        force_update: true,
+        value_template: VALUE_TEMPLATE,
+        latest_version_topic: 'topic/watcher-name/container-name',
+        latest_version_template: LATEST_VERSION_TEMPLATE,
+        json_attributes_topic: 'topic/watcher-name/container-name',
+      }),
+      { retain: true },
+    );
+  });
+
+  test('the move needs no tombstone: same discovery topic, same unique_id, no empty payload', async () => {
+    const container = {
+      id: 'container-id-1',
+      name: 'container-name',
+      displayName: 'Container Name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+      image: { name: 'library/nginx' },
+    };
+
+    const hassOff = makeHass(false);
+    vi.spyOn(hassOff, 'updateContainerSensors').mockResolvedValue(undefined);
+    await hassOff.addContainerSensor(container);
+    const [beforeTopic, beforePayload] = clientMock.publish.mock.calls[0];
+
+    clientMock.publish.mockClear();
+
+    const hassOn = makeHass(true);
+    vi.spyOn(hassOn, 'updateContainerSensors').mockResolvedValue(undefined);
+    await hassOn.addContainerSensor(container);
+    const [afterTopic, afterPayload] = clientMock.publish.mock.calls[0];
+
+    // Identical config topic and unique_id: HA treats the new payload as a
+    // discovery update of the same entity and re-attaches it to the new
+    // device, so publishing an empty retained payload first would delete an
+    // entity we want to keep.
+    expect(afterTopic).toBe(beforeTopic);
+    expect(JSON.parse(afterPayload).unique_id).toBe(JSON.parse(beforePayload).unique_id);
+    expect(JSON.parse(afterPayload).device).not.toStrictEqual(JSON.parse(beforePayload).device);
+    expect(clientMock.publish.mock.calls.filter(([, payload]) => payload === '')).toHaveLength(0);
+  });
+
+  test('flag ON — the device identifier survives a rename for a compose-identified container', async () => {
+    const hassOn = makeHass(true);
+    vi.spyOn(hassOn, 'updateContainerSensors').mockResolvedValue(undefined);
+    const composeContainer = {
+      id: 'container-id-before',
+      name: 'myapp_web_1',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+
+    await hassOn.addContainerSensor(composeContainer);
+    await hassOn.addContainerSensor({ ...composeContainer, name: 'myapp_web_1_renamed' });
+
+    const identifiers = discoveryPayloads('homeassistant/update/').map(
+      (payload) => payload.device.identifiers[0],
+    );
+    expect(identifiers).toHaveLength(2);
+    expect(new Set(identifiers).size).toBe(1);
+    expect(identifiers[0]).toMatch(/^drydock_dd_[0-9a-f]{12}$/);
+  });
+
+  test('flag ON — drydock-level and watcher-level entities stay on the drydock device', async () => {
+    const hassOn = makeHass(true);
+
+    await hassOn.updateContainerSensors({
+      name: 'container-name',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    });
+    await hassOn.updateWatcherSensors({ watcher: { name: 'watcher-name' }, isRunning: true });
+
+    const devices = [
+      ...discoveryPayloads('homeassistant/sensor/'),
+      ...discoveryPayloads('homeassistant/binary_sensor/'),
+    ].map((payload) => payload.device);
+    expect(devices).toHaveLength(7);
+    for (const device of devices) {
+      expect(device).toStrictEqual(DRYDOCK_DEVICE);
+    }
+  });
+});

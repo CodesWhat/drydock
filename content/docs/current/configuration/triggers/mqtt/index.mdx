@@ -23,6 +23,7 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery. When omitted, defaults to the value of `HASS_ENABLED`. | `true`, `false` | Same as `HASS_ENABLED` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_PREFIX` | ⚪ | Base topic for hass entity discovery | | `homeassistant` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_AGENTTOPICSEGMENT` | ⚪ | Insert an `agent/<name>` segment into Home Assistant topics for containers owned by a remote agent, including watcher running-status topics, so multiple agents using the default watcher name `local` do not overwrite each other's topics. Controller-local container topics are unchanged. Set to `false` to temporarily opt back into the pre-v1.7.0 unscoped layout. | `true`, `false` | `true` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_DEVICEPERCONTAINER` | ⚪ | Give every watched container its own Home Assistant device, nested under the `drydock` device via `via_device`, instead of hanging every entity off the single `drydock` device. Drydock-level entities (global counts, watcher counts, watcher running status) stay on the `drydock` device either way. Set to `false` to keep the pre-v1.8.0 single-device layout. | `true`, `false` | `true` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_COMMANDS` | ⚪ | Enable bidirectional commands: adds a `command_topic` to each container's discovery payload so Home Assistant's `update` entity shows an Install button, and subscribes drydock to the corresponding command topics so clicking it triggers an update. Requires `HASS_ENABLED`. | `true`, `false` | `false` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_ATTRIBUTES` | ⚪ | Attribute preset controlling which container fields are included in MQTT payloads. `full` sends everything; `short` excludes large fields like SBOM documents, scan vulnerabilities, details, and labels. | `full`, `short` | `short` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to keep (include-mode). When set, only these keys are published. | Comma-separated flattened keys | |
@@ -45,6 +46,39 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 <Callout type="warning">**Multi-agent deployments:** Home Assistant MQTT topics include an `agent/<name>` segment for agent-owned containers by default as of v1.7.0, scoping topics, watcher running-status, sensor counts, and discovery cleanup per agent so multiple agents sharing the default watcher name `local` no longer collide. This changed the Home Assistant entity IDs for agent containers on upgrade — update any automations or dashboards that reference the old (agent-less) entity IDs. Drydock does not retroactively remove the old discovery entities; they remain retained on the broker and show up as orphaned, frozen-at-last-state duplicates until manually removed. Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_AGENTTOPICSEGMENT=false` to temporarily opt back into the pre-v1.7.0 unscoped layout — see [Deprecations](https://getdrydock.com/docs/deprecations). Toggling `HASS_AGENTTOPICSEGMENT` in either direction moves the retained state topic and the old one is not cleared automatically, because the unscoped topic can legitimately belong to a controller-local container of the same name and drydock cannot tell that case apart from a stale one. If you flip the setting, publish an empty retained message to the old topic yourself to clear it.</Callout>
 
 <Callout type="warning">**Topics and `unique_id` are keyed by container identity as of v1.8.0.** The state topic segment (`{container}` below) is the Compose `project.service` pair for a container carrying `com.docker.compose.project`/`com.docker.compose.service` labels, and the sanitized container name otherwise — so `<topic>/<watcher>/<container>` is `dd/container/local/myapp.web`, not `dd/container/local/myapp_web_1`. The Home Assistant `unique_id` no longer comes from the topic at all: it's `dd_` plus a hash of the container's identity. **Rename stability of both the topic and the `unique_id` is a guarantee for Compose-labeled containers only** — a container with no `com.docker.compose.*` labels is identified by its name, so renaming it still changes its topic and (barring a carried-over stored identity) its `unique_id`, the same as before v1.8.0. Update any hand-written subscriptions to the new topic shape. Existing Home Assistant entities repair themselves automatically the first time a v1.8.0 controller starts — see [Deprecations](https://getdrydock.com/docs/deprecations).</Callout>
+
+## Home Assistant devices
+
+As of v1.8.0 each watched container gets its own Home Assistant device. Its
+identifier is `drydock_` plus the container's `unique_id`, its name is the
+container's display name, its model is the image name, and `via_device` points
+at the `drydock` device, so Home Assistant nests the containers under drydock on
+the integration page. The drydock-level entities stay where they were: global
+container counts, per-watcher counts, and watcher running status all remain on
+the `drydock` device.
+
+**Migration is automatic and keeps your history.** The discovery config topic and
+the `unique_id` are unchanged by this, so the retained payload drydock publishes
+on startup is a discovery *update* for the entity that already exists rather than
+a new entity. Home Assistant re-attaches it to the new device and keeps the same
+entity id, the same state history, and the same dashboard cards. Nothing is
+orphaned and no entities need to be removed by hand.
+
+Two things do change visibly. Each container's update entity moves off the
+`drydock` device onto its own, so anywhere Home Assistant shows a device next to
+an entity you now see the container. And friendly names get shorter: Home
+Assistant prefixes every discovered entity's name with its device's name, so the
+update entity is published unnamed (Home Assistant's marker for the device's main
+feature) and shows as `nginx` rather than the `drydock nginx` you had before, or
+`nginx nginx` if it kept its own name. `dd.display.name` now names the device;
+`dd.display.icon` and `dd.display.picture` still apply to the entity.
+Automations that address entities by entity id are unaffected. Anything that
+targets the `drydock` *device* (a device trigger, or a `device_id`-based action)
+now only reaches the drydock-level entities and has to be re-pointed at the
+container's device or at the entity directly.
+
+Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_DEVICEPERCONTAINER=false` to keep
+the pre-v1.8.0 layout, where every entity sits on the single `drydock` device.
 
 ## Examples
 
