@@ -8,6 +8,9 @@ import DataTableColumnPicker from '../DataTableColumnPicker.vue';
 import ContainerSelectionBar from './ContainerSelectionBar.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import FleetUpdateProgressBanner from './FleetUpdateProgressBanner.vue';
+import FleetDimensionsControls from './FleetDimensionsControls.vue';
+import FleetBulkActionsToolbar from './FleetBulkActionsToolbar.vue';
+import FleetHealthBar from './FleetHealthBar.vue';
 import {
   type ContainersViewTemplateContext,
   useContainersViewTemplateContext,
@@ -44,6 +47,9 @@ const {
   resetColumns,
   tt,
   groupByStack,
+  fleet,
+  fleetBulk,
+  fleetHealth,
   rechecking,
   recheckAll,
   expandAllGroups,
@@ -160,6 +166,7 @@ const activeFilterChips = computed(() => {
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('containerComponents.listContent.loadingContainers') }}</div>
 
     <FleetUpdateProgressBanner />
+    <FleetHealthBar v-if="fleetHealth" :health="fleetHealth" />
 
     <DataFilterBar
       v-model="containerViewMode"
@@ -177,6 +184,7 @@ const activeFilterChips = computed(() => {
           @update:sort-asc="containerSortAsc = $event" />
       </template>
       <template #filters>
+        <FleetDimensionsControls v-if="fleet" :fleet="fleet" mode="filters" />
         <input
           v-model="filterSearch"
           type="text"
@@ -255,13 +263,14 @@ const activeFilterChips = computed(() => {
           @reset="resetColumns" />
       </template>
       <template #left>
+        <FleetDimensionsControls v-if="fleet" :fleet="fleet" mode="grouping" />
         <AppIconButton icon="stack" size="sm" variant="secondary" class="shrink-0"
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt(t('containerComponents.listContent.groupByStackTooltip'))"
           :aria-label="t('containerComponents.listContent.groupByStackTooltip')"
           @click="groupByStack = !groupByStack" />
         <AppButton
-          v-if="groupByStack"
+          v-if="groupByStack || (fleet && fleet.groupBy.value !== 'none')"
           size="sm"
           variant="secondary"
           weight="semibold"
@@ -313,6 +322,7 @@ const activeFilterChips = computed(() => {
       </template>
     </DataFilterBar>
 
+    <FleetBulkActionsToolbar v-if="fleetBulk" :actions="fleetBulk" />
     <ContainersGroupedViews />
     <ContainerSelectionBar />
   </div>
