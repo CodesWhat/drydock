@@ -55,10 +55,16 @@ import { expect, test } from 'vitest';
 // again before the snapshot, and a cronRunGeneration field separates the
 // isCronWatchInProgress reset from scanGeneration so an unrelated concurrent
 // watch() (an AgentWatcher's direct delegate.watch()) can't leave it stuck.
-test('Docker watcher implementation should stay under 1834 lines', () => {
+// Bumped from 1834 for the Podman detection feature (roadmap 10.4): one
+// import, the isPodman/podmanVersion fields (plus a one-line comment), and
+// the detectPodmanCompatibility() call site in init(). Docker structurally
+// satisfies the helper's watcher shape, so no adapter cast is needed here;
+// the detection and compatibility-warning logic itself lives in
+// podman-detection.ts.
+test('Docker watcher implementation should stay under 1837 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1834);
+  expect(lineCount).toBeLessThanOrEqual(1837);
 });
