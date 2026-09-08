@@ -122,7 +122,9 @@ describe('detectPodmanCompatibility', () => {
     expect(message).toContain('Podman detected (5.6.0)');
     expect(message).toContain('rootless networking');
     expect(message).toContain('volume driver differences');
-    expect(message).toContain('systemd-managed containers are not restarted by Drydock');
+    expect(message).toContain(
+      'containers managed by a systemd unit (Quadlet) are recreated by the Docker action outside their unit',
+    );
     expect(message).toContain(PODMAN_COMPAT_DOCS_URL);
   });
 

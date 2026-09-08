@@ -6,7 +6,11 @@ export const ROOTFUL_PODMAN_SOCKET_PATH = '/run/podman/podman.sock';
 
 function defaultFsAccess(path: string): boolean {
   try {
-    fs.accessSync(path);
+    const stats = fs.statSync(path);
+    if (!stats.isSocket()) {
+      log.debug(`Skipping Podman socket candidate ${path}: exists but is not a socket`);
+      return false;
+    }
     return true;
   } catch {
     return false;
@@ -18,6 +22,17 @@ export interface DockerSocketResolutionOptions {
   fsAccess?: (path: string) => boolean;
   /** Overrides `process.env.XDG_RUNTIME_DIR` for testing. */
   xdgRuntimeDir?: string;
+  /** Overrides `process.env` for testing, so an ambient XDG_RUNTIME_DIR never leaks into a test. */
+  env?: Record<string, string | undefined>;
+  /**
+   * Whether `configuredSocket` was explicitly set by the operator (env var or
+   * config file) rather than left for the Joi schema default to fill in.
+   * When true, probing never runs — even if the explicit value happens to
+   * equal the schema default — because "unset" and "explicitly set to the
+   * default" must not collapse into the same behavior (#10.4 forward-port
+   * review finding 1).
+   */
+  socketExplicit?: boolean;
   onInfo?: (message: string) => void;
   onError?: (message: string) => void;
 }
@@ -31,12 +46,13 @@ export interface DockerSocketResolutionOptions {
  * operator who hasn't done that (or can't) gets a confusing "socket not
  * found" failure with no hint that Podman's own socket paths exist.
  *
- * Only kicks in when the configured socket is still the schema default AND
- * that default is absent — any explicitly configured socket (including one
- * that happens to already point at a Podman path) is returned unchanged, no
- * probing. This keeps "explicit configuration always wins" true: a `host`
- * watcher never calls this at all (see docker-remote-auth.ts), and a
- * watcher with a non-default `socket` is never second-guessed.
+ * Only kicks in when the socket was never explicitly configured AND the
+ * configured (default) socket is absent — any explicitly configured socket
+ * (including one that happens to equal the schema default, or one that
+ * already points at a Podman path) is returned unchanged, no probing. This
+ * keeps "explicit configuration always wins" true: a `host` watcher never
+ * calls this at all (see docker-remote-auth.ts), and a watcher with an
+ * explicit `socket` is never second-guessed, whatever value it was set to.
  *
  * Probe order: rootful Podman socket, then the rootless XDG-runtime-dir
  * socket when `XDG_RUNTIME_DIR` is set. First existing path wins. If
@@ -52,7 +68,7 @@ export function resolveDockerSocketPath(
   const onInfo = options.onInfo ?? ((message: string) => log.info(message));
   const onError = options.onError ?? ((message: string) => log.error(message));
 
-  if (configuredSocket !== DEFAULT_DOCKER_SOCKET_PATH) {
+  if (options.socketExplicit || configuredSocket !== DEFAULT_DOCKER_SOCKET_PATH) {
     return configuredSocket;
   }
 
@@ -60,7 +76,8 @@ export function resolveDockerSocketPath(
     return configuredSocket;
   }
 
-  const xdgRuntimeDir = options.xdgRuntimeDir ?? process.env.XDG_RUNTIME_DIR;
+  const env = options.env ?? process.env;
+  const xdgRuntimeDir = options.xdgRuntimeDir ?? env.XDG_RUNTIME_DIR;
   const candidatePaths = [ROOTFUL_PODMAN_SOCKET_PATH];
   if (xdgRuntimeDir) {
     candidatePaths.push(`${xdgRuntimeDir}/podman/podman.sock`);

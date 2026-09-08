@@ -343,6 +343,38 @@ test('getWatcherConfiguration should normalize DISCOVERY_SETTLE_MS to the watche
   delete configuration.ddEnvVars.DD_WATCHER_LOCAL_DISCOVERY_SETTLE_MS;
 });
 
+test('isWatcherSocketExplicitlyConfigured should return true when DD_WATCHER_<name>_SOCKET is set (#10.4 finding 1)', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET = '/var/run/docker.sock';
+
+  expect(configuration.isWatcherSocketExplicitlyConfigured('local')).toBe(true);
+  expect(configuration.isWatcherSocketExplicitlyConfigured('LOCAL')).toBe(true);
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET;
+});
+
+test('isWatcherSocketExplicitlyConfigured should return false for a watcher with no configured socket', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '0 2 * * *';
+
+  expect(configuration.isWatcherSocketExplicitlyConfigured('local')).toBe(false);
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW;
+});
+
+test('isWatcherSocketExplicitlyConfigured should return false for a watcher name with no configuration at all', () => {
+  expect(configuration.isWatcherSocketExplicitlyConfigured('nonexistent')).toBe(false);
+});
+
+test('isWatcherSocketExplicitlyConfigured should resolve independently per watcher', () => {
+  configuration.ddEnvVars.DD_WATCHER_ONE_SOCKET = '/run/one.sock';
+  configuration.ddEnvVars.DD_WATCHER_TWO_MAINTENANCE_WINDOW = '0 3 * * *';
+
+  expect(configuration.isWatcherSocketExplicitlyConfigured('one')).toBe(true);
+  expect(configuration.isWatcherSocketExplicitlyConfigured('two')).toBe(false);
+
+  delete configuration.ddEnvVars.DD_WATCHER_ONE_SOCKET;
+  delete configuration.ddEnvVars.DD_WATCHER_TWO_MAINTENANCE_WINDOW;
+});
+
 test('getWatcherConfiguration should not apply DISCOVERY_SETTLE_MS alias without a watcher name', () => {
   configuration.ddEnvVars.DD_WATCHER__DISCOVERY_SETTLE_MS = '0';
 

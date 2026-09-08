@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import Dockerode from 'dockerode';
-import { getDetectedServerName, setDetectedServerName } from '../../../configuration/index.js';
+import {
+  getDetectedServerName,
+  isWatcherSocketExplicitlyConfigured,
+  setDetectedServerName,
+} from '../../../configuration/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
@@ -161,9 +165,13 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
     // When the configured socket is still the schema default and that
     // default path doesn't exist, probe Podman's known socket paths (#10.4)
     // rather than failing straight into "socket not found" with no hint
-    // that Podman needs a different mount. A non-default configured socket
-    // is never second-guessed — explicit configuration always wins.
-    const resolvedSocketPath = resolveDockerSocketPath(watcher.configuration.socket);
+    // that Podman needs a different mount. An explicitly configured socket
+    // is never second-guessed — even one explicitly set to the default path
+    // — so isWatcherSocketExplicitlyConfigured (true when the raw, pre-Joi
+    // watcher config actually carried a `socket` key) always wins over probing.
+    const resolvedSocketPath = resolveDockerSocketPath(watcher.configuration.socket, {
+      socketExplicit: isWatcherSocketExplicitlyConfigured(watcher.name),
+    });
     options.socketPath = resolvedSocketPath;
     // Pin the daemon's API version so all requests use versioned paths
     // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat

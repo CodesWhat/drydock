@@ -661,7 +661,7 @@ Drydock also detects Podman at watcher startup from the daemon's own `/version` 
 
 - **Rootless networking** — can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations)
 - **Volume driver differences** — Podman's volume drivers don't behave identically to Docker's
-- **systemd-managed containers are not restarted by Drydock** — a container started by a systemd unit (e.g. via Quadlet) needs to be restarted through systemd, not by Drydock issuing its usual container-recreate calls
+- **Containers managed by a systemd unit (Quadlet) are recreated by the Docker action outside their unit** — the Docker action stops, removes, and recreates a container the same way regardless of what's managing it, so a Quadlet-managed container gets rebuilt outside its unit instead of being restarted through it; exclude systemd-managed containers from actions, or use a command action that restarts the unit instead
 
 For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-blocks-podman-socket-access-permission-denied).
 

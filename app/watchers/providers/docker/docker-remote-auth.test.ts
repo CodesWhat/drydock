@@ -7,6 +7,7 @@ const {
   mockGetErrorMessage,
   mockSetDetectedServerName,
   mockGetDetectedServerName,
+  mockIsWatcherSocketExplicitlyConfigured,
   mockInitializeRemoteOidcStateFromConfiguration,
   mockIsRemoteOidcTokenRefreshRequired,
   mockRefreshRemoteOidcAccessToken,
@@ -20,6 +21,7 @@ const {
   mockGetErrorMessage: vi.fn((_: unknown, fallback: string) => fallback),
   mockSetDetectedServerName: vi.fn(),
   mockGetDetectedServerName: vi.fn<() => string | undefined>(() => undefined),
+  mockIsWatcherSocketExplicitlyConfigured: vi.fn<(watcherName: string) => boolean>(() => false),
   mockInitializeRemoteOidcStateFromConfiguration: vi.fn(),
   mockIsRemoteOidcTokenRefreshRequired: vi.fn(() => false),
   mockRefreshRemoteOidcAccessToken: vi.fn(),
@@ -45,6 +47,7 @@ vi.mock('../../../runtime/paths.js', () => ({
 vi.mock('../../../configuration/index.js', () => ({
   setDetectedServerName: mockSetDetectedServerName,
   getDetectedServerName: mockGetDetectedServerName,
+  isWatcherSocketExplicitlyConfigured: mockIsWatcherSocketExplicitlyConfigured,
 }));
 
 vi.mock('./docker-helpers.js', () => ({
@@ -125,6 +128,7 @@ describe('docker remote auth module', () => {
     mockRefreshRemoteOidcAccessToken.mockResolvedValue(undefined);
     mockProbeSocketApiVersion.mockResolvedValue(undefined);
     mockGetDetectedServerName.mockReturnValue(undefined);
+    mockIsWatcherSocketExplicitlyConfigured.mockReturnValue(false);
     mockResolveDockerSocketPath.mockImplementation((configuredSocket: string) => configuredSocket);
   });
 
@@ -143,7 +147,9 @@ describe('docker remote auth module', () => {
 
     await initWatcherWithRemoteAuth(watcher as any);
 
-    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/var/run/docker.sock');
+    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/var/run/docker.sock', {
+      socketExplicit: false,
+    });
     expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/var/run/docker.sock');
     expect(mockDockerodeCtor).toHaveBeenCalledWith({
       ca: undefined,
@@ -176,10 +182,39 @@ describe('docker remote auth module', () => {
 
     await initWatcherWithRemoteAuth(watcher as any);
 
-    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/var/run/docker.sock');
+    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/var/run/docker.sock', {
+      socketExplicit: false,
+    });
     expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/run/podman/podman.sock');
     expect(mockDockerodeCtor).toHaveBeenCalledWith(
       expect.objectContaining({ socketPath: '/run/podman/podman.sock' }),
+    );
+  });
+
+  test('initWatcherWithRemoteAuth marks an explicitly configured non-default socket as explicit and never probes (#10.4 finding 4)', async () => {
+    const dockerApi = { modem: { headers: {} } };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+    mockIsWatcherSocketExplicitlyConfigured.mockReturnValue(true);
+
+    const watcher = createWatcher({
+      name: 'watcher-explicit',
+      configuration: {
+        socket: '/run/docker-local.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockIsWatcherSocketExplicitlyConfigured).toHaveBeenCalledWith('watcher-explicit');
+    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/run/docker-local.sock', {
+      socketExplicit: true,
+    });
+    expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/run/docker-local.sock');
+    expect(mockDockerodeCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ socketPath: '/run/docker-local.sock' }),
     );
   });
 

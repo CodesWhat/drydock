@@ -90,8 +90,9 @@ export async function detectPodmanCompatibility(watcher: PodmanDetectionWatcher)
   if (isPodman) {
     watcher.log.warn(
       `Podman detected (${podmanVersion ?? 'unknown version'}): Drydock uses the Docker-compatible API; ` +
-        'known limits: rootless networking, volume driver differences, systemd-managed containers are ' +
-        `not restarted by Drydock. See ${PODMAN_COMPAT_DOCS_URL}`,
+        'known limits: rootless networking, volume driver differences, containers managed by a systemd ' +
+        'unit (Quadlet) are recreated by the Docker action outside their unit — exclude them from actions ' +
+        `or use a command action that restarts the unit instead. See ${PODMAN_COMPAT_DOCS_URL}`,
     );
   }
 }
