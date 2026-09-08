@@ -58,6 +58,8 @@ A host behind an agent only appears as prunable when that agent exposes [control
 
 ### Still running
 
+Preview requests only read inventory. If an agent preview returns `504`, no prune was started by that request; retry the preview to obtain an estimate.
+
 The controller's connection to an agent host times out after 30 seconds. A prune that outlives that window is reported as a `504` with "returned no result; the prune may still be running", shown in the UI as a warning rather than an error. The same answer covers an agent that was unreachable, because the proxy does not yet distinguish the two (DR-133 on the roadmap). Refresh the list once the prune has had time to finish to see the result.
 
 ## Related

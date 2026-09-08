@@ -6,6 +6,8 @@ const IMAGE_HOST_UNSUPPORTED_MESSAGE =
 const CONTAINER_ACTIONS_DISABLED_MESSAGE = 'Container actions are disabled';
 const AGENT_PRUNE_STILL_RUNNING_MESSAGE =
   "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.";
+const AGENT_PREVIEW_TIMEOUT_MESSAGE =
+  "The agent's Docker proxy returned no preview result. No prune was started. Retry the preview.";
 
 const imageHostQueryParam = {
   name: 'host',
@@ -84,7 +86,7 @@ export const imagePaths = {
         404: errorResponse(IMAGE_HOST_NOT_FOUND_MESSAGE),
         501: errorResponse(IMAGE_HOST_UNSUPPORTED_MESSAGE),
         500: errorResponse('Unable to estimate reclaimable space'),
-        504: errorResponse(AGENT_PRUNE_STILL_RUNNING_MESSAGE),
+        504: errorResponse(AGENT_PREVIEW_TIMEOUT_MESSAGE),
       },
     },
   },

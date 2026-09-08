@@ -109,7 +109,9 @@ describe('imagePaths', () => {
         errorResponse(IMAGE_HOST_UNSUPPORTED_MESSAGE),
       );
       expect(previewPath.responses[504]).toStrictEqual(
-        errorResponse(AGENT_PRUNE_STILL_RUNNING_MESSAGE),
+        errorResponse(
+          "The agent's Docker proxy returned no preview result. No prune was started. Retry the preview.",
+        ),
       );
     });
   });

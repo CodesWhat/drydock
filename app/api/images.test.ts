@@ -356,6 +356,28 @@ describe('Images Router', () => {
       });
     });
 
+    test.each(['listImages', 'listContainers'] as const)(
+      'reports an agent %s preview timeout without implying a prune started',
+      async (method) => {
+        agentDockerApi[method].mockRejectedValue(
+          Object.assign(new Error('gateway timeout'), { statusCode: 504 }),
+        );
+
+        const res = await invokeGet(
+          '/prune-preview',
+          createMockRequest({ query: { host: 'edge.docker.remote', mode: 'dangling' } }),
+        );
+
+        expect(res.status).toHaveBeenCalledWith(504);
+        expect(res.json).toHaveBeenCalledWith({
+          error:
+            "The agent's Docker proxy returned no preview result. No prune was started. Retry the preview.",
+        });
+        expect(agentDockerApi.pruneImages).not.toHaveBeenCalled();
+        expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      },
+    );
+
     test('maps a local host inventory failure to 500', async () => {
       localDockerApi.listImages.mockRejectedValue(new Error('inventory failed'));
 

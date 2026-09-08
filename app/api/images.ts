@@ -27,6 +27,9 @@ const IMAGE_HOST_UNSUPPORTED_MESSAGE =
 const AGENT_PRUNE_STILL_RUNNING_MESSAGE =
   "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.";
 
+const AGENT_PREVIEW_TIMEOUT_MESSAGE =
+  "The agent's Docker proxy returned no preview result. No prune was started. Retry the preview.";
+
 // Docker fills ImageSummary.SharedSize only when the list call asks for it
 // (`shared-size=true`, API 1.42+); without it the field is -1 and the
 // reclaimable estimate degrades to the full image size.
@@ -195,9 +198,14 @@ function isAgentPruneTimeoutError(host: ImageHost, error: unknown): boolean {
   return /timeout|timed out|socket hang up/i.test(message);
 }
 
-function respondWithHostError(res: Response, host: ImageHost, error: unknown): void {
+function respondWithHostError(
+  res: Response,
+  host: ImageHost,
+  error: unknown,
+  timeoutMessage: string,
+): void {
   if (isAgentPruneTimeoutError(host, error)) {
-    sendErrorResponse(res, 504, AGENT_PRUNE_STILL_RUNNING_MESSAGE);
+    sendErrorResponse(res, 504, timeoutMessage);
     return;
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -237,7 +245,7 @@ async function getPrunePreview(req: Request, res: Response) {
     log.warn(
       `Error estimating reclaimable space for host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );
-    respondWithHostError(res, host, e);
+    respondWithHostError(res, host, e, AGENT_PREVIEW_TIMEOUT_MESSAGE);
   }
 }
 
@@ -291,7 +299,7 @@ async function pruneImages(req: Request, res: Response) {
       details: message,
     });
 
-    respondWithHostError(res, host, e);
+    respondWithHostError(res, host, e, AGENT_PRUNE_STILL_RUNNING_MESSAGE);
   }
 }
 
