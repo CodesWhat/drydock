@@ -22,6 +22,85 @@ function resolvedVersion(lockfile, packageName) {
   return lockfile.packages?.[`node_modules/${packageName}`]?.version;
 }
 
+test('every baseline-browser-mapping resolution includes the invalid-input fix', () => {
+  let resolutions = 0;
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      if (!path.endsWith('node_modules/baseline-browser-mapping')) continue;
+      resolutions += 1;
+      assert.ok(
+        compareSemver(entry.version, '2.11.0') >= 0,
+        `${workspace}/${path} ${entry.version} predates the GHSA-w5vr-8v7q-w6rv fix`,
+      );
+    }
+  }
+  assert.ok(resolutions > 0, 'expected baseline-browser-mapping resolutions in workspace locks');
+});
+
+test('Vitest and its mocker include the redirect path validation fix', () => {
+  for (const workspace of ['.', 'app', 'ui', 'apps/demo']) {
+    const manifest = readJson(`${workspace}/package.json`);
+    assert.ok(compareSemver(manifest.devDependencies.vitest, '4.1.11') >= 0, workspace);
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    const found = new Set();
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      if (!/node_modules\/(?:vitest|@vitest\/mocker)$/.test(path)) continue;
+      found.add(path.endsWith('node_modules/vitest') ? 'vitest' : '@vitest/mocker');
+      assert.ok(compareSemver(entry.version, '4.1.11') >= 0, `${workspace}/${path}`);
+    }
+    assert.deepEqual([...found].sort(), ['@vitest/mocker', 'vitest'], `${workspace} resolutions`);
+  }
+});
+
+test('Joi includes the rename and custom-message prototype fixes in app and e2e', () => {
+  for (const workspace of ['app', 'e2e']) {
+    const manifest = readJson(`${workspace}/package.json`);
+    assert.ok(
+      compareSemver(manifest.dependencies?.joi ?? manifest.overrides?.joi, '18.2.5') >= 0,
+      workspace,
+    );
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      if (!path.endsWith('node_modules/joi')) continue;
+      assert.ok(compareSemver(entry.version, '18.2.5') >= 0, `${workspace}/${path}`);
+    }
+  }
+});
+
+test('Nodemailer includes the address parser and legacy content-access fixes', () => {
+  assert.ok(compareSemver(readJson('app/package.json').dependencies.nodemailer, '9.1.1') >= 0);
+  let resolutions = 0;
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    for (const [path, entry] of Object.entries(
+      readJson(`${workspace}/package-lock.json`).packages,
+    )) {
+      if (!path.endsWith('node_modules/nodemailer')) continue;
+      resolutions += 1;
+      assert.ok(compareSemver(entry.version, '9.1.1') >= 0, `${workspace}/${path}`);
+    }
+  }
+  assert.ok(resolutions > 0, 'expected Nodemailer resolutions in workspace locks');
+});
+
+test('every js-yaml resolution counts empty merge sources against its budget', () => {
+  assert.ok(compareSemver(readJson('e2e/package.json').overrides['js-yaml'], '3.15.2') >= 0);
+  let resolutions = 0;
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    for (const [path, entry] of Object.entries(
+      readJson(`${workspace}/package-lock.json`).packages,
+    )) {
+      if (!path.endsWith('node_modules/js-yaml')) continue;
+      resolutions += 1;
+      const major = Number(entry.version.split('.')[0]);
+      assert.ok(major === 3 || major === 4, `${workspace}/${path} must use a vetted major`);
+      const floor = major === 3 ? '3.15.2' : '4.3.2';
+      assert.ok(compareSemver(entry.version, floor) >= 0, `${workspace}/${path}`);
+    }
+  }
+  assert.ok(resolutions > 0, 'expected js-yaml resolutions in workspace locks');
+});
+
 test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
   const manifest = readJson('e2e/package.json');
   const lockfile = readJson('e2e/package-lock.json');
@@ -106,21 +185,23 @@ test('sharp is pinned to a patched release in the website', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  assert.equal(manifest.overrides?.sharp, '0.35.4');
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.3') >= 0);
+  assert.ok(compareSemver(manifest.overrides?.sharp, '0.35.4') >= 0);
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.4') >= 0);
 });
 
-test('Next.js is pinned past the 16.2.9 security advisory batch', () => {
+test('Next.js is pinned past the Windows server execution advisory', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  // Floor, not an exact pin: 16.2.11 closed the advisory batch, and routine
+  // Floor, not an exact pin: 16.3.3 closed the advisory, and routine
   // Renovate bumps past it must not fail the guard (16.x only — a new major
   // is a deliberate migration, not a routine bump).
   const manifestNext = manifest.dependencies?.next;
   assert.ok(manifestNext?.startsWith('16.'), 'apps/web next must stay on the vetted 16.x line');
-  assert.ok(compareSemver(manifestNext, '16.2.11') >= 0);
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'next'), '16.2.11') >= 0);
+  assert.ok(compareSemver(manifestNext, '16.3.3') >= 0);
+  const resolvedNext = resolvedVersion(lockfile, 'next');
+  assert.match(resolvedNext, /^16\./, 'apps/web lockfile next must stay on the vetted 16.x line');
+  assert.ok(compareSemver(resolvedNext, '16.3.3') >= 0);
 });
 
 test('the rc.5 changelog records the Next.js security refresh', () => {
