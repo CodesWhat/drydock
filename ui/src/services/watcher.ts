@@ -37,7 +37,10 @@ export async function refreshWatcherInventory(
     body: '{}',
   });
   if (!response.ok) {
-    throw new ApiError(`Inventory refresh failed: ${response.statusText}`, response.status);
+    throw new ApiError(
+      `Inventory refresh failed: ${response.statusText || response.status}`,
+      response.status,
+    );
   }
   return readJsonResponse(response);
 }

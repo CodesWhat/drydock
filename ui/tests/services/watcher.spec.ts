@@ -9,6 +9,20 @@ import {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 describe('Watcher Service', () => {
+  it('includes the numeric status when an inventory failure has an empty HTTP status message', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 504, statusText: '' });
+    await expect(refreshWatcherInventory({ type: 'docker', name: 'local' })).rejects.toThrow(
+      'Inventory refresh failed: 504',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves nonempty inventory HTTP status messages', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 503, statusText: 'Service Unavailable' });
+    await expect(refreshWatcherInventory({ type: 'docker', name: 'local' })).rejects.toThrow(
+      'Inventory refresh failed: Service Unavailable',
+    );
+  });
   it.each([undefined, 'Local / edge'])(
     'refreshes inventory only for the exact watcher and agent %s',
     async (agent) => {
