@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rolling back a container (auto-rollback on an unhealthy update, or a manual restore) now runs the same runtime-config sanitization as an update, so an entrypoint or command the newer image introduced is no longer copied onto the older image and the rolled-back container starts.**
 - **Tag family matching now requires the candidate's variant suffix to match the current tag's exactly, so a container on 1.27.3-alpine is no longer offered 1.28.0-alpine-perl (or 1.28.0-alpine from -alpine-slim) under dd.tag.family=loose or a dd.tag.include filter.**
 - Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
+- **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.
 
 ## [1.7.0-rc.13] — 2026-09-08
 

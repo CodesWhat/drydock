@@ -186,6 +186,26 @@ describe('watchFromCronOrchestration', () => {
     expect(watcher.queueMaintenanceWindowWatch).not.toHaveBeenCalled();
   });
 
+  test('keeps a monthly scan pending instead of overflowing the real deadline timer', async () => {
+    const deferred = createDeferred<ContainerReport[]>();
+    const watcher = createWatcher({
+      watch: vi.fn().mockReturnValue(deferred.promise),
+      getNextScheduledRunDate: vi.fn((fromDate?: Date) =>
+        fromDate ? new Date('2026-02-01T00:00:00Z') : new Date('2026-01-01T00:00:00Z'),
+      ),
+    });
+    const call = watchFromCronOrchestration(watcher, { reason: 'schedule' });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(watcher.log?.warn).not.toHaveBeenCalled();
+      expect(watcher.cronWatchInFlight).toBeDefined();
+    } finally {
+      deferred.resolve([]);
+      await call;
+      resetCronWatchState(watcher);
+    }
+  });
+
   test.each([
     {
       label: 'no interval is available',
@@ -206,6 +226,21 @@ describe('watchFromCronOrchestration', () => {
       label: "the interval's multiple exceeds the floor",
       intervalMs: 20 * 60 * 1000,
       expectedDeadlineMs: 40 * 60 * 1000,
+    },
+    {
+      label: "the interval's multiple is below Node's timer ceiling",
+      intervalMs: 1073741823,
+      expectedDeadlineMs: 2147483646,
+    },
+    {
+      label: "the interval's multiple exceeds Node's timer ceiling",
+      intervalMs: 1073741824,
+      expectedDeadlineMs: 2147483647,
+    },
+    {
+      label: 'the interval spans a month',
+      intervalMs: 31 * 24 * 60 * 60 * 1000,
+      expectedDeadlineMs: 2147483647,
     },
   ])('sizes the in-flight deadline when $label', async ({ intervalMs, expectedDeadlineMs }) => {
     vi.useFakeTimers();
