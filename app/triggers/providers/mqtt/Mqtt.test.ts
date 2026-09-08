@@ -32,6 +32,7 @@ const configurationValid = {
   topic: 'dd/container',
   clientid: 'dd',
   exclude: '',
+  agenttopicsegment: false,
   hass: {
     discovery: false,
     agenttopicsegment: true,
@@ -704,6 +705,93 @@ describe('agent state topic parity with hass discovery', () => {
     } finally {
       await hass.deregister();
     }
+  });
+});
+
+// DR-130: with Home Assistant off, two agents that both run a watcher named
+// `local` used to publish container `nginx` to the same unscoped topic and
+// overwrite each other's retained state. The top-level `agenttopicsegment`
+// opt-in scopes plain MQTT topics per agent without requiring Home Assistant.
+describe('plain MQTT topic scoped per agent (DR-130)', () => {
+  function agentNginxContainer(agent) {
+    return { name: 'nginx', watcher: 'local', agent };
+  }
+
+  function buildConfiguration({ agenttopicsegment, hass }) {
+    return {
+      url: 'mqtt://host:1883',
+      topic: 'dd/container',
+      exclude: '',
+      agenttopicsegment,
+      hass: {
+        enabled: false,
+        discovery: false,
+        prefix: 'homeassistant',
+        agenttopicsegment: false,
+        commands: false,
+        attributes: 'full',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+        ...hass,
+      },
+    };
+  }
+
+  async function publishedTopic(configuration, container) {
+    mqtt.configuration = configuration;
+    await mqtt.trigger(container);
+    const calls = mqtt.client.publish.mock.calls;
+    return calls[calls.length - 1][0];
+  }
+
+  test('flag on, hass disabled: two agents sharing a watcher name publish to distinct topics', async () => {
+    const configuration = buildConfiguration({ agenttopicsegment: true });
+
+    const alphaTopic = await publishedTopic(configuration, agentNginxContainer('alpha'));
+    const betaTopic = await publishedTopic(configuration, agentNginxContainer('beta'));
+
+    expect(alphaTopic).toBe('dd/container/agent/alpha/local/nginx');
+    expect(betaTopic).toBe('dd/container/agent/beta/local/nginx');
+  });
+
+  test('flag off (default), hass disabled: two agents sharing a watcher name collide on one topic', async () => {
+    const configuration = buildConfiguration({ agenttopicsegment: false });
+
+    const alphaTopic = await publishedTopic(configuration, agentNginxContainer('alpha'));
+    const betaTopic = await publishedTopic(configuration, agentNginxContainer('beta'));
+
+    expect(alphaTopic).toBe('dd/container/local/nginx');
+    expect(betaTopic).toBe('dd/container/local/nginx');
+  });
+
+  test('flag on: a controller-local container (no agent) keeps the unscoped topic', async () => {
+    const configuration = buildConfiguration({ agenttopicsegment: true });
+
+    const topic = await publishedTopic(configuration, { name: 'nginx', watcher: 'local' });
+
+    expect(topic).toBe('dd/container/local/nginx');
+  });
+
+  test('flag on with hass.enabled and hass.agenttopicsegment=false: validation forces hass.agenttopicsegment on', () => {
+    const validated = mqtt.validateConfiguration(
+      buildConfiguration({
+        agenttopicsegment: true,
+        hass: { enabled: true, agenttopicsegment: false },
+      }),
+    );
+
+    expect(validated.hass.agenttopicsegment).toBe(true);
+  });
+
+  test('schema default: agenttopicsegment defaults to false when omitted', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+    });
+
+    expect(validated.agenttopicsegment).toBe(false);
   });
 });
 

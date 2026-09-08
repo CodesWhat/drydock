@@ -47,6 +47,7 @@ interface MqttConfiguration extends TriggerConfiguration {
   user?: string;
   password?: string;
   exclude: string;
+  agenttopicsegment: boolean;
   hass: {
     enabled: boolean;
     prefix: string;
@@ -93,6 +94,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
     topic: containerDefaultTopic,
     clientid: '',
     exclude: '',
+    agenttopicsegment: false,
     hass: {
       enabled: false,
       prefix: hassDefaultPrefix,
@@ -239,6 +241,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
       user: this.joi.string(),
       password: this.joi.string(),
       exclude: this.joi.string().allow('').default(''),
+      agenttopicsegment: this.joi.boolean().default(false),
       hass: this.joi
         .object({
           enabled: this.joi.boolean().default(false),
@@ -288,6 +291,22 @@ class Mqtt extends Trigger<MqttConfiguration> {
           rejectunauthorized: true,
         }),
     });
+  }
+
+  /**
+   * Validate the configuration, then reconcile the plain-topic and Home
+   * Assistant agent-segment flags. The state payload has to land on the
+   * exact topic the Home Assistant discovery config names as `state_topic`
+   * (#386, DR-129), and `Hass.ts` reads `hass.agenttopicsegment` directly,
+   * so when the top-level `agenttopicsegment` opt-in is on it forces
+   * `hass.agenttopicsegment` on too. The two flags must never disagree.
+   */
+  validateConfiguration(configuration: MqttConfiguration): MqttConfiguration {
+    const validatedConfiguration = super.validateConfiguration(configuration);
+    if (validatedConfiguration.agenttopicsegment) {
+      validatedConfiguration.hass.agenttopicsegment = true;
+    }
+    return validatedConfiguration;
   }
 
   /**
@@ -373,14 +392,21 @@ class Mqtt extends Trigger<MqttConfiguration> {
   }
 
   /**
-   * Whether container state topics carry the `agent/<name>` segment. Requires
-   * the Home Assistant integration to be on: the segment exists to keep the
+   * Whether container state topics carry the `agent/<name>` segment. On when
+   * the plain top-level `agenttopicsegment` opt-in is set (scopes plain MQTT
+   * topics per agent so two agents sharing a watcher name don't overwrite
+   * each other's topic), or when the Home Assistant integration is on and its
+   * own `hass.agenttopicsegment` is set (the segment then exists to keep the
    * state topic in step with the Home Assistant discovery/command topics
-   * `Hass` builds, and `Hass` is only constructed when `hass.enabled` is true.
+   * `Hass` builds, and `Hass` is only constructed when `hass.enabled` is
+   * true). `validateConfiguration` forces `hass.agenttopicsegment` on
+   * whenever the top-level flag is on, so the two conditions never disagree
+   * once configuration has passed validation.
    */
-  private isHassAgentTopicSegmentEnabled(): boolean {
+  private isAgentTopicSegmentEnabled(): boolean {
     return (
-      this.configuration.hass?.enabled === true && !!this.configuration.hass?.agenttopicsegment
+      this.configuration.agenttopicsegment === true ||
+      (this.configuration.hass?.enabled === true && !!this.configuration.hass?.agenttopicsegment)
     );
   }
 
@@ -433,9 +459,10 @@ class Mqtt extends Trigger<MqttConfiguration> {
       // Assistant discovery config names as `state_topic`, and `Hass` is only
       // ever constructed when `hass.enabled` is on. Keeping the segment tied
       // to `hass.enabled` here means the two are identical whenever a `Hass`
-      // exists, and that plain (non-Home-Assistant) MQTT subscribers keep the
-      // unscoped topic they have always had.
-      agentTopicSegment: this.isHassAgentTopicSegmentEnabled(),
+      // exists. Plain (non-Home-Assistant) MQTT subscribers keep the
+      // unscoped topic they have always had, unless the top-level
+      // `agenttopicsegment` opt-in is on (DR-130).
+      agentTopicSegment: this.isAgentTopicSegmentEnabled(),
     });
 
     const filterConfig = this.getFilterConfig();
