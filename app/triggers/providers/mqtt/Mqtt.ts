@@ -26,7 +26,7 @@ import {
   getHassUpdateProgress,
   HASS_UPDATE_STATE_KEY,
 } from './hass-progress.js';
-import { getContainerIdentitySlug } from './naming.js';
+import { getContainerStateTopic } from './topics.js';
 
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
@@ -34,17 +34,6 @@ const hassAgentTopicSegmentDefault = true;
 
 function generateClientId() {
   return `dd_${randomBytes(4).toString('hex')}`;
-}
-
-/**
- * Get container topic.
- * @param baseTopic
- * @param container
- * @return {string}
- */
-function getContainerTopic({ baseTopic, container }) {
-  const identitySlug = getContainerIdentitySlug(container);
-  return `${baseTopic}/${container.watcher}/${identitySlug}`;
 }
 
 interface MqttConfiguration extends TriggerConfiguration {
@@ -375,6 +364,18 @@ class Mqtt extends Trigger<MqttConfiguration> {
     await super.deregisterComponent();
   }
 
+  /**
+   * Whether container state topics carry the `agent/<name>` segment. Requires
+   * the Home Assistant integration to be on: the segment exists to keep the
+   * state topic in step with the Home Assistant discovery/command topics
+   * `Hass` builds, and `Hass` is only constructed when `hass.enabled` is true.
+   */
+  private isHassAgentTopicSegmentEnabled(): boolean {
+    return (
+      this.configuration.hass?.enabled === true && !!this.configuration.hass?.agenttopicsegment
+    );
+  }
+
   getFilterConfig(): MqttFilterConfig {
     const includePaths = splitFilterPaths(this.configuration.hass?.filter?.include);
     if (includePaths.length > 0) {
@@ -417,9 +418,16 @@ class Mqtt extends Trigger<MqttConfiguration> {
    * @returns {Promise}
    */
   async trigger(container) {
-    const containerTopic = getContainerTopic({
+    const containerTopic = getContainerStateTopic({
       baseTopic: this.configuration.topic,
       container,
+      // #386 — the state payload has to land on the exact topic the Home
+      // Assistant discovery config names as `state_topic`, and `Hass` is only
+      // ever constructed when `hass.enabled` is on. Keeping the segment tied
+      // to `hass.enabled` here means the two are identical whenever a `Hass`
+      // exists, and that plain (non-Home-Assistant) MQTT subscribers keep the
+      // unscoped topic they have always had.
+      agentTopicSegment: this.isHassAgentTopicSegmentEnabled(),
     });
 
     const filterConfig = this.getFilterConfig();
