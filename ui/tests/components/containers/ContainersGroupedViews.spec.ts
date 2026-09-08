@@ -540,6 +540,32 @@ describe('ContainersGroupedViews', () => {
     wrapper.unmount();
   });
 
+  it('keeps stack update-all controls out of fleet groups', async () => {
+    const row = makeContainer({ id: 'fleet-update', name: 'alpha', newTag: '2.0' });
+    const { context } = makeContext();
+    context.fleet = { groupBy: ref('agent') };
+    context.filteredContainers.value = [row];
+    context.displayContainers.value = [row];
+    context.renderGroups.value = [
+      {
+        key: 'fleet',
+        name: 'edge',
+        containers: [row],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+    const wrapper = mountSubject();
+    expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(false);
+    context.fleet.groupBy.value = 'none';
+    context.groupByStack.value = true;
+    await nextTick();
+    expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('hoists card sorting when cards are selected or measured card reflow is forced', async () => {
     const container = makeContainer({ id: 'c-hoist', name: 'alpha' });
     const { context, refs } = makeContext();

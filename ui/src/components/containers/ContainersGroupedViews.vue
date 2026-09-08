@@ -661,6 +661,7 @@ onScopeDispose(() => {
             :done-count="getGroupDoneCount(row.group)"
             :tt="tt"
             :show-update-controls="updateMode !== 'notify'"
+            :show-update-all="!fleet || fleet.groupBy.value === 'none'"
             @toggle="toggleGroupCollapse"
             @update-all="updateAllInGroup($event)"
           />
