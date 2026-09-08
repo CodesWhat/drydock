@@ -43,7 +43,7 @@
     "flat": "6.0.1",
     "gotify-client": "0.4.2",
     "helmet": "8.3.0",
-    "joi": "18.2.3",
+    "joi": "18.2.8",
     "joi-cron-expression": "1.0.1",
     "just-debounce": "1.1.0",
     "kafkajs": "2.2.4",
@@ -51,7 +51,7 @@
     "mqtt": "5.15.2",
     "nocache": "4.0.0",
     "node-cron": "4.6.0",
-    "nodemailer": "9.0.3",
+    "nodemailer": "9.1.1",
     "openid-client": "6.8.4",
     "p-limit": "7.3.1",
     "parse-docker-image-name": "3.0.0",
@@ -104,12 +104,12 @@
     "@types/passport": "1.0.17",
     "@types/semver": "7.7.1",
     "@types/yaml": "1.9.7",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "fast-check": "4.9.0",
     "knip": "6.29.0",
     "nodemon": "3.1.14",
     "ts-node": "10.9.2",
     "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }
