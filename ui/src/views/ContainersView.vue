@@ -10,6 +10,7 @@ import { containersViewTemplateContextKey } from '../components/containers/conta
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
+import { useDependencyGraph } from '../composables/useDependencyGraph';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
@@ -289,6 +290,10 @@ async function loadContainers() {
 
 onMounted(() => {
   void loadContainers();
+  // Fire-and-forget: the dependency graph is a distinct global resource from
+  // the container list (#219, roadmap 6.1), and useDependencyGraph() keeps
+  // its own error ref rather than surfacing into this view's error state.
+  void useDependencyGraph().loadDependencyGraph();
 });
 
 // Safety net only: if the SSE container-removed/added/updated stream hasn't
@@ -446,6 +451,7 @@ const {
   clearSkipsSelected,
   confirmClearPolicy,
   confirmDelete,
+  confirmDependencyGroupUpdate,
   confirmForceUpdate,
   confirmUpdate,
   confirmRollback,
@@ -1536,6 +1542,7 @@ provide(containersViewTemplateContextKey, {
   confirmRestart,
   scanContainer,
   confirmForceUpdate,
+  confirmDependencyGroupUpdate,
   skipUpdate,
   closeActionsMenu,
   confirmDelete,

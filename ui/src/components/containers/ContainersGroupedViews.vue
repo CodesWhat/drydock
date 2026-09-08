@@ -4,8 +4,10 @@ import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { useDependencyGraph } from '../../composables/useDependencyGraph';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
+import { getDependencyComponentIds } from '../../utils/dependency-graph-view';
 import {
   getUpdateInProgressPhaseLabelKey,
   UPDATE_IN_PROGRESS_PHASE_I18N,
@@ -25,6 +27,7 @@ import {
 import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import ContainerDependencyRow from './ContainerDependencyRow.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
 import ContainerPortEntry from './ContainerPortEntry.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
@@ -69,6 +72,7 @@ const {
   recheckContainer,
   scanContainer,
   confirmForceUpdate,
+  confirmDependencyGroupUpdate,
   skipUpdate,
   closeActionsMenu,
   confirmDelete,
@@ -87,6 +91,7 @@ const {
   updateMode: configuredUpdateMode,
 } = useContainersViewTemplateContext();
 const updateMode = computed(() => configuredUpdateMode?.value ?? 'manual');
+const { adjacency, isExpanded, toggleExpanded } = useDependencyGraph();
 const { visibleColumns } = useColumnVisibility();
 const nowMs = useNow(
   30_000,
@@ -143,7 +148,13 @@ type ContainerTableRow = DisplayContainer & {
   __source: DisplayContainer;
 };
 
-type GroupedTableRow = GroupHeaderTableRow | ContainerTableRow;
+interface DependencyTableRow {
+  __rowType: 'dependency';
+  __rowKey: string;
+  container: DisplayContainer;
+}
+
+type GroupedTableRow = GroupHeaderTableRow | ContainerTableRow | DependencyTableRow;
 
 function isGroupHeaderTableRow(row: GroupedTableRow): row is GroupHeaderTableRow {
   return row.__rowType === 'group';
@@ -151,6 +162,10 @@ function isGroupHeaderTableRow(row: GroupedTableRow): row is GroupHeaderTableRow
 
 function isContainerTableRow(row: GroupedTableRow): row is ContainerTableRow {
   return row.__rowType === 'container';
+}
+
+function isDependencyTableRow(row: GroupedTableRow): row is DependencyTableRow {
+  return row.__rowType === 'dependency';
 }
 
 // Build the row using the container as a prototype so field reads (c.name,
@@ -176,10 +191,32 @@ function makeContainerTableRow(container: DisplayContainer, groupKey: string): C
   return row;
 }
 
+// Dependency rows are rebuilt fresh every time (never cached in the
+// WeakMap above) — they're cheap, presentational-only, and their content
+// (parent/child names, cycle membership) comes from the dependency graph
+// singleton rather than the container itself, so there's no staleness risk
+// to guard against by memoizing on the container reference.
+function makeDependencyTableRow(container: DisplayContainer): DependencyTableRow {
+  return {
+    __rowType: 'dependency',
+    __rowKey: `dependency:${getContainerViewKey(container)}`,
+    container,
+  };
+}
+
+function pushContainerRow(rows: GroupedTableRow[], container: DisplayContainer, groupKey: string) {
+  rows.push(makeContainerTableRow(container, groupKey));
+  if (isExpanded(container.id)) {
+    rows.push(makeDependencyTableRow(container));
+  }
+}
+
 const tableRows = computed<GroupedTableRow[]>(() => {
   if (!groupByStack.value) {
     const flat = renderGroups.value[0]?.containers ?? displayContainers.value;
-    return flat.map((container) => makeContainerTableRow(container, '__flat__'));
+    const rows: GroupedTableRow[] = [];
+    flat.forEach((container) => pushContainerRow(rows, container, '__flat__'));
+    return rows;
   }
 
   const rows: GroupedTableRow[] = [];
@@ -191,9 +228,7 @@ const tableRows = computed<GroupedTableRow[]>(() => {
       isFirst: index === 0,
     });
     if (!collapsedGroups.value.has(group.key)) {
-      rows.push(
-        ...group.containers.map((container) => makeContainerTableRow(container, group.key)),
-      );
+      group.containers.forEach((container) => pushContainerRow(rows, container, group.key));
     }
   });
   return rows;
@@ -455,7 +490,8 @@ function getContainerUpdateStateTooltip(
 }
 
 function isTableRowFullWidth(row: Record<string, unknown>) {
-  return isGroupHeaderTableRow(row as GroupedTableRow);
+  const typedRow = row as GroupedTableRow;
+  return isGroupHeaderTableRow(typedRow) || isDependencyTableRow(typedRow);
 }
 
 function isTableRowInteractive(row: Record<string, unknown>) {
@@ -601,6 +637,15 @@ onScopeDispose(() => {
             @toggle="toggleGroupCollapse"
             @update-all="updateAllInGroup($event)"
           />
+          <ContainerDependencyRow
+            v-else-if="isDependencyTableRow(row)"
+            :container="row.container"
+            :adjacency="adjacency"
+            :cycle="adjacency.cycleMemberIds.has(row.container.id)"
+            :group-size="getDependencyComponentIds(adjacency, row.container.id).size"
+            :container-actions-enabled="containerActionsEnabled"
+            @update-group="confirmDependencyGroupUpdate($event)"
+          />
         </template>
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
@@ -631,6 +676,17 @@ onScopeDispose(() => {
         <template #cell-name="{ row: c }">
           <div class="min-w-0">
               <div class="flex items-center gap-2">
+                <AppIconButton
+                  v-if="c.dependencyCount || c.dependentCount"
+                  :icon="isExpanded(c.id) ? 'chevron-down' : 'chevron-right'"
+                  size="xs"
+                  variant="muted"
+                  class="shrink-0"
+                  :aria-label="t('containerComponents.dependencyGraph.toggle')"
+                  :aria-expanded="isExpanded(c.id)"
+                  data-test="container-dependency-toggle"
+                  @click.stop="toggleExpanded(c.id)"
+                />
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
               </div>
               <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ c.image }}</div>

@@ -1,6 +1,7 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useDependencyGraph } from '../../composables/useDependencyGraph';
 import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useScanLifecycle } from '../../composables/useScanLifecycle';
 import { useServerFeatures } from '../../composables/useServerFeatures';
@@ -40,6 +41,8 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   type TranslateFn,
 } from '../../utils/container-update';
+import type { DependencyAdjacency } from '../../utils/dependency-graph-view';
+import { findStaleParents, formatStaleParentNames } from '../../utils/dependency-update-guard';
 import { ApiError, errorMessage } from '../../utils/error';
 import {
   getPrimaryHardBlocker,
@@ -849,8 +852,60 @@ function schedulePendingActionsPoll(args: {
   }, args.pendingActionsPollIntervalMs.value);
 }
 
+/**
+ * Builds the child-before-parent warning suffix + acceptLabel override for
+ * a single-container update confirmation (#219, roadmap 6.1). Only the
+ * per-row update/force-update path calls this — the stack "Update All"
+ * button has no confirm dialog today and stays as-is.
+ *
+ * A transitive parent is "stale" when it is not part of this dispatch (a
+ * one-container dispatch, so only `containerId` itself) AND already has a
+ * pending update of its own — updating the child now would leave it running
+ * against a parent that is about to change underneath it.
+ */
+function buildStaleParentsWarning(args: {
+  adjacency: DependencyAdjacency;
+  containerId: string | undefined;
+  name: string;
+  containers: Container[];
+  t: TranslateFn;
+}): { suffix: string; acceptLabel?: string } {
+  if (!args.containerId) {
+    return { suffix: '' };
+  }
+  const staleParents = findStaleParents({
+    adjacency: args.adjacency,
+    containerId: args.containerId,
+    dispatchIds: new Set([args.containerId]),
+    hasPendingUpdate: (id) => {
+      const container = args.containers.find((c) => c.id === id);
+      return container ? Boolean(container.newTag) : undefined;
+    },
+  });
+  if (staleParents.length === 0) {
+    return { suffix: '' };
+  }
+  const { names, overflow } = formatStaleParentNames(staleParents);
+  let suffix = `\n\n${args.t('containerComponents.dependencyGraph.staleParentsWarning', {
+    name: args.name,
+    parents: names,
+    count: staleParents.length,
+  })}`;
+  if (overflow > 0) {
+    suffix += ` ${args.t('containerComponents.dependencyGraph.staleParentsOverflow', {
+      count: overflow,
+    })}`;
+  }
+  return {
+    suffix,
+    acceptLabel: args.t('containerComponents.dependencyGraph.staleParentsAccept'),
+  };
+}
+
 function createConfirmHandlers(args: {
   confirm: ReturnType<typeof useConfirmDialog>;
+  containerIdMap: Readonly<Ref<Record<string, string>>>;
+  containers: Readonly<Ref<Container[]>>;
   executeAction: (
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
@@ -872,6 +927,8 @@ function createConfirmHandlers(args: {
   updateMode: Readonly<Ref<UpdateMode>>;
   t: TranslateFn;
 }) {
+  const { adjacency } = useDependencyGraph();
+
   function confirmStop(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
@@ -914,11 +971,21 @@ function createConfirmHandlers(args: {
       return;
     }
     const name = typeof target === 'string' ? target : target.name;
+    const { containerId } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    const staleParents = buildStaleParentsWarning({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      containers: args.containers.value,
+      t: args.t,
+    });
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.forceUpdate.header'),
-      message: args.t('containerComponents.confirmDialogs.forceUpdate.message', { name }),
+      message: `${args.t('containerComponents.confirmDialogs.forceUpdate.message', { name })}${staleParents.suffix}`,
       rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
-      acceptLabel: args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
+      acceptLabel:
+        staleParents.acceptLabel ??
+        args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
       severity: 'warn',
       accept: () => args.forceUpdate(target),
     });
@@ -973,14 +1040,25 @@ function createConfirmHandlers(args: {
       message = `${message}${args.t('containerComponents.confirmDialogs.update.softBlockerSuffix', { list })}`;
     }
 
+    const { containerId } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    const staleParents = buildStaleParentsWarning({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      containers: args.containers.value,
+      t: args.t,
+    });
+    message = `${message}${staleParents.suffix}`;
+
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.update.header'),
       message,
       rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
       acceptLabel:
-        softBlockers.length > 0
+        staleParents.acceptLabel ??
+        (softBlockers.length > 0
           ? args.t('containerComponents.confirmDialogs.update.acceptLabelOverride')
-          : args.t('containerComponents.confirmDialogs.update.acceptLabel'),
+          : args.t('containerComponents.confirmDialogs.update.acceptLabel')),
       severity: 'warn',
       link:
         softBlockers.length > 0
@@ -1648,6 +1726,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     confirmUpdate,
   } = createConfirmHandlers({
     confirm,
+    containerIdMap: input.containerIdMap,
+    containers: input.containers,
     executeAction,
     forceUpdate,
     deleteContainer,
