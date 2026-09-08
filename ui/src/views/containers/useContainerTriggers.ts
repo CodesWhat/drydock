@@ -2,13 +2,11 @@ import { type Ref, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import {
-  getContainerTriggers,
-  getUnassociatedContainerTriggers,
+  getContainerTriggersWithReasons,
   runTrigger as runContainerTrigger,
 } from '../../services/container';
 import type { ApiContainerTrigger, ApiUnassociatedContainerTrigger } from '../../types/api';
 import { errorMessage } from '../../utils/error';
-import { loadContainerDetailListState } from './loadContainerDetailListState';
 
 interface UseContainerTriggersInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
@@ -111,27 +109,36 @@ export function useContainerTriggers(input: UseContainerTriggersInput) {
   }
 
   async function loadDetailTriggers() {
-    await loadContainerDetailListState({
-      containerId: input.selectedContainerId.value,
-      loading: triggersLoading,
-      error: triggerError,
-      value: detailTriggers,
-      loader: getContainerTriggers,
-      failureMessage: t('containerComponents.triggers.toasts.loadFailed'),
-    });
-    if (!input.selectedContainerId.value) {
+    const containerId = input.selectedContainerId.value;
+    if (!containerId) {
+      detailTriggers.value = [];
       unassociatedTriggers.value = [];
       return;
     }
+
+    triggersLoading.value = true;
+    triggerError.value = null;
     try {
-      unassociatedTriggers.value = await getUnassociatedContainerTriggers(
-        input.selectedContainerId.value,
-      );
-    } catch {
-      // The associated-triggers load above already surfaced a failure toast/error for this
-      // container; the reason list is supplementary, so a failure here just leaves it empty
-      // rather than showing a second error for the same request.
+      const { data, unassociatedTriggers: reasons } =
+        await getContainerTriggersWithReasons(containerId);
+      if (input.selectedContainerId.value !== containerId) {
+        // The selected container changed while the request was in flight; a newer load
+        // already owns (or will own) these refs, so this stale response is dropped.
+        return;
+      }
+      detailTriggers.value = data;
+      unassociatedTriggers.value = reasons;
+    } catch (e: unknown) {
+      if (input.selectedContainerId.value !== containerId) {
+        return;
+      }
+      detailTriggers.value = [];
       unassociatedTriggers.value = [];
+      triggerError.value = errorMessage(e, t('containerComponents.triggers.toasts.loadFailed'));
+    } finally {
+      if (input.selectedContainerId.value === containerId) {
+        triggersLoading.value = false;
+      }
     }
   }
 

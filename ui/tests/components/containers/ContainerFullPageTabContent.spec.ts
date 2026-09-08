@@ -750,6 +750,7 @@ describe('ContainerFullPageTabContent', () => {
         id: 'portainer.update',
         type: 'portainer',
         name: 'update',
+        agent: 'watchtower',
         reason: 'structuralIncompatibility',
       } as UnassociatedTrigger,
     ];
@@ -759,6 +760,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('Unavailable Triggers');
     const row = wrapper.get('[data-unassociated-trigger-key="portainer.update"]');
     expect(row.text()).toContain('portainer.update');
+    expect(row.text()).toContain('watchtower');
     expect(row.text()).toContain("Compose project, service, or file doesn't match this container.");
     expect(wrapper.find('[data-unassociated-trigger-key="portainer.update"] button').exists()).toBe(
       false,

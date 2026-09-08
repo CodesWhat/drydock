@@ -62,7 +62,9 @@ vi.mock('@/services/container', () => ({
   getContainerLogs: vi.fn(),
   getContainerUpdateOperations: vi.fn().mockResolvedValue([]),
   getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
-  getContainerTriggers: vi.fn().mockResolvedValue([]),
+  getContainerTriggersWithReasons: vi
+    .fn()
+    .mockResolvedValue({ data: [], unassociatedTriggers: [] }),
   getContainerVulnerabilities: vi.fn().mockResolvedValue({
     status: 'not-scanned',
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },

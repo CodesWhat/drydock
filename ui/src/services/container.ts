@@ -1,4 +1,8 @@
-import type { ApiContainerUpdateOperation, ApiUnassociatedContainerTrigger } from '../types/api';
+import type {
+  ApiContainerTrigger,
+  ApiContainerUpdateOperation,
+  ApiUnassociatedContainerTrigger,
+} from '../types/api';
 import type { DependencyGraph, UpdateChainPreview } from '../types/container';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
@@ -211,13 +215,16 @@ async function getContainerTriggers(containerId: string) {
 }
 
 /**
- * Triggers that do not apply to this container, each with a reason (DR-78). Reads the same
- * GET /api/v1/containers/:id/triggers response `getContainerTriggers` reads `data` from, but
- * pulls the additive `unassociatedTriggers` field instead.
+ * GET /api/v1/containers/:id/triggers — single request for both the associated trigger list
+ * (`data`) and the unassociated-trigger reason list (`unassociatedTriggers`, DR-78). Reading both
+ * from one response, instead of issuing the request twice, avoids the trigger/agent/label
+ * configuration changing between two separate round trips and briefly showing a trigger in both
+ * lists or neither.
  */
-async function getUnassociatedContainerTriggers(
-  containerId: string,
-): Promise<ApiUnassociatedContainerTrigger[]> {
+async function getContainerTriggersWithReasons(containerId: string): Promise<{
+  data: ApiContainerTrigger[];
+  unassociatedTriggers: ApiUnassociatedContainerTrigger[];
+}> {
   const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
     credentials: 'include',
   });
@@ -226,9 +233,12 @@ async function getUnassociatedContainerTriggers(
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
   const envelope = payload as { unassociatedTriggers?: unknown };
-  return Array.isArray(envelope.unassociatedTriggers)
-    ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
-    : [];
+  return {
+    data: extractCollectionData<ApiContainerTrigger>(payload),
+    unassociatedTriggers: Array.isArray(envelope.unassociatedTriggers)
+      ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
+      : [],
+  };
 }
 
 async function runTrigger({
@@ -579,10 +589,10 @@ export {
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
+  getContainerTriggersWithReasons,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
-  getUnassociatedContainerTriggers,
   getUpdateOperationById,
   previewUpdateChain,
   refreshAllContainers,

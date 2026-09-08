@@ -33,8 +33,7 @@ const mocks = vi.hoisted(() => ({
   deleteContainer: vi.fn(),
   scanContainer: vi.fn(),
   getContainerUpdateOperations: vi.fn(),
-  getContainerTriggers: vi.fn(),
-  getUnassociatedContainerTriggers: vi.fn(),
+  getContainerTriggersWithReasons: vi.fn(),
   runTrigger: vi.fn(),
   updateContainerPolicy: vi.fn(),
   restartContainer: vi.fn(),
@@ -65,8 +64,7 @@ vi.mock('@/services/container', () => ({
   deleteContainer: mocks.deleteContainer,
   scanContainer: mocks.scanContainer,
   getContainerUpdateOperations: mocks.getContainerUpdateOperations,
-  getContainerTriggers: mocks.getContainerTriggers,
-  getUnassociatedContainerTriggers: mocks.getUnassociatedContainerTriggers,
+  getContainerTriggersWithReasons: mocks.getContainerTriggersWithReasons,
   runTrigger: mocks.runTrigger,
   updateContainerPolicy: mocks.updateContainerPolicy,
   previewUpdateChain: mocks.previewUpdateChain,
@@ -265,8 +263,7 @@ describe('useContainerActions', () => {
     mocks.deleteContainer.mockResolvedValue({});
     mocks.scanContainer.mockResolvedValue({});
     mocks.getContainerUpdateOperations.mockResolvedValue([]);
-    mocks.getContainerTriggers.mockResolvedValue([]);
-    mocks.getUnassociatedContainerTriggers.mockResolvedValue([]);
+    mocks.getContainerTriggersWithReasons.mockResolvedValue({ data: [], unassociatedTriggers: [] });
     mocks.runTrigger.mockResolvedValue({});
     mocks.updateContainerPolicy.mockResolvedValue({});
     mocks.restartContainer.mockResolvedValue({});
@@ -314,7 +311,7 @@ describe('useContainerActions', () => {
       selectedContainer: container,
       selectedContainerId: container.id,
     });
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     loadContainers.mockClear();
@@ -335,7 +332,7 @@ describe('useContainerActions', () => {
     expect(composable.triggerMessage.value).toBe('Trigger agent-1.slack.notify ran successfully');
     expect(composable.triggerError.value).toBeNull();
     expect(loadContainers).toHaveBeenCalledTimes(1);
-    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
     expect(composable.triggerRunInProgress.value).toBeNull();
@@ -393,7 +390,7 @@ describe('useContainerActions', () => {
       selectedContainerId: container.id,
       containerIdMap: { web: 'container-1' },
     });
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     loadContainers.mockClear();
@@ -404,7 +401,7 @@ describe('useContainerActions', () => {
     expect(composable.policyMessage.value).toBe('Skipped current update for web');
     expect(composable.skippedUpdates.value.has('container-1')).toBe(true);
     expect(loadContainers).toHaveBeenCalledTimes(1);
-    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
   });
@@ -2102,7 +2099,7 @@ describe('useContainerActions', () => {
     expect(composable.detailUpdateOperations.value).toEqual([]);
     expect(composable.updateOperationsError.value).toBeNull();
 
-    mocks.getContainerTriggers.mockRejectedValueOnce(new Error('trigger load failed'));
+    mocks.getContainerTriggersWithReasons.mockRejectedValueOnce(new Error('trigger load failed'));
     mocks.getBackups.mockRejectedValueOnce(new Error('backup load failed'));
     mocks.getContainerUpdateOperations.mockRejectedValueOnce(new Error('ops load failed'));
 
@@ -2119,12 +2116,15 @@ describe('useContainerActions', () => {
     expect(composable.updateOperationsError.value).toBe('ops load failed');
   });
 
-  it('loads the unassociated-triggers reason list alongside associated triggers (DR-78)', async () => {
+  it('loads the unassociated-triggers reason list alongside associated triggers from one response (DR-78)', async () => {
     vi.useFakeTimers();
     const container = makeContainer({ id: 'container-1', name: 'web' });
-    mocks.getUnassociatedContainerTriggers.mockResolvedValueOnce([
-      { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
-    ]);
+    mocks.getContainerTriggersWithReasons.mockResolvedValueOnce({
+      data: [{ type: 'slack', name: 'notify' }],
+      unassociatedTriggers: [
+        { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      ],
+    });
     const { composable } = await mountActionsHarness({
       activeDetailTab: 'actions',
       selectedContainer: container,
@@ -2133,16 +2133,18 @@ describe('useContainerActions', () => {
     vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
-    expect(mocks.getUnassociatedContainerTriggers).toHaveBeenCalledWith('container-1');
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledWith('container-1');
+    expect(composable.detailTriggers.value).toEqual([{ type: 'slack', name: 'notify' }]);
     expect(composable.unassociatedTriggers.value).toEqual([
       { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
     ]);
   });
 
-  it('leaves the unassociated-triggers list empty when its own load fails, without a second error', async () => {
+  it('clears the unassociated-triggers list alongside the associated list when the shared load fails', async () => {
     vi.useFakeTimers();
     const container = makeContainer({ id: 'container-1', name: 'web' });
-    mocks.getUnassociatedContainerTriggers.mockRejectedValueOnce(new Error('reason load failed'));
+    mocks.getContainerTriggersWithReasons.mockRejectedValueOnce(new Error('trigger load failed'));
     const { composable } = await mountActionsHarness({
       activeDetailTab: 'actions',
       selectedContainer: container,
@@ -2151,7 +2153,101 @@ describe('useContainerActions', () => {
     vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
+    expect(composable.detailTriggers.value).toEqual([]);
     expect(composable.unassociatedTriggers.value).toEqual([]);
+    expect(composable.triggerError.value).toBe('trigger load failed');
+  });
+
+  it('drops a stale triggers response that resolves after the selected container changed', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    const { composable, selectedContainer, selectedContainerId } = await mountActionsHarness({
+      activeDetailTab: 'actions',
+      selectedContainer: web,
+      selectedContainerId: web.id,
+    });
+
+    let resolveWebLoad!: (value: {
+      data: ApiContainerTrigger[];
+      unassociatedTriggers: never[];
+    }) => void;
+    const webLoad = new Promise<{ data: ApiContainerTrigger[]; unassociatedTriggers: never[] }>(
+      (resolve) => {
+        resolveWebLoad = resolve;
+      },
+    );
+    mocks.getContainerTriggersWithReasons.mockClear();
+    mocks.getContainerTriggersWithReasons.mockImplementationOnce(() => webLoad);
+    mocks.getContainerTriggersWithReasons.mockResolvedValueOnce({
+      data: [{ type: 'slack', name: 'api-trigger' }],
+      unassociatedTriggers: [],
+    });
+
+    // Initial mount already scheduled a debounced load for container-1 (web); let it fire and
+    // start the still-pending fetch.
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
+
+    // Switch to a different container while the first request is still in flight.
+    selectedContainer.value = api;
+    selectedContainerId.value = api.id;
+    await nextTick();
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(2);
+    expect(composable.detailTriggers.value).toEqual([{ type: 'slack', name: 'api-trigger' }]);
+
+    // Resolve the stale container-1 response now; it must not clobber container-2's data.
+    resolveWebLoad({
+      data: [{ type: 'docker', name: 'stale' }],
+      unassociatedTriggers: [],
+    });
+    await flushPromises();
+
+    expect(composable.detailTriggers.value).toEqual([{ type: 'slack', name: 'api-trigger' }]);
+    expect(composable.unassociatedTriggers.value).toEqual([]);
+  });
+
+  it('drops a stale triggers failure that rejects after the selected container changed', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    const { composable, selectedContainer, selectedContainerId } = await mountActionsHarness({
+      activeDetailTab: 'actions',
+      selectedContainer: web,
+      selectedContainerId: web.id,
+    });
+
+    let rejectWebLoad!: (error: Error) => void;
+    const webLoad = new Promise<never>((_resolve, reject) => {
+      rejectWebLoad = reject;
+    });
+    mocks.getContainerTriggersWithReasons.mockClear();
+    mocks.getContainerTriggersWithReasons.mockImplementationOnce(() => webLoad);
+    mocks.getContainerTriggersWithReasons.mockResolvedValueOnce({
+      data: [{ type: 'slack', name: 'api-trigger' }],
+      unassociatedTriggers: [],
+    });
+
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+
+    selectedContainer.value = api;
+    selectedContainerId.value = api.id;
+    await nextTick();
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+    expect(composable.detailTriggers.value).toEqual([{ type: 'slack', name: 'api-trigger' }]);
+    expect(composable.triggerError.value).toBeNull();
+
+    // Reject the stale container-1 request now; it must not clobber container-2's state or
+    // report a stale error against the currently selected container.
+    rejectWebLoad(new Error('stale load failed'));
+    await flushPromises();
+
+    expect(composable.detailTriggers.value).toEqual([{ type: 'slack', name: 'api-trigger' }]);
     expect(composable.triggerError.value).toBeNull();
   });
 
@@ -2175,7 +2271,7 @@ describe('useContainerActions', () => {
       } satisfies ApiContainerUpdateOperation,
     ];
     composable.updateOperationsError.value = 'stale error';
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
@@ -2185,7 +2281,7 @@ describe('useContainerActions', () => {
     vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
-    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getContainerTriggersWithReasons).not.toHaveBeenCalled();
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
     expect(composable.detailBackups.value).toEqual([]);
@@ -2203,7 +2299,7 @@ describe('useContainerActions', () => {
       selectedContainerId: web.id,
     });
 
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
@@ -2216,17 +2312,17 @@ describe('useContainerActions', () => {
     selectedContainerId.value = web.id;
     await nextTick();
 
-    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getContainerTriggersWithReasons).not.toHaveBeenCalled();
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
-    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
-    expect(mocks.getContainerTriggers).toHaveBeenCalledWith('container-1');
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledWith('container-1');
     expect(mocks.getBackups).toHaveBeenCalledWith('container-1');
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledWith('container-1');
   });
@@ -2662,12 +2758,12 @@ describe('useContainerActions', () => {
       maturityBlocked: false,
     });
 
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     await composable.skipUpdate('web');
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
-    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getContainerTriggersWithReasons).not.toHaveBeenCalled();
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
@@ -2766,24 +2862,24 @@ describe('useContainerActions', () => {
       containers: [container],
       containerIdMap: { web: 'container-1' },
     });
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
     await composable.startContainer('web');
     expect(mocks.startContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Started: web');
-    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
 
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
     await composable.skipUpdate(container);
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
-    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggersWithReasons).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
   });
@@ -2796,14 +2892,14 @@ describe('useContainerActions', () => {
       selectedContainerId: container.id,
       containerIdMap: {},
     });
-    mocks.getContainerTriggers.mockClear();
+    mocks.getContainerTriggersWithReasons.mockClear();
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
     await composable.skipUpdate('web');
 
     expect(composable.skippedUpdates.value.has('web')).toBe(false);
-    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getContainerTriggersWithReasons).not.toHaveBeenCalled();
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
