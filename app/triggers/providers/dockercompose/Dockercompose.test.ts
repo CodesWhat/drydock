@@ -4859,96 +4859,209 @@ describe('Dockercompose Trigger', () => {
   // DR-127: label-sourced compose path containment
   // -----------------------------------------------------------------------
 
-  test('getComposeFileForContainer should not contain label paths on a host run with no file and no bind mounts', () => {
+  // Drives triggerBatch with Drydock inspecting itself, so containment is
+  // exercised through observable behaviour (which file processComposeFile is
+  // handed) rather than through the helper that computes the roots.
+  async function runContainmentBatch({
+    binds,
+    container,
+  }: {
+    binds?: string[];
+    container: Record<string, unknown>;
+  }) {
+    const originalHostname = process.env.HOSTNAME;
+    if (binds) {
+      process.env.HOSTNAME = 'drydock-self';
+      mockDockerApi.getContainer.mockImplementation((containerName) => {
+        if (containerName === 'drydock-self') {
+          return {
+            inspect: vi.fn().mockResolvedValue({ HostConfig: { Binds: binds } }),
+          };
+        }
+        return { inspect: vi.fn().mockResolvedValue({ State: { Running: true } }) };
+      });
+    } else {
+      delete process.env.HOSTNAME;
+    }
+    fs.access.mockResolvedValue(undefined);
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    try {
+      await trigger.triggerBatch([container]);
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+    return processComposeFileSpy;
+  }
+
+  test('triggerBatch should use a dd.compose.file label unchanged on a host run with no file and no bind mounts', async () => {
     // Zero-config host run: no configured file, no bind mounts of Drydock's
     // own, so there is no known root and containment stays off.
     trigger.configuration.file = undefined;
-    trigger.setHostToContainerBindMountCache([]);
+
     const container = {
       name: 'nginx',
-      labels: { 'dd.compose.file': '/etc/hosts' },
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/srv/anywhere/compose.yml' },
     };
+    const processComposeFileSpy = await runContainmentBatch({ container });
 
-    expect(trigger.getComposeFileForContainer(container)).toBe('/etc/hosts');
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/srv/anywhere/compose.yml', [container]);
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('outside the allowed roots'),
+    );
     expect(trigger.getAllowedComposeLabelPathRoots()).toEqual([]);
-    expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
-  test('getComposeFileForContainer should reject a dd.compose.file label outside a bind mount when Drydock runs in a container', () => {
+  test('triggerBatch should reject a dd.compose.file label outside the bind mounts of a containerised Drydock', async () => {
     trigger.configuration.file = undefined;
-    trigger.setHostToContainerBindMountCache([{ source: '/compose', destination: '/compose' }]);
+
     const container = {
       name: 'nginx',
+      watcher: 'local',
       labels: { 'dd.compose.file': '/etc/hosts' },
     };
+    const processComposeFileSpy = await runContainmentBatch({
+      binds: ['/compose:/compose:rw'],
+      container,
+    });
 
-    expect(trigger.getComposeFileForContainer(container)).toBeNull();
+    expect(processComposeFileSpy).not.toHaveBeenCalled();
     expect(mockLog.warn).toHaveBeenCalledWith(
       'Compose file label dd.compose.file on container nginx value /etc/hosts resolved to /etc/hosts, which is outside the allowed roots (/compose); ignoring the label',
     );
   });
 
-  test('getComposeFileForContainer should accept a dd.compose.file label under a bind mount when Drydock runs in a container', () => {
+  test('triggerBatch should accept a dd.compose.file label under a bind mount of a containerised Drydock', async () => {
     trigger.configuration.file = undefined;
-    trigger.setHostToContainerBindMountCache([{ source: '/compose', destination: '/compose' }]);
+
     const container = {
       name: 'nginx',
+      watcher: 'local',
       labels: { 'dd.compose.file': '/compose/nginx/compose.yml' },
     };
+    const processComposeFileSpy = await runContainmentBatch({
+      binds: ['/compose:/compose:rw'],
+      container,
+    });
 
-    expect(trigger.getComposeFileForContainer(container)).toBe('/compose/nginx/compose.yml');
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/compose/nginx/compose.yml', [container]);
     expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
-  test('getComposeFileForContainer should accept a dd.compose.file label naming either side of a bind mount pair', () => {
+  test('triggerBatch should accept a dd.compose.file label naming either side of a bind mount pair', async () => {
     trigger.configuration.file = undefined;
-    trigger.setHostToContainerBindMountCache([
-      { source: '/mnt/stacks', destination: '/drydock/stacks' },
+
+    // The legacy label is used verbatim, so the host-side source has to be an
+    // allowed root as well as the container-side destination.
+    const hostSideContainer = {
+      name: 'host-side',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/mnt/stacks/app/compose.yml' },
+    };
+    const hostSideSpy = await runContainmentBatch({
+      binds: ['/mnt/stacks:/drydock/stacks:rw'],
+      container: hostSideContainer,
+    });
+    expect(hostSideSpy).toHaveBeenCalledWith('/mnt/stacks/app/compose.yml', [hostSideContainer]);
+
+    const containerSideContainer = {
+      name: 'container-side',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/drydock/stacks/app/compose.yml' },
+    };
+    const containerSideSpy = await runContainmentBatch({
+      binds: ['/mnt/stacks:/drydock/stacks:rw'],
+      container: containerSideContainer,
+    });
+    expect(containerSideSpy).toHaveBeenCalledWith('/drydock/stacks/app/compose.yml', [
+      containerSideContainer,
     ]);
 
-    // The legacy label is used verbatim, so both the host-side source and the
-    // container-side destination have to be allowed roots.
-    expect(
-      trigger.getComposeFileForContainer({
-        name: 'host-side',
-        labels: { 'dd.compose.file': '/mnt/stacks/app/compose.yml' },
-      }),
-    ).toBe('/mnt/stacks/app/compose.yml');
-    expect(
-      trigger.getComposeFileForContainer({
-        name: 'container-side',
-        labels: { 'dd.compose.file': '/drydock/stacks/app/compose.yml' },
-      }),
-    ).toBe('/drydock/stacks/app/compose.yml');
     expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
-  test('getComposeFileForContainer should reject a dd.compose.file label outside the configured file directory', () => {
-    trigger.configuration.file = '/stacks/compose.yml';
-    trigger.setHostToContainerBindMountCache([]);
+  test('triggerBatch should accept a bind-mounted directory named like a traversal prefix', async () => {
+    // `..cache` starts with `..` but is a whole segment of its own, so it is
+    // inside /compose and must not be read as an escape.
+    trigger.configuration.file = undefined;
+
+    const container = {
+      name: 'cache-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/compose/..cache/app.yml' },
+    };
+    const processComposeFileSpy = await runContainmentBatch({
+      binds: ['/compose:/compose:rw'],
+      container,
+    });
+
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/compose/..cache/app.yml', [container]);
+    expect(mockLog.warn).not.toHaveBeenCalled();
+  });
+
+  test('triggerBatch should reject a dd.compose.file label that traverses out of a bind mount', async () => {
+    trigger.configuration.file = undefined;
+
     const container = {
       name: 'nginx',
-      labels: { 'dd.compose.file': '/etc/hosts' },
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/compose/../etc/hosts' },
     };
+    const processComposeFileSpy = await runContainmentBatch({
+      binds: ['/compose:/compose:rw'],
+      container,
+    });
 
-    // The container is left with no compose file rather than being redirected
-    // onto the trigger's default, which is not the file it asked for.
-    expect(trigger.getComposeFileForContainer(container)).toBeNull();
+    expect(processComposeFileSpy).not.toHaveBeenCalled();
     expect(mockLog.warn).toHaveBeenCalledWith(
-      'Compose file label dd.compose.file on container nginx value /etc/hosts resolved to /etc/hosts, which is outside the allowed roots (/stacks/compose.yml, /stacks); ignoring the label',
+      expect.stringContaining(
+        'value /compose/../etc/hosts resolved to /etc/hosts, which is outside the allowed roots',
+      ),
     );
   });
 
-  test('getComposeFileForContainer should accept a dd.compose.file label inside the configured file directory', () => {
+  test('triggerBatch should accept a dd.compose.file label inside the configured file directory with no bind mounts', async () => {
     trigger.configuration.file = '/stacks/compose.yml';
-    trigger.setHostToContainerBindMountCache([]);
+
     const container = {
       name: 'other-app',
+      watcher: 'local',
       labels: { 'dd.compose.file': '/stacks/other-app/compose.yml' },
     };
+    const processComposeFileSpy = await runContainmentBatch({ container });
 
-    expect(trigger.getComposeFileForContainer(container)).toBe('/stacks/other-app/compose.yml');
-    expect(mockLog.warn).not.toHaveBeenCalled();
+    // Inside the configured file's directory, but not the configured file
+    // itself, so the configured-file mismatch check skips it as it always has.
+    expect(processComposeFileSpy).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
+    );
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('outside the allowed roots'),
+    );
+  });
+
+  test('triggerBatch should reject a dd.compose.file label outside the configured file directory with no bind mounts', async () => {
+    trigger.configuration.file = '/stacks/compose.yml';
+
+    const container = {
+      name: 'nginx',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/etc/hosts' },
+    };
+    const processComposeFileSpy = await runContainmentBatch({ container });
+
+    // The container is left with no compose file rather than being redirected
+    // onto the trigger's default, which is not the file it asked for.
+    expect(processComposeFileSpy).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Compose file label dd.compose.file on container nginx value /etc/hosts resolved to /etc/hosts, which is outside the allowed roots (/stacks/compose.yml, /stacks); ignoring the label',
+    );
   });
 
   test('getComposeFileForContainer should reject a dd.compose.file label that traverses outside the allowed roots', () => {
@@ -5017,133 +5130,12 @@ describe('Dockercompose Trigger', () => {
     expect(trigger.getComposeFileForContainer(container)).toBeNull();
   });
 
-  test('getComposeFilesFromProjectLabels should accept a config_files label that maps through a bind mount', () => {
-    trigger.configuration.file = undefined;
-    trigger.setHostToContainerBindMountCache([
-      { source: '/mnt/stacks', destination: '/drydock/stacks' },
-    ]);
-
-    const composeFiles = trigger.getComposeFilesFromProjectLabels(
-      {
-        'com.docker.compose.project.config_files': '/mnt/stacks/app/compose.yml',
-      },
-      'test-container',
-    );
-
-    // Mapped onto the mount destination first, so containment sees a path that
-    // is inside an allowed root by construction.
-    expect(composeFiles).toEqual(['/drydock/stacks/app/compose.yml']);
-    expect(mockLog.warn).not.toHaveBeenCalled();
-  });
-
-  test('getComposeFilesFromProjectLabels should accept a config_files label the mount-prefix fallback would rescue', () => {
-    // Foreign host layout with no bind mount covering it: nothing maps, but the
-    // issue #365 tail match will swap in the configured path downstream, so
-    // containment must let it through rather than reject it here.
-    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
-    trigger.configuration.mountPrefixFallback = true;
-    trigger.setHostToContainerBindMountCache([]);
-
-    const composeFiles = trigger.getComposeFilesFromProjectLabels(
-      {
-        'com.docker.compose.project.config_files': '/data/compose/mystack/docker-compose.yml',
-      },
-      'portainer-app',
-    );
-
-    expect(composeFiles).toEqual(['/data/compose/mystack/docker-compose.yml']);
-    expect(mockLog.warn).not.toHaveBeenCalled();
-  });
-
-  test('isComposeLabelPathRescuedByMountPrefixFallback should require the flag, a configured file and a matching tail', () => {
-    trigger.setHostToContainerBindMountCache([]);
-
-    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
-    trigger.configuration.mountPrefixFallback = false;
-    expect(
-      trigger.isComposeLabelPathRescuedByMountPrefixFallback(
-        '/data/compose/mystack/docker-compose.yml',
-      ),
-    ).toBe(false);
-
-    trigger.configuration.mountPrefixFallback = true;
-    expect(
-      trigger.isComposeLabelPathRescuedByMountPrefixFallback(
-        '/data/compose/mystack/docker-compose.yml',
-      ),
-    ).toBe(true);
-    expect(
-      trigger.isComposeLabelPathRescuedByMountPrefixFallback(
-        '/data/compose/otherstack/docker-compose.yml',
-      ),
-    ).toBe(false);
-
-    trigger.configuration.file = undefined;
-    expect(
-      trigger.isComposeLabelPathRescuedByMountPrefixFallback(
-        '/data/compose/mystack/docker-compose.yml',
-      ),
-    ).toBe(false);
-  });
-
-  test('triggerBatch should reject a dd.compose.file label pointing outside the bind mounts of a containerised Drydock', async () => {
-    const originalHostname = process.env.HOSTNAME;
-    process.env.HOSTNAME = 'drydock-self';
-    trigger.configuration.file = undefined;
-    mockDockerApi.getContainer.mockImplementation((containerName) => {
-      if (containerName === 'drydock-self') {
-        return {
-          inspect: vi.fn().mockResolvedValue({
-            HostConfig: { Binds: ['/compose:/compose:rw'] },
-          }),
-        };
-      }
-      return { inspect: vi.fn().mockResolvedValue({ State: { Running: true } }) };
-    });
-    fs.access.mockResolvedValue(undefined);
-
-    const container = {
-      name: 'nginx',
-      watcher: 'local',
-      labels: { 'dd.compose.file': '/etc/hosts' },
-    };
-    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
-
-    try {
-      await trigger.triggerBatch([container]);
-    } finally {
-      if (originalHostname === undefined) {
-        delete process.env.HOSTNAME;
-      } else {
-        process.env.HOSTNAME = originalHostname;
-      }
-    }
-
-    expect(mockLog.warn).toHaveBeenCalledWith(
-      'Compose file label dd.compose.file on container nginx value /etc/hosts resolved to /etc/hosts, which is outside the allowed roots (/compose); ignoring the label',
-    );
-    expect(processComposeFileSpy).not.toHaveBeenCalled();
-  });
-
   test('triggerBatch should accept a config_files label whose foreign host path maps onto a Drydock bind mount', async () => {
     // Different host layout than Drydock's own view (Portainer style), but
     // Drydock has a real bind mount covering it, so the label maps to a
     // destination path before containment runs and clears the allow-list
     // without needing the mountPrefixFallback flag at all.
-    const originalHostname = process.env.HOSTNAME;
-    process.env.HOSTNAME = 'drydock-self';
     trigger.configuration.file = undefined;
-    mockDockerApi.getContainer.mockImplementation((containerName) => {
-      if (containerName === 'drydock-self') {
-        return {
-          inspect: vi.fn().mockResolvedValue({
-            HostConfig: { Binds: ['/data/compose/mystack:/drydock/mystack:rw'] },
-          }),
-        };
-      }
-      return { inspect: vi.fn().mockResolvedValue({ State: { Running: true } }) };
-    });
-    fs.access.mockResolvedValue(undefined);
 
     const container = {
       name: 'portainer-app',
@@ -5152,17 +5144,10 @@ describe('Dockercompose Trigger', () => {
         'com.docker.compose.project.config_files': '/data/compose/mystack/docker-compose.yml',
       },
     };
-    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
-
-    try {
-      await trigger.triggerBatch([container]);
-    } finally {
-      if (originalHostname === undefined) {
-        delete process.env.HOSTNAME;
-      } else {
-        process.env.HOSTNAME = originalHostname;
-      }
-    }
+    const processComposeFileSpy = await runContainmentBatch({
+      binds: ['/data/compose/mystack:/drydock/mystack:rw'],
+      container,
+    });
 
     expect(mockLog.warn).not.toHaveBeenCalledWith(
       expect.stringContaining('outside the allowed roots'),
@@ -5170,6 +5155,139 @@ describe('Dockercompose Trigger', () => {
     expect(processComposeFileSpy).toHaveBeenCalledWith('/drydock/mystack/docker-compose.yml', [
       container,
     ]);
+  });
+
+  test('triggerBatch should substitute the configured path for a config_files label the mount-prefix fallback rescues', async () => {
+    // Foreign host layout with no bind mount covering it: nothing maps, so the
+    // issue #365 tail match swaps in the configured path at the point the label
+    // is read, not later.
+    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
+    trigger.configuration.mountPrefixFallback = true;
+
+    const container = {
+      name: 'portainer-app',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project.config_files': '/data/compose/mystack/docker-compose.yml',
+      },
+    };
+    const processComposeFileSpy = await runContainmentBatch({ container });
+
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/drydock/mystack/docker-compose.yml', [
+      container,
+    ]);
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('mount prefix'));
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('outside the allowed roots'),
+    );
+  });
+
+  test('resolveComposeServiceContext should read only the configured path for a rescued label path', async () => {
+    // The blocker this rewrite fixes: grouping used to substitute the safe path
+    // while every other consumer still read the label path verbatim.
+    trigger.configuration.file = '/safe/mystack/docker-compose.yml';
+    trigger.configuration.mountPrefixFallback = true;
+    trigger.setHostToContainerBindMountCache([]);
+    fs.access.mockResolvedValue(undefined);
+
+    const composeFilesRead: string[] = [];
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (composeFilePath) => {
+      composeFilesRead.push(composeFilePath);
+      return { services: { nginx: { image: 'nginx:1.0.0' } } };
+    });
+    vi.spyOn(trigger, 'getComposeResolvedImages').mockResolvedValue(new Map());
+
+    const container = {
+      name: 'nginx',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/unrelated/mystack/docker-compose.yml' },
+      image: { registry: { name: 'hub' }, name: 'nginx', tag: { value: '1.0.0' } },
+    };
+
+    const { composeFile, composeFiles } = await trigger.resolveComposeServiceContext(
+      container,
+      'nginx:1.0.0',
+    );
+
+    expect(composeFile).toBe('/safe/mystack/docker-compose.yml');
+    expect(composeFiles).toEqual(['/safe/mystack/docker-compose.yml']);
+    expect(composeFilesRead).toEqual(['/safe/mystack/docker-compose.yml']);
+    expect(composeFilesRead).not.toContain('/unrelated/mystack/docker-compose.yml');
+  });
+
+  test('triggerBatch should rescue a label path against a directory-form configured file', async () => {
+    // FILE names the stack directory, so the tail comparison has to run against
+    // the compose file the directory resolves to, not against the directory.
+    trigger.configuration.file = '/drydock/mystack';
+    trigger.configuration.mountPrefixFallback = true;
+    fs.stat.mockResolvedValue({ isDirectory: () => true });
+
+    const container = {
+      name: 'portainer-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/data/compose/mystack/compose.yaml' },
+    };
+    let processComposeFileSpy: ReturnType<typeof vi.spyOn>;
+    try {
+      processComposeFileSpy = await runContainmentBatch({ container });
+    } finally {
+      // Restore the module mock's default so the directory probe does not leak
+      // into later tests.
+      fs.stat.mockResolvedValue({ mtimeMs: Date.now() });
+    }
+
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/drydock/mystack/compose.yaml', [
+      container,
+    ]);
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('mount prefix'));
+  });
+
+  test('triggerBatch should fall back to the configured file when mountPrefixFallback is on and no label is present', async () => {
+    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
+    trigger.configuration.mountPrefixFallback = true;
+
+    const container = { name: 'plain-app', watcher: 'local' };
+    const processComposeFileSpy = await runContainmentBatch({ container });
+
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/drydock/mystack/docker-compose.yml', [
+      container,
+    ]);
+  });
+
+  test('getMountPrefixFallbackComposeFilePath should require the flag, a configured file and a matching tail', () => {
+    const context = trigger.createComposeLabelResolutionContext();
+    trigger.setHostToContainerBindMountCache([]);
+
+    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
+    trigger.configuration.mountPrefixFallback = false;
+    expect(
+      trigger.getMountPrefixFallbackComposeFilePath(
+        '/data/compose/mystack/docker-compose.yml',
+        context,
+      ),
+    ).toBeNull();
+
+    trigger.configuration.mountPrefixFallback = true;
+    expect(
+      trigger.getMountPrefixFallbackComposeFilePath(
+        '/data/compose/mystack/docker-compose.yml',
+        context,
+      ),
+    ).toBe('/drydock/mystack/docker-compose.yml');
+    expect(
+      trigger.getMountPrefixFallbackComposeFilePath(
+        '/data/compose/otherstack/docker-compose.yml',
+        context,
+      ),
+    ).toBeNull();
+
+    trigger.configuration.file = undefined;
+    expect(
+      trigger.getMountPrefixFallbackComposeFilePath(
+        '/data/compose/mystack/docker-compose.yml',
+        context,
+      ),
+    ).toBeNull();
   });
 
   test('resolveComposeFilesForContainer should map compose config file labels from host bind paths to container paths', async () => {
