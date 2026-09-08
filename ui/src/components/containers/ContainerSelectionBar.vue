@@ -11,6 +11,7 @@ import { hasRawUpdateCandidate, updateButtonState } from '../../utils/update-eli
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const {
+  containers,
   filteredContainers,
   containerActionsEnabled,
   confirmBulkUpdate,
@@ -40,6 +41,7 @@ const plan = computed<BulkUpdatePlan>(() =>
   planBulkUpdate({
     selectedIds: selectedIds.value,
     containers: filteredContainers.value,
+    allContainers: containers.value,
     adjacency: adjacency.value,
     rowState,
     isRowLocked: isContainerRowLocked,

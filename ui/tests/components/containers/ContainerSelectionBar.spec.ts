@@ -4,7 +4,7 @@ import {
   resetContainerSelectionState,
   useContainerSelection,
 } from '@/composables/useContainerSelection';
-import { resetDependencyGraphState } from '@/composables/useDependencyGraph';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import type { Container } from '@/types/container';
 import { mountWithPlugins } from '../../helpers/mount';
 
@@ -40,9 +40,11 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   const filteredContainers = ref<Container[]>([]);
+  const containers = ref<Container[]>([]);
   const containerActionsEnabled = ref(true);
   const confirmBulkUpdate = vi.fn();
   const context = {
+    containers,
     filteredContainers,
     containerActionsEnabled,
     confirmBulkUpdate,
@@ -53,7 +55,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     ...overrides,
   } as any;
 
-  return { context, filteredContainers, containerActionsEnabled, confirmBulkUpdate };
+  return { context, filteredContainers, containers, containerActionsEnabled, confirmBulkUpdate };
 }
 
 function mountBar() {
@@ -196,6 +198,39 @@ describe('ContainerSelectionBar', () => {
 
     expect(count.value).toBe(0);
     expect(bar()).toBeNull();
+  });
+
+  it('reports a stale parent hidden from the filtered list by resolving it against the unfiltered containers', async () => {
+    useDependencyGraph().graph.value = {
+      nodes: [
+        { id: 'c-1', name: 'web', displayName: 'web' },
+        { id: 'c-2', name: 'db', displayName: 'db' },
+      ],
+      edges: [{ from: 'c-1', to: 'c-2', action: 'update', source: 'label' }],
+      cycles: [],
+      unresolved: [],
+      crossHostIgnored: [],
+    };
+    const web = makeContainer({ id: 'c-1', name: 'web', newTag: '2.0.0' });
+    const db = makeContainer({ id: 'c-2', name: 'db', newTag: '3.0.0' });
+    const { context, filteredContainers, containers, confirmBulkUpdate } = makeContext();
+    // db is filtered out of the visible list (e.g. a search filter) but is
+    // still present in the full, unfiltered container list.
+    filteredContainers.value = [web];
+    containers.value = [web, db];
+    mocked.context = context;
+    useContainerSelection().toggle('c-1');
+
+    activeWrapper = mountBar();
+    const updateBtn = bar()?.querySelector<HTMLButtonElement>(
+      '[data-test="container-selection-update"]',
+    );
+    updateBtn?.click();
+    await activeWrapper.vm.$nextTick();
+
+    expect(confirmBulkUpdate).toHaveBeenCalledTimes(1);
+    const plan = confirmBulkUpdate.mock.calls[0][0];
+    expect(plan.staleParents).toEqual([{ id: 'c-2', name: 'db' }]);
   });
 
   it('clears the selection on unmount', () => {

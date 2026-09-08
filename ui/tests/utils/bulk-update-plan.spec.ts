@@ -245,7 +245,7 @@ describe('planBulkUpdate', () => {
     expect(plan.dispatch.map((entry) => entry.id)).toEqual(['c', 'a', 'b']);
   });
 
-  it('reports a stale parent that has a pending update and is not itself selected, deduped across multiple dispatch entries', () => {
+  it('reports an unselected, dispatchable parent, deduped across multiple dispatch entries', () => {
     const adjacency = makeAdjacency({
       nodes: [makeNode('app1'), makeNode('app2'), makeNode('db', 'database')],
       edges: [
@@ -262,7 +262,128 @@ describe('planBulkUpdate', () => {
       selectedIds: new Set(['app1', 'app2']),
       containers,
       adjacency,
-      rowState: rowStateFrom({ app1: 'soft', app2: 'soft' }),
+      rowState: rowStateFrom({ app1: 'soft', app2: 'soft', db: 'ready' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([{ id: 'db', name: 'database' }]);
+  });
+
+  it('does not report an unselected parent that is itself locked (in flight)', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const containers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database', newTag: '2.0.0' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'soft', db: 'ready' }),
+      isRowLocked: (container) => container.id === 'db',
+      t,
+    });
+    expect(plan.staleParents).toEqual([]);
+  });
+
+  it('does not report a selected parent even when it is itself hard-blocked', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const containers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database', newTag: '2.0.0' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app', 'db']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'soft', db: 'hard' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([]);
+  });
+
+  it('does not report an unselected parent that is itself blocked', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const containers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database', bouncer: 'blocked' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'soft', db: 'blocked' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([]);
+  });
+
+  it('reports an unselected, ready parent', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const containers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'soft', db: 'ready' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([{ id: 'db', name: 'database' }]);
+  });
+
+  it('does not report an unselected parent with rowState none', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const containers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'soft', db: 'none' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([]);
+  });
+
+  it('resolves a stale parent against allContainers when it is absent from the filtered containers list', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const allContainers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app']),
+      containers: [makeContainer({ id: 'app' })],
+      allContainers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'soft', db: 'ready' }),
       isRowLocked: noneLocked(),
       t,
     });

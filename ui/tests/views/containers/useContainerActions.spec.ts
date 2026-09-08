@@ -5211,8 +5211,7 @@ describe('useContainerActions', () => {
       expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
       expect(composable.isContainerUpdateQueued(api)).toBe(true);
       expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
-      const [successMessage] = mocks.toastSuccess.mock.calls[0]!;
-      expect(successMessage).toContain('bulkUpdate.successMessage');
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Update started for 2 containers');
     });
 
     it('folds stale parents into the dispatch when the plan carries them', async () => {
@@ -5258,7 +5257,7 @@ describe('useContainerActions', () => {
       expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1']);
     });
 
-    it('silently drops targets already in flight and dispatches only the remaining eligible one', async () => {
+    it('aborts the whole batch with a warning toast when any planned target is already in flight', async () => {
       const ready = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
       const queued = makeContainer({
         id: 'container-2',
@@ -5305,13 +5304,15 @@ describe('useContainerActions', () => {
       await confirmCall.accept();
       await flushPromises();
 
-      expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1']);
-      expect(composable.isContainerUpdateQueued(ready)).toBe(false);
-      const [successMessage] = mocks.toastSuccess.mock.calls[0]!;
-      expect(successMessage).toContain('bulkUpdate.successMessage');
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(composable.isContainerUpdateInProgress(ready)).toBe(false);
+      expect(mocks.toastWarning).toHaveBeenCalledWith(
+        'Update already in progress for some containers in this group',
+      );
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
     });
 
-    it('returns without dispatching when every planned target is already in flight', async () => {
+    it('returns without dispatching, warning, when every planned target is already in flight', async () => {
       const inProgress = makeContainer({
         id: 'container-1',
         name: 'web',
@@ -5338,6 +5339,55 @@ describe('useContainerActions', () => {
       expect(mocks.updateContainers).not.toHaveBeenCalled();
       expect(mocks.toastSuccess).not.toHaveBeenCalled();
       expect(mocks.toastError).not.toHaveBeenCalled();
+      expect(mocks.toastWarning).toHaveBeenCalledWith(
+        'Update already in progress for some containers in this group',
+      );
+    });
+
+    it('picks the first accepted target as the head and queues the rest when an earlier requested target is rejected', async () => {
+      const web = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+      const api = makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0' });
+      const worker = makeContainer({ id: 'container-3', name: 'worker', newTag: '3.0.0' });
+      const { composable } = await mountActionsHarness({ containers: [web, api, worker] });
+      mocks.updateContainers.mockResolvedValue({
+        message: 'Container update requests processed',
+        accepted: [
+          { containerId: 'container-2', containerName: 'api' },
+          { containerId: 'container-3', containerName: 'worker' },
+        ],
+        rejected: [
+          {
+            containerId: 'container-1',
+            containerName: 'web',
+            statusCode: 500,
+            message: 'registry timeout',
+          },
+        ],
+      });
+
+      composable.confirmBulkUpdate(
+        makeBulkPlan({
+          dispatch: [
+            { id: 'container-1', name: 'web' },
+            { id: 'container-2', name: 'api' },
+            { id: 'container-3', name: 'worker' },
+          ],
+        }),
+      );
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0]![0] as {
+        accept: () => Promise<void>;
+      };
+      await confirmCall.accept();
+      await flushPromises();
+
+      expect(mocks.updateContainers).toHaveBeenCalledWith([
+        'container-1',
+        'container-2',
+        'container-3',
+      ]);
+      expect(composable.isContainerUpdateQueued(api)).toBe(false);
+      expect(composable.isContainerUpdateQueued(worker)).toBe(true);
     });
 
     it('toasts a non-stale rejection and stays silent for a stale one', async () => {

@@ -456,25 +456,36 @@ async function runBulkUpdateState(args: {
     return;
   }
   const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
-  // The plan resolved eligibility an instant ago; a target that has since
-  // started (or was already mid-flight) is silently dropped rather than
-  // blocking the rest of the dispatch with a warning.
-  const dispatchableTargets = args.targets.filter((container) => {
-    const liveContainer = displayContainers.find((entry) => entry.id === container.id);
-    const operation =
-      liveContainer?.updateOperation ??
-      args.projectContainerDisplayState(container).updateOperation;
-    return !(
-      operation?.status === 'queued' ||
-      operation?.status === 'in-progress' ||
-      args.actionInProgress.value.has(container.id)
-    );
-  });
-  const frozenUpdateTargets = dispatchableTargets.map((container) => ({
+  // The plan resolved eligibility an instant ago; if any target has since
+  // started (or was already mid-flight), abort the whole batch with a
+  // warning rather than silently dispatching a subset the user didn't see
+  // confirmed. Mirrors updateAllInGroupState's same three-way check.
+  if (
+    args.targets.some((container) => {
+      const liveContainer = displayContainers.find((entry) => entry.id === container.id);
+      const operation =
+        liveContainer?.updateOperation ??
+        args.projectContainerDisplayState(container).updateOperation;
+      return (
+        operation?.status === 'queued' ||
+        operation?.status === 'in-progress' ||
+        args.actionInProgress.value.has(container.id)
+      );
+    })
+  ) {
+    useToast().warning(args.t('containersView.toast.updateAlreadyInProgress'));
+    return;
+  }
+  const frozenUpdateTargets = args.targets.map((container) => ({
     id: container.id,
     identityKey: container.identityKey,
     name: container.name,
   }));
+  // c8 ignore next 3: confirmBulkUpdate only calls this with a non-empty
+  // plan.dispatch (formatBulkUpdateConfirm disables accept at count === 0),
+  // and withStaleParents only ever adds to dispatch, never empties it. Kept
+  // as a defensive guard against an empty targets list from any future caller.
+  /* c8 ignore next 3 */
   if (frozenUpdateTargets.length === 0) {
     return;
   }
@@ -504,9 +515,14 @@ async function runBulkUpdateState(args: {
 
     await args.loadContainers();
     const isMultiContainerBatch = acceptedTargetIds.length >= 2;
-    const headTargetId = frozenUpdateTargets[0]!.id;
+    // The head is the first ACCEPTED target in request order, not simply
+    // frozenUpdateTargets[0]: if the first requested target was itself
+    // rejected, frozenUpdateTargets[0] never appears in acceptedTargetIdSet,
+    // so nothing would ever match "the head" and every accepted target would
+    // render queued.
+    const headTargetId = targetIds.find((id) => acceptedTargetIdSet.has(id));
     const nextGroupUpdateQueue = new Set(args.groupUpdateQueue.value);
-    for (const container of dispatchableTargets) {
+    for (const container of args.targets) {
       if (!acceptedTargetIdSet.has(container.id)) {
         continue;
       }

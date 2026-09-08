@@ -1,7 +1,6 @@
 import type { Container } from '../types/container';
 import type { TranslateFn } from './container-update';
-import type { DependencyAdjacency } from './dependency-graph-view';
-import { findStaleParents } from './dependency-update-guard';
+import { collectTransitiveParentIds, type DependencyAdjacency } from './dependency-graph-view';
 import { getPrimaryHardBlocker, getSoftBlockers } from './update-eligibility';
 
 /**
@@ -27,7 +26,12 @@ export interface BulkUpdatePlan {
   blocked: BulkUpdatePlanEntry[];
   /** dispatch entries that also carry soft blockers; reason: joined soft-blocker messages. */
   softOverrides: BulkUpdatePlanEntry[];
-  /** parents of dispatch entries with a pending update of their own, not themselves selected. */
+  /**
+   * Transitive parents of dispatch entries that are not themselves selected
+   * but are dispatchable (not locked, rowState 'ready' or 'soft'). A parent
+   * that is blocked, hard-blocked, in flight, or already selected is never
+   * listed here.
+   */
   staleParents: BulkUpdatePlanEntry[];
   /** distinct agent names among dispatch (informational only). */
   agentCount: number;
@@ -39,6 +43,14 @@ export interface PlanBulkUpdateInput {
   selectedIds: ReadonlySet<string>;
   /** The visible container list. */
   containers: Container[];
+  /**
+   * The full, unfiltered container list, used to resolve stale-parent
+   * lookups (id, rowState, isRowLocked). `containers` may be narrowed by a
+   * search or group filter, which would otherwise make a hidden parent read
+   * as missing and silently drop the warning. Optional: defaults to
+   * `containers` for callers with no separate unfiltered list.
+   */
+  allContainers?: Container[];
   adjacency: DependencyAdjacency | null;
   rowState: (container: Container) => BulkRowState;
   isRowLocked: (container: Container) => boolean;
@@ -59,8 +71,16 @@ function skippedReason(kind: 'stale' | 'inFlight' | 'noUpdate', t: TranslateFn):
 }
 
 export function planBulkUpdate(input: PlanBulkUpdateInput): BulkUpdatePlan {
-  const { selectedIds, containers, adjacency, rowState, isRowLocked, groupKeyForContainer, t } =
-    input;
+  const {
+    selectedIds,
+    containers,
+    allContainers,
+    adjacency,
+    rowState,
+    isRowLocked,
+    groupKeyForContainer,
+    t,
+  } = input;
   const containerById = new Map(containers.map((container) => [container.id, container]));
 
   const dispatch: BulkUpdatePlanEntry[] = [];
@@ -105,26 +125,27 @@ export function planBulkUpdate(input: PlanBulkUpdateInput): BulkUpdatePlan {
     }
   }
 
-  const dispatchIds = new Set(dispatch.map((entry) => entry.id));
   const staleParents: BulkUpdatePlanEntry[] = [];
   const seenStaleParentIds = new Set<string>();
   if (adjacency) {
+    const parentLookupById = new Map(
+      (allContainers ?? containers).map((container) => [container.id, container]),
+    );
     for (const entry of dispatch) {
-      const stale = findStaleParents({
-        adjacency,
-        containerId: entry.id,
-        dispatchIds,
-        hasPendingUpdate: (parentId) => {
-          const parent = containerById.get(parentId);
-          return parent ? Boolean(parent.newTag) : undefined;
-        },
-      });
-      for (const parent of stale) {
-        if (seenStaleParentIds.has(parent.id)) {
+      for (const parentId of collectTransitiveParentIds(adjacency, entry.id)) {
+        if (seenStaleParentIds.has(parentId) || selectedIds.has(parentId)) {
           continue;
         }
-        seenStaleParentIds.add(parent.id);
-        staleParents.push({ id: parent.id, name: parent.name });
+        const parent = parentLookupById.get(parentId);
+        if (!parent || isRowLocked(parent)) {
+          continue;
+        }
+        const parentState = rowState(parent);
+        if (parentState !== 'ready' && parentState !== 'soft') {
+          continue;
+        }
+        seenStaleParentIds.add(parentId);
+        staleParents.push({ id: parentId, name: parent.name });
       }
     }
   }
