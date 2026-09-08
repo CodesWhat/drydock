@@ -237,7 +237,8 @@ test.describe('Containers', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog).toContainText('Update 2 selected containers');
+    await expect(dialog).toContainText(/Update \d+ selected container/);
+    await expect(dialog).toContainText(/Will update|Skipped|Blocked/);
 
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();

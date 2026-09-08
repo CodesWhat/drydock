@@ -680,7 +680,7 @@ onScopeDispose(() => {
             :checked="selectAllState(visibleIds) === 'all'"
             :aria-label="t('containerComponents.selection.selectAll')"
             data-test="container-select-all"
-            class="align-middle accent-[var(--dd-secondary)]"
+            class="absolute left-1 top-1/2 -translate-y-1/2 accent-[var(--dd-secondary)]"
             @click.stop="toggleSelectAllVisible"
           />
         </template>
@@ -712,7 +712,7 @@ onScopeDispose(() => {
             :checked="isSelected(c.id)"
             :aria-label="t('containerComponents.selection.selectRow', { name: c.name })"
             data-test="container-select"
-            class="align-middle mr-1 accent-[var(--dd-secondary)]"
+            class="absolute left-1 top-1/2 -translate-y-1/2 z-20 accent-[var(--dd-secondary)]"
             @click.stop="toggle(c.id)"
             @keydown.stop
           />

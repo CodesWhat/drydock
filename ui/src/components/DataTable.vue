@@ -1280,7 +1280,7 @@ function handleCardSortChange(event: Event): void {
                   class="dd-data-table-cell py-3 align-middle"
                   :class="[
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
-                    col.icon ? 'text-center pl-5 pr-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
+                    col.icon ? 'relative text-center pl-5 pr-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
                     pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-10'] : '',
                     col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
                   ]"
