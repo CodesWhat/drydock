@@ -36,6 +36,7 @@ const configurationValid = {
     discovery: false,
     agenttopicsegment: true,
     commands: false,
+    devicepercontainer: true,
     enabled: false,
     prefix: 'homeassistant',
     attributes: 'short',
@@ -127,6 +128,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     discovery: true,
     agenttopicsegment: true,
     commands: false,
+    devicepercontainer: true,
     attributes: 'short',
     filter: {
       include: '',
@@ -158,6 +160,31 @@ test('validateConfiguration should respect an explicit hass.agenttopicsegment=fa
     },
   });
   expect(validatedConfiguration.hass.agenttopicsegment).toBe(false);
+});
+
+test('validateConfiguration should default hass.devicepercontainer to true', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      prefix: 'homeassistant',
+    },
+  });
+  expect(validatedConfiguration.hass.devicepercontainer).toBe(true);
+});
+
+test('validateConfiguration should respect an explicit hass.devicepercontainer=false opt-out', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      prefix: 'homeassistant',
+      devicepercontainer: false,
+    },
+  });
+  expect(validatedConfiguration.hass.devicepercontainer).toBe(false);
 });
 
 test('validateConfiguration should throw error when invalid', async () => {
@@ -1406,6 +1433,7 @@ describe('hass update progress (#210)', () => {
       discovery: true,
       agenttopicsegment: true,
       commands: false,
+      devicepercontainer: true,
       prefix: 'homeassistant',
       attributes: 'full',
       filter: { include: '', exclude: '' },

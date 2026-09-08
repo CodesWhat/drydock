@@ -31,6 +31,10 @@ import { getContainerStateTopic } from './topics.js';
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
 const hassAgentTopicSegmentDefault = true;
+// roadmap 7.8 (#210) — one HA device per watched container, nested under the
+// drydock device via `via_device`. Default-on for v1.8; `false` restores the
+// pre-v1.8 layout where every entity hangs off the single drydock device.
+const hassDevicePerContainerDefault = true;
 
 function generateClientId() {
   return `dd_${randomBytes(4).toString('hex')}`;
@@ -49,6 +53,7 @@ interface MqttConfiguration extends TriggerConfiguration {
     discovery: boolean;
     agenttopicsegment: boolean;
     commands: boolean;
+    devicepercontainer: boolean;
     attributes: HassAttributePreset;
     filter: {
       include: string;
@@ -94,6 +99,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
       discovery: false,
       agenttopicsegment: hassAgentTopicSegmentDefault,
       commands: false,
+      devicepercontainer: hassDevicePerContainerDefault,
       attributes: 'short',
       filter: {
         include: '',
@@ -240,6 +246,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           discovery: this.joi.boolean().default((parent) => !!parent?.enabled),
           agenttopicsegment: this.joi.boolean().default(hassAgentTopicSegmentDefault),
           commands: this.joi.boolean().default(false),
+          devicepercontainer: this.joi.boolean().default(hassDevicePerContainerDefault),
           attributes: this.joi
             .string()
             .valid(...HASS_ATTRIBUTE_PRESET_VALUES)
@@ -260,6 +267,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           discovery: false,
           agenttopicsegment: hassAgentTopicSegmentDefault,
           commands: false,
+          devicepercontainer: hassDevicePerContainerDefault,
           attributes: 'short',
           filter: {
             include: '',

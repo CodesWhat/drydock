@@ -116,6 +116,7 @@ interface HassConfiguration {
     discovery: boolean;
     agenttopicsegment?: boolean;
     commands?: boolean;
+    devicepercontainer?: boolean;
   };
 }
 
@@ -182,6 +183,44 @@ function getHaDevice() {
     model: HASS_DEVICE_ID,
     name: HASS_DEVICE_NAME,
     sw_version: getVersion(),
+  };
+}
+
+/**
+ * The container's image name, used as the HA device model. Absent for a
+ * container the store never recorded an image for, in which case the key is
+ * dropped from the payload entirely (`JSON.stringify` omits `undefined`)
+ * rather than published as an empty string, which HA would render as a blank
+ * model row on the device page.
+ */
+function getHaContainerDeviceModel(container: { image?: { name?: unknown } }): string | undefined {
+  const imageName = container.image?.name;
+  return typeof imageName === 'string' && imageName !== '' ? imageName : undefined;
+}
+
+/**
+ * HA device info for a single watched container (roadmap 7.8, #210).
+ *
+ * `identifiers` reuses `getHassUniqueId` verbatim instead of deriving a
+ * second key from the same container identity, so the device id and the
+ * update entity's `unique_id` can never drift apart: both survive a rename
+ * and a Compose recreate for a Compose-labeled container, and both change
+ * together on a rename for a container Compose never labeled (see
+ * `getHassUniqueId`).
+ *
+ * `via_device` nests the container device under the single drydock device
+ * that keeps the global and watcher-level entities. Current Home Assistant
+ * (2024.12+, home-assistant/core#131588) stub-creates the parent device on
+ * first sight of `via_device`, so publish ordering doesn't matter there; on
+ * older HA the link heals on the next discovery publish.
+ */
+function getHaContainerDevice(container: Container, stateTopic: string) {
+  return {
+    identifiers: [`${HASS_DEVICE_ID}_${getHassUniqueId(container)}`],
+    manufacturer: HASS_MANUFACTURER,
+    model: getHaContainerDeviceModel(container),
+    name: container.displayName || getHassEntityId(stateTopic),
+    via_device: HASS_DEVICE_ID,
   };
 }
 
@@ -890,6 +929,13 @@ class Hass {
       currentStateTopic: containerStateSensor.topic,
     });
     const entityPictureOverride = resolveEntityPictureOverride(container);
+    // roadmap 7.8 — the update entity is the only per-container entity there
+    // is. Everything else published from this class (global counts, watcher
+    // counts, watcher running status) is drydock-level and keeps the shared
+    // drydock device.
+    const containerDevice = this.configuration.hass.devicepercontainer
+      ? getHaContainerDevice(container, containerStateSensor.topic)
+      : undefined;
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
       await this.removeDiscoveryTopics({
@@ -903,10 +949,20 @@ class Hass {
         }),
         kind: containerStateSensor.kind,
         stateTopic: containerStateSensor.topic,
-        name: container.displayName,
+        // HA sets `has_entity_name` on every discovered entity, so an entity
+        // that belongs to a device is displayed as "<device name> <entity
+        // name>". Keeping the container's display name on both would render
+        // every container as "nginx nginx". A null entity name is HA's
+        // documented marker for "this entity is the device's main feature",
+        // which is exactly what the update entity is here: the friendly name
+        // becomes the device name on its own. Without a per-container device
+        // the entity name is still the display name, prefixed by "drydock" as
+        // it always has been.
+        name: containerDevice ? null : container.displayName,
         icon: sanitizeIcon(container.displayIcon),
         entityPicture: entityPictureOverride,
         uniqueId: getHassUniqueId(container),
+        device: containerDevice,
         options: {
           force_update: true,
           value_template: HASS_ENTITY_VALUE_TEMPLATE,
@@ -1257,12 +1313,17 @@ class Hass {
     icon,
     entityPicture,
     uniqueId,
+    device,
     options = {},
   }: {
     discoveryTopic: string;
     stateTopic: string;
     kind: string;
-    name: string;
+    // `null` marks the entity as its device's main feature (HA's own naming
+    // convention), so HA uses the device name alone as the friendly name
+    // instead of concatenating the two. Anything else falls back to the
+    // topic-derived entity id when empty, as it always has.
+    name?: string | null;
     icon?: string;
     entityPicture?: string;
     // Per-container sensors pass the identity-derived id from
@@ -1271,6 +1332,11 @@ class Hass {
     // derive from and fall back to the topic-derived entity id, same as
     // before.
     uniqueId?: string;
+    // roadmap 7.8 — per-container entities pass their own device block so HA
+    // nests them under a device per container; drydock-level entities pass
+    // nothing and stay on the single shared drydock device, which is also
+    // what every entity gets when `hass.devicepercontainer` is off.
+    device?: Record<string, unknown>;
     options?: Record<string, unknown>;
   }) {
     const entityId = getHassEntityId(stateTopic);
@@ -1279,8 +1345,8 @@ class Hass {
       JSON.stringify({
         unique_id: uniqueId ?? entityId,
         default_entity_id: `${kind}.${entityId}`,
-        name: name || entityId,
-        device: getHaDevice(),
+        name: name === null ? null : name || entityId,
+        device: device ?? getHaDevice(),
         icon: icon || sanitizeIcon('mdi:docker'),
         entity_picture: entityPicture || resolveEntityPicture(icon),
         state_topic: stateTopic,
