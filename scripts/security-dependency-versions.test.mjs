@@ -38,6 +38,33 @@ test('every baseline-browser-mapping resolution includes the invalid-input fix',
   assert.ok(resolutions > 0, 'expected baseline-browser-mapping resolutions in workspace locks');
 });
 
+test('Vitest and its mocker include the redirect path validation fix', () => {
+  for (const workspace of ['.', 'app', 'ui', 'apps/demo']) {
+    const manifest = readJson(`${workspace}/package.json`);
+    assert.ok(compareSemver(manifest.devDependencies.vitest, '4.1.11') >= 0, workspace);
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      if (!/node_modules\/(?:vitest|@vitest\/mocker)$/.test(path)) continue;
+      assert.ok(compareSemver(entry.version, '4.1.11') >= 0, `${workspace}/${path}`);
+    }
+  }
+});
+
+test('Joi includes the template rename prototype fix in app and e2e', () => {
+  for (const workspace of ['app', 'e2e']) {
+    const manifest = readJson(`${workspace}/package.json`);
+    assert.ok(
+      compareSemver(manifest.dependencies?.joi ?? manifest.overrides?.joi, '18.2.4') >= 0,
+      workspace,
+    );
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      if (!path.endsWith('node_modules/joi')) continue;
+      assert.ok(compareSemver(entry.version, '18.2.4') >= 0, `${workspace}/${path}`);
+    }
+  }
+});
+
 test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
   const manifest = readJson('e2e/package.json');
   const lockfile = readJson('e2e/package-lock.json');
@@ -122,21 +149,21 @@ test('sharp is pinned to a patched release in the website', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  assert.equal(manifest.overrides?.sharp, '0.35.4');
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.3') >= 0);
+  assert.ok(compareSemver(manifest.overrides?.sharp, '0.35.4') >= 0);
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.4') >= 0);
 });
 
-test('Next.js is pinned past the 16.2.9 security advisory batch', () => {
+test('Next.js is pinned past the Windows server execution advisory', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  // Floor, not an exact pin: 16.2.11 closed the advisory batch, and routine
+  // Floor, not an exact pin: 16.3.3 closed the advisory, and routine
   // Renovate bumps past it must not fail the guard (16.x only — a new major
   // is a deliberate migration, not a routine bump).
   const manifestNext = manifest.dependencies?.next;
   assert.ok(manifestNext?.startsWith('16.'), 'apps/web next must stay on the vetted 16.x line');
-  assert.ok(compareSemver(manifestNext, '16.2.11') >= 0);
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'next'), '16.2.11') >= 0);
+  assert.ok(compareSemver(manifestNext, '16.3.3') >= 0);
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'next'), '16.3.3') >= 0);
 });
 
 test('the rc.5 changelog records the Next.js security refresh', () => {
