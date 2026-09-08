@@ -54,10 +54,8 @@ import {
   getPendingDiscoverySettleDelayMs,
   getSettledContainersToWatch,
   isDockerWatcher,
-  mergeConfigWithImgset,
   pruneOldContainers,
   resolveEffectiveContainerTagPolicy,
-  resolveLabelsFromContainer,
   resolveTriggerLabelOverrides,
 } from './container-init.js';
 import {
@@ -118,7 +116,12 @@ import {
 import {
   addImageDetailsToContainerOrchestration,
   type ContainerLabelOverrides,
+  createDockerImageDetailsHelpers,
 } from './docker-image-details-orchestration.js';
+import {
+  type DockerInventoryWatcher,
+  refreshDockerInventoryForWatcher,
+} from './docker-inventory.js';
 import {
   applyRemoteAuthHeadersForWatcher,
   ensureRemoteAuthHeadersForWatcher,
@@ -1200,7 +1203,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through watcher adapters
   private updateContainerFromInspect(
     containerFound: Container,
     containerInspect: DockerContainerInspectPayload,
@@ -1408,6 +1411,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     });
   }
 
+  async refreshInventory() {
+    return refreshDockerInventoryForWatcher(
+      this as unknown as DockerInventoryWatcher,
+      getContainersFromSameDockerSource,
+    );
+  }
+
   /**
    * Get all containers to watch.
    * @param options.scanGeneration - See scanGeneration's declaration. When
@@ -1579,9 +1589,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async getSwarmServiceLabels(
     serviceId: string,
     containerId: string,
+    strict = false,
   ): Promise<Record<string, string>> {
     this.ensureLogger();
     if (typeof this.dockerApi.getService !== 'function') {
+      if (strict) throw new Error('Docker API does not support service inspection');
       this.log.debug(
         `Docker API does not support getService; skipping swarm label lookup for container ${containerId}`,
       );
@@ -1618,6 +1630,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         ...taskContainerLabels,
       };
     } catch (e: unknown) {
+      if (strict) throw e;
       this.log.warn(
         `Unable to inspect swarm service ${serviceId} for container ${containerId} (${getErrorMessage(
           e,
@@ -1630,6 +1643,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async getEffectiveContainerLabels(
     container: DockerContainerSummaryLike,
     serviceLabelsCache: Map<string, Promise<Record<string, string>>>,
+    strict = false,
   ): Promise<Record<string, string>> {
     const containerLabels = container.Labels || {};
     const serviceId = containerLabels[SWARM_SERVICE_ID_LABEL];
@@ -1639,7 +1653,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     }
 
     if (!serviceLabelsCache.has(serviceId)) {
-      serviceLabelsCache.set(serviceId, this.getSwarmServiceLabels(serviceId, container.Id));
+      serviceLabelsCache.set(
+        serviceId,
+        this.getSwarmServiceLabels(serviceId, container.Id, strict),
+      );
     }
     const swarmServiceLabels = await serviceLabelsCache.get(serviceId);
 
@@ -1687,35 +1704,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       this.asDockerImageDetailsWatcher(),
       container,
       labelOverrides,
-      {
-        resolveLabelsFromContainer,
-        mergeConfigWithImgset,
-        normalizeContainer,
-        resolveImageName: (imageName: string, image: unknown, containerName?: string) =>
-          this.resolveImageName(imageName, image, containerName),
-        resolveTagName: (
-          parsedImage: ParsedImageReferenceLike,
-          image: unknown,
-          inspectTagPath: string | undefined,
-          transformTagsFromLabel: string | undefined,
-          containerId: string,
-          inspectTagVersionOnly?: boolean,
-        ) =>
-          this.resolveTagName(
-            parsedImage,
-            image,
-            inspectTagPath,
-            transformTagsFromLabel,
-            containerId,
-            inspectTagVersionOnly,
-          ),
-        getMatchingImgsetConfiguration: (
-          parsedImage: Parameters<typeof getMatchingImgsetConfigurationState>[0],
-        ) => this.getMatchingImgsetConfiguration(parsedImage),
-      },
+      this.getDockerImageDetailsHelpers(),
     );
   }
 
+  private getDockerImageDetailsHelpers() {
+    return createDockerImageDetailsHelpers(
+      this as unknown as Parameters<typeof createDockerImageDetailsHelpers>[0],
+    );
+  }
+
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through image-detail helper adapter
   private resolveImageName(imageName: string, image: unknown, containerName?: string) {
     const imageRecord = image as DockerImageInspectPayloadLike;
     let imageNameToParse = imageName;
@@ -1768,6 +1767,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return { path: digest, tag: 'unknown' };
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through image-detail helper adapter
   private resolveTagName(
     parsedImage: ParsedImageReferenceLike,
     image: unknown,
