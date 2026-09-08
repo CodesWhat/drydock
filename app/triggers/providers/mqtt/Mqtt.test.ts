@@ -594,13 +594,11 @@ describe('agent state topic parity with hass discovery', () => {
 
       expect(topic).toBe('dd/container/agent/ml/local/nginx');
       expect(topic).toBe(hass.getContainerStateTopic({ container: agentContainer }));
-      expect(mqtt.client.publish).toHaveBeenCalledWith(
-        topic,
-        JSON.stringify(flatten(agentContainer)),
-        {
-          retain: true,
-        },
-      );
+      // The payload also carries the Home Assistant update_state object (#1137),
+      // so pin the container fields rather than the exact string.
+      const [, payload, options] = mqtt.client.publish.mock.calls[0];
+      expect(JSON.parse(payload)).toMatchObject(flatten(agentContainer));
+      expect(options).toStrictEqual({ retain: true });
     } finally {
       await hass.deregister();
     }
