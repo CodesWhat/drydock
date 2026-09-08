@@ -58,6 +58,12 @@
       "runningButton": "运行中...",
       "runButton": "运行",
       "noTriggersAssociated": "此容器没有关联的触发器",
+      "unavailableTriggers": "不可用的触发器",
+      "unavailableTriggerReason": {
+        "agentOwnership": "属于与此容器不同的代理。",
+        "structuralIncompatibility": "Compose 项目、服务或文件与此容器不匹配。",
+        "labelScope": "被此容器的 dd.action/dd.notification 包含或排除标签排除。"
+      },
       "backupsRollback": "备份与回滚",
       "rollingBack": "回滚中...",
       "rollbackLatest": "回滚到最新",

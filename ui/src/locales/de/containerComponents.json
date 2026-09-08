@@ -58,6 +58,12 @@
       "runningButton": "Läuft...",
       "runButton": "Ausführen",
       "noTriggersAssociated": "Keine Trigger mit diesem Container verknüpft",
+      "unavailableTriggers": "Nicht verfügbare Trigger",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Gehört zu einem anderen Agent als diesem Container.",
+        "structuralIncompatibility": "Compose-Projekt, -Service oder -Datei stimmt nicht mit diesem Container überein.",
+        "labelScope": "Durch die dd.action-/dd.notification-Include- oder -Exclude-Labels dieses Containers ausgeschlossen."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rollback läuft...",
       "rollbackLatest": "Letztes Backup zurückrollen",

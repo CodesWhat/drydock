@@ -290,6 +290,7 @@ async function updateAllInGroupState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
   startPolling: (pendingKey: string) => void;
   group: ContainerActionGroup;
   loadContainers: () => Promise<void>;
@@ -359,6 +360,9 @@ async function updateAllInGroupState(args: {
     }
 
     await args.loadContainers();
+    const isMultiContainerBatch = acceptedTargetIds.length >= 2;
+    const headTargetId = frozenUpdateTargets[0]!.id;
+    const nextGroupUpdateQueue = new Set(args.groupUpdateQueue.value);
     for (const container of updatableContainers) {
       if (!acceptedTargetIdSet.has(container.id)) {
         continue;
@@ -372,8 +376,17 @@ async function updateAllInGroupState(args: {
         snapshot: container,
         mode: 'update',
       });
+      if (isMultiContainerBatch && container.id !== headTargetId) {
+        // Mark containers waiting behind the batch head as queued right away:
+        // a client-side signal so they render a "Queued" state immediately,
+        // rather than looking stalled until their own updateOperation is next
+        // observed. It clears itself via prunePendingActionsState once that
+        // container's pending action settles.
+        nextGroupUpdateQueue.add(container.id);
+      }
     }
-    if (acceptedTargetIds.length >= 2) {
+    args.groupUpdateQueue.value = nextGroupUpdateQueue;
+    if (isMultiContainerBatch) {
       args.captureBatch(args.group.key, acceptedTargetIds.length);
     } else {
       args.clearBatch(args.group.key);
@@ -651,6 +664,7 @@ function clearPendingActionState(args: {
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
   pendingKey: string;
 }) {
   args.actionPending.value.delete(args.pendingKey);
@@ -659,6 +673,11 @@ function clearPendingActionState(args: {
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
   nextObserved.delete(args.pendingKey);
   args.actionPendingLifecycleObserved.value = nextObserved;
+  if (args.groupUpdateQueue.value.has(args.pendingKey)) {
+    const nextQueue = new Set(args.groupUpdateQueue.value);
+    nextQueue.delete(args.pendingKey);
+    args.groupUpdateQueue.value = nextQueue;
+  }
 }
 
 export function isPendingUpdateSettled(args: {
@@ -709,6 +728,7 @@ export function prunePendingActionsState(args: {
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
 }) {
@@ -752,6 +772,7 @@ export function prunePendingActionsState(args: {
         actionPendingStartTimes: args.actionPendingStartTimes,
         actionPendingLifecycleModes: args.actionPendingLifecycleModes,
         actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        groupUpdateQueue: args.groupUpdateQueue,
         pendingKey,
       });
     }
@@ -1305,6 +1326,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
   const actionPendingLifecycleModes = ref<Map<string, PendingActionLifecycleMode>>(new Map());
   const actionPendingLifecycleObserved = ref<Set<string>>(new Set());
+  const groupUpdateQueue = ref<Set<string>>(new Set());
   const pendingActionsPollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
   const pendingActionsPollIntervalMs = ref(PENDING_ACTIONS_POLL_INTERVAL_MS);
   const pendingActionsPollInFlight = ref(false);
@@ -1323,6 +1345,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
       pollTimeout: POLL_TIMEOUT,
       stopPendingActionsPolling,
     });
@@ -1443,7 +1466,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     ) {
       return false;
     }
-    return liveOperation?.status === 'queued';
+    return liveOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id);
   }
 
   function isContainerScanInProgress(target: ContainerActionTarget) {
@@ -1532,6 +1555,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       actionPending,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
       startPolling,
       group,
       loadContainers: input.loadContainers,
@@ -1726,6 +1750,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     triggerMessage: triggers.triggerMessage,
     triggerRunInProgress: triggers.triggerRunInProgress,
     triggersLoading: triggers.triggersLoading,
+    unassociatedTriggers: triggers.unassociatedTriggers,
     unsnoozeSelected: policy.unsnoozeSelected,
     updateAllInGroup,
     updateContainer,

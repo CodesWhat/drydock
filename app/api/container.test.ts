@@ -2462,7 +2462,11 @@ describe('Container Router', () => {
         { type: 'slack', name: 'default', configuration: {} },
       ]);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ data: expect.any(Array), total: 1 });
+      expect(res.json).toHaveBeenCalledWith({
+        data: expect.any(Array),
+        total: 1,
+        unassociatedTriggers: [],
+      });
     });
 
     test('should filter triggers with notificationTriggerInclude', async () => {

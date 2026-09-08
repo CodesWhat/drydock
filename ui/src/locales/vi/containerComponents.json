@@ -58,6 +58,12 @@
       "runningButton": "Đang chạy...",
       "runButton": "Chạy",
       "noTriggersAssociated": "Không có trigger nào liên kết với container này",
+      "unavailableTriggers": "Trigger không khả dụng",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Thuộc về một agent khác với container này.",
+        "structuralIncompatibility": "Dự án, dịch vụ hoặc tệp Compose không khớp với container này.",
+        "labelScope": "Bị loại trừ bởi nhãn include hoặc exclude dd.action/dd.notification của container này."
+      },
       "backupsRollback": "Sao lưu & Khôi phục",
       "rollingBack": "Đang khôi phục...",
       "rollbackLatest": "Khôi phục mới nhất",

@@ -135,6 +135,7 @@ const {
   previewErrorAction,
   triggersLoading,
   detailTriggers,
+  unassociatedTriggers,
   getTriggerKey,
   triggerRunInProgress,
   runAssociatedTrigger,
@@ -1024,6 +1025,20 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageActions.noTriggersAssociated') }}</p>
               <p v-if="triggerMessage" class="mt-2 text-2xs" style="color: var(--dd-success);">{{ triggerMessage }}</p>
               <p v-if="triggerError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ triggerError }}</p>
+              <div v-if="unassociatedTriggers.length > 0" class="mt-3 space-y-1.5">
+                <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.unavailableTriggers') }}</div>
+                <div v-for="trigger in unassociatedTriggers" :key="getTriggerKey(trigger)"
+                     :data-unassociated-trigger-key="getTriggerKey(trigger)"
+                     class="flex items-center justify-between gap-2 px-2.5 py-2 dd-rounded text-2xs-plus opacity-60"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="min-w-0"
+                       v-tooltip.top="t(`containerComponents.fullPageActions.unavailableTriggerReason.${trigger.reason}`)">
+                    <div class="font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
+                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
+                    <div class="text-2xs dd-text-muted" data-test="unassociated-trigger-reason">{{ t(`containerComponents.fullPageActions.unavailableTriggerReason.${trigger.reason}`) }}</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div>

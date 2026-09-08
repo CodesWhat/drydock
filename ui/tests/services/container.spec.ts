@@ -9,6 +9,7 @@ import {
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
+  getContainerTriggersWithReasons,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
@@ -376,6 +377,55 @@ describe('Container Service', () => {
       } as any);
 
       await expect(getContainerTriggers('c1')).rejects.toThrow(
+        'Failed to get triggers for container c1: Not Found',
+      );
+    });
+  });
+
+  describe('getContainerTriggersWithReasons', () => {
+    it('reads the associated triggers and the unassociatedTriggers reason list from one response (DR-78)', async () => {
+      const mockTriggers = [
+        { type: 'webhook', name: 'trigger1' },
+        { type: 'email', name: 'trigger2' },
+      ];
+      const mockUnassociated = [
+        { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: mockTriggers,
+          total: 2,
+          unassociatedTriggers: mockUnassociated,
+        }),
+      } as any);
+
+      const result = await getContainerTriggersWithReasons('container1');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/triggers', {
+        credentials: 'include',
+      });
+      expect(result).toEqual({ data: mockTriggers, unassociatedTriggers: mockUnassociated });
+    });
+
+    it('returns an empty unassociatedTriggers array when the response has no such field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [], total: 0 }),
+      } as any);
+
+      const result = await getContainerTriggersWithReasons('container1');
+      expect(result).toEqual({ data: [], unassociatedTriggers: [] });
+    });
+
+    it('throws when fetching triggers fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+      } as any);
+
+      await expect(getContainerTriggersWithReasons('c1')).rejects.toThrow(
         'Failed to get triggers for container c1: Not Found',
       );
     });

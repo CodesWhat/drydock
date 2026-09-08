@@ -70,6 +70,24 @@ export interface ApiContainerTrigger {
   resolvedState?: 'blocked' | 'manual' | 'auto';
 }
 
+/**
+ * Why a trigger does not apply to the requested container (DR-78), from
+ * GET /api/containers/:id/triggers' `unassociatedTriggers` list.
+ */
+export type ApiTriggerAssociationReason =
+  | 'agentOwnership'
+  | 'structuralIncompatibility'
+  | 'labelScope';
+
+/** Trigger that does not apply to a container (from GET /api/containers/:id/triggers). */
+export interface ApiUnassociatedContainerTrigger {
+  id: string;
+  type: string;
+  name: string;
+  agent?: string;
+  reason: ApiTriggerAssociationReason;
+}
+
 export type ApiContainerUpdateOperationStatus = ContainerUpdateOperationStatus;
 export type ApiContainerUpdateOperationPhase = ContainerUpdateOperationPhase;
 

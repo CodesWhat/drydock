@@ -58,6 +58,12 @@
       "runningButton": "実行中...",
       "runButton": "実行",
       "noTriggersAssociated": "このコンテナに関連するトリガーがありません",
+      "unavailableTriggers": "利用できないトリガー",
+      "unavailableTriggerReason": {
+        "agentOwnership": "このコンテナとは異なるエージェントに属しています。",
+        "structuralIncompatibility": "Composeのプロジェクト、サービス、またはファイルがこのコンテナと一致しません。",
+        "labelScope": "このコンテナの dd.action/dd.notification の include または exclude ラベルによって除外されています。"
+      },
       "backupsRollback": "バックアップ＆ロールバック",
       "rollingBack": "ロールバック中...",
       "rollbackLatest": "最新へロールバック",

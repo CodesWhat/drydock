@@ -58,6 +58,12 @@
       "runningButton": "Çalışıyor...",
       "runButton": "Çalıştır",
       "noTriggersAssociated": "Bu kapsayıcıyla ilişkili tetikleyici yok",
+      "unavailableTriggers": "Kullanılamayan Tetikleyiciler",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Bu kapsayıcıdan farklı bir aracıya ait.",
+        "structuralIncompatibility": "Compose projesi, servisi veya dosyası bu kapsayıcıyla eşleşmiyor.",
+        "labelScope": "Bu kapsayıcının dd.action/dd.notification include veya exclude etiketleri tarafından hariç tutuldu."
+      },
       "backupsRollback": "Yedeklemeler ve Geri Alma",
       "rollingBack": "Geri dönüyor...",
       "rollbackLatest": "En son sürüme geri al",

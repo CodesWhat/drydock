@@ -58,6 +58,12 @@
       "runningButton": "실행 중...",
       "runButton": "실행",
       "noTriggersAssociated": "이 컨테이너에 연결된 트리거가 없습니다",
+      "unavailableTriggers": "사용할 수 없는 트리거",
+      "unavailableTriggerReason": {
+        "agentOwnership": "이 컨테이너와 다른 에이전트에 속해 있습니다.",
+        "structuralIncompatibility": "Compose 프로젝트, 서비스 또는 파일이 이 컨테이너와 일치하지 않습니다.",
+        "labelScope": "이 컨테이너의 dd.action/dd.notification include 또는 exclude 라벨에 의해 제외되었습니다."
+      },
       "backupsRollback": "백업 및 롤백",
       "rollingBack": "롤백 중...",
       "rollbackLatest": "최신 버전으로 롤백",

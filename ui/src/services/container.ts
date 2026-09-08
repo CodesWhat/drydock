@@ -1,4 +1,8 @@
-import type { ApiContainerUpdateOperation } from '../types/api';
+import type {
+  ApiContainerTrigger,
+  ApiContainerUpdateOperation,
+  ApiUnassociatedContainerTrigger,
+} from '../types/api';
 import type { DependencyGraph, UpdateChainPreview } from '../types/container';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
@@ -208,6 +212,33 @@ async function getContainerTriggers(containerId: string) {
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
   return extractCollectionData<Record<string, unknown>>(payload);
+}
+
+/**
+ * GET /api/v1/containers/:id/triggers — single request for both the associated trigger list
+ * (`data`) and the unassociated-trigger reason list (`unassociatedTriggers`, DR-78). Reading both
+ * from one response, instead of issuing the request twice, avoids the trigger/agent/label
+ * configuration changing between two separate round trips and briefly showing a trigger in both
+ * lists or neither.
+ */
+async function getContainerTriggersWithReasons(containerId: string): Promise<{
+  data: ApiContainerTrigger[];
+  unassociatedTriggers: ApiUnassociatedContainerTrigger[];
+}> {
+  const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
+  }
+  const payload = await readJsonResponse(response, 'Container triggers API');
+  const envelope = payload as { unassociatedTriggers?: unknown };
+  return {
+    data: extractCollectionData<ApiContainerTrigger>(payload),
+    unassociatedTriggers: Array.isArray(envelope.unassociatedTriggers)
+      ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
+      : [],
+  };
 }
 
 async function runTrigger({
@@ -558,6 +589,7 @@ export {
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
+  getContainerTriggersWithReasons,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,

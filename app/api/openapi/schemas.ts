@@ -1211,6 +1211,29 @@ export const openApiSchemas = {
       },
     ],
   },
+  ContainerUnassociatedTrigger: {
+    type: 'object',
+    description:
+      'A trigger that does not apply to the requested container (GET /containers/{id}/triggers, ' +
+      'DR-78), with the reason it was excluded from `data`.',
+    properties: {
+      id: { type: 'string' },
+      type: { type: 'string' },
+      name: { type: 'string' },
+      agent: { type: 'string' },
+      reason: {
+        type: 'string',
+        enum: ['agentOwnership', 'structuralIncompatibility', 'labelScope'],
+        description:
+          "'agentOwnership' — the trigger belongs to a different agent than the container. " +
+          "'structuralIncompatibility' — a dockercompose/portainer trigger whose compose " +
+          "project/service or file does not match the container. 'labelScope' — excluded, or " +
+          'omitted from a configured include list, by the dd.action.*/dd.notification.* labels.',
+      },
+    },
+    required: ['id', 'type', 'name', 'reason'],
+    additionalProperties: false,
+  },
   IconCacheClearResponse: {
     type: 'object',
     properties: {

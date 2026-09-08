@@ -130,6 +130,9 @@ const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
 const triggersLoading = ref(false);
 const detailTriggers = ref<Array<{ type: string; name: string; agent?: string }>>([]);
+const unassociatedTriggers = ref<
+  Array<{ id: string; type: string; name: string; agent?: string; reason: string }>
+>([]);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
@@ -225,6 +228,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     previewError,
     triggersLoading,
     detailTriggers,
+    unassociatedTriggers,
     getTriggerKey: (trigger: { type: string; name: string }) => `${trigger.type}.${trigger.name}`,
     triggerRunInProgress,
     runAssociatedTrigger: mockRunAssociatedTrigger,
@@ -349,6 +353,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     policyError.value = null;
     triggersLoading.value = false;
     detailTriggers.value = [];
+    unassociatedTriggers.value = [];
     triggerRunInProgress.value = null;
     triggerMessage.value = null;
     triggerError.value = null;
@@ -816,6 +821,36 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     expect(mockRunAssociatedTrigger).toHaveBeenCalledWith(detailTriggers.value[0]);
     expect(mockConfirmRollback).toHaveBeenCalledWith('backup-1');
+  });
+
+  it('shows why an unassociated trigger does not apply to the container (DR-78)', () => {
+    activeDetailTab.value = 'actions';
+    unassociatedTriggers.value = [
+      { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      {
+        id: 'slack.notify',
+        type: 'slack',
+        name: 'notify',
+        agent: 'agent-2',
+        reason: 'labelScope',
+      },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Unavailable Triggers');
+    const dockerRow = wrapper.get('[data-unassociated-trigger-key="docker.deploy"]');
+    expect(dockerRow.text()).toContain('docker.deploy');
+    expect(dockerRow.text()).toContain('Belongs to a different agent than this container.');
+
+    const slackRow = wrapper.get('[data-unassociated-trigger-key="slack.notify"]');
+    expect(slackRow.text()).toContain('agent: agent-2');
+    expect(slackRow.text()).toContain(
+      "Excluded by this container's dd.action/dd.notification include or exclude labels.",
+    );
+    expect(wrapper.find('[data-unassociated-trigger-key="docker.deploy"] button').exists()).toBe(
+      false,
+    );
   });
 
   it('renders populated overview rows for ports, volumes, runtime warnings, and hook variables', () => {

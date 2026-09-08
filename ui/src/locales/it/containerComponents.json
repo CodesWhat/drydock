@@ -58,6 +58,12 @@
       "runningButton": "In esecuzione...",
       "runButton": "Esegui",
       "noTriggersAssociated": "Nessun trigger associato a questo container",
+      "unavailableTriggers": "Trigger non disponibili",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Appartiene a un agente diverso da quello di questo container.",
+        "structuralIncompatibility": "Il progetto, il servizio o il file Compose non corrisponde a questo container.",
+        "labelScope": "Escluso dalle etichette di inclusione o esclusione dd.action/dd.notification di questo container."
+      },
       "backupsRollback": "Backup e rollback",
       "rollingBack": "Rollback in corso...",
       "rollbackLatest": "Rollback ultimo",
