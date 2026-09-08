@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.10-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.11-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,17 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.11 highlights</strong></summary>
+
+Long-lived containers on floating tags now detect new registry digests without
+needing to be recreated. Every scan rechecks the digest-watch default while
+preserving explicit label and image-set overrides.
+
+[Full changelog](CHANGELOG.md#161-rc11--2026-09-08)
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.10 highlights</strong></summary>
 
 - **The demo site no longer fails the weekly DAST scan on ZAP rule 90004** — it never sent `Cross-Origin-Opener-Policy`, and `apps/demo/vercel.json` now sends `same-origin`.
