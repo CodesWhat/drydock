@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Thao tác cho nhóm đã lọc",
+      "updateAll": "Cập nhật tất cả ({count})",
+      "snoozePatch": "Hoãn tất cả bản vá",
+      "patchCount": "{count} ứng viên bản vá",
+      "duration": "Thời gian hoãn",
+      "days": "{count} ngày",
+      "untilDate": "Đến ngày",
+      "date": "Hoãn đến hết ngày",
+      "snoozeConfirm": "Hoãn {count} ứng viên bản vá?",
+      "snoozeScope": "Các container này hiện có bản vá. Hoãn tất cả cập nhật của chúng trong {duration}, không chỉ bản vá. Áp dụng cho danh sách hiện tại đã lọc, không phải các ô đã chọn. Ngày bao gồm hết ngày theo giờ địa phương.",
+      "snoozeResult": "Đã hoãn: {succeeded}. Thất bại: {failed}.",
+      "refreshFailed": "Đã lưu chính sách nhưng không làm mới được danh sách. Hãy tải lại.",
+      "disabled": "Thao tác container bị tắt. Không đổi chính sách.",
+      "invalid": "Thời gian không hợp lệ. Không đổi chính sách.",
+      "busy": "Một thao tác khác đang chạy. Không đổi thêm chính sách."
+    },
     "fleetDimensions": {
       "groupBy": "Nhóm theo",
       "none": "Không nhóm",

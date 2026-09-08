@@ -9,6 +9,7 @@ import ContainerSelectionBar from './ContainerSelectionBar.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import FleetUpdateProgressBanner from './FleetUpdateProgressBanner.vue';
 import FleetDimensionsControls from './FleetDimensionsControls.vue';
+import FleetBulkActionsToolbar from './FleetBulkActionsToolbar.vue';
 import {
   type ContainersViewTemplateContext,
   useContainersViewTemplateContext,
@@ -46,6 +47,7 @@ const {
   tt,
   groupByStack,
   fleet,
+  fleetBulk,
   rechecking,
   recheckAll,
   expandAllGroups,
@@ -317,6 +319,7 @@ const activeFilterChips = computed(() => {
       </template>
     </DataFilterBar>
 
+    <FleetBulkActionsToolbar v-if="fleetBulk" :actions="fleetBulk" />
     <ContainersGroupedViews />
     <ContainerSelectionBar />
   </div>

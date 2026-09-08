@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "筛选后的集群操作",
+      "updateAll": "全部更新（{count}）",
+      "snoozePatch": "延后所有补丁候选",
+      "patchCount": "{count} 个补丁候选",
+      "duration": "延后时长",
+      "days": "{count} 天",
+      "untilDate": "直到日期",
+      "date": "延后至此日期结束",
+      "snoozeConfirm": "延后 {count} 个补丁候选？",
+      "snoozeScope": "这些容器当前有补丁候选。将所列容器的所有更新延后 {duration}，不仅是补丁更新。范围为筛选后的实时列表，而不是复选框选择。日期包含当地时间当天结束。",
+      "snoozeResult": "已延后：{succeeded}。失败：{failed}。",
+      "refreshFailed": "策略已保存，但列表刷新失败。请重新加载列表。",
+      "disabled": "容器操作已禁用。未更改策略。",
+      "invalid": "延后时长无效。未更改策略。",
+      "busy": "其他操作正在进行。未额外更改策略。"
+    },
     "fleetDimensions": {
       "groupBy": "分组依据",
       "none": "不分组",

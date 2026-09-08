@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Azioni della flotta filtrata",
+      "updateAll": "Aggiorna tutti ({count})",
+      "snoozePatch": "Rimanda tutte le patch",
+      "patchCount": "{count} candidati patch",
+      "duration": "Durata rinvio",
+      "days": "{count} giorni",
+      "untilDate": "Fino alla data",
+      "date": "Rimanda fino a questa data",
+      "snoozeConfirm": "Rimandare {count} candidati patch?",
+      "snoozeScope": "Questi container hanno patch disponibili. Rimanda tutti i loro aggiornamenti per {duration}, non solo le patch. Si usa la lista attiva filtrata, non le caselle selezionate. Una data include la fine del giorno locale.",
+      "snoozeResult": "Rimandati: {succeeded}. Falliti: {failed}.",
+      "refreshFailed": "Politiche salvate, ma aggiornamento della lista fallito. Ricarica la lista.",
+      "disabled": "Azioni disabilitate. Nessuna politica modificata.",
+      "invalid": "Durata non valida. Nessuna politica modificata.",
+      "busy": "Un’altra azione è in corso. Nessun’altra politica modificata."
+    },
     "fleetDimensions": {
       "groupBy": "Raggruppa per",
       "none": "Nessun raggruppamento",

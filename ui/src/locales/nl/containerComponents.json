@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Acties voor gefilterde vloot",
+      "updateAll": "Alles bijwerken ({count})",
+      "snoozePatch": "Alle patches uitstellen",
+      "patchCount": "{count} patchkandidaten",
+      "duration": "Uitstelduur",
+      "days": "{count} dagen",
+      "untilDate": "Tot datum",
+      "date": "Uitstellen tot en met datum",
+      "snoozeConfirm": "{count} patchkandidaten uitstellen?",
+      "snoozeScope": "Deze containers hebben patchkandidaten. Stel al hun updates uit voor {duration}, niet alleen patches. De gefilterde actuele lijst geldt, niet de aangevinkte selectie. Een datum geldt tot het einde van de lokale dag.",
+      "snoozeResult": "Uitgesteld: {succeeded}. Mislukt: {failed}.",
+      "refreshFailed": "Beleid opgeslagen, maar lijst vernieuwen mislukt. Laad de lijst opnieuw.",
+      "disabled": "Containeracties uitgeschakeld. Geen beleid gewijzigd.",
+      "invalid": "Ongeldige duur. Geen beleid gewijzigd.",
+      "busy": "Er loopt al een andere actie. Geen extra beleid gewijzigd."
+    },
     "fleetDimensions": {
       "groupBy": "Groeperen op",
       "none": "Geen groepering",

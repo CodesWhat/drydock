@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Filtrelenmiş filo işlemleri",
+      "updateAll": "Tümünü güncelle ({count})",
+      "snoozePatch": "Tüm yamaları ertele",
+      "patchCount": "{count} yama adayı",
+      "duration": "Erteleme süresi",
+      "days": "{count} gün",
+      "untilDate": "Tarihe kadar",
+      "date": "Bu tarihin sonuna kadar ertele",
+      "snoozeConfirm": "{count} yama adayı ertelensin mi?",
+      "snoozeScope": "Bu konteynerlerde yama adayları var. Yalnızca yamaları değil, listelenen konteynerlerin tüm güncellemelerini {duration} ertele. İşaretli seçim değil, filtrelenmiş canlı liste kullanılır. Tarih, yerel gün sonunu kapsar.",
+      "snoozeResult": "Ertelenen: {succeeded}. Başarısız: {failed}.",
+      "refreshFailed": "İlkeler kaydedildi ancak liste yenilenemedi. Listeyi yeniden yükleyin.",
+      "disabled": "İşlemler devre dışı. Hiçbir ilke değişmedi.",
+      "invalid": "Geçersiz süre. Hiçbir ilke değişmedi.",
+      "busy": "Başka bir işlem sürüyor. Ek ilke değişmedi."
+    },
     "fleetDimensions": {
       "groupBy": "Gruplama ölçütü",
       "none": "Gruplama yok",

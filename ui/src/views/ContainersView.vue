@@ -36,6 +36,7 @@ import {
 } from '../utils/display';
 import { errorMessage } from '../utils/error';
 import { useContainerActions } from './containers/useContainerActions';
+import { useFleetBulkActions } from './containers/useFleetBulkActions';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
 import { useContainerSsePatchPipeline } from './containers/useContainerSsePatchPipeline';
@@ -955,13 +956,13 @@ function toggleContainerSort(key: string) {
 // When containerIds is set (deep-link e.g. from Security's "View in Containers") it's a directed
 // lookup, so it bypasses filter state — otherwise Hide Pinned / kind / server filters could hide
 // the exact container the link targets (#299).
-const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
+const liveActionContainers = computed(() => {
   const ids = filterContainerIds.value;
   const sourceContainers =
     ids.size > 0
       ? containers.value.filter((container) => ids.has(container.id))
       : filteredContainers.value;
-  const live = sourceContainers.map((container) =>
+  return sourceContainers.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
       ? {
           ...container,
@@ -971,6 +972,10 @@ const displayContainers = computed<Array<Container & { _pending?: true }>>(() =>
         }
       : container,
   );
+});
+
+const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
+  const live = liveActionContainers.value;
   const liveIdentityKeys = new Set(
     live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
   );
@@ -978,6 +983,23 @@ const displayContainers = computed<Array<Container & { _pending?: true }>>(() =>
     .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
     .map((snapshot) => ({ ...snapshot, _pending: true as const }));
   return [...live, ...ghosts].map(projectContainerDisplayState);
+});
+
+const fleetBulk = useFleetBulkActions({
+  containers,
+  scope: liveActionContainers,
+  containerActionsEnabled,
+  busy: computed(
+    () => loading.value || actionInProgress.value.size > 0 || Boolean(policyInProgress.value),
+  ),
+  updateMode,
+  isContainerRowLocked,
+  isContainerUpdateInProgress,
+  isContainerUpdateQueued,
+  groupKeyForContainer: getEffectiveContainerGroup,
+  confirmBulkUpdate,
+  loadContainers,
+  t,
 });
 
 const sortedContainers = computed(() => {
@@ -1507,6 +1529,7 @@ function registryErrorTooltip(container: Container): string {
 
 provide(containersViewTemplateContextKey, {
   fleet,
+  fleetBulk,
   containerCardReflowForced,
   error,
   loading,

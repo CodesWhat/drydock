@@ -21,6 +21,7 @@ import type {
 import type { useContainerActions } from '../../views/containers/useContainerActions';
 import type { useContainerLogs } from '../../views/containers/useContainerLogs';
 import type { useContainerSecurity } from '../../views/containers/useContainerSecurity';
+import type { useFleetBulkActions } from '../../views/containers/useFleetBulkActions';
 
 type ContainerFiltersContext = Pick<
   ReturnType<typeof useContainerFilters>,
@@ -115,6 +116,7 @@ export interface ContainersViewTemplateContext
     ContainerSecurityContext,
     ContainerActionsContext {
   fleet?: ReturnType<typeof useContainerFilters>['fleet'];
+  fleetBulk?: ReturnType<typeof useFleetBulkActions>;
   error: Ref<string | null>;
   loading: Ref<boolean>;
   containers: Ref<Container[]>;

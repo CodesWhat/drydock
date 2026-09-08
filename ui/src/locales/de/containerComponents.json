@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Aktionen für gefilterte Flotte",
+      "updateAll": "Alle aktualisieren ({count})",
+      "snoozePatch": "Alle Patch-Kandidaten pausieren",
+      "patchCount": "{count} Patch-Kandidaten",
+      "duration": "Pausendauer",
+      "days": "{count} Tage",
+      "untilDate": "Bis Datum",
+      "date": "Bis einschließlich Datum pausieren",
+      "snoozeConfirm": "{count} Patch-Kandidaten pausieren?",
+      "snoozeScope": "Diese Container haben aktuell Patch-Kandidaten. Alle Updates der aufgeführten Container für {duration} pausieren, nicht nur Patches. Es gilt die gefilterte Live-Liste, nicht die Checkbox-Auswahl. Ein Datum gilt bis zum lokalen Tagesende.",
+      "snoozeResult": "Pausiert: {succeeded}. Fehlgeschlagen: {failed}.",
+      "refreshFailed": "Richtlinien gespeichert, aber Listenaktualisierung fehlgeschlagen. Liste neu laden.",
+      "disabled": "Container-Aktionen deaktiviert. Keine Richtlinien geändert.",
+      "invalid": "Ungültige Dauer. Keine Richtlinien geändert.",
+      "busy": "Eine andere Aktion läuft bereits. Keine weiteren Richtlinien geändert."
+    },
     "fleetDimensions": {
       "groupBy": "Gruppieren nach",
       "none": "Keine Gruppierung",

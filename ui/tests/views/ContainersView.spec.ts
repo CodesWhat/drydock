@@ -443,6 +443,114 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  it('plans fleet Update all from live filtered rows without changing selection', async () => {
+    const { useContainerSelection } = await import('@/composables/useContainerSelection');
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const ready = makeContainer({
+      id: 'ready',
+      name: 'ready',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const hidden = makeContainer({
+      id: 'hidden',
+      name: 'hidden',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const wrapper = await mountContainersView([ready, hidden]);
+    const vm = wrapper.vm as any;
+    mockFilteredContainers.value = [ready];
+    await flushPromises();
+    useContainerSelection().toggle('hidden');
+    expect(wrapper.find('[data-test="fleet-bulk-update"]').exists()).toBe(true);
+    expect(vm.fleetBulk?.canUpdate.value).toBe(true);
+    await wrapper.get('[data-test="fleet-bulk-update"]').trigger('click');
+    expect(useConfirmDialog().current.value?.message).toContain('ready');
+    expect(useConfirmDialog().current.value?.message).not.toContain('hidden');
+    expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+    mockFilteredContainers.value = [hidden];
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(mockApiUpdateBulk).toHaveBeenCalledWith(['ready']);
+    expect(useContainerSelection().selectedIds.value).toEqual(new Set(['hidden']));
+    useContainerSelection().clear();
+  });
+
+  it('confirms a frozen patch-only snooze scope and applies container-wide policies once', async () => {
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const patch = makeContainer({
+      id: 'patch',
+      name: 'patch',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const minor = makeContainer({
+      id: 'minor',
+      name: 'minor',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+    });
+    const wrapper = await mountContainersView([patch, minor]);
+    const vm = wrapper.vm as any;
+    expect(vm.fleetBulk?.patchCount.value).toBe(1);
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    expect(useConfirmDialog().current.value?.message).toContain('all updates');
+    expect(mockUpdateContainerPolicy).not.toHaveBeenCalled();
+    mockFilteredContainers.value = [minor];
+    await useConfirmDialog().accept();
+    expect(mockUpdateContainerPolicy).toHaveBeenCalledExactlyOnceWith('patch', 'snooze', {
+      days: 7,
+    });
+    expect(vm.fleetBulk.summary.value).toContain('1');
+  });
+
+  it('wires snooze duration/date controls and renders failure and success summaries', async () => {
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const patch = makeContainer({
+      id: 'patch',
+      name: 'patch',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const wrapper = await mountContainersView([patch]);
+    await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('date');
+    expect(
+      (wrapper.get('[data-test="fleet-bulk-snooze"]').element as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await wrapper.get('[data-test="fleet-snooze-date"]').setValue('2099-04-14');
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    mockUpdateContainerPolicy.mockRejectedValueOnce(new Error('gone'));
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain('Snoozed: 0. Failed: 1.');
+    expect(wrapper.get('[role="status"]').classes()).toContain('dd-text-warning');
+    await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('1');
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(mockUpdateContainerPolicy).toHaveBeenLastCalledWith('patch', 'snooze', { days: 1 });
+    expect(wrapper.get('[role="status"]').classes()).toContain('dd-text-muted');
+  });
+
+  it('exposes the live action scope before display ghosts and honors directed ids', async () => {
+    const first = makeContainer({
+      id: 'first',
+      name: 'first',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const second = makeContainer({ id: 'second', name: 'second' });
+    const wrapper = await mountContainersView([first, second]);
+    const vm = wrapper.vm as any;
+    mockFilteredContainers.value = [first];
+    vm.actionPending = new Map([['gone', makeContainer({ id: 'gone', name: 'gone' })]]);
+    expect(vm.liveActionContainers?.map((row: Container) => row.id)).toEqual(['first']);
+    expect(vm.displayContainers.map((row: Container) => row.id)).toContain('gone');
+    vm.filterContainerIds = new Set(['second', 'missing']);
+    expect(vm.liveActionContainers.map((row: Container) => row.id)).toEqual(['second']);
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRouterReplace.mockResolvedValue(undefined);

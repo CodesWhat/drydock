@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Ações da frota filtrada",
+      "updateAll": "Atualizar todos ({count})",
+      "snoozePatch": "Adiar todos os patches",
+      "patchCount": "{count} candidatos de patch",
+      "duration": "Duração do adiamento",
+      "days": "{count} dias",
+      "untilDate": "Até a data",
+      "date": "Adiar até esta data",
+      "snoozeConfirm": "Adiar {count} candidatos de patch?",
+      "snoozeScope": "Estes contêineres têm patches disponíveis. Adiar todas as suas atualizações por {duration}, não apenas patches. Usa a lista ativa filtrada, não as caixas selecionadas. A data inclui o fim do dia local.",
+      "snoozeResult": "Adiados: {succeeded}. Falhas: {failed}.",
+      "refreshFailed": "Políticas salvas, mas a atualização da lista falhou. Recarregue a lista.",
+      "disabled": "Ações desativadas. Nenhuma política alterada.",
+      "invalid": "Duração inválida. Nenhuma política alterada.",
+      "busy": "Outra ação está em andamento. Nenhuma política adicional alterada."
+    },
     "fleetDimensions": {
       "groupBy": "Agrupar por",
       "none": "Sem agrupamento",

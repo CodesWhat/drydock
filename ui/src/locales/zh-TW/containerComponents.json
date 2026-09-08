@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "篩選後的叢集操作",
+      "updateAll": "全部更新（{count}）",
+      "snoozePatch": "延後所有修補候選",
+      "patchCount": "{count} 個修補候選",
+      "duration": "延後時長",
+      "days": "{count} 天",
+      "untilDate": "直到日期",
+      "date": "延後至此日期結束",
+      "snoozeConfirm": "延後 {count} 個修補候選？",
+      "snoozeScope": "這些容器目前有修補候選。將所列容器的所有更新延後 {duration}，不只是修補更新。範圍為篩選後的即時清單，而非核取方塊選取項目。日期包含當地時間當天結束。",
+      "snoozeResult": "已延後：{succeeded}。失敗：{failed}。",
+      "refreshFailed": "原則已儲存，但清單重新整理失敗。請重新載入清單。",
+      "disabled": "容器操作已停用。未變更原則。",
+      "invalid": "延後時長無效。未變更原則。",
+      "busy": "其他操作正在進行。未額外變更原則。"
+    },
     "fleetDimensions": {
       "groupBy": "分組依據",
       "none": "不分組",

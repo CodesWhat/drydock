@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "絞り込み済みフリートの操作",
+      "updateAll": "すべて更新 ({count})",
+      "snoozePatch": "パッチ候補をすべて延期",
+      "patchCount": "パッチ候補 {count} 件",
+      "duration": "延期期間",
+      "days": "{count} 日",
+      "untilDate": "日付まで",
+      "date": "この日の終了まで延期",
+      "snoozeConfirm": "パッチ候補 {count} 件を延期しますか？",
+      "snoozeScope": "これらのコンテナには現在パッチ候補があります。パッチだけでなく、一覧の各コンテナのすべての更新を {duration} 延期します。チェックボックスの選択ではなく、絞り込み済みの現在の一覧が対象です。日付はローカル時刻の一日の終わりまで含みます。",
+      "snoozeResult": "延期: {succeeded}。失敗: {failed}。",
+      "refreshFailed": "ポリシーは保存されましたが、一覧の更新に失敗しました。再読み込みしてください。",
+      "disabled": "コンテナ操作は無効です。ポリシーは変更されていません。",
+      "invalid": "延期期間が無効です。ポリシーは変更されていません。",
+      "busy": "別の操作が実行中です。追加のポリシー変更はありません。"
+    },
     "fleetDimensions": {
       "groupBy": "グループ化",
       "none": "グループ化なし",

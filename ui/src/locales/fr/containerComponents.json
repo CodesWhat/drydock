@@ -1,5 +1,22 @@
 {
   "containerComponents": {
+    "fleetBulk": {
+      "label": "Actions de la flotte filtrée",
+      "updateAll": "Tout mettre à jour ({count})",
+      "snoozePatch": "Reporter tous les correctifs",
+      "patchCount": "{count} candidats correctifs",
+      "duration": "Durée du report",
+      "days": "{count} jours",
+      "untilDate": "Jusqu’au",
+      "date": "Reporter jusqu’à cette date",
+      "snoozeConfirm": "Reporter {count} candidats correctifs ?",
+      "snoozeScope": "Ces conteneurs ont des correctifs disponibles. Reporter toutes leurs mises à jour pendant {duration}, pas seulement les correctifs. La liste active filtrée est utilisée, pas les cases cochées. Une date inclut la fin de journée locale.",
+      "snoozeResult": "Reportés : {succeeded}. Échecs : {failed}.",
+      "refreshFailed": "Politiques enregistrées, mais actualisation de la liste impossible. Rechargez la liste.",
+      "disabled": "Actions désactivées. Aucune politique modifiée.",
+      "invalid": "Durée invalide. Aucune politique modifiée.",
+      "busy": "Une autre action est en cours. Aucune politique supplémentaire modifiée."
+    },
     "fleetDimensions": {
       "groupBy": "Regrouper par",
       "none": "Aucun regroupement",
