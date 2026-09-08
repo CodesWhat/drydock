@@ -1104,7 +1104,7 @@ curl http://drydock:3000/api/v1/images
 | --- | --- | --- | --- |
 | `host` | string | | Scope the inventory to one host id; omit to list images across every supported host |
 
-`hosts` always names every image host drydock knows about, including unsupported agent hosts that were never queried (`supported: false`, `reason: "agent-transport-unsupported"`), so a caller can render every host without a second lookup. A host that was queried but failed carries its `error` message instead of contributing images. `agent` and `lastSeen` are present only when they apply — an agent-owned image and one that at least one container currently references, respectively.
+`hosts` always names every image host drydock knows about, including unsupported agent hosts that were never queried (`supported: false`, `reason: "agent-transport-unsupported"`), so a caller can render every host without a second lookup. A host that was queried but failed carries its `error` message instead of contributing images. `agent` and `lastSeen` are present only when they apply: an agent-owned image and one that at least one container currently references, respectively.
 
 Returns 200 with the inventory, 404 if a `host` query parameter names a host that doesn't exist, or 501 if a `host` query parameter names an agent host without controller Docker transport.
 
@@ -1136,7 +1136,7 @@ Returns 200 with the estimate, 400 if `host` is missing or `mode` isn't `danglin
 
 ## Prune images
 
-Prunes images on a host — dangling only, or every image no container references — and writes an `image-prune` audit entry recording the outcome. Requires the `admin` scope and `DD_SERVER_FEATURE_CONTAINERACTIONS`.
+Prunes images on a host (dangling only, or every image no container references) and writes an `image-prune` audit entry recording the outcome. Requires the `admin` scope and `DD_SERVER_FEATURE_CONTAINERACTIONS`.
 Prune is destructive and requires explicit confirmation via `X-DD-Confirm-Action: image-prune`.
 
 ```bash

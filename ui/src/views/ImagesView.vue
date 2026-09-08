@@ -246,7 +246,7 @@ async function performPrune(host: ImageHostSummary, mode: PruneMode, hostText: s
 }
 
 // Only ever invoked from the prune buttons, which render exclusively when
-// `canPrune` is true — i.e. `selectedHostSummary` is guaranteed non-null.
+// `canPrune` is true, i.e. `selectedHostSummary` is guaranteed non-null.
 async function handlePrune(mode: PruneMode) {
   const host = selectedHostSummary.value as ImageHostSummary;
   const hostText = hostDisplayName(host.name, host.agent);
