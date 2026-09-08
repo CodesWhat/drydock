@@ -281,6 +281,13 @@ async function loadContainers() {
     if (groupByStack.value) {
       await loadGroups();
     }
+    // Fire-and-forget: the dependency graph is a distinct global resource from
+    // the container list (#219, roadmap 6.1), and useDependencyGraph() keeps
+    // its own error ref rather than surfacing into this view's error state.
+    // Reloaded on every successful list load, not just on mount, so the
+    // dependency rows and the child-before-parent guard never read edges from
+    // before a recheck, an SSE refresh, a delete or a group update.
+    void useDependencyGraph().loadDependencyGraph();
   } catch (e: unknown) {
     error.value = errorMessage(e, t('containersView.error.loadFailed'));
   } finally {
@@ -290,10 +297,6 @@ async function loadContainers() {
 
 onMounted(() => {
   void loadContainers();
-  // Fire-and-forget: the dependency graph is a distinct global resource from
-  // the container list (#219, roadmap 6.1), and useDependencyGraph() keeps
-  // its own error ref rather than surfacing into this view's error state.
-  void useDependencyGraph().loadDependencyGraph();
 });
 
 // Safety net only: if the SSE container-removed/added/updated stream hasn't

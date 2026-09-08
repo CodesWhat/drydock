@@ -870,7 +870,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 Inspect the resolved graph with `GET /api/v1/containers/dependencies`, dry-run the wave order for one container's chain with `POST /api/v1/containers/{id}/update-chain-preview`, or bulk-accept that whole chain with `POST /api/v1/dependency-groups/{rootId}/update`. In the UI, the "Update dependency chain" action previews the same wave order — including any cycle or unresolved-target warnings — before you confirm.
 
-The container list shows the graph too. A container with dependencies gets a chevron next to its name; expanding it lists what it depends on, what requires it, a cycle marker when it sits in one, and an "Update dependency group" button that dispatches the whole connected set in wave order after the same preview. Updating a single container whose dependency also has a pending update warns you first, since updating the child on its own leaves it running against an outdated parent; you can still go ahead.
+The container list shows the graph too. A container that depends on another, or that another depends on, gets a chevron next to its name; expanding it lists what it depends on, what requires it, a cycle marker when it sits in one, and an "Update dependency group" button that dispatches the whole connected set in wave order after the same preview. Updating a single container whose dependency also has a pending update warns you first, since updating the child on its own leaves it running against an outdated parent; you can still go ahead.
 
 </Callout>
 

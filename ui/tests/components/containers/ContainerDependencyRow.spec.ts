@@ -60,6 +60,17 @@ describe('ContainerDependencyRow', () => {
     expect(children.text()).toContain('web');
   });
 
+  it('falls back to the node name when displayName is empty', () => {
+    const graph = makeGraph({
+      nodes: [makeNode('web'), { id: 'db', name: 'db', displayName: '' }],
+      edges: [{ from: 'web', to: 'db', action: 'update', source: 'label' }],
+    });
+    const adjacency = buildDependencyAdjacency(graph);
+    const wrapper = mountRow({ adjacency });
+
+    expect(wrapper.find('[data-test="container-dependency-parents"]').text()).toContain('db');
+  });
+
   it('does not render a parents or children list when there are none', () => {
     const adjacency = buildDependencyAdjacency(makeGraph());
     const wrapper = mountRow({ container: { id: 'lonely', name: 'lonely' }, adjacency });
