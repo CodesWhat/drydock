@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Images",
     "subtitle": "Every image on each host, with what uses it and what a prune would reclaim",
+    "loading": "Loading images...",
+    "loadFailed": "Failed to load images",
     "columns": {
       "repository": "Repository",
       "tag": "Tag",

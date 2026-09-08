@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Immagini",
     "subtitle": "Tutte le immagini su ogni host, con cosa le usa e cosa un prune libererebbe",
+    "loading": "Caricamento immagini...",
+    "loadFailed": "Impossibile caricare le immagini",
     "columns": {
       "repository": "Repository",
       "tag": "Tag",

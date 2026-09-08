@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Images",
     "subtitle": "Alle images op elke host, met wat ze gebruikt en wat een prune zou vrijmaken",
+    "loading": "Images laden...",
+    "loadFailed": "Kan images niet laden",
     "columns": {
       "repository": "Repository",
       "tag": "Tag",

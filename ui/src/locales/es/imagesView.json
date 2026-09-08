@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Imágenes",
     "subtitle": "Todas las imágenes de cada host, con lo que las usa y lo que un prune recuperaría",
+    "loading": "Cargando imágenes...",
+    "loadFailed": "No se pudieron cargar las imágenes",
     "columns": {
       "repository": "Repositorio",
       "tag": "Etiqueta",

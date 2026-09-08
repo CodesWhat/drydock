@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Imagens",
     "subtitle": "Todas as imagens em cada host, com o que as usa e o que uma limpeza recuperaria",
+    "loading": "Carregando imagens...",
+    "loadFailed": "Falha ao carregar imagens",
     "columns": {
       "repository": "Repositório",
       "tag": "Tag",

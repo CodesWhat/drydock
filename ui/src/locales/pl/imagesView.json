@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Obrazy",
     "subtitle": "Wszystkie obrazy na każdym hoście, wraz z tym, co ich używa i ile odzyska czyszczenie",
+    "loading": "Ładowanie obrazów...",
+    "loadFailed": "Nie udało się załadować obrazów",
     "columns": {
       "repository": "Repozytorium",
       "tag": "Tag",

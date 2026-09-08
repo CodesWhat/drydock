@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "İmajlar",
     "subtitle": "Her sunucudaki tüm imajlar; neyin kullandığı ve prune ile ne kadar yer geri kazanılacağıyla birlikte",
+    "loading": "İmajlar yükleniyor...",
+    "loadFailed": "İmajlar yüklenemedi",
     "columns": {
       "repository": "Depo",
       "tag": "Etiket",

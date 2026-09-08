@@ -55,7 +55,7 @@ async function load() {
     images.value = response.images;
     hosts.value = response.hosts;
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load images');
+    error.value = errorMessage(e, t('imagesView.loadFailed'));
   } finally {
     loading.value = false;
   }
@@ -293,7 +293,7 @@ async function handlePrune(mode: PruneMode) {
       {{ t('imagesView.hostUnsupported') }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading images&hellip;</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('imagesView.loading') }}</div>
 
     <DataFilterBar
       v-model="imagesViewMode"

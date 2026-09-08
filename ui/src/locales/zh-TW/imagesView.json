@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "映像檔",
     "subtitle": "每台主機上的所有映像檔，包含使用情況以及清理可回收的空間",
+    "loading": "正在載入映像檔……",
+    "loadFailed": "無法載入映像檔",
     "columns": {
       "repository": "倉庫",
       "tag": "標籤",

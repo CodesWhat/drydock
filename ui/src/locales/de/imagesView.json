@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Images",
     "subtitle": "Alle Images auf jedem Host, mit Angabe der Nutzung und der durch ein Prune freizugebenden Größe",
+    "loading": "Images werden geladen...",
+    "loadFailed": "Images konnten nicht geladen werden",
     "columns": {
       "repository": "Repository",
       "tag": "Tag",

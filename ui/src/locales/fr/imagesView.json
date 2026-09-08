@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Images",
     "subtitle": "Toutes les images de chaque hôte, avec ce qui les utilise et ce qu'un nettoyage permettrait de récupérer",
+    "loading": "Chargement des images...",
+    "loadFailed": "Impossible de charger les images",
     "columns": {
       "repository": "Dépôt",
       "tag": "Tag",

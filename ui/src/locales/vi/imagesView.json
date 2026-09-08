@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "Image",
     "subtitle": "Mọi image trên từng máy chủ, kèm những gì đang dùng nó và dung lượng dọn dẹp có thể thu hồi",
+    "loading": "Đang tải image...",
+    "loadFailed": "Không thể tải image",
     "columns": {
       "repository": "Repository",
       "tag": "Tag",

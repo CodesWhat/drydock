@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "이미지",
     "subtitle": "각 호스트의 모든 이미지와 이를 사용하는 대상, 정리 시 회수될 용량",
+    "loading": "이미지 불러오는 중...",
+    "loadFailed": "이미지를 불러오지 못했습니다",
     "columns": {
       "repository": "저장소",
       "tag": "태그",

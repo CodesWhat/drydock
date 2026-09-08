@@ -2,6 +2,8 @@
   "imagesView": {
     "title": "镜像",
     "subtitle": "每台主机上的所有镜像，包括使用情况以及清理可回收的空间",
+    "loading": "正在加载镜像...",
+    "loadFailed": "无法加载镜像",
     "columns": {
       "repository": "仓库",
       "tag": "标签",
