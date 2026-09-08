@@ -1243,6 +1243,123 @@ describe('docker tag candidates module', () => {
 
       expect(result.tags).toEqual(['1.28.0-alpine']);
     });
+
+    // Review finding: strict mode was the only family policy exercised
+    // alongside dd.tag.include above — loose mode shares the same
+    // isSuffixCompatible guard (see isSemverFamilyMatch's #498 comment), but
+    // had no matrix coverage combined with an include filter. Cover both a
+    // wide-open include ('.*') and a narrower one ('^1\..*') that still
+    // admits every nginx variant, to confirm the include filter's population
+    // never reintroduces a cross-variant pick under loose family matching.
+    test.each(referenceToOwnVariant)(
+      'loose mode + dd.tag.include=.*: reference %s only climbs to its own-variant candidate',
+      (reference, ownVariant) => {
+        const container = createContainer({
+          image: { tag: { value: reference, semver: true } },
+          tagFamily: 'loose',
+          includeTags: '.*',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, [reference, ...nginxCandidates], log);
+
+        expect(result.tags).toEqual([ownVariant]);
+      },
+    );
+
+    test.each(referenceToOwnVariant)(
+      'loose mode + dd.tag.include=^1\\..* (narrower, still admits every variant): reference %s only climbs to its own-variant candidate',
+      (reference, ownVariant) => {
+        const container = createContainer({
+          image: { tag: { value: reference, semver: true } },
+          tagFamily: 'loose',
+          includeTags: '^1\\..*',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, [reference, ...nginxCandidates], log);
+
+        expect(result.tags).toEqual([ownVariant]);
+      },
+    );
+  });
+
+  // Review finding: isPrecisionOnlyExtension (the DR-125 carve-out in
+  // isSuffixCompatible) had no test documenting its accepted behavior in
+  // either direction — only the rejection side was covered above via the
+  // nginx matrix's "-alpine-perl"/"-perl" variants. Pin the intended
+  // behavior explicitly so a future change to isPrecisionOnlyExtension is a
+  // deliberate decision, not an accidental regression:
+  //
+  //   DR-125: letters change the variant, digits and dots refine it. Both
+  //   directions of digit refinement are accepted — a less-precise reference
+  //   accepts a more-precise candidate ("-alpine" -> "-alpine3.21") and a
+  //   more-precise reference accepts a less-precise candidate ("-alpine3.21"
+  //   -> "-alpine"), since neither introduces a new letter-based variant.
+  //
+  //   Trade-off recorded on the roadmap as DR-128: this same rule means a
+  //   "-cuda" reference accepts a "-cuda12" candidate, treating a CUDA major
+  //   version as a precision suffix rather than a distinct variant.
+  describe('digit precision inside a variant is treated as precision, not a new variant (DR-125)', () => {
+    test('reference "1.2.0-alpine" accepts a more precise "1.3.0-alpine3.21" candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine', '1.3.0-alpine3.21'], log);
+
+      expect(result.tags).toEqual(['1.3.0-alpine3.21']);
+    });
+
+    test('reference "1.2.0-alpine3.20" accepts the same-precision-shape "1.3.0-alpine3.21" candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine3.20', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine3.20', '1.3.0-alpine3.21'], log);
+
+      expect(result.tags).toEqual(['1.3.0-alpine3.21']);
+    });
+
+    test('reference "1.2.0-alpine3.21" accepts a less precise "1.3.0-alpine" candidate (reverse direction)', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine3.21', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine3.21', '1.3.0-alpine'], log);
+
+      expect(result.tags).toEqual(['1.3.0-alpine']);
+    });
+
+    test('reference "1.2.0-alpine" rejects the different-variant "1.3.0-alpine-perl" candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine', '1.3.0-alpine-perl'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('reference "1.2.0-alpine" rejects the different-variant "1.3.0-alpineperl" candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine', '1.3.0-alpineperl'], log);
+
+      expect(result.tags).toEqual([]);
+    });
   });
 
   describe('Immich OpenVINO pinned-tag matrix (#498)', () => {
