@@ -180,7 +180,10 @@ function isPrecisionOnlyExtension(shorterTemplate: string, longerTemplate: strin
     return false;
   }
   const extra = longerTemplate.slice(shorterTemplate.length);
-  return extra.length > 0 && /^[#.]+$/.test(extra);
+  // A genuine precision-only extension needs at least one digit placeholder
+  // ("#"); punctuation alone (e.g. a trailing "." or "..") is not a more
+  // precise spelling of the same variant and must stay rejected.
+  return extra.length > 0 && /^\.?#(?:\.#)*$/.test(extra);
 }
 
 /**
