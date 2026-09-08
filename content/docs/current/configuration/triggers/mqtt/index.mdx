@@ -267,6 +267,23 @@ A few things worth knowing before you turn this on:
 - If two containers somehow sanitize down to the same state topic, drydock refuses to guess and drops the command rather than updating the wrong one.
 - Since anyone who can publish to a container's command topic can trigger an update, scope your Home Assistant broker credential tightly: publish-only access to `{topic}/+/+/cmd` and `{topic}/agent/+/+/+/cmd` is all it needs.
 
+### Update progress
+
+Once an update is running, drydock reports how far along it is on the same state topic the entity already reads, so the Install button shows a live progress bar instead of sitting there until the next watch cycle. The container's state payload carries an `update_state` object with Home Assistant's own `installed_version`, `in_progress` and `update_percentage` fields, and the entity's `value_template` hands that object straight to HA.
+
+The percentage is a fixed ladder over the phases an update walks, not a measurement: pulling the image reports 10, the image scan 30, preparing the new container 40, renaming 50, creating 60, stopping the old one 70, starting the new one 80, and the health gate 85 through 95. A rollback reports 90. Drydock has no byte-level progress from the registry pull to work with, so these numbers tell you which step is running, not how much time is left.
+
+When the operation finishes, drydock publishes `in_progress: false` with a null percentage and the entity returns to its normal state. That happens on every outcome, so a failed or rolled-back update clears the progress bar exactly like a successful one; the installed and newest versions keep whatever the container itself reports. Progress is derived from the live operation each time drydock publishes, so a restart part-way through an update can't leave an entity spinning forever.
+
+This needs `HASS_ENABLED`, but not `HASS_DISCOVERY`. If you hand-configured your own `update` entity, point its `value_template` at the new object to pick progress up:
+
+```yaml
+value_template: >-
+  {% if value_json.update_state is defined %}{{ value_json.update_state | to_json }}{% else %}{{ value_json.image_tag_value }}{% endif %}
+```
+
+<Callout type="info">**Existing payloads keep working.** `update_state` is added to the state payload, nothing was removed or renamed, and the template falls back to the old behaviour for a retained message published by an older drydock. Home Assistant only reads `in_progress` and `update_percentage` from the object the `value_template` renders, so a template that emits a bare version string ignores them.</Callout>
+
 ## Attribute filtering
 
 Container MQTT payloads can include large nested fields (SBOM documents, scan vulnerability arrays, environment details, labels) that exceed Home Assistant's `json_attributes_topic` size limits or clutter entity attributes.

@@ -1,9 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import mqtt, { type IClientOptions, type MqttClient } from 'mqtt';
-import { registerContainerAdded, registerContainerUpdated } from '../../../event/index.js';
+import {
+  registerContainerAdded,
+  registerContainerUpdated,
+  registerUpdateOperationChanged,
+  type UpdateOperationChangedEventPayload,
+} from '../../../event/index.js';
 import { flatten } from '../../../model/container.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import * as containerStore from '../../../store/container.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
+import { getErrorMessage } from '../../../util/error.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import {
   filterContainer,
@@ -13,6 +21,11 @@ import {
   type HassAttributePreset,
 } from './filter.js';
 import Hass from './Hass.js';
+import {
+  buildHassUpdateState,
+  getHassUpdateProgress,
+  HASS_UPDATE_STATE_KEY,
+} from './hass-progress.js';
 import { getContainerIdentitySlug } from './naming.js';
 
 const containerDefaultTopic = 'dd/container';
@@ -106,6 +119,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
   private hass?: Hass;
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
+  private unregisterUpdateOperationChanged?: () => void;
 
   private clearContainerEventSubscriptions() {
     this.unregisterContainerAdded?.();
@@ -113,6 +127,9 @@ class Mqtt extends Trigger<MqttConfiguration> {
 
     this.unregisterContainerUpdated?.();
     this.unregisterContainerUpdated = undefined;
+
+    this.unregisterUpdateOperationChanged?.();
+    this.unregisterUpdateOperationChanged = undefined;
   }
 
   handleContainerEvent(container) {
@@ -123,6 +140,91 @@ class Mqtt extends Trigger<MqttConfiguration> {
       this.log.warn(`Error (${error.message})`);
       this.log.debug(error);
     });
+  }
+
+  /**
+   * Republish a container's state payload when its update operation changes phase, so
+   * the Home Assistant `update` entity's progress bar advances during an install and
+   * clears itself the moment the operation reaches a terminal state (#210). Without
+   * this the entity only refreshes on the watcher's next scan, which is why pressing
+   * Install used to show nothing at all until the update was already over.
+   *
+   * The operation's own status and phase are deliberately not read from the event.
+   * `trigger()` re-derives progress from the operation store on every publish, so this
+   * handler only has to say "this container changed, publish it again" — one code path
+   * produces the payload whichever event brought us here.
+   */
+  handleUpdateOperationChangedEvent(payload: UpdateOperationChangedEventPayload) {
+    const container = this.resolveUpdateOperationContainer(payload);
+    if (!container) {
+      this.log.debug(
+        `No stored container for update operation ${payload.operationId} (${payload.containerName}); skipping progress publish`,
+      );
+      return;
+    }
+    this.handleContainerEvent(container);
+  }
+
+  /**
+   * Resolve the event back to the container row the state topic is built from.
+   *
+   * `newContainerId` comes first: once a local-Docker recreate has created the
+   * replacement, the original id no longer exists in the store, and the terminal event
+   * for a successful update is exactly the one that must land. A miss here costs a
+   * delayed clear, not a stuck one — the watcher's next scan republishes the container
+   * and `trigger()` recomputes progress from the store.
+   */
+  private resolveUpdateOperationContainer(payload: UpdateOperationChangedEventPayload) {
+    try {
+      for (const containerId of [payload.newContainerId, payload.containerId]) {
+        if (typeof containerId === 'string' && containerId !== '') {
+          const storedContainer = containerStore.getContainer(containerId);
+          if (storedContainer) {
+            return storedContainer;
+          }
+        }
+      }
+      return undefined;
+    } catch (error: unknown) {
+      this.log.warn(
+        `Failed to resolve container for update operation ${payload.operationId} (${getErrorMessage(error)})`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * The Home Assistant `update` object for a container, or undefined when this trigger
+   * is not driving a Home Assistant entity. Gated on `hass.enabled` rather than
+   * `hass.discovery` so a hand-configured HA entity (the documented
+   * `HASS_ENABLED=true, HASS_DISCOVERY=false` setup) still gets progress, while a
+   * plain MQTT consumer's payload keeps exactly the shape it has today.
+   */
+  private getHassUpdateState(container): Record<string, unknown> | undefined {
+    if (!this.configuration.hass?.enabled) {
+      return undefined;
+    }
+    return buildHassUpdateState({
+      installedVersion: container?.image?.tag?.value,
+      progress: getHassUpdateProgress(this.getActiveUpdateOperation(container)),
+    });
+  }
+
+  private getActiveUpdateOperation(container) {
+    const containerId = typeof container?.id === 'string' ? container.id : '';
+    if (containerId === '') {
+      return undefined;
+    }
+    try {
+      return updateOperationStore.getActiveOperationByContainerId(containerId);
+    } catch (error: unknown) {
+      // A store read that fails must not cost the state publish itself; the entity
+      // falls back to "no update running", which the next publish corrects.
+      this.log.warn(
+        `Failed to read active update operation for container [${container?.name}] (${getErrorMessage(error)})`,
+      );
+      return undefined;
+    }
   }
 
   /**
@@ -259,6 +361,11 @@ class Mqtt extends Trigger<MqttConfiguration> {
     this.unregisterContainerUpdated = registerContainerUpdated((container) =>
       this.handleContainerEvent(container),
     );
+    if (this.configuration.hass.enabled) {
+      this.unregisterUpdateOperationChanged = registerUpdateOperationChanged((payload) =>
+        this.handleUpdateOperationChangedEvent(payload),
+      );
+    }
   }
 
   async deregisterComponent(): Promise<void> {
@@ -328,8 +435,16 @@ class Mqtt extends Trigger<MqttConfiguration> {
           : filterContainer(flattenedContainer, filterConfig.paths)
         : flattenedContainer;
 
+    // Additive: the Home Assistant `update` object is appended AFTER filtering, so an
+    // aggressive include/exclude filter cannot strip the one key the entity's
+    // value_template reads (#210).
+    const hassUpdateState = this.getHassUpdateState(container);
+    const containerToPublishWithState = hassUpdateState
+      ? { ...containerToPublishFlattened, [HASS_UPDATE_STATE_KEY]: hassUpdateState }
+      : containerToPublishFlattened;
+
     this.log.debug(`Publish container result to ${containerTopic}`);
-    return this.client.publish(containerTopic, JSON.stringify(containerToPublishFlattened), {
+    return this.client.publish(containerTopic, JSON.stringify(containerToPublishWithState), {
       retain: true,
     });
   }
