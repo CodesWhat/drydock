@@ -40,7 +40,7 @@
   "overrides": {
     "csv-parse": "7.0.2",
     "brace-expansion": "5.0.9",
-    "js-yaml": "3.15.1",
+    "js-yaml": "3.15.2",
     "fast-xml-parser": "5.10.1",
     "joi": "18.2.8",
     "minimatch": "10.2.5",
