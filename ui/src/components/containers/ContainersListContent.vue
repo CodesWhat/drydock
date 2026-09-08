@@ -10,6 +10,7 @@ import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import FleetUpdateProgressBanner from './FleetUpdateProgressBanner.vue';
 import FleetDimensionsControls from './FleetDimensionsControls.vue';
 import FleetBulkActionsToolbar from './FleetBulkActionsToolbar.vue';
+import FleetHealthBar from './FleetHealthBar.vue';
 import {
   type ContainersViewTemplateContext,
   useContainersViewTemplateContext,
@@ -48,6 +49,7 @@ const {
   groupByStack,
   fleet,
   fleetBulk,
+  fleetHealth,
   rechecking,
   recheckAll,
   expandAllGroups,
@@ -164,6 +166,7 @@ const activeFilterChips = computed(() => {
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('containerComponents.listContent.loadingContainers') }}</div>
 
     <FleetUpdateProgressBanner />
+    <FleetHealthBar v-if="fleetHealth" :health="fleetHealth" />
 
     <DataFilterBar
       v-model="containerViewMode"

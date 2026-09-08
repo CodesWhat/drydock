@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Vlootstatus",
+      "description": "Status van de hele vloot. Inventarisatie ontdekt containers zonder registers te controleren of updates uit te voeren.",
+      "reload": "Status herladen",
+      "refresh": "Inventaris vernieuwen",
+      "configured": "Geconfigureerd",
+      "connected": "Verbonden",
+      "disconnected": "Verbinding verbroken",
+      "unavailable": "Niet beschikbaar",
+      "agentUnavailable": "Agentstatus niet beschikbaar. Bewaarde gegevens kunnen verouderd zijn.",
+      "watcherUnavailable": "Watchermetadata niet beschikbaar. Bewaarde gegevens kunnen verouderd zijn.",
+      "total": "{count} container | {count} containers",
+      "lastKnown": "Laatst bekend",
+      "lastSeen": "Laatst gezien: {value}",
+      "unsupported": "Alle doelen vereisen Docker-watchers die inventarisvernieuwing ondersteunen.",
+      "complete": "Inventaris volledig",
+      "partial": "Inventaris onvolledig",
+      "reloadFailed": "Containerlijst kon niet worden herladen. Inventarisresultaten blijven zichtbaar."
+    },
     "fleetBulk": {
       "label": "Acties voor gefilterde vloot",
       "updateAll": "Alles bijwerken ({count})",

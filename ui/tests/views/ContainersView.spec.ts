@@ -1,5 +1,7 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import { getAgents } from '@/services/agent';
+import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -42,6 +44,11 @@ vi.mock('@/composables/useServerFeatures', () => ({
 }));
 
 // --- Mock all services ---
+vi.mock('@/services/agent', () => ({ getAgents: vi.fn().mockResolvedValue([]) }));
+vi.mock('@/services/watcher', () => ({
+  getAllWatchers: vi.fn().mockResolvedValue([]),
+  refreshWatcherInventory: vi.fn(),
+}));
 vi.mock('@/services/container', () => ({
   deleteContainer: vi.fn(),
   getAllContainers: vi.fn(),
@@ -443,6 +450,65 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  it('restores local fleet counts after a successful list retry, without treating an action error as stale inventory', async () => {
+    vi.mocked(getAllWatchers).mockResolvedValue([
+      {
+        id: 'docker.one',
+        type: 'docker',
+        name: 'one',
+        metadata: { inventoryRefreshSupported: true },
+      },
+    ]);
+    const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
+    const vm = wrapper.vm as any;
+    vm.error = 'an unrelated action failed';
+    await flushPromises();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
+    mockGetAllContainers.mockRejectedValueOnce(new Error('list unavailable'));
+    await vm.loadContainers();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('Unavailable');
+    await vm.loadContainers();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
+  });
+  it('mounts fleet-wide health above filters and reports an inventory list reload failure separately', async () => {
+    vi.mocked(getAgents).mockResolvedValue([
+      { name: 'empty', connected: true, containers: { total: 0 } },
+    ]);
+    vi.mocked(getAllWatchers).mockResolvedValue([
+      {
+        id: 'empty.docker.one',
+        type: 'docker',
+        name: 'one',
+        agent: 'empty',
+        metadata: { inventoryRefreshSupported: true },
+      },
+    ]);
+    vi.mocked(refreshWatcherInventory).mockResolvedValueOnce({
+      context: {
+        origin: 'inventory',
+        operationId: 'op',
+        source: { type: 'docker', name: 'one', agent: 'empty' },
+      },
+      authoritative: true,
+      containers: [],
+      removedIds: [],
+      errors: [],
+    });
+    const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
+    expect(wrapper.findAll('[data-test="fleet-health-row"]')).toHaveLength(1);
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('0 containers');
+    mockFilteredContainers.value = [];
+    await flushPromises();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('0 containers');
+    mockGetAllContainers.mockRejectedValueOnce(new Error('list unavailable'));
+    await wrapper.get('[data-test="fleet-inventory-refresh"]').trigger('click');
+    await flushPromises();
+    expect(
+      (wrapper.vm as any).fleetHealth.outcomes.value?.[JSON.stringify(['agent', 'empty'])] ??
+        (wrapper.vm as any).fleetHealth.outcomes[JSON.stringify(['agent', 'empty'])],
+    ).toMatchObject({ complete: true, reloadFailed: true });
+    expect(refreshWatcherInventory).toHaveBeenCalledTimes(1);
+  });
   it('plans fleet Update all from live filtered rows without changing selection', async () => {
     const { useContainerSelection } = await import('@/composables/useContainerSelection');
     const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
@@ -557,6 +623,8 @@ describe('ContainersView', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(getAgents).mockResolvedValue([]);
+    vi.mocked(getAllWatchers).mockResolvedValue([]);
     mockRouterReplace.mockResolvedValue(undefined);
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
@@ -3363,7 +3431,7 @@ describe('ContainersView', () => {
       vm.containers = [c];
 
       const mountedHooks = vm.$?.m as Array<() => void> | undefined;
-      mountedHooks?.[1]?.();
+      for (const hook of mountedHooks ?? []) hook();
 
       expect(vm.selectedContainer?.name).toBe('nginx');
       expect(vm.activeDetailTab).toBe('logs');

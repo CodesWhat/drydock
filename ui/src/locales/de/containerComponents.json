@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Flottenzustand",
+      "description": "Status der gesamten Flotte. Die Inventaraktualisierung erkennt Container ohne Registry-Prüfungen oder Update-Aktionen.",
+      "reload": "Status neu laden",
+      "refresh": "Inventar aktualisieren",
+      "configured": "Konfiguriert",
+      "connected": "Verbunden",
+      "disconnected": "Getrennt",
+      "unavailable": "Nicht verfügbar",
+      "agentUnavailable": "Agentenstatus nicht verfügbar. Beibehaltene Daten können veraltet sein.",
+      "watcherUnavailable": "Watcher-Metadaten nicht verfügbar. Beibehaltene Daten können veraltet sein.",
+      "total": "{count} Container",
+      "lastKnown": "Zuletzt bekannt",
+      "lastSeen": "Zuletzt gesehen: {value}",
+      "unsupported": "Alle Ziele benötigen Docker-Watcher mit Unterstützung für Inventaraktualisierungen.",
+      "complete": "Inventar vollständig",
+      "partial": "Inventar unvollständig",
+      "reloadFailed": "Containerliste konnte nicht neu geladen werden. Inventarergebnisse bleiben sichtbar."
+    },
     "fleetBulk": {
       "label": "Aktionen für gefilterte Flotte",
       "updateAll": "Alle aktualisieren ({count})",

@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Stan floty",
+      "description": "Stan całej floty. Odświeżenie inwentarza wykrywa kontenery bez sprawdzania rejestrów i wykonywania aktualizacji.",
+      "reload": "Wczytaj stan ponownie",
+      "refresh": "Odśwież inwentarz",
+      "configured": "Skonfigurowano",
+      "connected": "Połączono",
+      "disconnected": "Rozłączono",
+      "unavailable": "Niedostępne",
+      "agentUnavailable": "Stan agentów jest niedostępny. Zachowane dane mogą być nieaktualne.",
+      "watcherUnavailable": "Metadane obserwatorów są niedostępne. Zachowane dane mogą być nieaktualne.",
+      "total": "Kontenery: {count}",
+      "lastKnown": "Ostatnio znane",
+      "lastSeen": "Ostatnio widziano: {value}",
+      "unsupported": "Wszystkie cele wymagają obserwatorów Docker obsługujących odświeżanie inwentarza.",
+      "complete": "Inwentarz kompletny",
+      "partial": "Inwentarz niekompletny",
+      "reloadFailed": "Nie udało się ponownie wczytać listy kontenerów. Wyniki inwentarza pozostają widoczne."
+    },
     "fleetBulk": {
       "label": "Działania dla filtrowanej floty",
       "updateAll": "Aktualizuj wszystkie ({count})",

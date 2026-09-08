@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "플릿 상태",
+      "description": "전체 플릿의 상태입니다. 인벤토리 새로 고침은 레지스트리 확인이나 업데이트 작업 없이 컨테이너를 검색합니다.",
+      "reload": "상태 다시 불러오기",
+      "refresh": "인벤토리 새로 고침",
+      "configured": "구성됨",
+      "connected": "연결됨",
+      "disconnected": "연결 끊김",
+      "unavailable": "사용할 수 없음",
+      "agentUnavailable": "에이전트 상태를 사용할 수 없습니다. 보관된 데이터가 오래되었을 수 있습니다.",
+      "watcherUnavailable": "감시자 메타데이터를 사용할 수 없습니다. 보관된 데이터가 오래되었을 수 있습니다.",
+      "total": "컨테이너 {count}개",
+      "lastKnown": "마지막으로 확인됨",
+      "lastSeen": "마지막 접속: {value}",
+      "unsupported": "모든 대상에 인벤토리 새로 고침을 지원하는 Docker 감시자가 필요합니다.",
+      "complete": "인벤토리 완료",
+      "partial": "인벤토리 불완전",
+      "reloadFailed": "컨테이너 목록을 다시 불러오지 못했습니다. 인벤토리 결과는 계속 표시됩니다."
+    },
     "fleetBulk": {
       "label": "필터링된 플릿 작업",
       "updateAll": "모두 업데이트 ({count})",

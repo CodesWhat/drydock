@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Fleet health",
+      "description": "Fleet-wide status. Inventory refresh discovers containers without registry checks or update actions.",
+      "reload": "Reload status",
+      "refresh": "Refresh inventory",
+      "configured": "Configured",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "unavailable": "Unavailable",
+      "agentUnavailable": "Agent status unavailable. Retained data may be stale.",
+      "watcherUnavailable": "Watcher metadata unavailable. Retained data may be stale.",
+      "total": "{count} container | {count} containers",
+      "lastKnown": "Last known",
+      "lastSeen": "Last seen: {value}",
+      "unsupported": "Inventory refresh requires supported Docker watchers on every target.",
+      "complete": "Inventory complete",
+      "partial": "Inventory incomplete",
+      "reloadFailed": "Container list reload failed. Inventory results remain visible."
+    },
     "fleetBulk": {
       "label": "Filtered fleet actions",
       "updateAll": "Update all ({count})",

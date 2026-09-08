@@ -37,6 +37,7 @@ import {
 import { errorMessage } from '../utils/error';
 import { useContainerActions } from './containers/useContainerActions';
 import { useFleetBulkActions } from './containers/useFleetBulkActions';
+import { useFleetHealth } from './containers/useFleetHealth';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
 import { useContainerSsePatchPipeline } from './containers/useContainerSsePatchPipeline';
@@ -56,6 +57,7 @@ const { t } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
+const containerInventoryAvailable = ref(false);
 
 const containers = ref<Container[]>([]);
 const containerIdMap = ref<Record<string, string>>({});
@@ -258,7 +260,7 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
   return next;
 }
 
-async function loadContainers() {
+async function loadContainers(throwOnFailure = false) {
   try {
     const apiContainers = await getAllContainers();
     const mappedRaw = mapApiContainers(apiContainers, t);
@@ -298,8 +300,11 @@ async function loadContainers() {
     // dependency rows and the child-before-parent guard never read edges from
     // before a recheck, an SSE refresh, a delete or a group update.
     void useDependencyGraph().loadDependencyGraph();
+    containerInventoryAvailable.value = true;
   } catch (e: unknown) {
+    containerInventoryAvailable.value = false;
     error.value = errorMessage(e, t('containersView.error.loadFailed'));
+    if (throwOnFailure) throw e;
   } finally {
     loading.value = false;
   }
@@ -1002,6 +1007,15 @@ const fleetBulk = useFleetBulkActions({
   t,
 });
 
+const fleetHealth = useFleetHealth({
+  containers,
+  inventoryAvailable: containerInventoryAvailable,
+  busy: computed(
+    () => loading.value || actionInProgress.value.size > 0 || Boolean(policyInProgress.value),
+  ),
+  loadContainers: () => loadContainers(true),
+});
+
 const sortedContainers = computed(() => {
   const list = [...displayContainers.value];
   const key = containerSortKey.value;
@@ -1528,6 +1542,7 @@ function registryErrorTooltip(container: Container): string {
 }
 
 provide(containersViewTemplateContextKey, {
+  fleetHealth,
   fleet,
   fleetBulk,
   containerCardReflowForced,

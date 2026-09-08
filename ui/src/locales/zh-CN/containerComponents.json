@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "集群健康状态",
+      "description": "显示整个集群的状态。刷新清单仅发现容器，不检查镜像仓库或执行更新。",
+      "reload": "重新加载状态",
+      "refresh": "刷新清单",
+      "configured": "已配置",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "unavailable": "不可用",
+      "agentUnavailable": "代理状态不可用，保留的数据可能已过期。",
+      "watcherUnavailable": "监视器元数据不可用，保留的数据可能已过期。",
+      "total": "{count} 个容器",
+      "lastKnown": "上次已知状态",
+      "lastSeen": "上次在线：{value}",
+      "unsupported": "所有目标都需要支持清单刷新的 Docker 监视器。",
+      "complete": "清单完整",
+      "partial": "清单不完整",
+      "reloadFailed": "容器列表重新加载失败，清单结果仍可查看。"
+    },
     "fleetBulk": {
       "label": "筛选后的集群操作",
       "updateAll": "全部更新（{count}）",

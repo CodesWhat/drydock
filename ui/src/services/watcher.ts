@@ -1,9 +1,45 @@
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { ApiError } from '../utils/error';
 
 interface WatcherDetailPathOptions {
   type: string;
   name: string;
   agent?: string;
+}
+
+export interface FleetWatcher extends WatcherDetailPathOptions {
+  id: string;
+  metadata?: {
+    inventoryRefreshSupported?: boolean;
+    containers?: { total: number; running: number; stopped: number };
+  };
+}
+
+export interface InventoryRefreshResult {
+  context: {
+    origin: 'inventory';
+    operationId: string;
+    source: WatcherDetailPathOptions;
+  };
+  containers: unknown[];
+  removedIds: string[];
+  errors: { phase: string; id?: string; message: string }[];
+  authoritative: boolean;
+}
+
+export async function refreshWatcherInventory(
+  watcher: WatcherDetailPathOptions,
+): Promise<InventoryRefreshResult> {
+  const response = await fetch(`${buildWatcherDetailPath(watcher)}/inventory`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) {
+    throw new ApiError(`Inventory refresh failed: ${response.statusText}`, response.status);
+  }
+  return readJsonResponse(response);
 }
 
 function getWatcherProviderIcon(type: string) {

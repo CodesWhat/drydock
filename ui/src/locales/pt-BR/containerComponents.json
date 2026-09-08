@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Estado da frota",
+      "description": "Estado de toda a frota. O inventário descobre contêineres sem consultar registros ou executar atualizações.",
+      "reload": "Recarregar estado",
+      "refresh": "Atualizar inventário",
+      "configured": "Configurado",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "unavailable": "Indisponível",
+      "agentUnavailable": "Estado dos agentes indisponível. Os dados mantidos podem estar desatualizados.",
+      "watcherUnavailable": "Metadados dos observadores indisponíveis. Os dados mantidos podem estar desatualizados.",
+      "total": "{count} contêiner | {count} contêineres",
+      "lastKnown": "Último valor conhecido",
+      "lastSeen": "Último contato: {value}",
+      "unsupported": "Todos os destinos exigem observadores Docker compatíveis com o inventário.",
+      "complete": "Inventário completo",
+      "partial": "Inventário incompleto",
+      "reloadFailed": "Falha ao recarregar a lista de contêineres. Os resultados do inventário continuam visíveis."
+    },
     "fleetBulk": {
       "label": "Ações da frota filtrada",
       "updateAll": "Atualizar todos ({count})",
