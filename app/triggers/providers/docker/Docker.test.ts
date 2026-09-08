@@ -5898,6 +5898,86 @@ describe('additional direct wrapper coverage', () => {
     expect(getCreatedContainerCandidate(createError)).toBeUndefined();
   });
 
+  test('recreateContainer (DR-126) resolves clone options through getCloneRuntimeConfigOptions so an entrypoint the newer image materialized is dropped on rollback', async () => {
+    // Reproduces the rollback scenario: the running container is on image B,
+    // which (unlike image A) defines an Entrypoint, so the daemon materialized
+    // it onto Config with no dd.runtime.entrypoint.origin label. Rolling back
+    // to image A must not clone that Entrypoint verbatim — A has no such file.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi
+          .fn()
+          .mockResolvedValue(
+            imageRef === 'app:b'
+              ? { Config: { Entrypoint: ['/docker-entrypoint.sh'] } }
+              : { Config: { Entrypoint: null } },
+          ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toBeUndefined();
+  });
+
+  test('recreateContainer (DR-126) preserves a runtime field the rollback target image itself defines', async () => {
+    // Same origin-unknown, inherited-from-source shape as the drop case above,
+    // but the rollback target (image A) defines the identical Entrypoint —
+    // sanitizeClonedRuntimeConfig's target-match check keeps it either way.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Config: { Entrypoint: ['/docker-entrypoint.sh'] } }),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  });
+
   test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {
     vi.useFakeTimers();
     const dateNowSpy = vi.spyOn(Date, 'now');

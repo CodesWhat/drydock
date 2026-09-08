@@ -1472,10 +1472,26 @@ class Docker<
    * the previous container was running.
    */
   async recreateContainer(dockerApi, currentContainerSpec, newImage, container, logContainer) {
-    const containerToCreateInspect = this.cloneContainer(
+    // DR-126: resolve clone options through the same helper the update path
+    // uses (ContainerUpdateExecutor.prepareContainerUpdateExecution) instead
+    // of passing logContainer as the runtime-config options. Without this,
+    // sourceImageConfig/targetImageConfig/runtimeFieldOrigins are all
+    // undefined here, sourceImageKnown is false in
+    // ContainerRuntimeConfigManager.shouldDropClonedRuntimeField, and the
+    // UNKNOWN-origin sanitization never fires — so a rollback (auto-rollback
+    // on an unhealthy update, or a manual restore) clones a runtime field the
+    // daemon materialized from the newer image (e.g. Entrypoint) verbatim
+    // onto the older image, which may not have the referenced file.
+    const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
+      dockerApi,
       currentContainerSpec,
       newImage,
       logContainer,
+    );
+    const containerToCreateInspect = this.cloneContainer(
+      currentContainerSpec,
+      newImage,
+      cloneRuntimeConfigOptions,
     );
 
     const newContainer = await this.createContainer(
