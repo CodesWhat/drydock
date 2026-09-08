@@ -1176,6 +1176,75 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toEqual(['1.2.4-ls133']);
   });
 
+  // DR-125: isSuffixCompatible previously accepted a candidate whose suffix
+  // template was a startsWith-prefix or -extension of the reference's, so a
+  // container on "1.27.3-alpine" could climb to "1.28.0-alpine-perl" (a
+  // variant swap), and one on "1.27.3-alpine-slim" could climb to
+  // "1.28.0-alpine" (losing the "-slim" variant). Fixed to require the
+  // suffix template match exactly (aside from the precision-only extension
+  // carved out in isPrecisionOnlyExtension). This mirrors nginx's real tag
+  // set (bare, -alpine, -alpine-slim, -alpine-perl, -perl).
+  describe('nginx-style variant matrix — suffix must match exactly (DR-125)', () => {
+    const nginxCandidates = [
+      '1.28.0',
+      '1.28.0-alpine',
+      '1.28.0-alpine-slim',
+      '1.28.0-alpine-perl',
+      '1.28.0-perl',
+    ];
+
+    const referenceToOwnVariant: [string, string][] = [
+      ['1.27.3', '1.28.0'],
+      ['1.27.3-alpine', '1.28.0-alpine'],
+      ['1.27.3-alpine-slim', '1.28.0-alpine-slim'],
+      ['1.27.3-alpine-perl', '1.28.0-alpine-perl'],
+      ['1.27.3-perl', '1.28.0-perl'],
+    ];
+
+    test.each(referenceToOwnVariant)(
+      'strict mode: reference %s only climbs to its own-variant candidate',
+      (reference, ownVariant) => {
+        const container = createContainer({
+          image: { tag: { value: reference, semver: true } },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, [reference, ...nginxCandidates], log);
+
+        expect(result.tags).toEqual([ownVariant]);
+      },
+    );
+
+    test.each(referenceToOwnVariant)(
+      'loose mode: reference %s only climbs to its own-variant candidate',
+      (reference, ownVariant) => {
+        const container = createContainer({
+          image: { tag: { value: reference, semver: true } },
+          tagFamily: 'loose',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, [reference, ...nginxCandidates], log);
+
+        expect(result.tags).toEqual([ownVariant]);
+      },
+    );
+
+    test('a dd.tag.include filter matching every candidate does not reintroduce a cross-variant pick', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.27.3-alpine', semver: true } },
+        tagFamily: 'strict',
+        includeTags: '.*',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.27.3-alpine', ...nginxCandidates], log);
+
+      expect(result.tags).toEqual(['1.28.0-alpine']);
+    });
+  });
+
   describe('Immich OpenVINO pinned-tag matrix (#498)', () => {
     const registryTags = ['v2.7.5-openvino', 'v3.0.2', 'v3.0.2-openvino'];
 
