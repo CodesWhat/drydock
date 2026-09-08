@@ -85,3 +85,27 @@ To fetch a watcher registered on a specific agent, append the agent name:
 ```bash
 curl http://drydock:3000/api/v1/watchers/docker/local/agent1
 ```
+
+## Refresh inventory
+
+Send an empty JSON object to `POST /api/v1/watchers/{type}/{name}/inventory` for
+a local watcher, or `POST /api/v1/watchers/{type}/{name}/{agent}/inventory` for
+an exact agent-scoped watcher. This operation requires the `containers:watch`
+API-key scope. It refreshes Docker container inventory without registry checks
+and never falls back to the full-watch operation.
+
+The response contains `context`, `containers`, `removedIds`, `errors`, and
+`authoritative`. The context identifies the inventory operation with a UUID
+`operationId` and its exact `source` (`type`, `name`, and optional `agent`).
+Container runtime secrets are redacted in this public response.
+
+`containers` is the final persisted inventory for that source, not a list or
+count of changed containers. An empty inventory with `authoritative: true` is
+successful. Failed observations retain last-known records and return HTTP 200
+with `authoritative: false` and sanitized errors containing `phase`, optional
+container `id`, and `message`. Superseded requests also return a stale diagnostic.
+
+Missing watchers return 404, unsupported providers return 501, disconnected
+agents return 503, and the 30-second request deadline returns 504. An unexpected
+operation failure returns 500. A timed-out or superseded request cannot later
+apply inventory writes; independently scheduled registry scans remain unchanged.

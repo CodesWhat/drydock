@@ -128,6 +128,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/server/security/assets/:provider/:operation → admin',
   'POST /api/v1/triggers/:type/:name → dynamic',
   'POST /api/v1/triggers/:type/:name/:agent → dynamic',
+  'POST /api/v1/watchers/:type/:name/:agent/inventory → containers:watch',
+  'POST /api/v1/watchers/:type/:name/inventory → containers:watch',
   'POST /api/v1/webhook/update/:containerName → session-only',
   'POST /api/v1/webhook/watch → session-only',
   'POST /api/v1/webhook/watch/:containerName → session-only',
