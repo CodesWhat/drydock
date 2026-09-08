@@ -855,6 +855,25 @@ function getErrorCode(error: unknown): string | undefined {
 }
 
 /**
+ * Whether `candidate` (an already `path.resolve`d absolute path) sits inside
+ * `root`, including `root` itself. Symlink-free: uses `path.relative` rather
+ * than `fs.realpath` so it never requires the path to exist (DR-127).
+ */
+function isPathWithinAllowedRoot(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+/**
+ * The last two segments of a compose path (`<project directory>/<file name>`),
+ * which is what the issue #365 mount-prefix fallback compares when the host and
+ * the container see the same stack under different prefixes.
+ */
+function getComposeFilePathTail(composeFilePath: string): string {
+  return path.join(path.basename(path.dirname(composeFilePath)), path.basename(composeFilePath));
+}
+
+/**
  * Return true if the container belongs to the compose file.
  * @param compose
  * @param container
@@ -1109,10 +1128,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    */
   getConfiguredComposeFilesForContainer(
     container: ComposeContainerReference,
-    options: { includeDefaultComposeFile?: boolean } = {},
+    options: { includeDefaultComposeFile?: boolean; rejectedLabelPaths?: string[] } = {},
   ): string[] {
-    const { includeDefaultComposeFile = true } = options;
-    const composeFileFromLegacyLabel = this.getComposeFileFromLegacyLabel(container);
+    const { includeDefaultComposeFile = true, rejectedLabelPaths = [] } = options;
+    const composeFileFromLegacyLabel = this.getComposeFileFromLegacyLabel(
+      container,
+      rejectedLabelPaths,
+    );
     if (composeFileFromLegacyLabel) {
       return [composeFileFromLegacyLabel];
     }
@@ -1120,12 +1142,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const composeFilesFromComposeLabels = this.getComposeFilesFromProjectLabels(
       container.labels,
       container.name,
+      rejectedLabelPaths,
     );
     if (composeFilesFromComposeLabels.length > 0) {
       return composeFilesFromComposeLabels;
     }
 
-    if (!includeDefaultComposeFile) {
+    // A label naming a compose file outside every allowed root (DR-127) leaves
+    // the container with no compose file. Falling through to the trigger's
+    // default would sweep it into a stack it never asked for, which is what
+    // the configured-file mismatch check already refuses to do.
+    if (!includeDefaultComposeFile || rejectedLabelPaths.length > 0) {
       return [];
     }
     const composeFileFromDefault = this.getDefaultComposeFilePath();
@@ -1151,12 +1178,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return null;
   }
 
-  getComposeFileFromLegacyLabel(container: ComposeContainerReference): string | null {
+  getComposeFileFromLegacyLabel(
+    container: ComposeContainerReference,
+    rejectedLabelPaths: string[] = [],
+  ): string | null {
     const composeFileLabel = this.configuration.composeFileLabel;
     const labelValue = container.labels?.[composeFileLabel];
     if (labelValue) {
+      let resolvedComposeFilePath: string;
       try {
-        return this.resolveComposeFilePath(labelValue, {
+        resolvedComposeFilePath = this.resolveComposeFilePath(labelValue, {
           label: `Compose file label ${composeFileLabel}`,
         });
       } catch (e: unknown) {
@@ -1165,6 +1196,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         );
         return null;
       }
+      // The legacy label is used verbatim, without bind-mount mapping, so it is
+      // checked against the host side of the mount table as well (DR-127).
+      const containmentViolation = this.getComposeLabelPathContainmentViolation(
+        resolvedComposeFilePath,
+        labelValue,
+        composeFileLabel,
+        container.name,
+      );
+      if (containmentViolation) {
+        this.log.warn(containmentViolation);
+        rejectedLabelPaths.push(resolvedComposeFilePath);
+        return null;
+      }
+      return resolvedComposeFilePath;
     }
     return null;
   }
@@ -1183,9 +1228,91 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Roots a label-sourced compose path (`dd.compose.file` or
+   * `com.docker.compose.project.config_files`, see DR-127) is allowed to
+   * resolve into: the directory holding the trigger's configured `file`, plus
+   * both sides of every bind mount Drydock itself has — the same mount table
+   * `mapComposePathToContainerBindMount` maps label paths through. Both sides
+   * of the pair count because the legacy label is used verbatim (a host-side
+   * path) while `config_files` paths are checked after mapping (a
+   * container-side path).
+   *
+   * An empty list turns containment off rather than rejecting everything:
+   * Drydock is then running on the host with no configured `file` and no bind
+   * mounts of its own, so there is no known root to contain anything to and
+   * label paths keep their pre-DR-127 behaviour. Trigger-configured paths never
+   * go through this check; only container-supplied labels do.
+   */
+  getAllowedComposeLabelPathRoots(): string[] {
+    const allowedRoots = new Set<string>();
+    const configuredComposeFile = this.getDefaultComposeFilePath();
+    if (configuredComposeFile) {
+      // `file` may name the compose file or the directory holding it. The path
+      // itself covers the directory form; its parent covers the file form,
+      // except when that parent is the filesystem root, which would allow every
+      // path on the machine and make containment a no-op.
+      allowedRoots.add(configuredComposeFile);
+      const configuredComposeDirectory = path.dirname(configuredComposeFile);
+      if (configuredComposeDirectory !== path.parse(configuredComposeFile).root) {
+        allowedRoots.add(configuredComposeDirectory);
+      }
+    }
+    for (const bindMount of this._hostToContainerBindMounts) {
+      allowedRoots.add(bindMount.source);
+      allowedRoots.add(bindMount.destination);
+    }
+    return [...allowedRoots];
+  }
+
+  /**
+   * Whether the issue #365 mount-prefix fallback would rescue this label path.
+   * `resolveComposeFilesForGrouping()` swaps such a path for the configured
+   * one, which is inside an allowed root by construction, so rejecting it here
+   * would break the foreign-host-layout case that flag exists for.
+   */
+  isComposeLabelPathRescuedByMountPrefixFallback(composeFilePath: string): boolean {
+    if (!this.configuration.mountPrefixFallback) {
+      return false;
+    }
+    const configuredComposeFile = this.getDefaultComposeFilePath();
+    if (!configuredComposeFile) {
+      return false;
+    }
+    return (
+      getComposeFilePathTail(composeFilePath) === getComposeFilePathTail(configuredComposeFile)
+    );
+  }
+
+  /**
+   * The warning to log when a label-sourced compose path sits outside every
+   * allowed root, or null when the path is allowed. Rejection is never fatal:
+   * the caller drops the label and falls back to the resolution it would have
+   * used had the label not been present.
+   */
+  getComposeLabelPathContainmentViolation(
+    composeFilePath: string,
+    labelValue: string,
+    label: string,
+    containerName: string | undefined,
+  ): string | null {
+    const allowedRoots = this.getAllowedComposeLabelPathRoots();
+    if (allowedRoots.length === 0) {
+      return null;
+    }
+    if (this.isComposeLabelPathRescuedByMountPrefixFallback(composeFilePath)) {
+      return null;
+    }
+    if (allowedRoots.some((allowedRoot) => isPathWithinAllowedRoot(composeFilePath, allowedRoot))) {
+      return null;
+    }
+    return `Compose file label ${label} on container ${containerName} value ${labelValue} resolved to ${composeFilePath}, which is outside the allowed roots (${allowedRoots.join(', ')}); ignoring the label`;
+  }
+
   getComposeFilesFromProjectLabels(
     labels: Record<string, string> | undefined,
     containerName: string | undefined,
+    rejectedLabelPaths: string[] = [],
   ): string[] {
     const composeProjectFilesLabel = labels?.[COMPOSE_PROJECT_CONFIG_FILES_LABEL];
     if (!composeProjectFilesLabel) {
@@ -1218,7 +1345,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           const resolvedComposeFilePath = this.resolveComposeFilePath(composeFilePath, {
             label: `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL}`,
           });
-          composeFiles.add(this.mapComposePathToContainerBindMount(resolvedComposeFilePath));
+          // Containment runs AFTER bind-mount mapping (DR-127): a foreign host
+          // path that maps onto one of Drydock's own mount destinations lands
+          // inside an allowed root by construction, so mapping it first keeps
+          // foreign-host-layout deployments working.
+          const mappedComposeFilePath =
+            this.mapComposePathToContainerBindMount(resolvedComposeFilePath);
+          const containmentViolation = this.getComposeLabelPathContainmentViolation(
+            mappedComposeFilePath,
+            composeFilePathRaw,
+            COMPOSE_PROJECT_CONFIG_FILES_LABEL,
+            containerName,
+          );
+          if (containmentViolation) {
+            this.log.warn(containmentViolation);
+            rejectedLabelPaths.push(mappedComposeFilePath);
+            return;
+          }
+          composeFiles.add(mappedComposeFilePath);
         } catch (e: unknown) {
           this.log.warn(
             `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL} on container ${containerName} is invalid (${getErrorMessage(e)})`,
@@ -1252,7 +1396,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return this.getConfiguredComposeFilesForContainer(container);
   }
 
-  async getComposeFilesFromInspect(container: ComposeContainerReference): Promise<string[]> {
+  async getComposeFilesFromInspect(
+    container: ComposeContainerReference,
+    rejectedLabelPaths: string[] = [],
+  ): Promise<string[]> {
     const watcher = this.getWatcher(container);
     const dockerApi = getDockerApiFromWatcher(watcher);
     if (!dockerApi) {
@@ -1264,6 +1411,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return this.getComposeFilesFromProjectLabels(
         inspectedContainer?.Config?.Labels,
         container.name,
+        rejectedLabelPaths,
       );
     } catch (e: unknown) {
       this.log.warn(
@@ -1276,16 +1424,27 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   async resolveComposeFilesForContainer(container: ComposeContainerReference): Promise<string[]> {
     await this.ensureHostToContainerBindMountsLoaded(container);
 
+    const rejectedLabelPaths: string[] = [];
     const composeFilesFromConfiguration = this.getConfiguredComposeFilesForContainer(container, {
       includeDefaultComposeFile: false,
+      rejectedLabelPaths,
     });
     if (composeFilesFromConfiguration.length > 0) {
       return composeFilesFromConfiguration;
     }
 
-    const composeFilesFromInspect = await this.getComposeFilesFromInspect(container);
+    const composeFilesFromInspect = await this.getComposeFilesFromInspect(
+      container,
+      rejectedLabelPaths,
+    );
     if (composeFilesFromInspect.length > 0) {
       return composeFilesFromInspect;
+    }
+
+    // See getConfiguredComposeFilesForContainer(): a contained-out label leaves
+    // the container with no compose file rather than the trigger's default.
+    if (rejectedLabelPaths.length > 0) {
+      return [];
     }
 
     const composeFileFromDefault = await this.resolveDefaultComposeFilePathForRuntime();
@@ -2098,12 +2257,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
     if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
       if (this.configuration.mountPrefixFallback) {
-        const configuredTail = path.join(
-          path.basename(path.dirname(configuredComposeFilePath)),
-          path.basename(configuredComposeFilePath),
-        );
+        const configuredTail = getComposeFilePathTail(configuredComposeFilePath);
         const tailMatch = composeFiles.some(
-          (f) => path.join(path.basename(path.dirname(f)), path.basename(f)) === configuredTail,
+          (composeFilePath) => getComposeFilePathTail(composeFilePath) === configuredTail,
         );
         if (tailMatch) {
           this.log.warn(
