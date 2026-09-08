@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update Joi to 18.2.8 for the template rename and custom-message prototype fixes (CVE-2026-84367, GHSA-gg4h-3hg2-grpc; CVE-2026-84368, GHSA-6w3j-5fw6-r9vr). Drydock's own rename schemas use static targets and its custom messages are developer-defined, but the runtime dependency is patched. These new runtime bytes require a fresh candidate soak.
 - Update the website to Next.js 16.3.4 for the Windows-hosted server execution fix (CVE-2026-75604, GHSA-p293-qw3h-jr36), with its required Sharp 0.35.4 and SWC helper updates. Update baseline-browser-mapping to 2.11.20 for invalid-input process termination (CVE-2026-45819, GHSA-w5vr-8v7q-w6rv). Website dependencies are not included in the Drydock Docker image.
 - Update Vitest and its matching packages to 4.1.11 for mock redirect path validation (CVE-2026-84373, GHSA-82fw-gwwq-j7x9). Version-floor regression tests cover all affected workspace lock resolutions.
+- Update Nodemailer to 9.1.1 for address parsing and legacy content-access fixes (GHSA-wmmp-3585-3rmp, GHSA-2x7j-588g-ccc2, GHSA-cc9r-2j5m-2m83, GHSA-8m3c-c648-2xjj). Drydock uses operator-configured recipients and the standard `sendMail` path, not the affected legacy `resolveContent` call. Update the e2e-only js-yaml dependency to 3.15.2 so empty merge sources count against the parser budget (CVE-2026-84375, GHSA-2883-xcg3-v3hh).
 
 ## [1.6.1-rc.11] — 2026-09-08
 
