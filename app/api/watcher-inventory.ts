@@ -6,30 +6,16 @@ import {
   InventoryRefreshOperationError,
   type InventoryRefreshProvider,
   runInventoryRefresh,
+  sanitizeInventoryErrors,
 } from '../watchers/inventory-refresh.js';
 import { redactContainersRuntimeEnv } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
-
-const SAFE_INVENTORY_MESSAGES: Record<InventoryRefreshResult['errors'][number]['phase'], string> = {
-  store: 'Unable to read inventory state',
-  enumerate: 'Unable to enumerate Docker containers',
-  inspect: 'Unable to inspect this container',
-  labels: 'Unable to read container labels',
-  image: 'Unable to inspect the local image',
-  ownership: 'Container identity or ownership changed',
-  stale: 'Inventory request is no longer current',
-  persist: 'Unable to save the observed inventory',
-};
 
 export function sanitizeInventoryResult(result: InventoryRefreshResult): InventoryRefreshResult {
   return {
     ...result,
     containers: redactContainersRuntimeEnv(result.containers),
-    errors: result.errors.map(({ phase, id }) => ({
-      phase,
-      ...(id === undefined ? {} : { id }),
-      message: SAFE_INVENTORY_MESSAGES[phase],
-    })),
+    errors: sanitizeInventoryErrors(result.errors),
   };
 }
 

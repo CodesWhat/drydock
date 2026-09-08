@@ -9,6 +9,27 @@ export interface InventoryRefreshProvider {
   isInventoryRefreshSupported?: () => boolean;
 }
 
+const SAFE_INVENTORY_MESSAGES: Record<InventoryRefreshResult['errors'][number]['phase'], string> = {
+  store: 'Unable to read inventory state',
+  enumerate: 'Unable to enumerate Docker containers',
+  inspect: 'Unable to inspect this container',
+  labels: 'Unable to read container labels',
+  image: 'Unable to inspect the local image',
+  ownership: 'Container identity or ownership changed',
+  stale: 'Inventory request is no longer current',
+  persist: 'Unable to save the observed inventory',
+};
+
+export function sanitizeInventoryErrors(
+  errors: InventoryRefreshResult['errors'],
+): InventoryRefreshResult['errors'] {
+  return errors.map(({ phase, id }) => ({
+    phase,
+    ...(id === undefined ? {} : { id }),
+    message: SAFE_INVENTORY_MESSAGES[phase],
+  }));
+}
+
 export class InventoryRefreshOperationError extends Error {
   constructor(
     public readonly status: number,

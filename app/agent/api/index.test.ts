@@ -110,6 +110,7 @@ vi.mock('../../registry/index.js', () => ({
 }));
 
 import { authenticate, init } from './index.js';
+import { refreshWatcherInventory } from './watcher-inventory.js';
 
 describe('Agent API index', () => {
   const originalEnv = { ...process.env };
@@ -182,6 +183,24 @@ describe('Agent API index', () => {
   });
 
   describe('init', () => {
+    test('registers the additive native inventory route after authentication', async () => {
+      process.env.DD_AGENT_SECRET = 'dd-secret';
+      await init();
+      expect(mockApp.post).toHaveBeenCalledWith(
+        '/api/watchers/:type/:name/inventory',
+        refreshWatcherInventory,
+      );
+      const authenticationIndex = mockApp.use.mock.calls.findIndex((args) =>
+        args.includes(authenticate),
+      );
+      const inventoryIndex = mockApp.post.mock.calls.findIndex(
+        ([path]) => path === '/api/watchers/:type/:name/inventory',
+      );
+      expect(authenticationIndex).toBeGreaterThanOrEqual(0);
+      expect(mockApp.use.mock.invocationCallOrder[authenticationIndex]).toBeLessThan(
+        mockApp.post.mock.invocationCallOrder[inventoryIndex],
+      );
+    });
     test('should throw when no secret is configured', async () => {
       await expect(init()).rejects.toThrow('Agent mode requires');
     });
