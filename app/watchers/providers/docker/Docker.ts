@@ -158,6 +158,7 @@ import {
   OIDC_DEVICE_URL_PATHS,
   OIDC_GRANT_TYPE_PATHS,
 } from './oidc.js';
+import { detectPodmanCompatibility, type PodmanDetectionWatcher } from './podman-detection.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
 
 export interface DockerWatcherConfiguration extends ComponentConfiguration {
@@ -392,6 +393,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
   public pendingDiscoverySettleTimeout?: NodeJS.Timeout;
   public unregisterContainerUpdateApplied?: () => void;
+  // Set at init() by detectPodmanCompatibility() (#10.4) from the daemon's
+  // GET /version payload. Not surfaced in any API response yet — exposed
+  // here so future API/UI work can read it without re-probing the daemon.
+  public isPodman?: boolean;
+  public podmanVersion?: string;
   #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
   ensureLogger() {
@@ -699,6 +705,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.warnIfNarrowMaintenanceWindow();
     await warnIfCurlHealthcheckOverride(this.log);
     await this.initWatcher();
+    await detectPodmanCompatibility(this.asPodmanDetectionWatcher());
     // A remote watcher's OIDC bearer header is not set by initWatcher(); it
     // is refreshed lazily, the same way getContainers() refreshes it before
     // its own listContainers() call below. Skipping this would send the
@@ -860,6 +867,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
   private asRemoteAuthWatcher(): DockerRemoteAuthWatcher {
     return this as unknown as DockerRemoteAuthWatcher;
+  }
+
+  private asPodmanDetectionWatcher(): PodmanDetectionWatcher {
+    return this as unknown as PodmanDetectionWatcher;
   }
 
   private asDockerEventsWatcher(): DockerEventsWatcher {

@@ -4,6 +4,7 @@ import { getDetectedServerName, setDetectedServerName } from '../../../configura
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
+import { resolveDockerSocketPath } from './docker-socket-resolution.js';
 import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {
   initializeRemoteOidcStateFromConfiguration,
@@ -157,13 +158,19 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
     options.ca = undefined;
     options.cert = undefined;
     options.key = undefined;
-    options.socketPath = watcher.configuration.socket;
+    // When the configured socket is still the schema default and that
+    // default path doesn't exist, probe Podman's known socket paths (#10.4)
+    // rather than failing straight into "socket not found" with no hint
+    // that Podman needs a different mount. A non-default configured socket
+    // is never second-guessed — explicit configuration always wins.
+    const resolvedSocketPath = resolveDockerSocketPath(watcher.configuration.socket);
+    options.socketPath = resolvedSocketPath;
     // Pin the daemon's API version so all requests use versioned paths
     // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat
     // layer from returning 301 redirects for unversioned endpoints,
     // which triggers a crash in docker-modem's redirect handler
     // (getaddrinfo EAI_AGAIN — see GitHub issue #182).
-    const apiVersion = await probeSocketApiVersion(watcher.configuration.socket);
+    const apiVersion = await probeSocketApiVersion(resolvedSocketPath);
     if (apiVersion) {
       options.version = `v${apiVersion}`;
     }
