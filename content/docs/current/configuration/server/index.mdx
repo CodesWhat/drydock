@@ -14,7 +14,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_PUBLIC_URL` | ⚪ | Public-facing URL for absolute links and OIDC callbacks. Required when any OIDC authentication provider is configured; other links fall back to request-based detection when unset. | URL (e.g., `https://drydock.example.com`) | auto-detected for non-OIDC request links |
 | `DD_SERVER_NAME` | ⚪ | Server name used in notifications to identify this instance (useful in multi-server setups with agents) | Any string | `os.hostname()` |
 | `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
-| `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode) | `true`, `false` | `true` |
+| `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode). When disabled, UI paths answer with a JSON 404 body instead of Express's default HTML 404; `/api/*`, `/health`, and `/metrics` are unaffected. | `true`, `false` | `true` |
 | `DD_SERVER_PORT` | ⚪ | Http listener port | from `0` to `65535` | `3000` |
 | `DD_SERVER_TRUSTPROXY` | ⚪ | Trust X-Forwarded-For headers when behind a reverse proxy | `true`, `false`, or hop count (`1`, `2`, etc.) | `false` |
 | `DD_SERVER_TLS_ENABLED` | ⚪ | Enable HTTPS+TLS | `true`, `false` | `false` |

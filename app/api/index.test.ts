@@ -1210,6 +1210,151 @@ describe('API Index', () => {
     expect(mockApp.use).not.toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).not.toHaveBeenCalledWith('/', 'ui-router');
+    // A plain function is mounted at '/' instead, so headless deployments get
+    // a JSON 404 for UI paths rather than falling through to Express's own
+    // bare HTML 404.
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+  });
+
+  test('real Express: UI paths return a JSON 404 explaining DD_SERVER_UI_ENABLED=false, while /api/v1 and /health are unaffected', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      ui: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+    const sendUiDisabledResponse = rootFunctionMountCalls[0][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const healthRouter = realExpress.Router();
+    healthRouter.get('/', (_req, res) => {
+      res.json({ status: 'ok' });
+    });
+    const v1Router = realExpress.Router();
+    v1Router.get('/containers', (_req, res) => {
+      res.json({ data: [] });
+    });
+
+    const app = realExpress.default();
+    app.use('/health', healthRouter);
+    app.use('/api/v1', v1Router);
+    app.use('/', sendUiDisabledResponse);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const expectedBody = {
+      error:
+        'The web UI is disabled (DD_SERVER_UI_ENABLED=false); the API remains available under /api/v1',
+    };
+
+    try {
+      const rootRes = await fetch(`${baseUrl}/`);
+      expect(rootRes.status).toBe(404);
+      expect(rootRes.headers.get('content-type')).toMatch(/application\/json/);
+      expect(await rootRes.json()).toEqual(expectedBody);
+
+      const containersPageRes = await fetch(`${baseUrl}/containers`);
+      expect(containersPageRes.status).toBe(404);
+      expect(containersPageRes.headers.get('content-type')).toMatch(/application\/json/);
+      expect(await containersPageRes.json()).toEqual(expectedBody);
+
+      const v1Res = await fetch(`${baseUrl}/api/v1/containers`);
+      expect(v1Res.status).toBe(200);
+      expect(await v1Res.json()).toEqual({ data: [] });
+
+      const healthRes = await fetch(`${baseUrl}/health`);
+      expect(healthRes.status).toBe(200);
+      expect(await healthRes.json()).toEqual({ status: 'ok' });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: sendUiDisabledResponse lets unmatched API, health, and metrics paths fall through instead of returning the UI-disabled body', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      ui: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+    const sendUiDisabledResponse = rootFunctionMountCalls[0][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const app = realExpress.default();
+    // No /health, /api/v1, or /metrics routers mounted ahead of it — mirrors
+    // an unmatched request falling through all of them, exactly like the
+    // real mount order in registerRoutes.
+    app.use('/', sendUiDisabledResponse);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      // Unmatched non-GET /api/v1 path (e.g. the /api/v1 router's GET-only
+      // catch-all never resolving DELETE /api/v1/app) — startsWith branch.
+      const deleteRes = await fetch(`${baseUrl}/api/v1/app`, { method: 'DELETE' });
+      expect(deleteRes.status).toBe(404);
+      expect(await deleteRes.text()).not.toContain('The web UI is disabled');
+
+      // Path exactly '/api' — equal branch.
+      const apiRes = await fetch(`${baseUrl}/api`);
+      expect(apiRes.status).toBe(404);
+      expect(await apiRes.text()).not.toContain('The web UI is disabled');
+
+      // Path under '/health' — startsWith branch.
+      const healthRes = await fetch(`${baseUrl}/health/foo`);
+      expect(healthRes.status).toBe(404);
+      expect(await healthRes.text()).not.toContain('The web UI is disabled');
+
+      // Path exactly '/metrics' — equal branch.
+      const metricsRes = await fetch(`${baseUrl}/metrics`);
+      expect(metricsRes.status).toBe(404);
+      expect(await metricsRes.text()).not.toContain('The web UI is disabled');
+
+      // Sanity check: an actual UI path still gets the JSON UI-disabled body.
+      const uiRes = await fetch(`${baseUrl}/some-ui-path`);
+      expect(uiRes.status).toBe(404);
+      expect(uiRes.headers.get('content-type')).toMatch(/application\/json/);
+      const uiBody = (await uiRes.json()) as { error: string };
+      expect(uiBody.error).toContain('The web UI is disabled');
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   });
 
   test('should not mount legacy error-response normalization middleware', async () => {
