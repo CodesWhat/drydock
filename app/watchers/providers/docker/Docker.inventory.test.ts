@@ -134,6 +134,45 @@ test('forwards inventory recreation and updates separately from ordinary scan li
   expect(reports).not.toHaveBeenCalled();
 });
 
+test('correlates an explicit operation id across inventory result and lifecycle events', async () => {
+  const added = vi.fn();
+  unsubscribe.push(event.registerContainerAdded(added));
+  const operationId = '108ee88c-aa47-4af8-8352-9a3438b23e15';
+  const result = await docker.refreshInventory({ operationId });
+  expect(result.context).toEqual({
+    origin: 'inventory',
+    operationId,
+    source: { type: 'docker', name: 'local' },
+  });
+  expect(added.mock.calls[0][1]).toEqual(result.context);
+});
+
+test.each(['abort', 'replacement'])(
+  'rejects inventory persistence after request %s without scheduling a watch',
+  async (reason) => {
+    const cancellation = new AbortController();
+    let isCurrent = true;
+    inspect.mockImplementation(async () => {
+      if (reason === 'abort') cancellation.abort();
+      else isCurrent = false;
+      return inspection();
+    });
+    const result = await docker.refreshInventory({
+      signal: cancellation.signal,
+      isCurrent: () => isCurrent,
+    });
+    expect(result.authoritative).toBe(false);
+    expect(result.errors).toContainEqual({
+      phase: 'stale',
+      message: 'Watcher changed while refreshing inventory',
+    });
+    expect(store.getContainer('new')).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(store.getContainer('new')).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
 test('does not attach inventory provenance to a reentrant ordinary store mutation', async () => {
   docker.agent = 'edge';
   const added = vi.fn();
@@ -508,6 +547,11 @@ test('returns a store diagnostic when the initial snapshot cannot be read', asyn
   });
   const result = await docker.refreshInventory();
   expect(result).toEqual({
+    context: {
+      origin: 'inventory',
+      operationId: expect.any(String),
+      source: { type: 'docker', name: 'local' },
+    },
     containers: [],
     removedIds: [],
     errors: [{ phase: 'store', message: 'store unavailable' }],

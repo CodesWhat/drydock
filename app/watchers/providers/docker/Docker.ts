@@ -118,10 +118,7 @@ import {
   type ContainerLabelOverrides,
   createDockerImageDetailsHelpers,
 } from './docker-image-details-orchestration.js';
-import {
-  type DockerInventoryWatcher,
-  refreshDockerInventoryForWatcher,
-} from './docker-inventory.js';
+import { createDockerInventoryRefresh, type DockerInventoryWatcher } from './docker-inventory.js';
 import {
   applyRemoteAuthHeadersForWatcher,
   ensureRemoteAuthHeadersForWatcher,
@@ -1411,12 +1408,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     });
   }
 
-  async refreshInventory() {
-    return refreshDockerInventoryForWatcher(
-      this as unknown as DockerInventoryWatcher,
-      getContainersFromSameDockerSource,
-    );
-  }
+  refreshInventory = createDockerInventoryRefresh(
+    this as unknown as DockerInventoryWatcher,
+    getContainersFromSameDockerSource,
+  );
 
   /**
    * Get all containers to watch.

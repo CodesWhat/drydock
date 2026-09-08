@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type Dockerode from 'dockerode';
 import type { ContainerLifecycleEventContext } from '../../../event/index.js';
 import { type Container, getCanonicalContainerName } from '../../../model/container.js';
+import type {
+  InventoryRefreshOptions,
+  InventoryRefreshResult,
+} from '../../../model/inventory-refresh.js';
 import * as store from '../../../store/container.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { recordControllerLocalEnumeration } from '../../controller-local-container-ids.js';
@@ -43,9 +47,18 @@ export interface DockerInventoryWatcher
 
 type SourceProbe = Pick<DockerInventoryWatcher, 'name' | 'agent' | 'configuration'>;
 
-export function refreshDockerInventoryForWatcher(
+export function createDockerInventoryRefresh(
   watcher: DockerInventoryWatcher,
   sourceContainers: (source: SourceProbe, containers: Container[]) => Container[],
+) {
+  return async (options: InventoryRefreshOptions = {}) =>
+    refreshDockerInventoryForWatcher(watcher, sourceContainers, options);
+}
+
+function refreshDockerInventoryForWatcher(
+  watcher: DockerInventoryWatcher,
+  sourceContainers: (source: SourceProbe, containers: Container[]) => Container[],
+  options: InventoryRefreshOptions,
 ) {
   watcher.ensureLogger();
   const enumerationGeneration = ++watcher.controllerLocalEnumerationGeneration;
@@ -54,7 +67,7 @@ export function refreshDockerInventoryForWatcher(
   const agent = watcher.agent || undefined;
   const context: ContainerLifecycleEventContext = {
     origin: 'inventory',
-    operationId: randomUUID(),
+    operationId: options.operationId ?? randomUUID(),
     source: { type: 'docker', name, ...(agent ? { agent } : {}) },
   };
   const source = getDockerWatcherSourceKey(watcher);
@@ -64,6 +77,8 @@ export function refreshDockerInventoryForWatcher(
   return refreshDockerInventory({
     context,
     isCurrent: () =>
+      !options.signal?.aborted &&
+      (options.isCurrent?.() ?? true) &&
       !watcher.isWatcherDeregistered &&
       scanGeneration === watcher.scanGeneration &&
       enumerationGeneration === watcher.controllerLocalEnumerationGeneration &&
@@ -97,19 +112,6 @@ export function refreshDockerInventoryForWatcher(
     recordEnumeration: (ids) => recordControllerLocalEnumeration(watcher, ids),
     watchByDefault: watcher.configuration.watchbydefault,
   });
-}
-
-interface InventoryRefreshError {
-  phase: 'store' | 'enumerate' | 'inspect' | 'labels' | 'image' | 'ownership' | 'stale' | 'persist';
-  id?: string;
-  message: string;
-}
-
-export interface InventoryRefreshResult {
-  containers: Container[];
-  removedIds: string[];
-  errors: InventoryRefreshError[];
-  authoritative: boolean;
 }
 
 interface InventoryDependencies {
@@ -173,12 +175,17 @@ async function refreshDockerInventory(
   deps: InventoryDependencies,
 ): Promise<InventoryRefreshResult> {
   const result: InventoryRefreshResult = {
+    context: deps.context,
     containers: [],
     removedIds: [],
     errors: [],
     authoritative: false,
   };
-  const fail = (phase: InventoryRefreshError['phase'], error: unknown, id?: string) => {
+  const fail = (
+    phase: InventoryRefreshResult['errors'][number]['phase'],
+    error: unknown,
+    id?: string,
+  ) => {
     result.errors.push({
       phase,
       ...(id === undefined ? {} : { id }),
