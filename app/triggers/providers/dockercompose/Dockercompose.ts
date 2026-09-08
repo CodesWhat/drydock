@@ -65,6 +65,12 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
 type ComposeLabelResolutionContext = {
   rejectedLabelPaths: string[];
   runtimeDefaultComposeFilePath: string | null;
+  /**
+   * Whether a containment rejection or a mount-prefix substitution is logged.
+   * Off for trigger affinity checks, which run per container on every trigger
+   * lookup and would otherwise repeat the warn the read path already emits.
+   */
+  logRejections: boolean;
 };
 
 const ROOT_MODE_BREAK_GLASS_HINT =
@@ -1149,8 +1155,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    */
   createComposeLabelResolutionContext(
     runtimeDefaultComposeFilePath: string | null = null,
+    options: { logRejections?: boolean } = {},
   ): ComposeLabelResolutionContext {
-    return { rejectedLabelPaths: [], runtimeDefaultComposeFilePath };
+    const { logRejections = true } = options;
+    return { rejectedLabelPaths: [], runtimeDefaultComposeFilePath, logRejections };
   }
 
   getConfiguredComposeFilesForContainer(
@@ -1350,14 +1358,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       context,
     );
     if (mountPrefixFallbackComposeFilePath) {
-      this.log.warn(
-        `Container ${containerName} compose file path differs by mount prefix; using configured path ${mountPrefixFallbackComposeFilePath} instead of label path ${composeFilePath} (issue #365 fallback)`,
-      );
+      if (context.logRejections) {
+        this.log.warn(
+          `Container ${containerName} compose file path differs by mount prefix; using configured path ${mountPrefixFallbackComposeFilePath} instead of label path ${composeFilePath} (issue #365 fallback)`,
+        );
+      }
       return mountPrefixFallbackComposeFilePath;
     }
-    this.log.warn(
-      `Compose file label ${label} on container ${containerName} value ${labelValue} resolved to ${composeFilePath}, which is outside the allowed roots (${allowedRoots.join(', ')}); ignoring the label`,
-    );
+    if (context.logRejections) {
+      this.log.warn(
+        `Compose file label ${label} on container ${containerName} value ${labelValue} resolved to ${composeFilePath}, which is outside the allowed roots (${allowedRoots.join(', ')}); ignoring the label`,
+      );
+    }
     return null;
   }
 
@@ -1444,8 +1456,22 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return [...uniqueComposeFiles];
   }
 
+  /**
+   * Compose files for trigger affinity (`api/docker-trigger.ts`), which only
+   * compares paths and never reads them. A label path containment rejected
+   * (DR-127) is still the file the container named, so it is returned here:
+   * an empty list tells the affinity walk this trigger is a catch-all for the
+   * container, which would hand a container that named some other stack to
+   * this trigger and then fail the update. Nothing is logged on this path; the
+   * read path logs the rejection once when it actually matters.
+   */
   getComposeFilesForContainer(container: ComposeContainerReference): string[] {
-    return this.getConfiguredComposeFilesForContainer(container);
+    const context = this.createComposeLabelResolutionContext(null, { logRejections: false });
+    const composeFiles = this.getConfiguredComposeFilesForContainer(container, { context });
+    if (composeFiles.length === 0 && context.rejectedLabelPaths.length > 0) {
+      return [...context.rejectedLabelPaths];
+    }
+    return composeFiles;
   }
 
   async getComposeFilesFromInspect(

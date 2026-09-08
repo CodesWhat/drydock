@@ -3,6 +3,10 @@ import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
+import {
+  type DockerTriggerCandidate,
+  isTriggerCompatibleWithContainer,
+} from '../../../api/docker-trigger.js';
 import { emitContainerUpdateApplied, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import * as backupStore from '../../../store/backup.js';
@@ -4934,6 +4938,56 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(
       'Compose file label dd.compose.file on container nginx value /etc/hosts resolved to /etc/hosts, which is outside the allowed roots (/compose); ignoring the label',
     );
+  });
+
+  test('getComposeFilesForContainer should return a rejected label path for trigger affinity without logging', () => {
+    // The QA fleet shape that broke the Playwright dashboard update: the
+    // trigger is pointed at its own demo stack, the fleet containers carry
+    // config_files labels naming the host path of a different stack. Affinity
+    // has to see that path so the compose trigger does not become a catch-all
+    // for containers that named another stack.
+    trigger.configuration.file = '/drydock/qa-action-demo-compose.yml';
+    const container = {
+      name: 'busybox-old',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project.config_files': '/home/runner/work/drydock/test/qa-compose.yml',
+      },
+    };
+
+    expect(trigger.getComposeFilesForContainer(container)).toEqual([
+      '/home/runner/work/drydock/test/qa-compose.yml',
+    ]);
+    expect(
+      isTriggerCompatibleWithContainer(
+        {
+          type: 'dockercompose',
+          configuration: trigger.configuration,
+          getDefaultComposeFilePath: () => trigger.getDefaultComposeFilePath(),
+          getComposeFilesForContainer: (candidate) =>
+            trigger.getComposeFilesForContainer(candidate),
+        } as unknown as DockerTriggerCandidate,
+        { agent: undefined, labels: container.labels, name: container.name },
+      ),
+    ).toBe(false);
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('outside the allowed roots'),
+    );
+  });
+
+  test('getComposeFilesForContainer should not log the mount-prefix substitution for trigger affinity', () => {
+    trigger.configuration.file = '/drydock/mystack/compose.yml';
+    trigger.configuration.mountPrefixFallback = true;
+    const container = {
+      name: 'nginx',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/foreign/mystack/compose.yml' },
+    };
+
+    expect(trigger.getComposeFilesForContainer(container)).toEqual([
+      '/drydock/mystack/compose.yml',
+    ]);
+    expect(mockLog.warn).not.toHaveBeenCalledWith(expect.stringContaining('issue #365 fallback'));
   });
 
   test('triggerBatch should accept a dd.compose.file label under a bind mount of a containerised Drydock', async () => {
