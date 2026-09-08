@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Update Joi to 18.2.4 for the template rename prototype fix (CVE-2026-84367, GHSA-gg4h-3hg2-grpc). Drydock's own rename schemas use static targets, but the runtime dependency is patched. These new runtime bytes require a fresh candidate soak.
+- Update Joi to 18.2.8 for the template rename and custom-message prototype fixes (CVE-2026-84367, GHSA-gg4h-3hg2-grpc; CVE-2026-84368, GHSA-6w3j-5fw6-r9vr). Drydock's own rename schemas use static targets and its custom messages are developer-defined, but the runtime dependency is patched. These new runtime bytes require a fresh candidate soak.
 - Update the website to Next.js 16.3.4 for the Windows-hosted server execution fix (CVE-2026-75604, GHSA-p293-qw3h-jr36), with its required Sharp 0.35.4 and SWC helper updates. Update baseline-browser-mapping to 2.11.20 for invalid-input process termination (CVE-2026-45819, GHSA-w5vr-8v7q-w6rv). Website dependencies are not included in the Drydock Docker image.
 - Update Vitest and its matching packages to 4.1.11 for mock redirect path validation (CVE-2026-84373, GHSA-82fw-gwwq-j7x9). Version-floor regression tests cover all affected workspace lock resolutions.
 
