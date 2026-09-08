@@ -43,6 +43,7 @@ import {
   isTerminalContainerUpdateOperationStatus,
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
+import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
@@ -55,8 +56,10 @@ import { getRequestedOperationId } from '../triggers/providers/docker/update-run
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
+import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js';
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
+import { AgentInventoryRefresh } from './agent-inventory.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -323,6 +326,8 @@ export class AgentClient {
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
   private readonly controllerDockerTransportWatchers: Set<string>;
+  private readonly inventoryRefreshWatchers = new Set<string>();
+  private readonly inventory: AgentInventoryRefresh;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
   /**
@@ -359,6 +364,57 @@ export class AgentClient {
     this.watcherSnapshotCache = new Map();
     this.controllerDockerTransportWatchers = new Set();
     this.statsChangedTimer = undefined;
+    this.inventory = new AgentInventoryRefresh({
+      agent: name,
+      isConnected: () => this.isConnected && !this.stopped,
+      request: async (type, watcherName, options) => {
+        const target = `/api/watchers/${encodeURIComponent(type)}/${encodeURIComponent(watcherName)}/inventory`;
+        const body = { operationId: options.operationId };
+        try {
+          const response = await axios.post(`${this.baseUrl}${target}`, body, {
+            ...this.buildRequestConfig('POST', target, body),
+            signal: options.signal,
+          });
+          return response.data;
+        } catch (error) {
+          const failure = error as { code?: string; response?: { status?: number } } | null;
+          const status = failure?.code === 'ECONNABORTED' ? 504 : failure?.response?.status;
+          const messages: Record<number, string> = {
+            404: 'Component not found',
+            501: 'Inventory refresh is not supported by this watcher',
+            503: 'Agent is disconnected',
+            504: 'Inventory refresh timed out',
+          };
+          throw new InventoryRefreshOperationError(
+            status && messages[status] ? status : 500,
+            status && messages[status] ? messages[status] : 'Agent inventory refresh failed',
+          );
+        }
+      },
+    });
+  }
+
+  isInventoryRefreshSupported(type: string, name: string): boolean {
+    return (
+      type === 'docker' && this.inventoryRefreshWatchers.has(watcherSnapshotCacheKey(type, name))
+    );
+  }
+
+  async refreshInventory(type: string, name: string, options: InventoryRefreshOptions = {}) {
+    if (!this.isConnected || this.stopped)
+      throw new InventoryRefreshOperationError(503, 'Agent is disconnected');
+    if (!this.isInventoryRefreshSupported(type, name))
+      throw new InventoryRefreshOperationError(
+        501,
+        'Inventory refresh is not supported by this watcher',
+      );
+    const id = `${this.name}.${type}.${name}`;
+    const watcher = registry.getState().watcher[id];
+    return this.inventory.refresh(type, name, {
+      ...options,
+      isCurrent: () =>
+        registry.getState().watcher[id] === watcher && (options.isCurrent?.() ?? true),
+    });
   }
 
   getWatcherSnapshot(
@@ -979,8 +1035,14 @@ export class AgentClient {
   }
 
   private setControllerDockerTransportWatchers(descriptors: AgentComponentDescriptor[]): void {
+    this.inventory.invalidate();
+    this.inventoryRefreshWatchers.clear();
     this.controllerDockerTransportWatchers.clear();
     for (const descriptor of descriptors) {
+      if (descriptor.type === 'docker' && descriptor.metadata?.inventoryRefreshSupported === true)
+        this.inventoryRefreshWatchers.add(
+          watcherSnapshotCacheKey(descriptor.type, descriptor.name),
+        );
       if (isControllerDockerTransportWatcher(descriptor)) {
         this.controllerDockerTransportWatchers.add(descriptor.name);
       }
@@ -1270,6 +1332,7 @@ export class AgentClient {
   }
 
   stop() {
+    this.inventory.invalidate();
     this.stopped = true;
     const activeSseStream = this.activeSseStream;
     this.activeSseStream = undefined;
@@ -1315,6 +1378,7 @@ export class AgentClient {
       return;
     }
     const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
+    this.inventory.invalidate();
     const wasConnected = this.isConnected;
     this.isConnected = false;
     // A disconnect is never a "still registering" state — it's a hard loss of
@@ -2193,6 +2257,11 @@ export class AgentClient {
 
   async handleEvent(eventName: string, data: unknown) {
     switch (eventName) {
+      case 'dd:inventory-added':
+      case 'dd:inventory-updated':
+      case 'dd:inventory-removed':
+        this.inventory.handleEvent(eventName, data);
+        return;
       case 'dd:ack':
         this.handleAckEvent(data);
         return;

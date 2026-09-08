@@ -1,5 +1,10 @@
 import Dockerode from 'dockerode';
 import type { Container, ContainerReport } from '../../model/container.js';
+import type {
+  InventoryRefreshOptions,
+  InventoryRefreshResult,
+} from '../../model/inventory-refresh.js';
+import { InventoryRefreshOperationError } from '../../watchers/inventory-refresh.js';
 import DockerWatcher, {
   type DockerWatcherConfiguration,
 } from '../../watchers/providers/docker/Docker.js';
@@ -64,6 +69,38 @@ class AgentWatcher extends Watcher {
     }
     const client = getRequiredAgentClient(this.agent, 'AgentWatcher');
     return client.watch(this.type, this.name);
+  }
+
+  isInventoryRefreshSupported(): boolean {
+    const client = this.agent ? getAgent(this.agent) : undefined;
+    return (
+      client?.isConnected === true &&
+      (this.controllerWatcher !== undefined ||
+        client.isInventoryRefreshSupported?.(this.type, this.name) === true)
+    );
+  }
+
+  async refreshInventory(options: InventoryRefreshOptions = {}): Promise<InventoryRefreshResult> {
+    const client = this.agent ? getAgent(this.agent) : undefined;
+    if (!client?.isConnected)
+      throw new InventoryRefreshOperationError(503, 'Agent is disconnected');
+    if (!this.isInventoryRefreshSupported())
+      throw new InventoryRefreshOperationError(
+        501,
+        'Inventory refresh is not supported by this watcher',
+      );
+    const delegate = this.controllerWatcher;
+    const agent = this.agent!;
+    const guarded = {
+      ...options,
+      isCurrent: () =>
+        getAgent(agent) === client &&
+        client.isConnected &&
+        this.controllerWatcher === delegate &&
+        (options.isCurrent?.() ?? true),
+    };
+    if (delegate) return delegate.refreshInventory(guarded);
+    return client.refreshInventory(this.type, this.name, guarded);
   }
 
   /**

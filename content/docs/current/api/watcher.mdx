@@ -50,6 +50,7 @@ curl http://drydock:3000/api/v1/watchers
 | `agent` | string \| undefined | Agent name when watcher is agent-scoped |
 | `metadata.lastRunAt` | string \| undefined | ISO-8601 timestamp of the most recent completed watch cycle |
 | `metadata.nextRunAt` | string \| undefined | ISO-8601 timestamp of the next scheduled update check |
+| `metadata.inventoryRefreshSupported` | boolean | Whether this watcher can refresh inventory without registry checks |
 
 `metadata.lastRunAt` is populated after at least one watch run has completed.
 `metadata.nextRunAt` reflects the next effective update-check time after applying watcher scheduling rules. When jitter is enabled, actual execution may drift within the configured jitter window.
@@ -109,3 +110,17 @@ Missing watchers return 404, unsupported providers return 501, disconnected
 agents return 503, and the 30-second request deadline returns 504. An unexpected
 operation failure returns 500. A timed-out or superseded request cannot later
 apply inventory writes; independently scheduled registry scans remain unchanged.
+
+Local Docker watchers and connected Portwing controller-Docker delegates support
+this operation. Native agents must explicitly advertise
+`metadata.inventoryRefreshSupported: true`; an older agent with no capability
+field is unsupported and is never probed with a full-watch request.
+
+The authenticated native-agent route is
+`POST /api/watchers/{type}/{name}/inventory`. Its internal body contains only a
+controller-generated UUIDv4 `operationId`, shared by its HTTP response and
+`dd:inventory-added`, `dd:inventory-updated`, and `dd:inventory-removed` SSE
+envelopes. These additive events leave the existing full-watch wire contract
+unchanged. Controllers ignore unsolicited inventory events and events from
+expired operations. Agent-to-controller replication retains raw runtime values;
+public responses and ordinary UI lifecycle events remain redacted.
