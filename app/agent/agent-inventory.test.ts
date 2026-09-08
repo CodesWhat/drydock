@@ -125,6 +125,37 @@ test('repeated frames and HTTP do not overwrite concurrent scan results or runti
   });
 });
 
+test('own rename remains authoritative across repeated SSE and HTTP without adopting concurrent fields', async () => {
+  const previous = seed();
+  const pending = inventory.refresh('docker', 'local');
+  const renamed = remote('known', { name: 'renamed', status: 'exited' });
+  frame('updated', renamed);
+  expect(store.getContainerRaw('known')?.identityKey).not.toBe(previous.identityKey);
+  store.updateContainerFields('known', { status: 'restarting' });
+  frame('updated', renamed);
+  resolve(result([renamed]));
+  expect(await pending).toMatchObject({ authoritative: true, errors: [] });
+  expect(store.getContainerRaw('known')).toMatchObject({ name: 'renamed', status: 'restarting' });
+});
+
+test('does not notify when a store update does not persist a row', async () => {
+  seed('known', { status: 'running' });
+  const onMutation = vi.fn();
+  inventory = new AgentInventoryRefresh({
+    agent: 'edge',
+    isConnected: () => connected,
+    request,
+    onMutation,
+  });
+  vi.spyOn(store, 'updateContainerFields').mockReturnValue(undefined);
+  const pending = inventory.refresh('docker', 'local');
+  frame('updated', remote('known', { status: 'exited' }));
+  resolve(result());
+  await pending;
+  expect(onMutation).not.toHaveBeenCalled();
+  expect(store.getContainerRaw('known')?.status).toBe('running');
+});
+
 test('confirmed removals precede recreation and retain controller policy', async () => {
   seed('old', { updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' } });
   const pending = inventory.refresh('docker', 'local');

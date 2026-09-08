@@ -367,6 +367,7 @@ export class AgentClient {
     this.inventory = new AgentInventoryRefresh({
       agent: name,
       isConnected: () => this.isConnected && !this.stopped,
+      onMutation: () => this.scheduleStatsChanged(),
       request: async (type, watcherName, options) => {
         const target = `/api/watchers/${encodeURIComponent(type)}/${encodeURIComponent(watcherName)}/inventory`;
         const body = { operationId: options.operationId };

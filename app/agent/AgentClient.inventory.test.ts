@@ -173,6 +173,112 @@ test('replicates real agent store lifecycle frames and raw HTTP without registry
   }
 });
 
+test.each(['added', 'updated', 'removed'])(
+  'accepted inventory %s mutations notify other clients through debounced stats',
+  async (kind) => {
+    if (kind !== 'added')
+      store.insertContainer(
+        createContainerFixture({ id: 'known', watcher: descriptor.name, agent: 'edge' }),
+      );
+    await vi.advanceTimersByTimeAsync(1000);
+    const stats = vi.spyOn(event, 'emitAgentStatsChanged');
+    let beforeDebounce = -1;
+    let beforeHttp = -1;
+    vi.mocked(axios.post).mockImplementation(async (_url, body) => {
+      const context = {
+        origin: 'inventory',
+        operationId: (body as { operationId: string }).operationId,
+        source: { type: 'docker', name: descriptor.name },
+      };
+      const container = createContainerFixture({
+        id: 'known',
+        watcher: descriptor.name,
+        status: 'exited',
+      });
+      await client.handleEvent(`dd:inventory-${kind}`, { context, container });
+      await client.handleEvent(`dd:inventory-${kind}`, { context, container });
+      beforeDebounce = stats.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1000);
+      beforeHttp = stats.mock.calls.length;
+      return {
+        data: {
+          context,
+          containers: kind === 'removed' ? [] : [container],
+          removedIds: kind === 'removed' ? ['known'] : [],
+          errors: [],
+          authoritative: true,
+        },
+      };
+    });
+    await client.refreshInventory('docker', descriptor.name);
+    expect(beforeDebounce).toBe(0);
+    expect(beforeHttp).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(stats).toHaveBeenCalledTimes(1);
+  },
+);
+
+test.each(['added', 'updated', 'removed'])(
+  'HTTP-only inventory %s mutations notify other clients',
+  async (kind) => {
+    if (kind !== 'added')
+      store.insertContainer(
+        createContainerFixture({ id: 'known', watcher: descriptor.name, agent: 'edge' }),
+      );
+    await vi.advanceTimersByTimeAsync(1000);
+    const stats = vi.spyOn(event, 'emitAgentStatsChanged');
+    vi.mocked(axios.post).mockImplementation(async (_url, body) => ({
+      data: {
+        context: {
+          origin: 'inventory',
+          operationId: (body as { operationId: string }).operationId,
+          source: { type: 'docker', name: descriptor.name },
+        },
+        containers:
+          kind === 'removed'
+            ? []
+            : [createContainerFixture({ id: 'known', watcher: descriptor.name, status: 'exited' })],
+        removedIds: kind === 'removed' ? ['known'] : [],
+        errors: [],
+        authoritative: true,
+      },
+    }));
+    await client.refreshInventory('docker', descriptor.name);
+    expect(stats).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(stats).toHaveBeenCalledExactlyOnceWith({ agentName: 'edge' });
+  },
+);
+
+test('rejected and late inventory frames do not emit false stats changes', async () => {
+  store.insertContainer(createContainerFixture({ id: 'local', watcher: 'controller' }));
+  await vi.advanceTimersByTimeAsync(1000);
+  const stats = vi.spyOn(event, 'emitAgentStatsChanged');
+  let late!: { context: unknown; container: unknown };
+  vi.mocked(axios.post).mockImplementation(async (_url, body) => {
+    const context = {
+      origin: 'inventory',
+      operationId: (body as { operationId: string }).operationId,
+      source: { type: 'docker', name: descriptor.name },
+    };
+    const container = createContainerFixture({ id: 'local', watcher: descriptor.name });
+    await client.handleEvent('dd:inventory-updated', { context, container });
+    await client.handleEvent('dd:inventory-added', { context, container: {} });
+    await client.handleEvent('dd:inventory-added', {
+      context: { ...context, operationId: 'older' },
+      container,
+    });
+    await client.handleEvent('dd:inventory-removed', { context, container: { id: 'missing' } });
+    late = { context, container: createContainerFixture({ id: 'late', watcher: descriptor.name }) };
+    return { data: { context, containers: [], removedIds: [], errors: [], authoritative: true } };
+  });
+  await client.refreshInventory('docker', descriptor.name);
+  await client.handleEvent('dd:inventory-added', late);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(stats).not.toHaveBeenCalled();
+  expect(store.getContainerRaw('late')).toBeUndefined();
+});
+
 test('ordinary concurrent lifecycle still emits its normal scan report', async () => {
   let resolve!: (data: unknown) => void;
   let operationId!: string;

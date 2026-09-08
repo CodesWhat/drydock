@@ -18,6 +18,7 @@ import {
 interface Dependencies {
   agent: string;
   isConnected: () => boolean;
+  onMutation?: () => void;
   request: (type: string, name: string, options: InventoryRefreshOptions) => Promise<unknown>;
 }
 interface Operation {
@@ -138,6 +139,7 @@ export class AgentInventoryRefresh {
     store.deleteContainer(id, { replacementExpected: true, context: operation.context });
     operation.removed.add(id);
     operation.baseline.delete(id);
+    this.dependencies.onMutation?.();
   }
 
   private upsert(operation: Operation, incoming: Container): void {
@@ -170,6 +172,7 @@ export class AgentInventoryRefresh {
       applyUpdatePolicyOverrides(incoming, {});
       const inserted = store.insertContainer(incoming, operation.context);
       operation.baseline.set(incoming.id, inserted);
+      this.dependencies.onMutation?.();
       return;
     }
     const patch: Partial<Container> = {};
@@ -198,8 +201,10 @@ export class AgentInventoryRefresh {
       });
     }
     if (Object.keys(patch).length === 0) return;
-    store.updateContainerFields(incoming.id, patch, operation.context);
-    operation.baseline.set(incoming.id, { ...baseline!, ...patch });
+    const updated = store.updateContainerFields(incoming.id, patch, operation.context);
+    if (!updated) return;
+    operation.baseline.set(incoming.id, validate({ ...baseline!, ...patch }));
+    if (!isDeepStrictEqual(current, updated)) this.dependencies.onMutation?.();
   }
 
   private mutate(operation: Operation, id: string, action: () => void): void {
