@@ -519,6 +519,167 @@ test('trigger should keep the compose-identity state topic stable across a conta
   );
 });
 
+// #386 / DR-129: two independent publishers build the same container state
+// topic. Mqtt.trigger publishes the state payload; Hass publishes the discovery
+// config that names `state_topic`/`latest_version_topic`/`json_attributes_topic`
+// (and the command topic derived from it). If they disagree for an agent-owned
+// container under `hass.agenttopicsegment`, the Home Assistant entity is created
+// but never receives state and sits permanently on "Unknown".
+describe('agent state topic parity with hass discovery', () => {
+  const agentContainer = {
+    id: '31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816',
+    name: 'nginx',
+    watcher: 'local',
+    agent: 'ml',
+    image: {
+      id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+      registry: {
+        url: '123456789.dkr.ecr.eu-west-1.amazonaws.com',
+      },
+      name: 'test',
+      tag: {
+        value: '2021.6.4',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: 'sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72',
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '2021.6.5',
+    },
+  };
+
+  function buildConfiguration({ enabled, agenttopicsegment }) {
+    return {
+      url: 'mqtt://host:1883',
+      topic: 'dd/container',
+      exclude: '',
+      hass: {
+        enabled,
+        discovery: enabled,
+        prefix: 'homeassistant',
+        agenttopicsegment,
+        commands: false,
+        attributes: 'full',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
+    };
+  }
+
+  async function publishedTopic(configuration, container) {
+    mqtt.configuration = configuration;
+    await mqtt.trigger(container);
+    return mqtt.client.publish.mock.calls[0][0];
+  }
+
+  test('publishes an agent container to the topic hass discovery advertises', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, agentContainer);
+
+      expect(topic).toBe('dd/container/agent/ml/local/nginx');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: agentContainer }));
+      // The payload also carries the Home Assistant update_state object (#1137),
+      // so pin the container fields rather than the exact string.
+      const [, payload, options] = mqtt.client.publish.mock.calls[0];
+      expect(JSON.parse(payload)).toMatchObject(flatten(agentContainer));
+      expect(options).toStrictEqual({ retain: true });
+    } finally {
+      await hass.deregister();
+    }
+  });
+
+  test('publishes an agent container with a Compose identity slug to the topic hass discovery advertises', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const composeAgentContainer = {
+      ...agentContainer,
+      name: 'myapp_web_1',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, composeAgentContainer);
+
+      expect(topic).toBe('dd/container/agent/ml/local/myapp.web');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: composeAgentContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+
+  test('keeps the unscoped topic for an agent container on the agenttopicsegment=false opt-out', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: false });
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, agentContainer);
+
+      expect(topic).toBe('dd/container/local/nginx');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: agentContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+
+  test('keeps the unscoped topic for an agent container when hass is disabled', async () => {
+    const topic = await publishedTopic(
+      buildConfiguration({ enabled: false, agenttopicsegment: true }),
+      agentContainer,
+    );
+
+    expect(topic).toBe('dd/container/local/nginx');
+  });
+
+  test('keeps the unscoped topic for a controller-local container', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const localContainer = { ...agentContainer, agent: undefined };
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, localContainer);
+
+      expect(topic).toBe('dd/container/local/nginx');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: localContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+});
+
 test('initTrigger should read TLS files when configured', async () => {
   // Re-set mock after vi.resetAllMocks() cleared it
   fs.readFile.mockResolvedValue(Buffer.from('file-content'));
