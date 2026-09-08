@@ -22,6 +22,17 @@ function resolvedVersion(lockfile, packageName) {
   return lockfile.packages?.[`node_modules/${packageName}`]?.version;
 }
 
+test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
+  const manifest = readJson('e2e/package.json');
+  const lockfile = readJson('e2e/package-lock.json');
+  assert.equal(manifest.overrides?.['csv-parse'], '7.0.2');
+  const artilleryCsv =
+    resolvedVersion(lockfile, 'artillery/node_modules/csv-parse') ??
+    resolvedVersion(lockfile, 'csv-parse');
+  assert.equal(artilleryCsv, '7.0.2');
+  assert.equal(manifest.scripts.postinstall, 'node ../scripts/patch-artillery-csv.mjs');
+});
+
 // Only the 4.x line is vetted now: 4.1.3 carries the August 2026 host-confusion
 // and SSRF fixes in addition to the earlier CVE-2026-16221 fix.
 // The transitional 3.1.4 branch was dropped once the override moved to 4.x,

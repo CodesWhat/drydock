@@ -219,6 +219,15 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.14</strong></summary>
+
+A reversão agora remove pontos de entrada e comandos herdados que a imagem de backup não pode executar. A comparação de tags mantém variantes como `alpine` e `alpine-perl` separadas. Os rótulos das imagens de manutenção identificam o commit de origem correto.
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc14--2026-09-08).
+
+</details>
+
+<details>
 <summary><strong>Destaques da v1.7.0-rc.13</strong></summary>
 
 - **Contêineres em uma tag flutuante que o drydock viu pela primeira vez antes da v1.5.0-rc.17 podiam ficar marcados como Current para sempre, mesmo com um digest mais novo disponível.** `image.digest.watch` agora é recalculado a cada varredura, em vez de ser fixado na primeira descoberta, da mesma forma que `isLocalImage` e `digest.repoDigests` já fazem. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))
