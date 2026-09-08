@@ -3780,6 +3780,45 @@ describe('ContainersGroupedViews', () => {
       expect(spies.selectContainer).not.toHaveBeenCalled();
     });
 
+    it('stops the keydown from reaching the row when a key is pressed on the checkbox', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const row = rowByName(wrapper, 'alpha');
+      const rowKeydownSpy = vi.fn();
+      row.element.addEventListener('keydown', rowKeydownSpy);
+
+      const checkbox = row.find('[data-test="container-select"]');
+      checkbox.element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(rowKeydownSpy).not.toHaveBeenCalled();
+    });
+
+    it('renders the checkbox in the card header and toggles selection without selecting the card', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const { wrapper, spies } = await mountCardsWithContainers([alpha]);
+      spies.selectContainer.mockClear();
+
+      const card = cardByName(wrapper, 'alpha');
+      const checkbox = card.find('[data-test="container-select"]');
+      expect(checkbox.exists()).toBe(true);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+
+      await checkbox.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(spies.selectContainer).not.toHaveBeenCalled();
+    });
+
     it('does not render the row checkbox or the select-all header when actions are disabled', () => {
       const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
       const { context } = makeContext();

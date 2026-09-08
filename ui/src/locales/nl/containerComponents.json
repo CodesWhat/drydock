@@ -516,17 +516,17 @@
         "staleChainDetail": "De afhankelijkheidsketen voor {name} is gewijzigd sinds het laatste voorbeeld. Open het updatedialoogvenster opnieuw om de huidige keten te bekijken voordat je bevestigt."
       },
       "bulkUpdate": {
-        "header": "{count} geselecteerde containers bijwerken",
-        "accept": "{count} bijwerken",
-        "acceptWithParents": "{count} bovenliggende containers toevoegen en bijwerken",
+        "header": "1 geselecteerde container bijwerken | {count} geselecteerde containers bijwerken",
+        "accept": "1 container bijwerken | {count} containers bijwerken",
+        "acceptWithParents": "1 bovenliggende container toevoegen en bijwerken | {count} bovenliggende containers toevoegen en bijwerken",
         "dispatchHeading": "Worden bijgewerkt",
         "blockedHeading": "Geblokkeerd, blijft ongewijzigd",
         "softOverridesHeading": "Bijwerken ondanks waarschuwingen",
         "skippedHeading": "Overgeslagen",
-        "staleParentsHeading": "Deze zijn afhankelijk van containers die ook updates in behandeling hebben",
+        "staleParentsHeading": "Bovenliggende containers met updates in behandeling, toegevoegd bij bevestiging",
         "agentCountInfo": "Omvat {count} agents; elke agent voert zijn eigen updates uit.",
         "stackCountInfo": "Omvat {count} stacks.",
-        "successMessage": "Update gestart voor {count} containers"
+        "successMessage": "Update gestart voor 1 container | Update gestart voor {count} containers"
       }
     },
     "actionToasts": {

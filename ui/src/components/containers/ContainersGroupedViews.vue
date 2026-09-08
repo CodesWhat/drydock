@@ -1187,6 +1187,16 @@ onScopeDispose(() => {
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="flex items-center gap-3 min-w-0">
+              <input
+                v-if="containerActionsEnabled"
+                type="checkbox"
+                :checked="isSelected(c.id)"
+                :aria-label="t('containerComponents.selection.selectRow', { name: c.name })"
+                data-test="container-select"
+                class="shrink-0 accent-[var(--dd-secondary)]"
+                @click.stop="toggle(c.id)"
+                @keydown.stop
+              />
               <ContainerIcon :icon="c.icon" :size="44" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-sm-plus font-semibold truncate dd-text">

@@ -516,17 +516,17 @@
         "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem."
       },
       "bulkUpdate": {
-        "header": "Zaktualizuj {count} wybranych kontenerów",
-        "accept": "Zaktualizuj {count}",
-        "acceptWithParents": "Dodaj {count} kontenerów nadrzędnych i zaktualizuj",
+        "header": "Zaktualizuj 1 wybrany kontener | Zaktualizuj {count} wybranych kontenerów",
+        "accept": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
+        "acceptWithParents": "Dodaj 1 kontener nadrzędny i zaktualizuj | Dodaj {count} kontenerów nadrzędnych i zaktualizuj",
         "dispatchHeading": "Zostaną zaktualizowane",
         "blockedHeading": "Zablokowane, pozostaną bez zmian",
         "softOverridesHeading": "Aktualizacja mimo ostrzeżeń",
         "skippedHeading": "Pominięte",
-        "staleParentsHeading": "Te zależą od kontenerów, które również mają oczekujące aktualizacje",
+        "staleParentsHeading": "Kontenery nadrzędne z oczekującymi aktualizacjami, dodawane po zatwierdzeniu",
         "agentCountInfo": "Obejmuje {count} agentów; każdy agent wykonuje własne aktualizacje.",
         "stackCountInfo": "Obejmuje {count} stosów.",
-        "successMessage": "Rozpoczęto aktualizację dla {count} kontenerów"
+        "successMessage": "Rozpoczęto aktualizację dla 1 kontenera | Rozpoczęto aktualizację dla {count} kontenerów"
       }
     },
     "actionToasts": {

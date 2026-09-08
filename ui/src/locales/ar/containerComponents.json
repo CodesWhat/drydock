@@ -516,17 +516,17 @@
         "staleChainDetail": "تغيّرت سلسلة الاعتمادية لـ {name} منذ آخر معاينة لها. أعد فتح مربع حوار التحديث لمراجعة السلسلة الحالية قبل التأكيد."
       },
       "bulkUpdate": {
-        "header": "تحديث {count} حاويات محددة",
-        "accept": "تحديث {count}",
-        "acceptWithParents": "إضافة {count} من العناصر الأصلية والتحديث",
+        "header": "تحديث حاوية واحدة محددة | تحديث {count} حاويات محددة",
+        "accept": "تحديث حاوية واحدة | تحديث {count} حاويات",
+        "acceptWithParents": "إضافة عنصر أصلي واحد والتحديث | إضافة {count} من العناصر الأصلية والتحديث",
         "dispatchHeading": "سيتم التحديث",
         "blockedHeading": "محظور، سيُترك دون تغيير",
         "softOverridesHeading": "التحديث رغم التحذيرات",
         "skippedHeading": "متخطى",
-        "staleParentsHeading": "تعتمد هذه على حاويات لديها أيضًا تحديثات معلقة",
+        "staleParentsHeading": "عناصر أصلية بها تحديثات معلقة، تُضاف عند القبول",
         "agentCountInfo": "يشمل {count} وكلاء؛ يُشغّل كل وكيل تحديثاته الخاصة.",
         "stackCountInfo": "يشمل {count} مكدسات.",
-        "successMessage": "بدأ التحديث لـ {count} حاويات"
+        "successMessage": "بدأ التحديث لحاوية واحدة | بدأ التحديث لـ {count} حاويات"
       }
     },
     "actionToasts": {

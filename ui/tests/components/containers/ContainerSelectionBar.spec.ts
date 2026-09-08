@@ -78,8 +78,10 @@ describe('ContainerSelectionBar', () => {
     resetContainerSelectionState();
   });
 
-  it('falls back to manual update mode when the context does not supply one', () => {
-    const { context, filteredContainers } = makeContext({ updateMode: undefined });
+  it('falls back to manual update mode when the context does not supply one', async () => {
+    const { context, filteredContainers, confirmBulkUpdate } = makeContext({
+      updateMode: undefined,
+    });
     filteredContainers.value = [makeContainer({ newTag: '2.0.0' })];
     mocked.context = context;
     useContainerSelection().toggle('c-1');
@@ -87,6 +89,18 @@ describe('ContainerSelectionBar', () => {
     activeWrapper = mountBar();
 
     expect(bar()?.textContent).toContain('1 container selected');
+
+    const updateBtn = bar()?.querySelector<HTMLButtonElement>(
+      '[data-test="container-selection-update"]',
+    );
+    expect(updateBtn?.disabled).toBe(false);
+
+    updateBtn?.click();
+    await activeWrapper.vm.$nextTick();
+
+    expect(confirmBulkUpdate).toHaveBeenCalledTimes(1);
+    const plan = confirmBulkUpdate.mock.calls[0][0];
+    expect(plan.dispatch.map((entry: { id: string }) => entry.id)).toEqual(['c-1']);
   });
 
   it('renders nothing when nothing is selected', () => {

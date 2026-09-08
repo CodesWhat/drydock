@@ -516,17 +516,17 @@
         "staleChainDetail": "A cadeia de dependências de {name} mudou desde a última pré-visualização. Reabra a caixa de diálogo de atualização para revisar a cadeia atual antes de confirmar."
       },
       "bulkUpdate": {
-        "header": "Atualizar {count} contêineres selecionados",
-        "accept": "Atualizar {count}",
-        "acceptWithParents": "Adicionar {count} itens pai e atualizar",
+        "header": "Atualizar 1 contêiner selecionado | Atualizar {count} contêineres selecionados",
+        "accept": "Atualizar 1 contêiner | Atualizar {count} contêineres",
+        "acceptWithParents": "Adicionar 1 item pai e atualizar | Adicionar {count} itens pai e atualizar",
         "dispatchHeading": "Serão atualizados",
         "blockedHeading": "Bloqueados, serão deixados como estão",
         "softOverridesHeading": "Atualizando apesar dos avisos",
         "skippedHeading": "Ignorados",
-        "staleParentsHeading": "Estes dependem de contêineres que também têm atualizações pendentes",
+        "staleParentsHeading": "Itens pai com atualizações pendentes, adicionados ao aceitar",
         "agentCountInfo": "Abrange {count} agentes; cada agente executa suas próprias atualizações.",
         "stackCountInfo": "Abrange {count} stacks.",
-        "successMessage": "Atualização iniciada para {count} contêineres"
+        "successMessage": "Atualização iniciada para 1 contêiner | Atualização iniciada para {count} contêineres"
       }
     },
     "actionToasts": {

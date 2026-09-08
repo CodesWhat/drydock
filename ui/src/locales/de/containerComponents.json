@@ -516,17 +516,17 @@
         "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen."
       },
       "bulkUpdate": {
-        "header": "{count} ausgewählte Container aktualisieren",
-        "accept": "{count} aktualisieren",
-        "acceptWithParents": "{count} übergeordnete Elemente hinzufügen und aktualisieren",
+        "header": "1 ausgewählten Container aktualisieren | {count} ausgewählte Container aktualisieren",
+        "accept": "1 Container aktualisieren | {count} Container aktualisieren",
+        "acceptWithParents": "1 übergeordnetes Element hinzufügen und aktualisieren | {count} übergeordnete Elemente hinzufügen und aktualisieren",
         "dispatchHeading": "Wird aktualisiert",
         "blockedHeading": "Blockiert, wird unverändert gelassen",
         "softOverridesHeading": "Wird trotz Warnungen aktualisiert",
         "skippedHeading": "Übersprungen",
-        "staleParentsHeading": "Diese hängen von Containern ab, die ebenfalls auf ein Update warten",
+        "staleParentsHeading": "Übergeordnete Elemente mit ausstehenden Updates, die bei Bestätigung hinzugefügt werden",
         "agentCountInfo": "Umfasst {count} Agenten; jeder Agent führt seine eigenen Updates aus.",
         "stackCountInfo": "Umfasst {count} Stacks.",
-        "successMessage": "Update für {count} Container gestartet"
+        "successMessage": "Update für 1 Container gestartet | Update für {count} Container gestartet"
       }
     },
     "actionToasts": {

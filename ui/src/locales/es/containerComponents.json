@@ -516,17 +516,17 @@
         "staleChainDetail": "La cadena de dependencias de {name} cambió desde la última vista previa. Vuelve a abrir el diálogo de actualización para revisar la cadena actual antes de confirmar."
       },
       "bulkUpdate": {
-        "header": "Actualizar {count} contenedores seleccionados",
-        "accept": "Actualizar {count}",
-        "acceptWithParents": "Añadir {count} elementos superiores y actualizar",
+        "header": "Actualizar 1 contenedor seleccionado | Actualizar {count} contenedores seleccionados",
+        "accept": "Actualizar 1 contenedor | Actualizar {count} contenedores",
+        "acceptWithParents": "Añadir 1 elemento superior y actualizar | Añadir {count} elementos superiores y actualizar",
         "dispatchHeading": "Se actualizarán",
         "blockedHeading": "Bloqueados, se dejarán como están",
         "softOverridesHeading": "Actualizando a pesar de las advertencias",
         "skippedHeading": "Omitidos",
-        "staleParentsHeading": "Estos dependen de contenedores que también tienen actualizaciones pendientes",
+        "staleParentsHeading": "Elementos superiores con actualizaciones pendientes, añadidos al aceptar",
         "agentCountInfo": "Abarca {count} agentes; cada agente ejecuta sus propias actualizaciones.",
         "stackCountInfo": "Abarca {count} stacks.",
-        "successMessage": "Actualización iniciada para {count} contenedores"
+        "successMessage": "Actualización iniciada para 1 contenedor | Actualización iniciada para {count} contenedores"
       }
     },
     "actionToasts": {

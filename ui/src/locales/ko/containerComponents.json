@@ -516,17 +516,17 @@
         "staleChainDetail": "{name}의 종속성 체인이 마지막으로 미리 본 이후 변경되었습니다. 확인하기 전에 업데이트 대화상자를 다시 열어 현재 체인을 검토하세요."
       },
       "bulkUpdate": {
-        "header": "선택한 컨테이너 {count}개 업데이트",
-        "accept": "{count}개 업데이트",
-        "acceptWithParents": "상위 항목 {count}개 추가 후 업데이트",
+        "header": "선택한 컨테이너 1개 업데이트 | 선택한 컨테이너 {count}개 업데이트",
+        "accept": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
+        "acceptWithParents": "상위 항목 1개 추가 후 업데이트 | 상위 항목 {count}개 추가 후 업데이트",
         "dispatchHeading": "업데이트될 항목",
         "blockedHeading": "차단됨, 그대로 둠",
         "softOverridesHeading": "경고를 무시하고 업데이트",
         "skippedHeading": "건너뜀",
-        "staleParentsHeading": "이 항목들은 업데이트를 기다리는 컨테이너에도 종속되어 있습니다",
+        "staleParentsHeading": "업데이트 대기 중인 상위 항목, 수락 시 추가됨",
         "agentCountInfo": "{count}개 에이전트에 걸쳐 있습니다. 각 에이전트는 자체적으로 업데이트를 실행합니다.",
         "stackCountInfo": "{count}개 스택에 걸쳐 있습니다.",
-        "successMessage": "컨테이너 {count}개에 대한 업데이트가 시작되었습니다"
+        "successMessage": "컨테이너 1개에 대한 업데이트가 시작되었습니다 | 컨테이너 {count}개에 대한 업데이트가 시작되었습니다"
       }
     },
     "actionToasts": {

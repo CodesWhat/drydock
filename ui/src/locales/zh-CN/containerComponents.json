@@ -516,17 +516,17 @@
         "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
       },
       "bulkUpdate": {
-        "header": "更新已选择的 {count} 个容器",
-        "accept": "更新 {count} 个",
-        "acceptWithParents": "添加 {count} 个上级容器并更新",
+        "header": "更新已选择的 1 个容器 | 更新已选择的 {count} 个容器",
+        "accept": "更新 1 个容器 | 更新 {count} 个容器",
+        "acceptWithParents": "添加 1 个上级容器并更新 | 添加 {count} 个上级容器并更新",
         "dispatchHeading": "将会更新",
         "blockedHeading": "已阻止，将保持不变",
         "softOverridesHeading": "忽略警告继续更新",
         "skippedHeading": "已跳过",
-        "staleParentsHeading": "这些容器依赖的容器也有待处理的更新",
+        "staleParentsHeading": "有待处理更新的上级容器，将在您接受时添加",
         "agentCountInfo": "涉及 {count} 个代理；每个代理各自运行自己的更新。",
         "stackCountInfo": "涉及 {count} 个技术栈。",
-        "successMessage": "已开始更新 {count} 个容器"
+        "successMessage": "已开始更新 1 个容器 | 已开始更新 {count} 个容器"
       }
     },
     "actionToasts": {

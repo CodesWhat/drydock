@@ -110,7 +110,9 @@ export function formatBulkUpdateConfirm(plan: BulkUpdatePlan, t: TranslateFn): B
   const count = plan.dispatch.length;
   const acceptLabel =
     plan.staleParents.length > 0
-      ? t('containerComponents.confirmDialogs.bulkUpdate.acceptWithParents', { count })
+      ? t('containerComponents.confirmDialogs.bulkUpdate.acceptWithParents', {
+          count: plan.staleParents.length,
+        })
       : t('containerComponents.confirmDialogs.bulkUpdate.accept', { count });
 
   return {

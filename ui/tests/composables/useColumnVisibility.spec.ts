@@ -194,17 +194,18 @@ describe('useColumnVisibility', () => {
     }
   });
 
-  it('sizes the icon column to fit its 32px ContainerIcon plus pl-5 padding (>= 52px)', async () => {
+  it('sizes the icon column to fit its 32px ContainerIcon, pl-5 padding, and selection checkbox (>= 76px)', async () => {
     // Regression guard: the icon cell renders a 32px ContainerIcon (ContainersGroupedViews.vue)
-    // inside `pl-5` (20px) padding. DataTable's icon cells have `overflow-hidden`, so if this
-    // column's size/minSize ever shrinks back below 52 (32 + 20), the icon silently clips again
+    // inside `pl-5` (20px) padding, plus a ~16px selection checkbox with a 4px mr-1 margin.
+    // DataTable's icon cells have `overflow-hidden`, so if this column's size/minSize ever
+    // shrinks back below 76 (32 + 20 + 16 + 4), the icon or checkbox silently clips again
     // instead of just hanging unseen past the cell edge like it used to.
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
     const iconCol = allColumns.find((c) => c.key === 'icon');
-    const ICON_PLUS_PADDING_PX = 52;
-    expect(iconCol?.size).toBeGreaterThanOrEqual(ICON_PLUS_PADDING_PX);
-    expect(iconCol?.minSize).toBeGreaterThanOrEqual(ICON_PLUS_PADDING_PX);
+    const ICON_PLUS_PADDING_PLUS_CHECKBOX_PX = 76;
+    expect(iconCol?.size).toBeGreaterThanOrEqual(ICON_PLUS_PADDING_PLUS_CHECKBOX_PX);
+    expect(iconCol?.minSize).toBeGreaterThanOrEqual(ICON_PLUS_PADDING_PLUS_CHECKBOX_PX);
   });
 
   it('keeps host names with numeric suffixes readable by default', async () => {
@@ -272,7 +273,9 @@ describe('useColumnVisibility', () => {
         },
       });
       const { useColumnVisibility } = await loadColumnVisibility();
-      const width = ref(1136);
+      // +24px vs. the pre-checkbox baseline: the icon column grew from 56 to 80 to fit the
+      // new selection checkbox, so the same content budget now needs 24px more available width.
+      const width = ref(1160);
       const { autoHiddenColumns } = useColumnVisibility(width);
 
       expect(autoHiddenColumns.value.map((column) => column.key)).toEqual(['softwareVersion']);
@@ -313,7 +316,10 @@ describe('useColumnVisibility', () => {
     it('drops in documented priority order as width tightens further', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       // Host stays ahead of the secondary software-version column at laptop widths.
-      const width = ref(913);
+      // +24px vs. the pre-checkbox baseline at every step: the icon column grew from 56 to 80
+      // to fit the new selection checkbox, so the same content budget now needs 24px more
+      // available width.
+      const width = ref(937);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
       expect(hiddenColumnKeys.value).toContain('registry');
       expect(hiddenColumnKeys.value).not.toContain('server');
@@ -324,7 +330,7 @@ describe('useColumnVisibility', () => {
         'status',
       ]);
 
-      width.value = 797;
+      width.value = 821;
       await nextTick();
       expect(hiddenColumnKeys.value).toContain('registry');
       expect(hiddenColumnKeys.value).toContain('server');
@@ -337,7 +343,7 @@ describe('useColumnVisibility', () => {
         'server',
       ]);
 
-      width.value = 685;
+      width.value = 709;
       await nextTick();
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',

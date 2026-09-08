@@ -21,13 +21,15 @@ const allColumns: ColumnDef[] = [
     key: 'icon',
     label: '',
     px: 'px-0',
-    // 56 = 32px ContainerIcon (ContainersGroupedViews.vue) + 20px pl-5 padding + 4px breathing
-    // room. Was 40 until the icon cell gained `overflow-hidden`: that class made the pre-existing
-    // ~11.9px overflow (32px icon inside a 20px content box) visibly clip instead of silently
-    // hanging past the cell edge. Keep this >= 52 (icon + padding) or the clip comes back.
-    size: 56,
-    minSize: 56,
-    maxSize: 56,
+    // 80 = 32px ContainerIcon (ContainersGroupedViews.vue) + 20px pl-5 padding + 4px breathing
+    // room + ~16px selection checkbox + 4px mr-1 margin. Was 56 until the checkbox was added to
+    // this cell; was 40 before that, until the icon cell gained `overflow-hidden`, which made
+    // the pre-existing ~11.9px overflow (32px icon inside a 20px content box) visibly clip
+    // instead of silently hanging past the cell edge. Keep this >= 76 (icon + padding +
+    // checkbox + margin) or the clip comes back.
+    size: 80,
+    minSize: 80,
+    maxSize: 80,
     autoSize: 'fixed',
     required: true,
     icon: true,

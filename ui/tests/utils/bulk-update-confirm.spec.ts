@@ -95,16 +95,20 @@ describe('formatBulkUpdateConfirm', () => {
     );
   });
 
-  it('renders a staleParents section and switches to the acceptWithParents label', () => {
+  it('renders a staleParents section and switches to the acceptWithParents label, counted by parents added (not the dispatch count)', () => {
     const plan = emptyPlan({
-      dispatch: [{ id: 'app', name: 'app' }],
+      dispatch: [
+        { id: 'app', name: 'app' },
+        { id: 'web', name: 'web' },
+      ],
       staleParents: [{ id: 'db', name: 'database' }],
     });
     const result = formatBulkUpdateConfirm(plan, t);
     expect(result.message).toBe(
       [
-        'containerComponents.confirmDialogs.bulkUpdate.dispatchHeading:{"count":1}',
+        'containerComponents.confirmDialogs.bulkUpdate.dispatchHeading:{"count":2}',
         '• app',
+        '• web',
         'containerComponents.confirmDialogs.bulkUpdate.staleParentsHeading:{"count":1}',
         '• database',
       ].join('\n'),
@@ -157,7 +161,10 @@ describe('formatBulkUpdateConfirm', () => {
 
   it('renders every section together in a full plan, joined by newlines, in dispatch/blocked/softOverrides/skipped/staleParents/agent/stack order', () => {
     const plan: BulkUpdatePlan = {
-      dispatch: [{ id: 'a', name: 'alpha' }],
+      dispatch: [
+        { id: 'a', name: 'alpha' },
+        { id: 'e', name: 'epsilon' },
+      ],
       blocked: [{ id: 'b', name: 'beta', reason: 'hard blocked' }],
       softOverrides: [{ id: 'a', name: 'alpha', reason: 'soft blocked' }],
       skipped: [{ id: 'c', name: 'gamma', reason: 'skip reason' }],
@@ -168,8 +175,9 @@ describe('formatBulkUpdateConfirm', () => {
     const result = formatBulkUpdateConfirm(plan, t);
     expect(result.message).toBe(
       [
-        'containerComponents.confirmDialogs.bulkUpdate.dispatchHeading:{"count":1}',
+        'containerComponents.confirmDialogs.bulkUpdate.dispatchHeading:{"count":2}',
         '• alpha',
+        '• epsilon',
         'containerComponents.confirmDialogs.bulkUpdate.blockedHeading:{"count":1}',
         '• beta (hard blocked)',
         'containerComponents.confirmDialogs.bulkUpdate.softOverridesHeading:{"count":1}',
@@ -181,6 +189,9 @@ describe('formatBulkUpdateConfirm', () => {
         'containerComponents.confirmDialogs.bulkUpdate.agentCountInfo:{"count":2}',
         'containerComponents.confirmDialogs.bulkUpdate.stackCountInfo:{"count":2}',
       ].join('\n'),
+    );
+    expect(result.acceptLabel).toBe(
+      'containerComponents.confirmDialogs.bulkUpdate.acceptWithParents:{"count":1}',
     );
     expect(result.disabled).toBe(false);
   });

@@ -516,17 +516,17 @@
         "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
       },
       "bulkUpdate": {
-        "header": "{count} seçili kapsayıcıyı güncelle",
-        "accept": "{count} tanesini güncelle",
-        "acceptWithParents": "{count} üst öğeyi ekle ve güncelle",
+        "header": "1 seçili kapsayıcıyı güncelle | {count} seçili kapsayıcıyı güncelle",
+        "accept": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "acceptWithParents": "1 üst öğeyi ekle ve güncelle | {count} üst öğeyi ekle ve güncelle",
         "dispatchHeading": "Güncellenecek",
         "blockedHeading": "Engellendi, olduğu gibi bırakılacak",
         "softOverridesHeading": "Uyarılara rağmen güncelleniyor",
         "skippedHeading": "Atlandı",
-        "staleParentsHeading": "Bunlar, bekleyen güncellemesi olan kapsayıcılara da bağlı",
+        "staleParentsHeading": "Bekleyen güncellemesi olan üst öğeler, onaylandığında eklenir",
         "agentCountInfo": "{count} ajanı kapsar; her ajan kendi güncellemelerini çalıştırır.",
         "stackCountInfo": "{count} yığını kapsar.",
-        "successMessage": "{count} kapsayıcı için güncelleme başlatıldı"
+        "successMessage": "1 kapsayıcı için güncelleme başlatıldı | {count} kapsayıcı için güncelleme başlatıldı"
       }
     },
     "actionToasts": {
