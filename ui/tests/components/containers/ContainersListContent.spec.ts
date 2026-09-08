@@ -16,7 +16,10 @@ import {
   type ContainersViewTemplateContext,
   containersViewTemplateContextKey,
 } from '@/components/containers/containersViewTemplateContext';
+import { useContainerFilters } from '@/composables/useContainerFilters';
 import type { ViewMode } from '@/preferences/schema';
+import { resetPreferences } from '@/preferences/store';
+import { mapApiContainer } from '@/utils/container-mapper';
 import { mountWithPlugins } from '../../helpers/mount';
 
 const DataTableColumnPickerStub = defineComponent({
@@ -141,6 +144,7 @@ function makeTemplateContext(
 
 describe('ContainersListContent', () => {
   let wrapper: VueWrapper | null = null;
+  beforeEach(resetPreferences);
 
   afterEach(() => {
     wrapper?.unmount();
@@ -179,6 +183,44 @@ describe('ContainersListContent', () => {
     wrapper = mountWithContext(context);
 
     expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+  });
+
+  it('wires fleet controls to exact filters and label grouping without hiding stack controls', async () => {
+    const filters = useContainerFilters(
+      ref([
+        mapApiContainer({
+          id: 'edge',
+          name: 'nginx',
+          agent: 'Local',
+          image: {
+            name: 'nginx',
+            tag: { value: 'latest' },
+            registry: { name: 'quay', url: 'https://quay.io' },
+          },
+          labels: { expression: 'a=b' },
+        }),
+      ]),
+    );
+    const context = makeTemplateContext({ ...filters });
+    wrapper = mountWithContext(context);
+    expect(wrapper.find('[data-test="fleet-group-by"]').exists()).toBe(true);
+    await wrapper.get('[data-test="fleet-group-by"]').setValue('label');
+    expect(filters.fleet.groupBy.value).toBe('label');
+    await wrapper.get('[data-test="fleet-group-label"]').setValue('team');
+    expect(filters.fleet.groupLabel.value).toBe('team');
+    await wrapper.get('[data-test="fleet-agent"]').setValue(JSON.stringify(['agent', 'Local']));
+    expect(filters.fleet.agent.value).toBe(JSON.stringify(['agent', 'Local']));
+    await wrapper
+      .get('[data-test="fleet-registry"]')
+      .setValue(JSON.stringify(['quay', 'https://quay.io']));
+    expect(filters.fleet.registry.value).toBe(JSON.stringify(['quay', 'https://quay.io']));
+    await wrapper.get('[data-test="fleet-tag-type"]').setValue('digest');
+    expect(filters.fleet.tagType.value).toBe('digest');
+    await wrapper.get('[data-test="fleet-label-key"]').setValue('expression');
+    await wrapper.get('[data-test="fleet-label-match"]').setValue('equals');
+    await wrapper.get('[data-test="fleet-label-value"]').setValue('a=b');
+    expect(filters.fleet.labelValue.value).toBe('a=b');
+    expect(wrapper.find('button[data-icon="stack"]').exists()).toBe(true);
   });
 
   it('mounts the container selection bar alongside the grouped views', () => {

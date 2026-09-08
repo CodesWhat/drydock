@@ -513,6 +513,33 @@ describe('ContainersGroupedViews', () => {
     ]);
   });
 
+  it('renders every fleet group while stack grouping is off and preserves row selection', async () => {
+    const first = makeContainer({ id: 'fleet-first', name: 'alpha' });
+    const second = makeContainer({ id: 'fleet-second', name: 'beta', agent: 'edge' });
+    const { context } = makeContext();
+    context.fleet = { groupBy: ref('agent') };
+    context.filteredContainers.value = [first, second];
+    context.displayContainers.value = [first, second];
+    context.renderGroups.value = [first, second].map((c) => ({
+      key: c.id,
+      name: c.name,
+      containers: [c],
+      containerCount: 1,
+      updatesAvailable: 0,
+      updatableCount: 0,
+    }));
+    mocked.context = context;
+    useContainerSelection().toggle(first.id);
+    const wrapper = mountSubject();
+    expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
+    expect(wrapper.findAll('.full-row-stub')).toHaveLength(2);
+    context.renderGroups.value = [...context.renderGroups.value].reverse();
+    await nextTick();
+    expect(useContainerSelection().isSelected(first.id)).toBe(true);
+    expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
   it('hoists card sorting when cards are selected or measured card reflow is forced', async () => {
     const container = makeContainer({ id: 'c-hoist', name: 'alpha' });
     const { context, refs } = makeContext();

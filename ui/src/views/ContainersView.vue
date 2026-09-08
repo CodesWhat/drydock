@@ -141,7 +141,7 @@ let committedUpdatePolicyMetadataFingerprint = '';
  *
  * Only hashes fields that affect row rendering or the downstream computed
  * chain (identity, tag, status, update indicators, safety state). Deep
- * structures like `details` (ports/volumes/env/labels) are intentionally
+ * structures like `details` (ports/volumes/env) are intentionally
  * excluded — they do not change the grouped table render and would dominate
  * the cost of this walk on every reload. See #301.
  *
@@ -161,6 +161,15 @@ function containerRowFingerprint(c: Container): string {
     c.status,
     c.server ?? '',
     c.registry ?? '',
+    JSON.stringify([
+      c.agent,
+      c.registryName,
+      c.registryUrl,
+      c.tagPrecision,
+      c.imageTagSemver,
+      c.isDigestPinned,
+      c.labels,
+    ]),
     c.updateKind ?? '',
     c.updateDetectedAt ?? '',
     c.imageCreated ?? '',
@@ -552,6 +561,7 @@ const tableActionStyle = usePreference(
 );
 
 const {
+  fleet,
   filterSearch,
   filterStatus,
   filterRegistry,
@@ -716,6 +726,7 @@ function applyFilterSearchFromQuery(
   // When navigating with a search query (e.g. from Ctrl+K), clear persisted
   // dropdown filters so the target container is always visible.
   if (filterSearch.value) {
+    fleet.clearFilters();
     filterStatus.value = DEFAULT_FILTER_VALUE;
     filterRegistry.value = DEFAULT_FILTER_VALUE;
     filterBouncer.value = DEFAULT_FILTER_VALUE;
@@ -763,6 +774,13 @@ const groupByStack = usePreference(
     preferences.containers.groupByStack = value;
   },
 );
+
+watch(fleet.groupBy, (value) => {
+  if (value !== 'none') groupByStack.value = false;
+});
+watch(groupByStack, (value) => {
+  if (value) fleet.groupBy.value = 'none';
+});
 
 function applyGroupByStackFromQuery(queryValue: unknown) {
   const raw = firstQueryValue(queryValue);
@@ -1278,6 +1296,7 @@ const groupedContainers = computed<RenderGroup[]>(() => {
 });
 
 const renderGroups = computed<RenderGroup[]>(() => {
+  if (fleet.groupBy.value !== 'none') return fleet.group(sortedContainers.value, t);
   if (!groupByStack.value) {
     return [
       {
@@ -1487,6 +1506,7 @@ function registryErrorTooltip(container: Container): string {
 }
 
 provide(containersViewTemplateContextKey, {
+  fleet,
   containerCardReflowForced,
   error,
   loading,

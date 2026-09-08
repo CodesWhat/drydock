@@ -114,6 +114,7 @@ export interface ContainersViewTemplateContext
     ContainerLogsContext,
     ContainerSecurityContext,
     ContainerActionsContext {
+  fleet?: ReturnType<typeof useContainerFilters>['fleet'];
   error: Ref<string | null>;
   loading: Ref<boolean>;
   containers: Ref<Container[]>;

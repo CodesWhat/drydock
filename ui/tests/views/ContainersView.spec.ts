@@ -134,21 +134,25 @@ const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
 const mockFilterHidePinned = ref(false);
 
-vi.mock('@/composables/useContainerFilters', () => ({
-  useContainerFilters: vi.fn(() => ({
-    filterSearch: mockFilterSearch,
-    filterStatus: mockFilterStatus,
-    filterRegistry: mockFilterRegistry,
-    filterBouncer: mockFilterBouncer,
-    filterServer: mockFilterServer,
-    filterKind: mockFilterKind,
-    filterHidePinned: mockFilterHidePinned,
-    showFilters: mockShowFilters,
-    activeFilterCount: mockActiveFilterCount,
-    filteredContainers: mockFilteredContainers,
-    clearFilters: mockClearFilters,
-  })),
-}));
+vi.mock('@/composables/useContainerFilters', async () => {
+  const { useFleetDimensions } = await import('@/composables/useFleetDimensions');
+  return {
+    useContainerFilters: vi.fn((containers) => ({
+      fleet: useFleetDimensions(containers),
+      filterSearch: mockFilterSearch,
+      filterStatus: mockFilterStatus,
+      filterRegistry: mockFilterRegistry,
+      filterBouncer: mockFilterBouncer,
+      filterServer: mockFilterServer,
+      filterKind: mockFilterKind,
+      filterHidePinned: mockFilterHidePinned,
+      showFilters: mockShowFilters,
+      activeFilterCount: mockActiveFilterCount,
+      filteredContainers: mockFilteredContainers,
+      clearFilters: mockClearFilters,
+    })),
+  };
+});
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: vi.fn(() => ({
@@ -497,6 +501,51 @@ describe('ContainersView', () => {
   });
 
   describe('loading containers', () => {
+    it('clears fleet filters for an external search navigation', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.fleet.agent = JSON.stringify(['agent', 'edge']);
+      mockRoute.query = { q: 'nginx' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).fleet.agent.value).toBe('all');
+    });
+
+    it('projects sorted fleet groups through the existing renderGroups model', async () => {
+      const rows = [
+        makeContainer({ id: 'z', name: 'zebra', agent: 'edge' }),
+        makeContainer({ id: 'a', name: 'alpha', agent: 'edge' }),
+        makeContainer({ id: 'b', name: 'beta' }),
+      ];
+      const wrapper = await mountContainersView(rows);
+      const vm = wrapper.vm as any;
+      vm.fleet.groupBy.value = 'agent';
+      await flushPromises();
+      expect(vm.renderGroups).toHaveLength(2);
+      const edge = vm.renderGroups.find((group: any) => group.name === 'edge');
+      expect(edge.containers.map((row: Container) => row.id)).toEqual(['a', 'z']);
+      expect(edge.containerCount).toBe(2);
+      vm.containerSortAsc = false;
+      await flushPromises();
+      expect(
+        vm.renderGroups
+          .find((group: any) => group.name === 'edge')
+          .containers.map((row: Container) => row.id),
+      ).toEqual(['z', 'a']);
+    });
+
+    it('renders fleet groups and switches back to the existing stack grouping', async () => {
+      const wrapper = await mountContainersView();
+      const vm = wrapper.vm as any;
+      expect(vm.fleet).toBeDefined();
+      vm.fleet.groupBy.value = 'agent';
+      await flushPromises();
+      expect(vm.groupByStack).toBe(false);
+      vm.groupByStack = true;
+      await flushPromises();
+      expect(vm.fleet.groupBy.value).toBe('none');
+      vm.fleet.groupBy.value = 'registry';
+      await flushPromises();
+      expect(vm.groupByStack).toBe(false);
+    });
     it('calls getAllContainers on mount', async () => {
       await mountContainersView([]);
       expect(mockGetAllContainers).toHaveBeenCalledOnce();
@@ -557,6 +606,26 @@ describe('ContainersView', () => {
     });
 
     describe('identical-list dedup optimisation', () => {
+      it.each([
+        { labels: { team: 'new' } },
+        { agent: 'Local' },
+        { registryUrl: 'https://other.example' },
+        { registryName: 'quay' },
+        { tagPrecision: 'specific' as const },
+        { imageTagSemver: true },
+        { isDigestPinned: true },
+      ])('refreshes fleet dimensions when only %j changes', async (patch) => {
+        const container = makeContainer({ labels: { team: 'old' } });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+        const changed = { ...container, ...patch };
+        mockGetAllContainers.mockResolvedValue([changed]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        vi.mocked(mapApiContainers).mockReturnValue([changed]);
+        await vm.loadContainers();
+        expect(vm.containers[0]).toMatchObject(patch);
+      });
+
       it('does not reassign containers.value when a reload returns identical data', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
         const wrapper = await mountContainersView([container]);
