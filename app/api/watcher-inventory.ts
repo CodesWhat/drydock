@@ -11,7 +11,7 @@ import {
 import { redactContainersRuntimeEnv } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 
-export function sanitizeInventoryResult(result: InventoryRefreshResult): InventoryRefreshResult {
+function sanitizeInventoryResult(result: InventoryRefreshResult): InventoryRefreshResult {
   return {
     ...result,
     containers: redactContainersRuntimeEnv(result.containers),
