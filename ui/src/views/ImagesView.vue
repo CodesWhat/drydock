@@ -69,8 +69,10 @@ const selectedHostSummary = computed<ImageHostSummary | null>(
   () => hosts.value.find((host) => host.id === selectedHostId.value) ?? null,
 );
 
-const selectedHostUnsupported = computed(
-  () => !!selectedHostSummary.value && !selectedHostSummary.value.supported,
+const unsupportedHostNames = computed(() =>
+  hosts.value
+    .filter((host) => !host.supported)
+    .map((host) => hostDisplayName(host.name, host.agent)),
 );
 
 const canPrune = computed(
@@ -111,6 +113,8 @@ const sortedItems = computed(() => {
 
 function mapImageRow(item: ImageInventoryItem) {
   return {
+    // Image ids repeat across hosts, so the row key carries the host too.
+    rowKey: `${item.agent ?? ''}|${item.watcher}|${item.id}`,
     id: item.id,
     repository: repositoryLabel(item, t('imagesView.untagged')),
     tagText: tagLabel(item),
@@ -289,8 +293,8 @@ async function handlePrune(mode: PruneMode) {
       {{ t('imagesView.hostError', { host: host.name, message: host.error }) }}
     </div>
 
-    <div v-if="selectedHostUnsupported" class="mb-2 px-1 text-2xs-plus dd-text-muted">
-      {{ t('imagesView.hostUnsupported') }}
+    <div v-if="unsupportedHostNames.length > 0" class="mb-2 px-1 text-2xs-plus dd-text-muted">
+      {{ t('imagesView.hostUnsupported') }} {{ unsupportedHostNames.join(', ') }}
     </div>
 
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('imagesView.loading') }}</div>
@@ -309,7 +313,7 @@ async function handlePrune(mode: PruneMode) {
                 class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="">{{ t('imagesView.filters.allHosts') }}</option>
           <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!host.supported">
-            {{ host.name }}
+            {{ hostDisplayName(host.name, host.agent) }}
           </option>
         </select>
         <label class="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer select-none">
@@ -347,7 +351,7 @@ async function handlePrune(mode: PruneMode) {
       :columns="tableColumns"
       storage-key="images"
       :rows="tableRows"
-      row-key="id"
+      row-key="rowKey"
       :hidden-column-keys="hiddenColumnKeys"
       :prefer-cards="imagesViewMode === 'cards'"
       v-model:sort-key="sortKey"

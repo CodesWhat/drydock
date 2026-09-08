@@ -41,7 +41,7 @@
       },
       "inProgress": "Images auf {host} werden bereinigt ...",
       "success": "1 Image entfernt und {size} auf {host} freigegeben | {count} Images entfernt und {size} auf {host} freigegeben",
-      "stillRunning": "Die Bereinigung auf {host} läuft noch; aktualisieren Sie die Liste gleich noch einmal.",
+      "stillRunning": "Der Docker-Proxy des Agents hat für {host} kein Ergebnis geliefert; die Bereinigung läuft möglicherweise noch. Aktualisieren Sie die Liste in Kürze.",
       "failed": "Bereinigung auf {host} fehlgeschlagen: {message}"
     },
     "refresh": "Aktualisieren"

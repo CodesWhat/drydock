@@ -41,7 +41,7 @@
       },
       "inProgress": "正在清理 {host} 上的镜像...",
       "success": "已在 {host} 上删除 1 个镜像，回收 {size} | 已在 {host} 上删除 {count} 个镜像，回收 {size}",
-      "stillRunning": "{host} 上的清理仍在进行；请稍后刷新列表。",
+      "stillRunning": "代理的 Docker 代理未返回 {host} 的结果；清理可能仍在进行。请稍后刷新列表。",
       "failed": "在 {host} 上清理失败：{message}"
     },
     "refresh": "刷新"

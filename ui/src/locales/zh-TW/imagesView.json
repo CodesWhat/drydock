@@ -41,7 +41,7 @@
       },
       "inProgress": "正在清理 {host} 上的映像檔...",
       "success": "已在 {host} 上移除 1 個映像檔，回收 {size} | 已在 {host} 上移除 {count} 個映像檔，回收 {size}",
-      "stillRunning": "{host} 上的清理仍在進行中；請稍後重新整理清單。",
+      "stillRunning": "代理程式的 Docker 代理未回傳 {host} 的結果；清理可能仍在進行中。請稍後重新整理清單。",
       "failed": "在 {host} 上清理失敗：{message}"
     },
     "refresh": "重新整理"

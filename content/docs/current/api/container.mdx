@@ -1132,7 +1132,7 @@ curl "http://drydock:3000/api/v1/images/prune-preview?host=docker.local&mode=unu
 | `host` | string | ✅ | Image host id to compute the estimate for |
 | `mode` | string | ✅ | `dangling` (untagged, unreferenced images only) or `unused` (any image with no referencing containers, tagged or not) |
 
-Returns 200 with the estimate, 400 if `host` is missing or `mode` isn't `dangling`/`unused`, 403 if container actions are disabled, 404 if the host doesn't exist, 501 if the host is an agent host without controller Docker transport, 504 if the host is an agent host and the prune-estimating call outlives the 30-second agent proxy window (message: "Prune is still running on this host; refresh the image list"), or 500 if the estimate otherwise fails.
+Returns 200 with the estimate, 400 if `host` is missing or `mode` isn't `dangling`/`unused`, 403 if container actions are disabled, 404 if the host doesn't exist, 501 if the host is an agent host without controller Docker transport, 504 if the host is an agent host and the prune-estimating call outlives the 30-second agent proxy window (message: "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list."), or 500 if the estimate otherwise fails.
 
 ## Prune images
 
@@ -1165,4 +1165,4 @@ curl -X POST http://drydock:3000/api/v1/images/prune \
 | `host` | string | ✅ | Image host id to prune |
 | `mode` | string | ✅ | `dangling` or `unused`, same semantics as the preview endpoint |
 
-`result.imagesDeleted` and `result.spaceReclaimed` come back from Docker's own prune response, not the earlier estimate. Returns 200 with the result, 400 if `host` is missing or `mode` isn't `dangling`/`unused`, 403 if container actions are disabled, 404 if the host doesn't exist, 428 if confirmation is missing, 501 if the host is an agent host without controller Docker transport, 504 if the host is an agent host and the prune outlives the 30-second agent proxy window (message: "Prune is still running on this host; refresh the image list"), or 500 if the prune otherwise fails.
+`result.imagesDeleted` and `result.spaceReclaimed` come back from Docker's own prune response, not the earlier estimate. Returns 200 with the result, 400 if `host` is missing or `mode` isn't `dangling`/`unused`, 403 if container actions are disabled, 404 if the host doesn't exist, 428 if confirmation is missing, 501 if the host is an agent host without controller Docker transport, 504 if the host is an agent host and the prune outlives the 30-second agent proxy window (message: "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list."), or 500 if the prune otherwise fails.

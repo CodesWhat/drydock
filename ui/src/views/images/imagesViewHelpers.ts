@@ -12,7 +12,9 @@ export function formatBytes(value: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let nextValue = Math.max(0, Number.isFinite(value) ? value : 0);
   let unitIndex = 0;
-  while (nextValue >= 1024 && unitIndex < units.length - 1) {
+  // Step up while the value would still round to 1024 at one decimal, so
+  // 1,048,575 bytes reads as 1.0 MB rather than 1024.0 KB.
+  while (nextValue >= 1023.95 && unitIndex < units.length - 1) {
     nextValue /= 1024;
     unitIndex += 1;
   }

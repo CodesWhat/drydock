@@ -25,7 +25,12 @@ const IMAGE_HOST_UNSUPPORTED_MESSAGE =
   "Image inventory is not supported over this host's agent connection, typically because the agent has not advertised the usesControllerDockerTransport capability.";
 
 const AGENT_PRUNE_STILL_RUNNING_MESSAGE =
-  'Prune is still running on this host; refresh the image list';
+  "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.";
+
+// Docker fills ImageSummary.SharedSize only when the list call asks for it
+// (`shared-size=true`, API 1.42+); without it the field is -1 and the
+// reclaimable estimate degrades to the full image size.
+const LIST_IMAGES_OPTIONS = { all: false, 'shared-size': true } as Record<string, unknown>;
 
 /**
  * Mirrors the literal used by the container action gate (`container-actions.ts`);
@@ -92,7 +97,7 @@ async function fetchHostInventory(
 ): Promise<{ items: ImageInventoryItem[]; summary: ImageHostSummary }> {
   try {
     const [images, containers] = await Promise.all([
-      host.dockerApi!.listImages({ all: false }),
+      host.dockerApi!.listImages(LIST_IMAGES_OPTIONS),
       host.dockerApi!.listContainers({ all: true }),
     ]);
     const items = buildImageInventory(images, containers, {
@@ -219,7 +224,7 @@ async function getPrunePreview(req: Request, res: Response) {
 
   try {
     const [images, containers] = await Promise.all([
-      host.dockerApi!.listImages({ all: false }),
+      host.dockerApi!.listImages(LIST_IMAGES_OPTIONS),
       host.dockerApi!.listContainers({ all: true }),
     ]);
     const items = buildImageInventory(images, containers, {

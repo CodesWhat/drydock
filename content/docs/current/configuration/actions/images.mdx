@@ -58,7 +58,7 @@ A host behind an agent only appears as prunable when that agent exposes [control
 
 ### Still running
 
-The controller's connection to an agent host times out after 30 seconds. A prune that's still running past that window doesn't fail: the API returns `504` and the UI shows "Prune is still running on this host; refresh the list in a moment" instead of an error. Refresh the list once the prune has had time to finish to see the result.
+The controller's connection to an agent host times out after 30 seconds. A prune that outlives that window is reported as a `504` with "returned no result; the prune may still be running", shown in the UI as a warning rather than an error. The same answer covers an agent that was unreachable, because the proxy does not yet distinguish the two (DR-133 on the roadmap). Refresh the list once the prune has had time to finish to see the result.
 
 ## Related
 

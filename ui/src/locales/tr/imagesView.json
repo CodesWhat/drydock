@@ -41,7 +41,7 @@
       },
       "inProgress": "{host} üzerinde imajlar temizleniyor...",
       "success": "{host} üzerinde 1 imaj kaldırıldı ve {size} geri kazanıldı | {host} üzerinde {count} imaj kaldırıldı ve {size} geri kazanıldı",
-      "stillRunning": "{host} üzerinde temizleme hâlâ devam ediyor; listeyi biraz sonra yenileyin.",
+      "stillRunning": "Aracının Docker proxy'si {host} için sonuç döndürmedi; temizleme hâlâ devam ediyor olabilir. Listeyi biraz sonra yenileyin.",
       "failed": "{host} üzerinde temizleme başarısız oldu: {message}"
     },
     "refresh": "Yenile"

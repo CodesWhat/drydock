@@ -41,7 +41,7 @@
       },
       "inProgress": "Nettoyage des images sur {host}...",
       "success": "1 image supprimée et {size} libérés sur {host} | {count} images supprimées et {size} libérés sur {host}",
-      "stillRunning": "Le nettoyage est toujours en cours sur {host} ; actualisez la liste dans un instant.",
+      "stillRunning": "Le proxy Docker de l'agent n'a renvoyé aucun résultat pour {host} ; le nettoyage est peut-être toujours en cours. Actualisez la liste dans un instant.",
       "failed": "Échec du nettoyage sur {host} : {message}"
     },
     "refresh": "Actualiser"

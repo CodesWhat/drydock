@@ -41,7 +41,7 @@
       },
       "inProgress": "Depurando imágenes en {host}...",
       "success": "Se eliminó 1 imagen y se recuperaron {size} en {host} | Se eliminaron {count} imágenes y se recuperaron {size} en {host}",
-      "stillRunning": "La depuración sigue en curso en {host}; actualice la lista en un momento.",
+      "stillRunning": "El proxy de Docker del agente no devolvió ningún resultado para {host}; la depuración puede seguir en curso. Actualice la lista en un momento.",
       "failed": "Error al depurar en {host}: {message}"
     },
     "refresh": "Actualizar"

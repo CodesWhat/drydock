@@ -41,7 +41,7 @@
       },
       "inProgress": "Prune delle immagini su {host} in corso...",
       "success": "Rimossa 1 immagine e liberati {size} su {host} | Rimosse {count} immagini e liberati {size} su {host}",
-      "stillRunning": "Il prune è ancora in corso su {host}; aggiorna l'elenco tra poco.",
+      "stillRunning": "Il proxy Docker dell'agent non ha restituito alcun risultato per {host}; il prune potrebbe essere ancora in corso. Aggiorna l'elenco tra poco.",
       "failed": "Prune non riuscito su {host}: {message}"
     },
     "refresh": "Aggiorna"

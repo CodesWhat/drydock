@@ -41,7 +41,7 @@
       },
       "inProgress": "Czyszczenie obrazów na {host}...",
       "success": "Usunięto 1 obraz i odzyskano {size} na {host} | Usunięto {count} obrazów i odzyskano {size} na {host}",
-      "stillRunning": "Czyszczenie na {host} wciąż trwa; odśwież listę za chwilę.",
+      "stillRunning": "Proxy Dockera agenta nie zwróciło wyniku dla {host}; czyszczenie może wciąż trwać. Odśwież listę za chwilę.",
       "failed": "Czyszczenie na {host} nie powiodło się: {message}"
     },
     "refresh": "Odśwież"

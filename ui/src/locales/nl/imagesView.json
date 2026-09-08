@@ -41,7 +41,7 @@
       },
       "inProgress": "Images op {host} worden opgeruimd...",
       "success": "1 image verwijderd en {size} vrijgemaakt op {host} | {count} images verwijderd en {size} vrijgemaakt op {host}",
-      "stillRunning": "Opruimen op {host} loopt nog; ververs de lijst zo dadelijk.",
+      "stillRunning": "De Docker-proxy van de agent gaf geen resultaat terug voor {host}; het opruimen loopt mogelijk nog. Ververs de lijst zo dadelijk.",
       "failed": "Opruimen op {host} mislukt: {message}"
     },
     "refresh": "Vernieuwen"

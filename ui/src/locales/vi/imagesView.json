@@ -41,7 +41,7 @@
       },
       "inProgress": "Đang dọn dẹp image trên {host}...",
       "success": "Đã xóa 1 image và thu hồi {size} trên {host} | Đã xóa {count} image và thu hồi {size} trên {host}",
-      "stillRunning": "Việc dọn dẹp trên {host} vẫn đang chạy; hãy làm mới danh sách sau một lát.",
+      "stillRunning": "Proxy Docker của agent không trả về kết quả cho {host}; việc dọn dẹp có thể vẫn đang chạy. Hãy làm mới danh sách sau giây lát.",
       "failed": "Dọn dẹp trên {host} thất bại: {message}"
     },
     "refresh": "Làm mới"

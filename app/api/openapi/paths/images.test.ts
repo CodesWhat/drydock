@@ -7,7 +7,7 @@ const IMAGE_HOST_UNSUPPORTED_MESSAGE =
   "Image inventory is not supported over this host's agent connection, typically because the agent has not advertised the usesControllerDockerTransport capability.";
 const CONTAINER_ACTIONS_DISABLED_MESSAGE = 'Container actions are disabled';
 const AGENT_PRUNE_STILL_RUNNING_MESSAGE =
-  'Prune is still running on this host; refresh the image list';
+  "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.";
 
 describe('imagePaths', () => {
   test('exports exactly the three expected path keys', () => {

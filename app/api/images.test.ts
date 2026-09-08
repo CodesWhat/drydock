@@ -138,6 +138,9 @@ describe('Images Router', () => {
 
       const res = await invokeGet('/', createMockRequest());
 
+      expect(localDockerApi.listImages).toHaveBeenCalledWith({ all: false, 'shared-size': true });
+      expect(agentDockerApi.listImages).toHaveBeenCalledWith({ all: false, 'shared-size': true });
+
       expect(res.status).toHaveBeenCalledWith(200);
       const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(body.total).toBe(2);
@@ -472,7 +475,7 @@ describe('Images Router', () => {
       });
     });
 
-    test('maps a 502 statusCode from an agent host to a 504 refresh-and-retry error', async () => {
+    test('maps a 502 statusCode from an agent host to a 504 no-result error', async () => {
       const error = Object.assign(new Error('bad gateway'), { statusCode: 502 });
       agentDockerApi.pruneImages.mockRejectedValue(error);
 
@@ -482,14 +485,15 @@ describe('Images Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(504);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Prune is still running on this host; refresh the image list',
+        error:
+          "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.",
       });
       expect(mockRecordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'image-prune', status: 'error' }),
       );
     });
 
-    test('maps a 504 statusCode from an agent host to the refresh-and-retry error', async () => {
+    test('maps a 504 statusCode from an agent host to the 504 no-result error', async () => {
       const error = Object.assign(new Error('gateway timeout'), { statusCode: 504 });
       agentDockerApi.pruneImages.mockRejectedValue(error);
 
@@ -500,7 +504,7 @@ describe('Images Router', () => {
       expect(res.status).toHaveBeenCalledWith(504);
     });
 
-    test('maps a timeout message from an agent host to the refresh-and-retry error', async () => {
+    test('maps a timeout message from an agent host to the 504 no-result error', async () => {
       agentDockerApi.pruneImages.mockRejectedValue(new Error('socket hang up'));
 
       const res = await invokePostPrune(
@@ -509,7 +513,8 @@ describe('Images Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(504);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Prune is still running on this host; refresh the image list',
+        error:
+          "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.",
       });
     });
 

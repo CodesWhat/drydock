@@ -89,7 +89,7 @@ const richImagesTableStub = defineComponent({
         :data-col-key="col.key">
         {{ col.label }}
       </div>
-      <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row" :data-row-id="row[rowKey || 'id']">
+      <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row" :data-row-id="row.id" :data-row-key="row[rowKey || 'id']">
         <slot name="cell-repository" :row="row" />
         <slot name="cell-tag" :row="row" />
         <slot name="cell-imageId" :row="row" />
@@ -108,7 +108,7 @@ const cardImagesTableStub = defineComponent({
   emits: ['update:cardReflowForced'],
   template: `
     <div class="data-table images-card-table" :data-row-count="rows?.length ?? 0" :data-prefer-cards="String(preferCards)">
-      <article v-for="row in rows || []" :key="row[rowKey || 'id']" class="image-card" :data-card-id="row[rowKey || 'id']">
+      <article v-for="row in rows || []" :key="row[rowKey || 'id']" class="image-card" :data-card-id="row.id">
         <slot name="card" :row="row" />
       </article>
     </div>
@@ -247,7 +247,7 @@ describe('ImagesView', () => {
     expect(wrapper.find('[data-row-id="sha256:unused"]').exists()).toBe(true);
   });
 
-  it('disables an unsupported host in the select and shows a notice when it is chosen', async () => {
+  it('disables an unsupported host in the select and names it in the notice', async () => {
     mockGetImages.mockResolvedValue({
       images: [],
       hosts: [
@@ -257,14 +257,40 @@ describe('ImagesView', () => {
     });
 
     const wrapper = await mountImagesView();
-    const blockedOption = wrapper.findAll('option').find((option) => option.text() === 'blocked');
+    const blockedOption = wrapper
+      .findAll('option')
+      .find((option) => option.text() === 'Blocked (edge)');
     expect(blockedOption).toBeDefined();
     expect(blockedOption?.attributes('disabled')).toBeDefined();
-    expect(wrapper.text()).not.toContain('does not expose the Docker API');
-
-    await wrapper.find('select').setValue('edge.docker.blocked');
-
     expect(wrapper.text()).toContain('does not expose the Docker API');
+    expect(wrapper.text()).toContain('Blocked (edge)');
+  });
+
+  it('hides the unsupported notice when every host is supported', async () => {
+    mockGetImages.mockResolvedValue({ images: [], hosts: [makeHost()] });
+
+    const wrapper = await mountImagesView();
+
+    expect(wrapper.text()).not.toContain('does not expose the Docker API');
+  });
+
+  it('keys rows per host so the same image id on two hosts stays distinct', async () => {
+    mockGetImages.mockResolvedValue({
+      images: [
+        makeImage({ id: 'sha256:same', watcher: 'local' }),
+        makeImage({ id: 'sha256:same', watcher: 'local', agent: 'edge' }),
+      ],
+      hosts: [makeHost(), makeHost({ id: 'edge.docker.local', name: 'local', agent: 'edge' })],
+    });
+
+    const wrapper = await mountImagesView();
+    const rows = wrapper.findAll('.data-table-row');
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.attributes('data-row-key')).sort()).toEqual([
+      'edge|local|sha256:same',
+      '|local|sha256:same',
+    ]);
   });
 
   it('shows a muted per-host error line', async () => {
@@ -501,7 +527,7 @@ describe('ImagesView', () => {
       await flushPromises();
 
       expect(mockToast.warning).toHaveBeenCalledWith(
-        'Prune is still running on Local; refresh the list in a moment.',
+        "The agent's Docker proxy returned no result for Local; the prune may still be running. Refresh the list in a moment.",
       );
       expect(mockGetImages).toHaveBeenCalledTimes(2);
     });
@@ -635,6 +661,11 @@ describe('imagesViewHelpers', () => {
 
     it('treats a non-finite value as zero', () => {
       expect(formatBytes(Number.NaN)).toBe('0 B');
+    });
+
+    it('steps up a unit when the value would round to 1024', () => {
+      expect(formatBytes(1_048_575)).toBe('1.0 MB');
+      expect(formatBytes(1023)).toBe('1023 B');
     });
   });
 

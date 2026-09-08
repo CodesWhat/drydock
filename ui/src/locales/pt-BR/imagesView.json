@@ -41,7 +41,7 @@
       },
       "inProgress": "Limpando imagens em {host}...",
       "success": "1 imagem removida e {size} recuperados em {host} | {count} imagens removidas e {size} recuperados em {host}",
-      "stillRunning": "A limpeza ainda está em andamento em {host}; atualize a lista em instantes.",
+      "stillRunning": "O proxy Docker do agente não retornou resultado para {host}; a limpeza ainda pode estar em andamento. Atualize a lista em instantes.",
       "failed": "Falha ao limpar em {host}: {message}"
     },
     "refresh": "Atualizar"
