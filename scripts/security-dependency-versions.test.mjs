@@ -50,17 +50,17 @@ test('Vitest and its mocker include the redirect path validation fix', () => {
   }
 });
 
-test('Joi includes the template rename prototype fix in app and e2e', () => {
+test('Joi includes the rename and custom-message prototype fixes in app and e2e', () => {
   for (const workspace of ['app', 'e2e']) {
     const manifest = readJson(`${workspace}/package.json`);
     assert.ok(
-      compareSemver(manifest.dependencies?.joi ?? manifest.overrides?.joi, '18.2.4') >= 0,
+      compareSemver(manifest.dependencies?.joi ?? manifest.overrides?.joi, '18.2.5') >= 0,
       workspace,
     );
     const lockfile = readJson(`${workspace}/package-lock.json`);
     for (const [path, entry] of Object.entries(lockfile.packages)) {
       if (!path.endsWith('node_modules/joi')) continue;
-      assert.ok(compareSemver(entry.version, '18.2.4') >= 0, `${workspace}/${path}`);
+      assert.ok(compareSemver(entry.version, '18.2.5') >= 0, `${workspace}/${path}`);
     }
   }
 });
