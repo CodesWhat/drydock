@@ -514,6 +514,19 @@
         "failedDetail": "Không thể cập nhật chuỗi phụ thuộc cho {name}.",
         "staleChainTitle": "Chuỗi phụ thuộc đã thay đổi",
         "staleChainDetail": "Chuỗi phụ thuộc cho {name} đã thay đổi kể từ lần xem trước gần nhất. Hãy mở lại hộp thoại cập nhật để xem lại chuỗi hiện tại trước khi xác nhận."
+      },
+      "bulkUpdate": {
+        "header": "Cập nhật {count} container đã chọn",
+        "accept": "Cập nhật {count}",
+        "acceptWithParents": "Thêm {count} container cha và cập nhật",
+        "dispatchHeading": "Sẽ được cập nhật",
+        "blockedHeading": "Bị chặn, sẽ được giữ nguyên",
+        "softOverridesHeading": "Đang cập nhật bất chấp cảnh báo",
+        "skippedHeading": "Đã bỏ qua",
+        "staleParentsHeading": "Các mục này phụ thuộc vào container cũng đang có bản cập nhật chờ xử lý",
+        "agentCountInfo": "Trải rộng trên {count} agent; mỗi agent tự chạy các bản cập nhật của mình.",
+        "stackCountInfo": "Trải rộng trên {count} stack.",
+        "successMessage": "Đã bắt đầu cập nhật cho {count} container"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} phụ thuộc vào {parents}, hiện cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên container cha đã lỗi thời. | {name} phụ thuộc vào {parents}, các mục này cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên các container cha đã lỗi thời.",
       "staleParentsOverflow": "và {count} mục khác",
       "staleParentsAccept": "Vẫn cập nhật"
+    },
+    "selection": {
+      "selectRow": "Chọn {name}",
+      "selectAll": "Chọn tất cả container hiển thị",
+      "barLabel": "Container đã chọn",
+      "count": "Đã chọn 1 container | Đã chọn {count} container",
+      "updateSelected": "Cập nhật mục đã chọn",
+      "clear": "Xóa",
+      "reasons": {
+        "stale": "không còn trong danh sách",
+        "inFlight": "đang được cập nhật",
+        "noUpdate": "không có bản cập nhật"
+      }
     }
   }
 }

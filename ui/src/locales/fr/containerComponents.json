@@ -514,6 +514,19 @@
         "failedDetail": "Impossible de mettre à jour la chaîne de dépendances pour {name}.",
         "staleChainTitle": "La chaîne de dépendances a changé",
         "staleChainDetail": "La chaîne de dépendances pour {name} a changé depuis son dernier aperçu. Rouvrez la boîte de dialogue de mise à jour pour vérifier la chaîne actuelle avant de confirmer."
+      },
+      "bulkUpdate": {
+        "header": "Mettre à jour {count} conteneurs sélectionnés",
+        "accept": "Mettre à jour {count}",
+        "acceptWithParents": "Ajouter {count} parents et mettre à jour",
+        "dispatchHeading": "Seront mis à jour",
+        "blockedHeading": "Bloqués, laissés tels quels",
+        "softOverridesHeading": "Mise à jour malgré les avertissements",
+        "skippedHeading": "Ignorés",
+        "staleParentsHeading": "Ceux-ci dépendent de conteneurs qui ont également des mises à jour en attente",
+        "agentCountInfo": "Concerne {count} agents ; chaque agent exécute ses propres mises à jour.",
+        "stackCountInfo": "Concerne {count} stacks.",
+        "successMessage": "Mise à jour démarrée pour {count} conteneurs"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} dépend de {parents}, qui a également une mise à jour en attente. Mettre à jour l'élément dépendant en premier peut le laisser fonctionner avec un parent obsolète. | {name} dépend de {parents}, qui ont également des mises à jour en attente. Mettre à jour l'élément dépendant en premier peut le laisser fonctionner avec des parents obsolètes.",
       "staleParentsOverflow": "et {count} de plus",
       "staleParentsAccept": "Mettre à jour quand même"
+    },
+    "selection": {
+      "selectRow": "Sélectionner {name}",
+      "selectAll": "Sélectionner tous les conteneurs visibles",
+      "barLabel": "Conteneurs sélectionnés",
+      "count": "1 conteneur sélectionné | {count} conteneurs sélectionnés",
+      "updateSelected": "Mettre à jour la sélection",
+      "clear": "Effacer",
+      "reasons": {
+        "stale": "n'est plus dans la liste",
+        "inFlight": "déjà en cours de mise à jour",
+        "noUpdate": "aucune mise à jour disponible"
+      }
     }
   }
 }

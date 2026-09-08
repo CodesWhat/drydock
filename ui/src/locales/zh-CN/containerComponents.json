@@ -514,6 +514,19 @@
         "failedDetail": "无法更新 {name} 的依赖链。",
         "staleChainTitle": "依赖链已发生变化",
         "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
+      },
+      "bulkUpdate": {
+        "header": "更新已选择的 {count} 个容器",
+        "accept": "更新 {count} 个",
+        "acceptWithParents": "添加 {count} 个上级容器并更新",
+        "dispatchHeading": "将会更新",
+        "blockedHeading": "已阻止，将保持不变",
+        "softOverridesHeading": "忽略警告继续更新",
+        "skippedHeading": "已跳过",
+        "staleParentsHeading": "这些容器依赖的容器也有待处理的更新",
+        "agentCountInfo": "涉及 {count} 个代理；每个代理各自运行自己的更新。",
+        "stackCountInfo": "涉及 {count} 个技术栈。",
+        "successMessage": "已开始更新 {count} 个容器"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} 依赖于 {parents}，该容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。 | {name} 依赖于 {parents}，这些容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。",
       "staleParentsOverflow": "还有 {count} 个",
       "staleParentsAccept": "仍然更新"
+    },
+    "selection": {
+      "selectRow": "选择 {name}",
+      "selectAll": "选择所有可见容器",
+      "barLabel": "已选容器",
+      "count": "已选择 1 个容器 | 已选择 {count} 个容器",
+      "updateSelected": "更新所选",
+      "clear": "清除",
+      "reasons": {
+        "stale": "已不在列表中",
+        "inFlight": "已在更新中",
+        "noUpdate": "没有可用更新"
+      }
     }
   }
 }

@@ -514,6 +514,19 @@
         "failedDetail": "فشل تحديث سلسلة الاعتمادية لـ {name}.",
         "staleChainTitle": "تغيّرت سلسلة الاعتمادية",
         "staleChainDetail": "تغيّرت سلسلة الاعتمادية لـ {name} منذ آخر معاينة لها. أعد فتح مربع حوار التحديث لمراجعة السلسلة الحالية قبل التأكيد."
+      },
+      "bulkUpdate": {
+        "header": "تحديث {count} حاويات محددة",
+        "accept": "تحديث {count}",
+        "acceptWithParents": "إضافة {count} من العناصر الأصلية والتحديث",
+        "dispatchHeading": "سيتم التحديث",
+        "blockedHeading": "محظور، سيُترك دون تغيير",
+        "softOverridesHeading": "التحديث رغم التحذيرات",
+        "skippedHeading": "متخطى",
+        "staleParentsHeading": "تعتمد هذه على حاويات لديها أيضًا تحديثات معلقة",
+        "agentCountInfo": "يشمل {count} وكلاء؛ يُشغّل كل وكيل تحديثاته الخاصة.",
+        "stackCountInfo": "يشمل {count} مكدسات.",
+        "successMessage": "بدأ التحديث لـ {count} حاويات"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} يعتمد على {parents}، الذي لديه أيضًا تحديث معلق. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عنصر أصلي قديم. | {name} يعتمد على {parents}، التي لديها أيضًا تحديثات معلقة. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عناصر أصلية قديمة.",
       "staleParentsOverflow": "و{count} إضافية",
       "staleParentsAccept": "التحديث على أي حال"
+    },
+    "selection": {
+      "selectRow": "تحديد {name}",
+      "selectAll": "تحديد كل الحاويات المرئية",
+      "barLabel": "الحاويات المحددة",
+      "count": "تم تحديد حاوية واحدة | تم تحديد {count} حاويات",
+      "updateSelected": "تحديث المحدد",
+      "clear": "مسح",
+      "reasons": {
+        "stale": "لم تعد في القائمة",
+        "inFlight": "قيد التحديث بالفعل",
+        "noUpdate": "لا يوجد تحديث متاح"
+      }
     }
   }
 }

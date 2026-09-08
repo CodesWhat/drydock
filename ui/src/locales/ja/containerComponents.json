@@ -514,6 +514,19 @@
         "failedDetail": "{name} の依存関係チェーンの更新に失敗しました。",
         "staleChainTitle": "依存関係チェーンが変更されました",
         "staleChainDetail": "{name} の依存関係チェーンは、前回プレビューした時点から変更されています。確定する前に更新ダイアログを再度開き、現在のチェーンを確認してください。"
+      },
+      "bulkUpdate": {
+        "header": "選択した {count} 件のコンテナを更新",
+        "accept": "{count} 件を更新",
+        "acceptWithParents": "{count} 件の親を追加して更新",
+        "dispatchHeading": "更新されます",
+        "blockedHeading": "ブロック済み、そのままにします",
+        "softOverridesHeading": "警告を無視して更新",
+        "skippedHeading": "スキップ済み",
+        "staleParentsHeading": "これらは更新待ちのコンテナにも依存しています",
+        "agentCountInfo": "{count} 件のエージェントにまたがります。各エージェントは独自に更新を実行します。",
+        "stackCountInfo": "{count} 件のスタックにまたがります。",
+        "successMessage": "{count} 件のコンテナの更新を開始しました"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} は {parents} に依存していますが、これには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。 | {name} は {parents} に依存していますが、これらには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。",
       "staleParentsOverflow": "他 {count} 件",
       "staleParentsAccept": "そのまま更新"
+    },
+    "selection": {
+      "selectRow": "{name} を選択",
+      "selectAll": "表示中のすべてのコンテナを選択",
+      "barLabel": "選択したコンテナ",
+      "count": "1 件のコンテナを選択中 | {count} 件のコンテナを選択中",
+      "updateSelected": "選択項目を更新",
+      "clear": "クリア",
+      "reasons": {
+        "stale": "リストから削除されました",
+        "inFlight": "すでに更新中です",
+        "noUpdate": "利用可能な更新はありません"
+      }
     }
   }
 }

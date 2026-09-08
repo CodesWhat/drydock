@@ -514,6 +514,19 @@
         "failedDetail": "Kan de afhankelijkheidsketen voor {name} niet bijwerken.",
         "staleChainTitle": "Afhankelijkheidsketen is gewijzigd",
         "staleChainDetail": "De afhankelijkheidsketen voor {name} is gewijzigd sinds het laatste voorbeeld. Open het updatedialoogvenster opnieuw om de huidige keten te bekijken voordat je bevestigt."
+      },
+      "bulkUpdate": {
+        "header": "{count} geselecteerde containers bijwerken",
+        "accept": "{count} bijwerken",
+        "acceptWithParents": "{count} bovenliggende containers toevoegen en bijwerken",
+        "dispatchHeading": "Worden bijgewerkt",
+        "blockedHeading": "Geblokkeerd, blijft ongewijzigd",
+        "softOverridesHeading": "Bijwerken ondanks waarschuwingen",
+        "skippedHeading": "Overgeslagen",
+        "staleParentsHeading": "Deze zijn afhankelijk van containers die ook updates in behandeling hebben",
+        "agentCountInfo": "Omvat {count} agents; elke agent voert zijn eigen updates uit.",
+        "stackCountInfo": "Omvat {count} stacks.",
+        "successMessage": "Update gestart voor {count} containers"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} is afhankelijk van {parents}, dat ook een update in behandeling heeft. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen een verouderd bovenliggend onderdeel blijven draaien. | {name} is afhankelijk van {parents}, die ook updates in behandeling hebben. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen verouderde bovenliggende onderdelen blijven draaien.",
       "staleParentsOverflow": "en {count} meer",
       "staleParentsAccept": "Toch bijwerken"
+    },
+    "selection": {
+      "selectRow": "{name} selecteren",
+      "selectAll": "Alle zichtbare containers selecteren",
+      "barLabel": "Geselecteerde containers",
+      "count": "1 container geselecteerd | {count} containers geselecteerd",
+      "updateSelected": "Selectie bijwerken",
+      "clear": "Wissen",
+      "reasons": {
+        "stale": "niet meer in de lijst",
+        "inFlight": "wordt al bijgewerkt",
+        "noUpdate": "geen update beschikbaar"
+      }
     }
   }
 }
