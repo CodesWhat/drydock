@@ -540,13 +540,15 @@ Podman works with Drydock through Podman's Docker-compatible API socket.
 
 #### Socket path mapping (`podman.sock` vs `docker.sock`)
 
-Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work.
+Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work. This is still the recommended path — it's the most predictable option and works with every Drydock release.
 
 | Runtime mode | Host socket path | Path inside Drydock container | Drydock watcher variable |
 | --- | --- | --- | --- |
 | Docker | `/var/run/docker.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
 | Podman rootful | `/run/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
 | Podman rootless | `/run/user/<uid>/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+
+<Callout type="info">**Automatic socket detection:** if you don't mount a Podman socket at `/var/run/docker.sock`, Drydock now probes for one when the local watcher's socket is left at its default and that default path doesn't exist. It checks `/run/podman/podman.sock` (rootful), then `$XDG_RUNTIME_DIR/podman/podman.sock` (rootless) when `XDG_RUNTIME_DIR` is set, and uses the first one it finds. This is a fallback, not a replacement for the mount above — an explicitly configured `DD_WATCHER_LOCAL_SOCKET` is always used as-is, with no probing.</Callout>
 
 #### Rootful vs rootless setup
 
@@ -652,6 +654,14 @@ services:
 | Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
 | SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
 | `podman-compose` networking | Pod-based networking breaks service-name DNS; use `podman compose` instead; see [FAQ](/docs/faq#podman-compose-vs-podman-compose-networking) |
+
+Drydock also detects Podman at watcher startup from the daemon's own `/version` response and logs a one-time warning naming the version and known limits, so it's obvious from the logs alone that a watcher is talking to Podman rather than Docker.
+
+**Known limits:**
+
+- **Rootless networking** — can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations)
+- **Volume driver differences** — Podman's volume drivers don't behave identically to Docker's
+- **Containers managed by a systemd unit (Quadlet) are recreated by the Docker action outside their unit** — the Docker action stops, removes, and recreates a container the same way regardless of what's managing it, so a Quadlet-managed container gets rebuilt outside its unit instead of being restarted through it; exclude systemd-managed containers from actions, or use a command action that restarts the unit instead
 
 For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-blocks-podman-socket-access-permission-denied).
 

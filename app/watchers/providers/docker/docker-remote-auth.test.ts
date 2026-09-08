@@ -7,11 +7,13 @@ const {
   mockGetErrorMessage,
   mockSetDetectedServerName,
   mockGetDetectedServerName,
+  mockIsWatcherSocketExplicitlyConfigured,
   mockInitializeRemoteOidcStateFromConfiguration,
   mockIsRemoteOidcTokenRefreshRequired,
   mockRefreshRemoteOidcAccessToken,
   mockProbeSocketApiVersion,
   mockDisableSocketRedirects,
+  mockResolveDockerSocketPath,
 } = vi.hoisted(() => ({
   mockDockerodeCtor: vi.fn(),
   mockReadFileSync: vi.fn(),
@@ -19,11 +21,13 @@ const {
   mockGetErrorMessage: vi.fn((_: unknown, fallback: string) => fallback),
   mockSetDetectedServerName: vi.fn(),
   mockGetDetectedServerName: vi.fn<() => string | undefined>(() => undefined),
+  mockIsWatcherSocketExplicitlyConfigured: vi.fn<(watcherName: string) => boolean>(() => false),
   mockInitializeRemoteOidcStateFromConfiguration: vi.fn(),
   mockIsRemoteOidcTokenRefreshRequired: vi.fn(() => false),
   mockRefreshRemoteOidcAccessToken: vi.fn(),
   mockProbeSocketApiVersion: vi.fn<(socketPath: string) => Promise<string | undefined>>(),
   mockDisableSocketRedirects: vi.fn(),
+  mockResolveDockerSocketPath: vi.fn((configuredSocket: string) => configuredSocket),
 }));
 
 vi.mock('dockerode', () => ({
@@ -43,6 +47,7 @@ vi.mock('../../../runtime/paths.js', () => ({
 vi.mock('../../../configuration/index.js', () => ({
   setDetectedServerName: mockSetDetectedServerName,
   getDetectedServerName: mockGetDetectedServerName,
+  isWatcherSocketExplicitlyConfigured: mockIsWatcherSocketExplicitlyConfigured,
 }));
 
 vi.mock('./docker-helpers.js', () => ({
@@ -61,6 +66,10 @@ vi.mock('./disable-socket-redirects.js', () => ({
 
 vi.mock('./socket-version-probe.js', () => ({
   probeSocketApiVersion: mockProbeSocketApiVersion,
+}));
+
+vi.mock('./docker-socket-resolution.js', () => ({
+  resolveDockerSocketPath: mockResolveDockerSocketPath,
 }));
 
 import {
@@ -119,6 +128,8 @@ describe('docker remote auth module', () => {
     mockRefreshRemoteOidcAccessToken.mockResolvedValue(undefined);
     mockProbeSocketApiVersion.mockResolvedValue(undefined);
     mockGetDetectedServerName.mockReturnValue(undefined);
+    mockIsWatcherSocketExplicitlyConfigured.mockReturnValue(false);
+    mockResolveDockerSocketPath.mockImplementation((configuredSocket: string) => configuredSocket);
   });
 
   test('initWatcherWithRemoteAuth initializes local socket watcher', async () => {
@@ -136,6 +147,9 @@ describe('docker remote auth module', () => {
 
     await initWatcherWithRemoteAuth(watcher as any);
 
+    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/var/run/docker.sock', {
+      socketExplicit: false,
+    });
     expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/var/run/docker.sock');
     expect(mockDockerodeCtor).toHaveBeenCalledWith({
       ca: undefined,
@@ -150,6 +164,82 @@ describe('docker remote auth module', () => {
     expect(watcher.applyRemoteAuthHeaders).not.toHaveBeenCalled();
     expect(watcher.remoteAuthBlockedReason).toBeUndefined();
     expect(watcher.dockerApi).toBe(dockerApi);
+  });
+
+  test('initWatcherWithRemoteAuth connects to a resolved Podman socket when the default is absent (#10.4)', async () => {
+    const dockerApi = { modem: { headers: {} } };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+    mockResolveDockerSocketPath.mockReturnValue('/run/podman/podman.sock');
+
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/var/run/docker.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/var/run/docker.sock', {
+      socketExplicit: false,
+    });
+    expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/run/podman/podman.sock');
+    expect(mockDockerodeCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ socketPath: '/run/podman/podman.sock' }),
+    );
+  });
+
+  test('initWatcherWithRemoteAuth marks an explicitly configured non-default socket as explicit and never probes (#10.4 finding 4)', async () => {
+    const dockerApi = { modem: { headers: {} } };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+    mockIsWatcherSocketExplicitlyConfigured.mockReturnValue(true);
+
+    const watcher = createWatcher({
+      name: 'watcher-explicit',
+      configuration: {
+        socket: '/run/docker-local.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockIsWatcherSocketExplicitlyConfigured).toHaveBeenCalledWith('watcher-explicit');
+    expect(mockResolveDockerSocketPath).toHaveBeenCalledWith('/run/docker-local.sock', {
+      socketExplicit: true,
+    });
+    expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/run/docker-local.sock');
+    expect(mockDockerodeCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ socketPath: '/run/docker-local.sock' }),
+    );
+  });
+
+  test('initWatcherWithRemoteAuth never resolves or probes a socket for a host-configured (remote) watcher', async () => {
+    const dockerApi = { modem: { headers: {} } };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      name: 'remote-watcher',
+      configuration: {
+        host: 'docker-api.example.com',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockResolveDockerSocketPath).not.toHaveBeenCalled();
+    expect(mockProbeSocketApiVersion).not.toHaveBeenCalled();
+    expect(mockDockerodeCtor).toHaveBeenCalledWith(
+      expect.not.objectContaining({ socketPath: expect.anything() }),
+    );
   });
 
   test('local socket watcher overrides an ambient remote DOCKER_HOST', async () => {
@@ -797,6 +887,34 @@ describe('docker remote auth module', () => {
     expect(watcher.setRemoteAuthorizationHeader).not.toHaveBeenCalled();
   });
 
+  test('ensureRemoteAuthHeadersForWatcher reuses a still-valid cached oidc token without refreshing', async () => {
+    const oidcContext = { watcherName: 'watcher-a' };
+    const oidcState = { accessToken: 'cached-oidc-token' };
+    const watcher = createWatcher({
+      remoteOidcAccessToken: 'cached-oidc-token',
+      configuration: {
+        host: 'docker-api.example.com',
+        socket: '/var/run/docker.sock',
+        port: 443,
+        protocol: 'https',
+        auth: {
+          type: 'oidc',
+        },
+      },
+      getRemoteAuthResolution: vi.fn(() => ({
+        authType: 'oidc',
+      })),
+      getOidcContext: vi.fn(() => oidcContext),
+      getOidcStateAdapter: vi.fn(() => oidcState),
+    });
+    mockIsRemoteOidcTokenRefreshRequired.mockReturnValue(false);
+
+    await ensureRemoteAuthHeadersForWatcher(watcher as any);
+
+    expect(mockRefreshRemoteOidcAccessToken).not.toHaveBeenCalled();
+    expect(watcher.setRemoteAuthorizationHeader).toHaveBeenCalledWith('Bearer cached-oidc-token');
+  });
+
   test('applyRemoteAuthHeadersForWatcher returns when auth is missing', () => {
     const watcher = createWatcher();
     const options: Record<string, unknown> = {};
@@ -950,6 +1068,91 @@ describe('docker remote auth module', () => {
     expect(options.headers).toEqual({
       Authorization: 'Bearer cached-oidc-token',
     });
+  });
+
+  test('applyRemoteAuthHeadersForWatcher initializes oidc state but sets no header without a cached token', () => {
+    const oidcContext = { watcherName: 'watcher-a' };
+    const watcher = createWatcher({
+      remoteOidcAccessToken: undefined,
+      configuration: {
+        host: 'docker-api.example.com',
+        socket: '/var/run/docker.sock',
+        port: 443,
+        protocol: 'https',
+        auth: {
+          type: 'oidc',
+        },
+      },
+      getRemoteAuthResolution: vi.fn(() => ({
+        authType: 'oidc',
+        hasBearer: false,
+        hasBasic: false,
+        hasOidcConfig: true,
+      })),
+      getOidcContext: vi.fn(() => oidcContext),
+    });
+    const options: Record<string, any> = {};
+
+    applyRemoteAuthHeadersForWatcher(watcher as any, options as any);
+
+    expect(mockInitializeRemoteOidcStateFromConfiguration).toHaveBeenCalledWith(oidcContext);
+    expect(options.headers).toBeUndefined();
+  });
+
+  test('applyRemoteAuthHeadersForWatcher fails when basic auth type is missing basic credentials', () => {
+    const watcher = createWatcher({
+      configuration: {
+        host: 'docker-api.example.com',
+        socket: '/var/run/docker.sock',
+        port: 443,
+        auth: {
+          type: 'basic',
+        },
+      },
+      // hasOidcConfig true keeps the aggregate "credentials are incomplete"
+      // check at the top from tripping first, so this exercises the
+      // basic-specific "credentials are incomplete" branch further down.
+      getRemoteAuthResolution: vi.fn(() => ({
+        authType: 'basic',
+        hasBearer: false,
+        hasBasic: false,
+        hasOidcConfig: true,
+      })),
+    });
+
+    applyRemoteAuthHeadersForWatcher(watcher as any, {} as any);
+
+    expect(watcher.handleRemoteAuthFailure).toHaveBeenCalledWith(
+      'Unable to authenticate remote watcher watcher-a: basic credentials are incomplete',
+    );
+  });
+
+  test('applyRemoteAuthHeadersForWatcher fails when bearer auth type is missing a bearer token', () => {
+    const watcher = createWatcher({
+      configuration: {
+        host: 'docker-api.example.com',
+        socket: '/var/run/docker.sock',
+        port: 443,
+        auth: {
+          type: 'bearer',
+        },
+      },
+      // hasBasic true keeps the aggregate "credentials are incomplete" check
+      // at the top from tripping first, so this exercises the
+      // bearer-specific "bearer token is missing" branch further down.
+      getRemoteAuthResolution: vi.fn(() => ({
+        authType: 'bearer',
+        hasBearer: false,
+        hasBasic: true,
+        hasOidcConfig: false,
+      })),
+    });
+
+    applyRemoteAuthHeadersForWatcher(watcher as any, {} as any);
+
+    expect(watcher.handleRemoteAuthFailure).toHaveBeenCalledWith(
+      'Unable to authenticate remote watcher watcher-a: bearer token is missing',
+    );
   });
 
   test('applyRemoteAuthHeadersForWatcher fails unsupported auth type after https check', () => {

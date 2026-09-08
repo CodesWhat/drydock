@@ -22,6 +22,7 @@ vi.mock('../configuration/index.js', () => ({
   getWatcherConfigurations: vi.fn(),
   getAuthenticationConfigurations: vi.fn(),
   getAgentConfigurations: vi.fn(),
+  isWatcherSocketExplicitlyConfigured: vi.fn(() => false),
   ddEnvVars: {},
 }));
 

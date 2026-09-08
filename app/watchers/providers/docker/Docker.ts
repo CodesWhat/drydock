@@ -158,6 +158,7 @@ import {
   OIDC_DEVICE_URL_PATHS,
   OIDC_GRANT_TYPE_PATHS,
 } from './oidc.js';
+import { detectPodmanCompatibility } from './podman-detection.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
 
 export interface DockerWatcherConfiguration extends ComponentConfiguration {
@@ -392,6 +393,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
   public pendingDiscoverySettleTimeout?: NodeJS.Timeout;
   public unregisterContainerUpdateApplied?: () => void;
+  // Set at init() by detectPodmanCompatibility(); see podman-detection.ts.
+  public isPodman?: boolean;
+  public podmanVersion?: string;
   #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
   ensureLogger() {
@@ -699,6 +703,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.warnIfNarrowMaintenanceWindow();
     await warnIfCurlHealthcheckOverride(this.log);
     await this.initWatcher();
+    await detectPodmanCompatibility(this);
     // A remote watcher's OIDC bearer header is not set by initWatcher(); it
     // is refreshed lazily, the same way getContainers() refreshes it before
     // its own listContainers() call below. Skipping this would send the

@@ -593,6 +593,27 @@ export function getWatcherConfigurations() {
 }
 
 /**
+ * Whether a watcher's `socket` was explicitly configured (env var or config
+ * file — both already merged into `ddEnvVars` by the time this runs) rather
+ * than left unset for the Docker watcher's Joi schema to default.
+ *
+ * `resolveDockerSocketPath` (docker-socket-resolution.ts) needs this signal:
+ * without it, an operator who explicitly sets
+ * `DD_WATCHER_<name>_SOCKET=/var/run/docker.sock` is indistinguishable, once
+ * Joi has filled in the same default for an unset socket, from one who never
+ * configured a socket at all — and gets silently rerouted to a detected
+ * Podman socket instead of the failure they'd expect (#10.4 forward-port
+ * review finding 1). Deliberately a side-channel lookup rather than a field
+ * added to the watcher configuration object: Docker.ts's Joi schema (and its
+ * line-count ratchet in Docker.structure.test.ts) has no room for an extra
+ * key, and validation would reject one it doesn't declare.
+ */
+export function isWatcherSocketExplicitlyConfigured(watcherName: string): boolean {
+  const watcherConfiguration = getWatcherConfigurations()[watcherName.toLowerCase()];
+  return Boolean(watcherConfiguration && Object.hasOwn(watcherConfiguration, 'socket'));
+}
+
+/**
  * Get trigger configurations.
  */
 export function getTriggerConfigurations() {
