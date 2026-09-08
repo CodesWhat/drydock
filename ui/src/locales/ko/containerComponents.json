@@ -516,7 +516,7 @@
         "staleChainDetail": "{name}의 종속성 체인이 마지막으로 미리 본 이후 변경되었습니다. 확인하기 전에 업데이트 대화상자를 다시 열어 현재 체인을 검토하세요."
       },
       "bulkUpdate": {
-        "header": "선택한 컨테이너 1개 업데이트 | 선택한 컨테이너 {count}개 업데이트",
+        "header": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
         "accept": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
         "acceptWithParents": "상위 항목 1개 추가 후 업데이트 | 상위 항목 {count}개 추가 후 업데이트",
         "dispatchHeading": "업데이트될 항목",

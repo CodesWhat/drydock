@@ -516,7 +516,7 @@
         "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
       },
       "bulkUpdate": {
-        "header": "Update 1 selected container | Update {count} selected containers",
+        "header": "Update 1 container | Update {count} containers",
         "accept": "Update 1 container | Update {count} containers",
         "acceptWithParents": "Add 1 parent and update | Add {count} parents and update",
         "dispatchHeading": "Will update",

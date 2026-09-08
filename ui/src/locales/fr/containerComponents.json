@@ -516,7 +516,7 @@
         "staleChainDetail": "La chaîne de dépendances pour {name} a changé depuis son dernier aperçu. Rouvrez la boîte de dialogue de mise à jour pour vérifier la chaîne actuelle avant de confirmer."
       },
       "bulkUpdate": {
-        "header": "Mettre à jour 1 conteneur sélectionné | Mettre à jour {count} conteneurs sélectionnés",
+        "header": "Mettre à jour 1 conteneur | Mettre à jour {count} conteneurs",
         "accept": "Mettre à jour 1 conteneur | Mettre à jour {count} conteneurs",
         "acceptWithParents": "Ajouter 1 parent et mettre à jour | Ajouter {count} parents et mettre à jour",
         "dispatchHeading": "Seront mis à jour",

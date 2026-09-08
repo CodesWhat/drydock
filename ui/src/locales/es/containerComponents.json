@@ -516,7 +516,7 @@
         "staleChainDetail": "La cadena de dependencias de {name} cambió desde la última vista previa. Vuelve a abrir el diálogo de actualización para revisar la cadena actual antes de confirmar."
       },
       "bulkUpdate": {
-        "header": "Actualizar 1 contenedor seleccionado | Actualizar {count} contenedores seleccionados",
+        "header": "Actualizar 1 contenedor | Actualizar {count} contenedores",
         "accept": "Actualizar 1 contenedor | Actualizar {count} contenedores",
         "acceptWithParents": "Añadir 1 elemento superior y actualizar | Añadir {count} elementos superiores y actualizar",
         "dispatchHeading": "Se actualizarán",

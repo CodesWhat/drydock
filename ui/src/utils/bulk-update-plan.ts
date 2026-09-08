@@ -146,6 +146,14 @@ export function planBulkUpdate(input: PlanBulkUpdateInput): BulkUpdatePlan {
         }
         seenStaleParentIds.add(parentId);
         staleParents.push({ id: parentId, name: parent.name });
+        if (parentState === 'soft') {
+          const softBlockers = getSoftBlockers(parent.updateEligibility);
+          softOverrides.push({
+            id: parentId,
+            name: parent.name,
+            reason: softBlockers.map((blocker) => blocker.message).join('; '),
+          });
+        }
       }
     }
   }

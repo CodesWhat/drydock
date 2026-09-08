@@ -516,7 +516,7 @@
         "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
       },
       "bulkUpdate": {
-        "header": "更新已选择的 1 个容器 | 更新已选择的 {count} 个容器",
+        "header": "更新 1 个容器 | 更新 {count} 个容器",
         "accept": "更新 1 个容器 | 更新 {count} 个容器",
         "acceptWithParents": "添加 1 个上级容器并更新 | 添加 {count} 个上级容器并更新",
         "dispatchHeading": "将会更新",

@@ -516,7 +516,7 @@
         "staleChainDetail": "La catena di dipendenze per {name} è cambiata dall'ultima anteprima. Riapri la finestra di dialogo di aggiornamento per rivedere la catena attuale prima di confermare."
       },
       "bulkUpdate": {
-        "header": "Aggiorna 1 container selezionato | Aggiorna {count} container selezionati",
+        "header": "Aggiorna 1 container | Aggiorna {count} container",
         "accept": "Aggiorna 1 container | Aggiorna {count} container",
         "acceptWithParents": "Aggiungi 1 elemento principale e aggiorna | Aggiungi {count} elementi principali e aggiorna",
         "dispatchHeading": "Verranno aggiornati",

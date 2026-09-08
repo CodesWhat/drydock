@@ -217,6 +217,9 @@ test.describe('Containers', () => {
 
     const checkboxes = page.locator('[data-test="container-select"]');
     await expect(checkboxes.first()).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(async () => await checkboxes.count(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(2);
     await checkboxes.nth(0).check();
     await checkboxes.nth(1).check();
 
@@ -237,7 +240,7 @@ test.describe('Containers', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog).toContainText(/Update \d+ selected container/);
+    await expect(dialog).toContainText(/Update \d+ container/);
     await expect(dialog).toContainText(/Will update|Skipped|Blocked/);
 
     await dialog.getByRole('button', { name: 'Cancel' }).click();

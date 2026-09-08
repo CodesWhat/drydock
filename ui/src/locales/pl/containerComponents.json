@@ -516,7 +516,7 @@
         "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem."
       },
       "bulkUpdate": {
-        "header": "Zaktualizuj 1 wybrany kontener | Zaktualizuj {count} wybranych kontenerów",
+        "header": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
         "accept": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
         "acceptWithParents": "Dodaj 1 kontener nadrzędny i zaktualizuj | Dodaj {count} kontenerów nadrzędnych i zaktualizuj",
         "dispatchHeading": "Zostaną zaktualizowane",

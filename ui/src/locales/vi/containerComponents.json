@@ -516,7 +516,7 @@
         "staleChainDetail": "Chuỗi phụ thuộc cho {name} đã thay đổi kể từ lần xem trước gần nhất. Hãy mở lại hộp thoại cập nhật để xem lại chuỗi hiện tại trước khi xác nhận."
       },
       "bulkUpdate": {
-        "header": "Cập nhật 1 container đã chọn | Cập nhật {count} container đã chọn",
+        "header": "Cập nhật 1 container | Cập nhật {count} container",
         "accept": "Cập nhật 1 container | Cập nhật {count} container",
         "acceptWithParents": "Thêm 1 container cha và cập nhật | Thêm {count} container cha và cập nhật",
         "dispatchHeading": "Sẽ được cập nhật",

@@ -516,7 +516,7 @@
         "staleChainDetail": "{name} 的依賴鏈自上次預覽後已變更。請重新開啟更新對話方塊，在確認前檢視目前的鏈結。"
       },
       "bulkUpdate": {
-        "header": "更新已選擇的 1 個容器 | 更新已選擇的 {count} 個容器",
+        "header": "更新 1 個容器 | 更新 {count} 個容器",
         "accept": "更新 1 個容器 | 更新 {count} 個容器",
         "acceptWithParents": "新增 1 個上層容器並更新 | 新增 {count} 個上層容器並更新",
         "dispatchHeading": "將會更新",

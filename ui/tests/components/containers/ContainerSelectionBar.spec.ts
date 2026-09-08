@@ -52,6 +52,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     isContainerUpdateQueued: () => false,
     isContainerRowLocked: () => false,
     updateMode: ref('manual'),
+    groupKeyForContainer: () => undefined,
     ...overrides,
   } as any;
 
@@ -231,6 +232,32 @@ describe('ContainerSelectionBar', () => {
     expect(confirmBulkUpdate).toHaveBeenCalledTimes(1);
     const plan = confirmBulkUpdate.mock.calls[0][0];
     expect(plan.staleParents).toEqual([{ id: 'c-2', name: 'db' }]);
+  });
+
+  it('passes groupKeyForContainer through to the plan and counts distinct stacks', async () => {
+    const web = makeContainer({ id: 'c-1', name: 'web', newTag: '2.0.0' });
+    const worker = makeContainer({ id: 'c-2', name: 'worker', newTag: '2.0.0' });
+    const groupKeyForContainer = (container: Container) =>
+      container.id === 'c-1' ? 'stack-a' : 'stack-b';
+    const { context, filteredContainers, confirmBulkUpdate } = makeContext({
+      groupKeyForContainer,
+    });
+    filteredContainers.value = [web, worker];
+    mocked.context = context;
+    const { toggle } = useContainerSelection();
+    toggle('c-1');
+    toggle('c-2');
+
+    activeWrapper = mountBar();
+    const updateBtn = bar()?.querySelector<HTMLButtonElement>(
+      '[data-test="container-selection-update"]',
+    );
+    updateBtn?.click();
+    await activeWrapper.vm.$nextTick();
+
+    expect(confirmBulkUpdate).toHaveBeenCalledTimes(1);
+    const plan = confirmBulkUpdate.mock.calls[0][0];
+    expect(plan.stackCount).toBe(2);
   });
 
   it('clears the selection on unmount', () => {

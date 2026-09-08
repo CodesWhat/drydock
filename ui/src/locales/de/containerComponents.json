@@ -516,7 +516,7 @@
         "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen."
       },
       "bulkUpdate": {
-        "header": "1 ausgewählten Container aktualisieren | {count} ausgewählte Container aktualisieren",
+        "header": "1 Container aktualisieren | {count} Container aktualisieren",
         "accept": "1 Container aktualisieren | {count} Container aktualisieren",
         "acceptWithParents": "1 übergeordnetes Element hinzufügen und aktualisieren | {count} übergeordnete Elemente hinzufügen und aktualisieren",
         "dispatchHeading": "Wird aktualisiert",

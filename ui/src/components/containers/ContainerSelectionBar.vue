@@ -19,6 +19,7 @@ const {
   isContainerUpdateQueued,
   isContainerRowLocked,
   updateMode: configuredUpdateMode,
+  groupKeyForContainer,
 } = useContainersViewTemplateContext();
 const updateMode = computed(() => configuredUpdateMode?.value ?? 'manual');
 const { adjacency } = useDependencyGraph();
@@ -45,6 +46,7 @@ const plan = computed<BulkUpdatePlan>(() =>
     adjacency: adjacency.value,
     rowState,
     isRowLocked: isContainerRowLocked,
+    groupKeyForContainer,
     t: t as TranslateFn,
   }),
 );

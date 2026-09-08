@@ -269,6 +269,71 @@ describe('planBulkUpdate', () => {
     expect(plan.staleParents).toEqual([{ id: 'db', name: 'database' }]);
   });
 
+  it('reports a soft stale parent in both staleParents and softOverrides with the joined blocker text', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app1'), makeNode('app2'), makeNode('db', 'database')],
+      edges: [
+        { from: 'app1', to: 'db', action: 'update', source: 'label' },
+        { from: 'app2', to: 'db', action: 'update', source: 'label' },
+      ],
+    });
+    const containers = [
+      makeContainer({ id: 'app1', name: 'app1' }),
+      makeContainer({ id: 'app2', name: 'app2' }),
+      makeContainer({
+        id: 'db',
+        name: 'database',
+        newTag: '2.0.0',
+        updateEligibility: {
+          eligible: true,
+          evaluatedAt: '2026-01-01T00:00:00.000Z',
+          blockers: [
+            {
+              reason: 'snoozed',
+              severity: 'soft',
+              message: 'Snoozed until tomorrow',
+              actionable: true,
+            },
+            { reason: 'skip-tag', severity: 'soft', message: 'Tag skipped', actionable: true },
+          ],
+        },
+      }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app1', 'app2']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app1: 'ready', app2: 'ready', db: 'soft' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([{ id: 'db', name: 'database' }]);
+    expect(plan.softOverrides).toEqual([
+      { id: 'db', name: 'database', reason: 'Snoozed until tomorrow; Tag skipped' },
+    ]);
+  });
+
+  it('reports a ready stale parent only in staleParents, not softOverrides', () => {
+    const adjacency = makeAdjacency({
+      nodes: [makeNode('app'), makeNode('db', 'database')],
+      edges: [{ from: 'app', to: 'db', action: 'update', source: 'label' }],
+    });
+    const containers = [
+      makeContainer({ id: 'app' }),
+      makeContainer({ id: 'db', name: 'database' }),
+    ];
+    const plan = planBulkUpdate({
+      selectedIds: new Set(['app']),
+      containers,
+      adjacency,
+      rowState: rowStateFrom({ app: 'ready', db: 'ready' }),
+      isRowLocked: noneLocked(),
+      t,
+    });
+    expect(plan.staleParents).toEqual([{ id: 'db', name: 'database' }]);
+    expect(plan.softOverrides).toEqual([]);
+  });
+
   it('does not report an unselected parent that is itself locked (in flight)', () => {
     const adjacency = makeAdjacency({
       nodes: [makeNode('app'), makeNode('db', 'database')],

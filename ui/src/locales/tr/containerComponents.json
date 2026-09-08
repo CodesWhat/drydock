@@ -516,7 +516,7 @@
         "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
       },
       "bulkUpdate": {
-        "header": "1 seçili kapsayıcıyı güncelle | {count} seçili kapsayıcıyı güncelle",
+        "header": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
         "accept": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
         "acceptWithParents": "1 üst öğeyi ekle ve güncelle | {count} üst öğeyi ekle ve güncelle",
         "dispatchHeading": "Güncellenecek",

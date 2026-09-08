@@ -1539,6 +1539,7 @@ provide(containersViewTemplateContextKey, {
   openActionsMenu,
   toggleActionsMenu,
   openContainerGroupDialog,
+  groupKeyForContainer: getEffectiveContainerGroup,
   updateContainer,
   confirmUpdate,
   confirmStop,
