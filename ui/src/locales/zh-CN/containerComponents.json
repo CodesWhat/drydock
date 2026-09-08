@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "无效的正则表达式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依赖于",
+      "requiredBy": "被以下依赖",
+      "cycle": "属于依赖循环的一部分",
+      "toggle": "显示依赖关系",
+      "updateGroup": "更新依赖组 ({count})",
+      "staleParentsWarning": "{name} 依赖于 {parents}，该容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。 | {name} 依赖于 {parents}，这些容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。",
+      "staleParentsOverflow": "还有 {count} 个",
+      "staleParentsAccept": "仍然更新"
     }
   }
 }

@@ -10,6 +10,7 @@ import { containersViewTemplateContextKey } from '../components/containers/conta
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
+import { useDependencyGraph } from '../composables/useDependencyGraph';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
@@ -280,6 +281,13 @@ async function loadContainers() {
     if (groupByStack.value) {
       await loadGroups();
     }
+    // Fire-and-forget: the dependency graph is a distinct global resource from
+    // the container list (#219, roadmap 6.1), and useDependencyGraph() keeps
+    // its own error ref rather than surfacing into this view's error state.
+    // Reloaded on every successful list load, not just on mount, so the
+    // dependency rows and the child-before-parent guard never read edges from
+    // before a recheck, an SSE refresh, a delete or a group update.
+    void useDependencyGraph().loadDependencyGraph();
   } catch (e: unknown) {
     error.value = errorMessage(e, t('containersView.error.loadFailed'));
   } finally {
@@ -446,6 +454,7 @@ const {
   clearSkipsSelected,
   confirmClearPolicy,
   confirmDelete,
+  confirmDependencyGroupUpdate,
   confirmForceUpdate,
   confirmUpdate,
   confirmRollback,
@@ -1536,6 +1545,7 @@ provide(containersViewTemplateContextKey, {
   confirmRestart,
   scanContainer,
   confirmForceUpdate,
+  confirmDependencyGroupUpdate,
   skipUpdate,
   closeActionsMenu,
   confirmDelete,

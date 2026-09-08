@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depends on",
+      "requiredBy": "Required by",
+      "cycle": "Part of a dependency cycle",
+      "toggle": "Show dependencies",
+      "updateGroup": "Update dependency group ({count})",
+      "staleParentsWarning": "{name} depends on {parents}, which also has an update pending. Updating the child first can leave it running against an outdated parent. | {name} depends on {parents}, which also have updates pending. Updating the child first can leave it running against an outdated parent.",
+      "staleParentsOverflow": "and {count} more",
+      "staleParentsAccept": "Update anyway"
     }
   }
 }

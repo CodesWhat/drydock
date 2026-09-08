@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "無効な正規表現です"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依存先",
+      "requiredBy": "依存元",
+      "cycle": "依存関係のサイクルの一部",
+      "toggle": "依存関係を表示",
+      "updateGroup": "依存関係グループを更新 ({count})",
+      "staleParentsWarning": "{name} は {parents} に依存していますが、これには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。 | {name} は {parents} に依存していますが、これらには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。",
+      "staleParentsOverflow": "他 {count} 件",
+      "staleParentsAccept": "そのまま更新"
     }
   }
 }

@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import { setI18nLocale } from '@/boot/i18n';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
@@ -257,6 +258,7 @@ describe('useContainerActions', () => {
     _resetScanLifecycleStateForTests();
     useOperationDisplayHold().clearAllOperationDisplayHolds();
     useUpdateBatches().batches.value = new Map();
+    resetDependencyGraphState();
     mocks.containerActionsEnabled.value = true;
     mocks.getBackups.mockResolvedValue([]);
     mocks.rollback.mockResolvedValue({});
@@ -1962,6 +1964,220 @@ describe('useContainerActions', () => {
     expect(confirmCall.message).toBe(
       'Update web now? This will apply the latest discovered image.',
     );
+  });
+
+  describe('child-before-parent stale-parent guard (#219)', () => {
+    function seedGraph() {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'web', displayName: 'web' },
+          { id: 'container-2', name: 'db', displayName: 'db' },
+        ],
+        edges: [{ from: 'container-1', to: 'container-2', action: 'update', source: 'label' }],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    it('appends the stale-parent warning and switches the accept label when a parent has a pending update', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('db');
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
+    it('does not warn when the parent has no pending update', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('does not warn when the parent is not present in the current container list', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('skips the guard when the target name has no container id', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: {},
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('caps the named parents at five and reports how many more there are', async () => {
+      const parentIds = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'];
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'web', displayName: 'web' },
+          ...parentIds.map((id) => ({ id, name: id, displayName: id })),
+        ],
+        edges: parentIds.map((id) => ({
+          from: 'container-1',
+          to: id,
+          action: 'update',
+          source: 'label',
+        })),
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const parents = parentIds.map((id) => makeContainer({ id, name: id, newTag: '2.0.0' }));
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1' },
+        containers: [web, ...parents],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('p1, p2, p3, p4, p5');
+      expect(confirmCall.message).not.toContain('p6');
+      expect(confirmCall.message).toContain('and 2 more');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
+    it('also appends the stale-parent warning to the force-update confirmation', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web', bouncer: 'blocked' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      composable.confirmForceUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
+    it('re-evaluates the warning against a reactive containers list for confirmUpdate', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable, containers } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      containers.value = [web, { ...db, newTag: '2.0.0' }];
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+
+      await confirmCall.accept?.();
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    });
+
+    it('re-evaluates the warning against a reactive containers list for confirmForceUpdate', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable, containers } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      containers.value = [web, { ...db, newTag: '2.0.0' }];
+
+      composable.confirmForceUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+
+      await confirmCall.accept?.();
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    });
   });
 
   it('wires rollback confirmation dialog to rollback accept handler', async () => {

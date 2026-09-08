@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Ongeldige reguliere expressie"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Afhankelijk van",
+      "requiredBy": "Vereist door",
+      "cycle": "Onderdeel van een afhankelijkheidscyclus",
+      "toggle": "Afhankelijkheden tonen",
+      "updateGroup": "Afhankelijkheidsgroep bijwerken ({count})",
+      "staleParentsWarning": "{name} is afhankelijk van {parents}, dat ook een update in behandeling heeft. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen een verouderd bovenliggend onderdeel blijven draaien. | {name} is afhankelijk van {parents}, die ook updates in behandeling hebben. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen verouderde bovenliggende onderdelen blijven draaien.",
+      "staleParentsOverflow": "en {count} meer",
+      "staleParentsAccept": "Toch bijwerken"
     }
   }
 }

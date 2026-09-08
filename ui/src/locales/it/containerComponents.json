@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Espressione regolare non valida"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Dipende da",
+      "requiredBy": "Richiesto da",
+      "cycle": "Fa parte di un ciclo di dipendenze",
+      "toggle": "Mostra dipendenze",
+      "updateGroup": "Aggiorna gruppo di dipendenze ({count})",
+      "staleParentsWarning": "{name} dipende da {parents}, che ha anche un aggiornamento in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro un elemento principale obsoleto. | {name} dipende da {parents}, che hanno anche aggiornamenti in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro elementi principali obsoleti.",
+      "staleParentsOverflow": "e altri {count}",
+      "staleParentsAccept": "Aggiorna comunque"
     }
   }
 }

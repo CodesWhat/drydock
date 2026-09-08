@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Nieprawidłowe wyrażenie regularne"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Zależy od",
+      "requiredBy": "Wymagany przez",
+      "cycle": "Część cyklu zależności",
+      "toggle": "Pokaż zależności",
+      "updateGroup": "Zaktualizuj grupę zależności ({count})",
+      "staleParentsWarning": "{name} zależy od {parents}, który również ma oczekującą aktualizację. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnego kontenera nadrzędnego. | {name} zależy od {parents}, które również mają oczekujące aktualizacje. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnych kontenerów nadrzędnych.",
+      "staleParentsOverflow": "i {count} więcej",
+      "staleParentsAccept": "Zaktualizuj mimo to"
     }
   }
 }

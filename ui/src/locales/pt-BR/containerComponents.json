@@ -679,6 +679,16 @@
     },
     "logViewer": {
       "invalidRegex": "Expressão regular inválida"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depende de",
+      "requiredBy": "Requerido por",
+      "cycle": "Faz parte de um ciclo de dependências",
+      "toggle": "Mostrar dependências",
+      "updateGroup": "Atualizar grupo de dependências ({count})",
+      "staleParentsWarning": "{name} depende de {parents}, que também tem uma atualização pendente. Atualizar o dependente primeiro pode deixá-lo em execução contra um item pai desatualizado. | {name} depende de {parents}, que também têm atualizações pendentes. Atualizar o dependente primeiro pode deixá-lo em execução contra itens pai desatualizados.",
+      "staleParentsOverflow": "e mais {count}",
+      "staleParentsAccept": "Atualizar mesmo assim"
     }
   }
 }
