@@ -1,10 +1,14 @@
 const assert = require('node:assert/strict');
 const { mkdtempSync, rmSync, writeFileSync } = require('node:fs');
+const { createRequire } = require('node:module');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
-const { parse } = require('csv-parse');
+const artilleryRequire = createRequire(
+  join(__dirname, '../node_modules/artillery/dist/lib/util/prepare-test-execution-plan.js'),
+);
+const { parse } = artilleryRequire('csv-parse');
 
 test('duplicate CSV headers remain own properties without replacing the record prototype', async () => {
   const [record] = await promisify(parse)('__proto__,__proto__,name\na,b,example\n', {
