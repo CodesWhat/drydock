@@ -606,6 +606,33 @@ describe('agent state topic parity with hass discovery', () => {
     }
   });
 
+  test('publishes an agent container with a Compose identity slug to the topic hass discovery advertises', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const composeAgentContainer = {
+      ...agentContainer,
+      name: 'myapp_web_1',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, composeAgentContainer);
+
+      expect(topic).toBe('dd/container/agent/ml/local/myapp.web');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: composeAgentContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+
   test('keeps the unscoped topic for an agent container on the agenttopicsegment=false opt-out', async () => {
     const configuration = buildConfiguration({ enabled: true, agenttopicsegment: false });
     const hass = new Hass({
