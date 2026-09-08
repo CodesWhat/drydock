@@ -60,6 +60,16 @@ Most Docker Compose users do not need to configure the file path at all. As long
 
 The removed `wud.compose.file` label is not part of this chain and is ignored in v1.6.
 
+### Label path containment
+
+Compose paths taken from a container label (`dd.compose.file` or `com.docker.compose.project.config_files`) are contained to roots Drydock already knows about, so a container cannot point the trigger at an arbitrary file such as `/etc/hosts`.
+
+Containment applies when Drydock runs in a container with at least one bind mount, or when the trigger has `FILE` configured. On a host run with no `FILE` and no bind mounts there is no known root to contain anything to, so label paths behave exactly as before.
+
+The allowed roots are the trigger's configured `FILE` path and its parent directory, plus both sides of every bind mount Drydock itself has. The parent is left out when it is the filesystem root, so a `FILE` naming a top-level directory does not widen containment to the whole machine. The check runs on the final path: `config_files` values are mapped through Drydock's host-to-container bind mounts first, so a foreign host path that maps onto one of Drydock's own mounts is inside by construction. A path outside every root that the [mount-prefix fallback](#mount-prefix-fallback) recognises is replaced by the configured `FILE` rather than let through, so no consumer ever reads the path the container named. Paths the trigger itself is configured with are never checked. Containment only decides which file the action reads: when Drydock picks an action for a container, a rejected label still counts as the file the container named, so this trigger is not treated as a catch-all for containers that belong to another stack.
+
+A label path outside every allowed root is dropped, with a warning naming the container, the label, the raw value, the resolved path and the allowed roots. The container is then handled as if the label had never been there, which means no compose file rather than the trigger's `FILE`: a container that asked for a file Drydock will not touch is skipped, not silently updated against a different stack.
+
 ## Mount-prefix fallback
 
 Some stack managers or bind mounts expose the same compose file under different prefixes inside Drydock than the path recorded on the running container. For example, the container can report `/opt/stacks/app/compose.yaml` while Drydock has the file mounted as `/drydock/stacks/app/compose.yaml`.
