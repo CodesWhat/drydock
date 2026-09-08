@@ -278,7 +278,8 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
         'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/container-name',
       force_update: true,
-      value_template: '{{ value_json.image_tag_value }}',
+      value_template:
+        '{% if value_json.update_state is defined %}{{ value_json.update_state | to_json }}{% else %}{{ value_json.image_tag_value }}{% endif %}',
       latest_version_topic: 'topic/watcher-name/container-name',
       latest_version_template:
         '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] if value_json.result_digest else value_json.image_tag_value }}{% else %}{{ value_json.result_tag if value_json.result_tag else value_json.image_tag_value }}{% endif %}',

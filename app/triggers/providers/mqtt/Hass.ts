@@ -26,6 +26,7 @@ import {
   isHassInstallPayload,
   resolveHassCommandContainer,
 } from './hass-commands.js';
+import { HASS_UPDATE_STATE_KEY } from './hass-progress.js';
 import {
   getContainerIdentitySlug,
   getSanitizedCanonicalContainerName,
@@ -35,7 +36,15 @@ import {
 const HASS_DEVICE_ID = 'drydock';
 const HASS_DEVICE_NAME = 'drydock';
 const HASS_MANUFACTURER = 'drydock';
-const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
+// Installed version plus live install progress (#210). HA renders this template
+// against the state payload and parses the RESULT as JSON, reading `in_progress` and
+// `update_percentage` only when that result is a JSON object; a template rendering a
+// bare version string (what this used to be) means HA never sees either field, so the
+// Install button spins with no feedback until the next watch cycle. `update_state` is
+// built in `hass-progress.ts` and re-emitted verbatim here. The `is defined` guard
+// keeps the old scalar behaviour for a payload that predates the key — a retained
+// message published by an older drydock, still on the broker until the next publish.
+const HASS_ENTITY_VALUE_TEMPLATE = `{% if value_json.${HASS_UPDATE_STATE_KEY} is defined %}{{ value_json.${HASS_UPDATE_STATE_KEY} | to_json }}{% else %}{{ value_json.image_tag_value }}{% endif %}`;
 // Newest version. When no update is pending, container.result is absent, so
 // result_tag/result_digest never appear in the flattened payload. Fall back to
 // the installed tag (image_tag_value) so HA resolves latest == installed ("up to

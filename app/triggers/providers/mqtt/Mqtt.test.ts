@@ -4,9 +4,12 @@ import {
   clearAllListenersForTests,
   emitContainerAdded,
   emitContainerUpdated,
+  emitUpdateOperationChanged,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { flatten, validate } from '../../../model/container.js';
+import * as containerStore from '../../../store/container.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 
 vi.mock('mqtt');
 vi.mock('node:fs/promises', () => ({
@@ -1215,5 +1218,355 @@ describe('hass isContainerAllowed wiring (#491)', () => {
 
     mustTriggerSpy.mockReturnValueOnce(false);
     expect(hassInstance.isContainerAllowed(container)).toBe(false);
+  });
+});
+
+describe('hass update progress (#210)', () => {
+  const progressContainer = {
+    id: 'container-progress',
+    name: 'progress-test',
+    watcher: 'local',
+    image: {
+      id: 'sha256:abc',
+      registry: { url: 'docker.io' },
+      name: 'nginx',
+      tag: { value: '1.25', semver: true },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+  };
+
+  const hassEnabledConfiguration = {
+    ...configurationValid,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      discovery: true,
+      agenttopicsegment: true,
+      commands: false,
+      prefix: 'homeassistant',
+      attributes: 'full',
+      filter: { include: '', exclude: '' },
+    },
+  };
+
+  function flush() {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function publishedPayload(callIndex = 0) {
+    return JSON.parse(mqtt.client.publish.mock.calls[callIndex][1]);
+  }
+
+  async function initWithHassEnabled(configurationOverrides = {}) {
+    mqtt.configuration = { ...hassEnabledConfiguration, ...configurationOverrides };
+    const publish = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish });
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
+    await mqtt.initTrigger();
+    return publish;
+  }
+
+  afterEach(async () => {
+    await mqtt.deregister();
+    vi.restoreAllMocks();
+  });
+
+  test('trigger publishes an idle update_state when hass is enabled', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+
+    await mqtt.trigger(progressContainer);
+
+    expect(publishedPayload()).toHaveProperty('update_state', {
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('trigger publishes the phase percentage while an operation is active', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    const getActiveOperation = vi
+      .spyOn(updateOperationStore, 'getActiveOperationByContainerId')
+      .mockReturnValue({ phase: 'pulling' } as never);
+
+    await mqtt.trigger(progressContainer);
+
+    expect(getActiveOperation).toHaveBeenCalledWith('container-progress');
+    expect(publishedPayload().update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: true,
+      update_percentage: 10,
+    });
+  });
+
+  test('trigger omits update_state entirely when hass is not enabled', async () => {
+    mqtt.configuration = {
+      ...hassEnabledConfiguration,
+      hass: { ...hassEnabledConfiguration.hass, enabled: false },
+    };
+    const getActiveOperation = vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId');
+
+    await mqtt.trigger(progressContainer);
+
+    expect(publishedPayload()).not.toHaveProperty('update_state');
+    expect(getActiveOperation).not.toHaveBeenCalled();
+  });
+
+  test('trigger survives a missing hass configuration block', async () => {
+    mqtt.configuration = { topic: 'dd/container', exclude: '' };
+
+    await mqtt.trigger(progressContainer);
+
+    expect(publishedPayload()).not.toHaveProperty('update_state');
+  });
+
+  test('trigger omits installed_version when the container carries no tag value', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+
+    await mqtt.trigger({ ...progressContainer, image: { ...progressContainer.image, tag: {} } });
+
+    expect(publishedPayload().update_state).toStrictEqual({
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('trigger skips the operation lookup for a container with no id', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    const getActiveOperation = vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId');
+
+    await mqtt.trigger({ ...progressContainer, id: undefined });
+
+    expect(getActiveOperation).not.toHaveBeenCalled();
+    expect(publishedPayload().update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('trigger still publishes when the operation store read throws', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockImplementation(() => {
+      throw new Error('store unavailable');
+    });
+    const warnSpy = vi.spyOn(mqtt.log, 'warn');
+
+    await mqtt.trigger(progressContainer);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to read active update operation'),
+    );
+    expect(publishedPayload().update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('an update-operation phase change republishes progress, and the terminal one clears it', async () => {
+    const publish = await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockReturnValue(progressContainer as never);
+    const getActiveOperation = vi
+      .spyOn(updateOperationStore, 'getActiveOperationByContainerId')
+      .mockReturnValueOnce({ phase: 'new-started' } as never)
+      .mockReturnValueOnce(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-1',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'new-started',
+    });
+    await flush();
+
+    expect(JSON.parse(publish.mock.calls[0][1]).update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: true,
+      update_percentage: 80,
+    });
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-1',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    await flush();
+
+    expect(JSON.parse(publish.mock.calls[1][1]).update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+    expect(getActiveOperation).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failed operation clears progress without touching the published versions', async () => {
+    const publish = await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockReturnValue(progressContainer as never);
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-2',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'boom',
+    });
+    await flush();
+
+    const payload = JSON.parse(publish.mock.calls[0][1]);
+    expect(payload.update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+    expect(payload).toHaveProperty('image_tag_value', '1.25');
+  });
+
+  test('the replacement container id is resolved before the original one', async () => {
+    await initWithHassEnabled();
+    const getContainer = vi
+      .spyOn(containerStore, 'getContainer')
+      .mockReturnValue(progressContainer as never);
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-3',
+      containerName: 'progress-test',
+      containerId: 'old-container',
+      newContainerId: 'new-container',
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    await flush();
+
+    expect(getContainer).toHaveBeenCalledTimes(1);
+    expect(getContainer).toHaveBeenCalledWith('new-container');
+    expect(triggerSpy).toHaveBeenCalledWith(progressContainer);
+  });
+
+  test('the original container id is used when the replacement is not stored yet', async () => {
+    await initWithHassEnabled();
+    const getContainer = vi
+      .spyOn(containerStore, 'getContainer')
+      .mockImplementation((id) =>
+        id === 'old-container' ? (progressContainer as never) : undefined,
+      );
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-4',
+      containerName: 'progress-test',
+      containerId: 'old-container',
+      newContainerId: 'new-container',
+      status: 'in-progress',
+      phase: 'renamed',
+    });
+    await flush();
+
+    expect(getContainer).toHaveBeenNthCalledWith(1, 'new-container');
+    expect(getContainer).toHaveBeenNthCalledWith(2, 'old-container');
+    expect(triggerSpy).toHaveBeenCalledWith(progressContainer);
+  });
+
+  test('an unresolvable operation event publishes nothing', async () => {
+    await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockReturnValue(undefined);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(mqtt.log, 'debug');
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-5',
+      containerName: 'gone',
+      containerId: '',
+      status: 'failed',
+      phase: 'failed',
+    });
+    await flush();
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('No stored container'));
+  });
+
+  test('a container lookup failure is warned about, not thrown', async () => {
+    await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockImplementation(() => {
+      throw new Error('store unavailable');
+    });
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(mqtt.log, 'warn');
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-6',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flush();
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to resolve container for update operation op-6'),
+    );
+  });
+
+  test('update-operation events are ignored when hass is not enabled', async () => {
+    mqtt.configuration = {
+      ...hassEnabledConfiguration,
+      hass: { ...hassEnabledConfiguration.hass, enabled: false, discovery: false },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
+      publish: vi.fn().mockResolvedValue(undefined),
+    });
+    await mqtt.initTrigger();
+    const getContainer = vi.spyOn(containerStore, 'getContainer');
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-7',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flush();
+
+    expect(getContainer).not.toHaveBeenCalled();
+    expect(triggerSpy).not.toHaveBeenCalled();
+  });
+
+  test('deregister unsubscribes from update-operation events', async () => {
+    await initWithHassEnabled();
+    const getContainer = vi
+      .spyOn(containerStore, 'getContainer')
+      .mockReturnValue(progressContainer as never);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await mqtt.deregister();
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-8',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flush();
+
+    expect(getContainer).not.toHaveBeenCalled();
+    expect(triggerSpy).not.toHaveBeenCalled();
   });
 });
