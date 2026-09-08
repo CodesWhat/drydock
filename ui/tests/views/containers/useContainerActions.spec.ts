@@ -2122,6 +2122,62 @@ describe('useContainerActions', () => {
       expect(confirmCall.message).toContain('which also has an update pending');
       expect(confirmCall.acceptLabel).toBe('Update anyway');
     });
+
+    it('re-evaluates the warning against a reactive containers list for confirmUpdate', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable, containers } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      containers.value = [web, { ...db, newTag: '2.0.0' }];
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+
+      await confirmCall.accept?.();
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    });
+
+    it('re-evaluates the warning against a reactive containers list for confirmForceUpdate', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable, containers } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      containers.value = [web, { ...db, newTag: '2.0.0' }];
+
+      composable.confirmForceUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+
+      await confirmCall.accept?.();
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    });
   });
 
   it('wires rollback confirmation dialog to rollback accept handler', async () => {

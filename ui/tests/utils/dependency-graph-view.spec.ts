@@ -122,6 +122,20 @@ describe('collectTransitiveParentIds', () => {
 
     expect(collectTransitiveParentIds(adjacency, 'app')).toEqual(new Set());
   });
+
+  it('returns an empty set for an unknown id against a null graph', () => {
+    expect(collectTransitiveParentIds(buildDependencyAdjacency(null), 'x')).toEqual(new Set());
+  });
+
+  it('includes an edge-only parent that has no matching node', () => {
+    const graph = makeGraph({
+      nodes: [makeNode('app')],
+      edges: [{ from: 'app', to: 'ghost', action: 'update', source: 'label' }],
+    });
+    const adjacency = buildDependencyAdjacency(graph);
+
+    expect(collectTransitiveParentIds(adjacency, 'app')).toEqual(new Set(['ghost']));
+  });
 });
 
 describe('getDependencyComponentIds', () => {
@@ -155,5 +169,20 @@ describe('getDependencyComponentIds', () => {
     const adjacency = buildDependencyAdjacency(graph);
 
     expect(getDependencyComponentIds(adjacency, 'a')).toEqual(new Set(['a', 'b']));
+  });
+
+  it('returns just the root id for an unknown id against a null graph', () => {
+    expect(getDependencyComponentIds(buildDependencyAdjacency(null), 'x')).toEqual(new Set(['x']));
+  });
+
+  it('includes an edge-only node that has no matching entry in nodes', () => {
+    const graph = makeGraph({
+      nodes: [makeNode('app')],
+      edges: [{ from: 'app', to: 'ghost', action: 'update', source: 'label' }],
+    });
+    const adjacency = buildDependencyAdjacency(graph);
+
+    expect(getDependencyComponentIds(adjacency, 'app')).toEqual(new Set(['app', 'ghost']));
+    expect(getDirectParents(adjacency, 'app')).toEqual([]);
   });
 });
