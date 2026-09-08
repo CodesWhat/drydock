@@ -156,6 +156,8 @@ export interface ContainersViewTemplateContext
   filterContainerIds: Ref<Set<string>>;
   clearContainerIdsFilter: () => void;
   updateMode: Readonly<Ref<UpdateMode>>;
+  /** Resolves the stack/compose-group key a container belongs to (manual override or server-detected group). */
+  groupKeyForContainer: (container: Container) => string | undefined;
 }
 
 export const containersViewTemplateContextKey: InjectionKey<ContainersViewTemplateContext> = Symbol(

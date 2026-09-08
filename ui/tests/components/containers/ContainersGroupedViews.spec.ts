@@ -2,6 +2,10 @@ import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
 import DataTable from '@/components/DataTable.vue';
+import {
+  resetContainerSelectionState,
+  useContainerSelection,
+} from '@/composables/useContainerSelection';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
@@ -74,6 +78,7 @@ const DataTableStub = defineComponent({
   },
   template: `
     <div class="data-table-stub" :data-hidden-column-keys="JSON.stringify(hiddenColumnKeys || [])">
+      <div class="header-icon-stub"><slot name="header-icon" /></div>
       <div
         v-for="row in rows"
         :key="keyFor(row)"
@@ -478,6 +483,7 @@ describe('ContainersGroupedViews', () => {
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
     resetDependencyGraphState();
+    resetContainerSelectionState();
   });
 
   it('passes tableColumns and hiddenColumnKeys straight through to DataTable', () => {
@@ -3748,6 +3754,147 @@ describe('ContainersGroupedViews', () => {
       expect(spies.confirmDependencyGroupUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c-web', name: 'web' }),
       );
+    });
+  });
+
+  describe('container selection (roadmap 6.1.1)', () => {
+    it('toggles selection on checkbox click and stops row-click propagation', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context, spies } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+      spies.selectContainer.mockClear();
+
+      const checkbox = rowByName(wrapper, 'alpha').find('[data-test="container-select"]');
+      expect(checkbox.exists()).toBe(true);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+
+      await checkbox.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(spies.selectContainer).not.toHaveBeenCalled();
+    });
+
+    it('stops the keydown from reaching the row when a key is pressed on the checkbox', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const row = rowByName(wrapper, 'alpha');
+      const rowKeydownSpy = vi.fn();
+      row.element.addEventListener('keydown', rowKeydownSpy);
+
+      const checkbox = row.find('[data-test="container-select"]');
+      checkbox.element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(rowKeydownSpy).not.toHaveBeenCalled();
+    });
+
+    it('renders the checkbox in the card header and toggles selection without selecting the card', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const { wrapper, spies } = await mountCardsWithContainers([alpha]);
+      spies.selectContainer.mockClear();
+
+      const card = cardByName(wrapper, 'alpha');
+      const checkbox = card.find('[data-test="container-select"]');
+      expect(checkbox.exists()).toBe(true);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+
+      await checkbox.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(spies.selectContainer).not.toHaveBeenCalled();
+    });
+
+    it('does not render the row checkbox or the select-all header when actions are disabled', () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha];
+      context.displayContainers.value = [alpha];
+      context.containerActionsEnabled.value = false;
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+
+      expect(rowByName(wrapper, 'alpha').find('[data-test="container-select"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('[data-test="container-select-all"]').exists()).toBe(false);
+    });
+
+    it('selects then clears all visible containers from the header checkbox', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      const selectAll = wrapper.find('[data-test="container-select-all"]');
+      expect(selectAll.exists()).toBe(true);
+      expect((selectAll.element as HTMLInputElement).checked).toBe(false);
+
+      await selectAll.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(useContainerSelection().isSelected('c-beta')).toBe(true);
+      await nextTick();
+      expect((selectAll.element as HTMLInputElement).checked).toBe(true);
+
+      await selectAll.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(false);
+      expect(useContainerSelection().isSelected('c-beta')).toBe(false);
+    });
+
+    it('sets indeterminate on the header checkbox when only some visible rows are selected', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      useContainerSelection().toggle('c-alpha');
+      await nextTick();
+
+      const selectAll = wrapper.find('[data-test="container-select-all"]')
+        .element as HTMLInputElement;
+      expect(selectAll.indeterminate).toBe(true);
+      expect(selectAll.checked).toBe(false);
+    });
+
+    it('prunes the selection to the currently visible containers when the filter changes', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      mountSubject();
+      useContainerSelection().toggle('c-beta');
+      expect(useContainerSelection().isSelected('c-beta')).toBe(true);
+
+      context.filteredContainers.value = [alpha];
+      await nextTick();
+
+      expect(useContainerSelection().isSelected('c-beta')).toBe(false);
     });
   });
 });

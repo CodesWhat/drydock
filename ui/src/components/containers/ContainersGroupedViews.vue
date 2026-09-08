@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onScopeDispose, watchEffect } from 'vue';
+import { computed, onScopeDispose, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { useContainerSelection } from '../../composables/useContainerSelection';
 import { useDependencyGraph } from '../../composables/useDependencyGraph';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
@@ -92,6 +93,8 @@ const {
 } = useContainersViewTemplateContext();
 const updateMode = computed(() => configuredUpdateMode?.value ?? 'manual');
 const { adjacency, isExpanded, toggleExpanded } = useDependencyGraph();
+const { isSelected, toggle, selectAllVisible, clearVisible, selectAllState, pruneTo } =
+  useContainerSelection();
 const { visibleColumns } = useColumnVisibility();
 const nowMs = useNow(
   30_000,
@@ -237,6 +240,29 @@ const tableRows = computed<GroupedTableRow[]>(() => {
 const selectedContainerKey = computed(() =>
   selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
 );
+
+// Selection (roadmap 6.1.1), pruned to the currently visible/filtered set so a
+// selection made under one filter doesn't silently keep dispatching against
+// rows a later filter change has hidden.
+const visibleIds = computed(() => filteredContainers.value.map((c) => c.id));
+watch(visibleIds, (ids) => pruneTo(ids));
+
+const selectAllIconRef = ref<HTMLInputElement | null>(null);
+watchEffect(() => {
+  const el = selectAllIconRef.value;
+  if (!el) {
+    return;
+  }
+  el.indeterminate = selectAllState(visibleIds.value) === 'some';
+});
+
+function toggleSelectAllVisible() {
+  if (selectAllState(visibleIds.value) === 'all') {
+    clearVisible(visibleIds.value);
+  } else {
+    selectAllVisible(visibleIds.value);
+  }
+}
 
 function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateInProgress(container);
@@ -647,6 +673,17 @@ onScopeDispose(() => {
             @update-group="confirmDependencyGroupUpdate($event)"
           />
         </template>
+        <template v-if="containerActionsEnabled" #header-icon>
+          <input
+            ref="selectAllIconRef"
+            type="checkbox"
+            :checked="selectAllState(visibleIds) === 'all'"
+            :aria-label="t('containerComponents.selection.selectAll')"
+            data-test="container-select-all"
+            class="absolute left-1 top-1/2 -translate-y-1/2 accent-[var(--dd-secondary)]"
+            @click.stop="toggleSelectAllVisible"
+          />
+        </template>
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
           <div
@@ -669,6 +706,16 @@ onScopeDispose(() => {
               <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : getInProgressBadgeLabel(c) }}</span>
             </div>
           </div>
+          <input
+            v-if="containerActionsEnabled"
+            type="checkbox"
+            :checked="isSelected(c.id)"
+            :aria-label="t('containerComponents.selection.selectRow', { name: c.name })"
+            data-test="container-select"
+            class="absolute left-1 top-1/2 -translate-y-1/2 z-20 accent-[var(--dd-secondary)]"
+            @click.stop="toggle(c.id)"
+            @keydown.stop
+          />
           <ContainerIcon :icon="c.icon" :size="32" />
         </template>
 
@@ -1140,6 +1187,16 @@ onScopeDispose(() => {
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="flex items-center gap-3 min-w-0">
+              <input
+                v-if="containerActionsEnabled"
+                type="checkbox"
+                :checked="isSelected(c.id)"
+                :aria-label="t('containerComponents.selection.selectRow', { name: c.name })"
+                data-test="container-select"
+                class="shrink-0 accent-[var(--dd-secondary)]"
+                @click.stop="toggle(c.id)"
+                @keydown.stop
+              />
               <ContainerIcon :icon="c.icon" :size="44" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-sm-plus font-semibold truncate dd-text">

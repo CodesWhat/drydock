@@ -514,6 +514,19 @@
         "failedDetail": "Failed to update the dependency chain for {name}.",
         "staleChainTitle": "Dependency chain has changed",
         "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+      },
+      "bulkUpdate": {
+        "header": "Update 1 container | Update {count} containers",
+        "accept": "Update 1 container | Update {count} containers",
+        "acceptWithParents": "Add 1 parent and update | Add {count} parents and update",
+        "dispatchHeading": "Will update",
+        "blockedHeading": "Blocked, will be left alone",
+        "softOverridesHeading": "Updating despite warnings",
+        "skippedHeading": "Skipped",
+        "staleParentsHeading": "Parents with updates waiting, added when you accept",
+        "agentCountInfo": "Spans {count} agents; each agent runs its own updates.",
+        "stackCountInfo": "Spans {count} stacks.",
+        "successMessage": "Update started for 1 container | Update started for {count} containers"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} depends on {parents}, which also has an update pending. Updating the child first can leave it running against an outdated parent. | {name} depends on {parents}, which also have updates pending. Updating the child first can leave it running against an outdated parent.",
       "staleParentsOverflow": "and {count} more",
       "staleParentsAccept": "Update anyway"
+    },
+    "selection": {
+      "selectRow": "Select {name}",
+      "selectAll": "Select all visible containers",
+      "barLabel": "Selected containers",
+      "count": "1 container selected | {count} containers selected",
+      "updateSelected": "Update selected",
+      "clear": "Clear",
+      "reasons": {
+        "stale": "no longer in the list",
+        "inFlight": "already updating",
+        "noUpdate": "no update available"
+      }
     }
   }
 }

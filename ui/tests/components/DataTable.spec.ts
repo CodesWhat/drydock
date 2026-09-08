@@ -1102,6 +1102,29 @@ describe('DataTable', () => {
     });
   });
 
+  describe('header slots', () => {
+    it('replaces the header content with a header-<key> slot and passes the column', () => {
+      const w = factory({}, { 'header-name': ({ column }: any) => `Custom: ${column.label}` });
+      const nameHeader = w.findAll('thead th')[0];
+      expect(nameHeader.text()).toBe('Custom: Name');
+    });
+
+    it('keeps sorting, aria-sort, and the resize handle working with a header-<key> slot supplied', async () => {
+      const w = factory(
+        { sortKey: 'name', sortAsc: true },
+        { 'header-name': ({ column }: any) => `Custom: ${column.label}` },
+      );
+      const nameHeader = w.findAll('thead th')[0];
+
+      expect(nameHeader.attributes('aria-sort')).toBe('ascending');
+      expect(nameHeader.find('[role="separator"]').exists()).toBe(true);
+
+      await nameHeader.trigger('click');
+      expect(w.emitted('update:sortAsc')?.[0]).toEqual([false]);
+      expect(w.emitted('update:sortKey')).toBeUndefined();
+    });
+  });
+
   describe('virtual scrolling', () => {
     function makeRows(count: number) {
       return Array.from({ length: count }, (_, i) => ({

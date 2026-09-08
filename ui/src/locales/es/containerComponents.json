@@ -514,6 +514,19 @@
         "failedDetail": "No se pudo actualizar la cadena de dependencias para {name}.",
         "staleChainTitle": "La cadena de dependencias ha cambiado",
         "staleChainDetail": "La cadena de dependencias de {name} cambió desde la última vista previa. Vuelve a abrir el diálogo de actualización para revisar la cadena actual antes de confirmar."
+      },
+      "bulkUpdate": {
+        "header": "Actualizar 1 contenedor | Actualizar {count} contenedores",
+        "accept": "Actualizar 1 contenedor | Actualizar {count} contenedores",
+        "acceptWithParents": "Añadir 1 elemento superior y actualizar | Añadir {count} elementos superiores y actualizar",
+        "dispatchHeading": "Se actualizarán",
+        "blockedHeading": "Bloqueados, se dejarán como están",
+        "softOverridesHeading": "Actualizando a pesar de las advertencias",
+        "skippedHeading": "Omitidos",
+        "staleParentsHeading": "Elementos superiores con actualizaciones pendientes, añadidos al aceptar",
+        "agentCountInfo": "Abarca {count} agentes; cada agente ejecuta sus propias actualizaciones.",
+        "stackCountInfo": "Abarca {count} stacks.",
+        "successMessage": "Actualización iniciada para 1 contenedor | Actualización iniciada para {count} contenedores"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} depende de {parents}, que también tiene una actualización pendiente. Actualizar primero el elemento dependiente puede dejarlo ejecutándose contra un elemento superior desactualizado. | {name} depende de {parents}, que también tienen actualizaciones pendientes. Actualizar primero el elemento dependiente puede dejarlo ejecutándose contra elementos superiores desactualizados.",
       "staleParentsOverflow": "y {count} más",
       "staleParentsAccept": "Actualizar de todos modos"
+    },
+    "selection": {
+      "selectRow": "Seleccionar {name}",
+      "selectAll": "Seleccionar todos los contenedores visibles",
+      "barLabel": "Contenedores seleccionados",
+      "count": "1 contenedor seleccionado | {count} contenedores seleccionados",
+      "updateSelected": "Actualizar selección",
+      "clear": "Limpiar",
+      "reasons": {
+        "stale": "ya no está en la lista",
+        "inFlight": "ya se está actualizando",
+        "noUpdate": "no hay actualización disponible"
+      }
     }
   }
 }

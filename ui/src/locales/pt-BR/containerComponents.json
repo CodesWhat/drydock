@@ -514,6 +514,19 @@
         "failedDetail": "Falha ao atualizar a cadeia de dependências de {name}.",
         "staleChainTitle": "A cadeia de dependências mudou",
         "staleChainDetail": "A cadeia de dependências de {name} mudou desde a última pré-visualização. Reabra a caixa de diálogo de atualização para revisar a cadeia atual antes de confirmar."
+      },
+      "bulkUpdate": {
+        "header": "Atualizar 1 contêiner | Atualizar {count} contêineres",
+        "accept": "Atualizar 1 contêiner | Atualizar {count} contêineres",
+        "acceptWithParents": "Adicionar 1 item pai e atualizar | Adicionar {count} itens pai e atualizar",
+        "dispatchHeading": "Serão atualizados",
+        "blockedHeading": "Bloqueados, serão deixados como estão",
+        "softOverridesHeading": "Atualizando apesar dos avisos",
+        "skippedHeading": "Ignorados",
+        "staleParentsHeading": "Itens pai com atualizações pendentes, adicionados ao aceitar",
+        "agentCountInfo": "Abrange {count} agentes; cada agente executa suas próprias atualizações.",
+        "stackCountInfo": "Abrange {count} stacks.",
+        "successMessage": "Atualização iniciada para 1 contêiner | Atualização iniciada para {count} contêineres"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} depende de {parents}, que também tem uma atualização pendente. Atualizar o dependente primeiro pode deixá-lo em execução contra um item pai desatualizado. | {name} depende de {parents}, que também têm atualizações pendentes. Atualizar o dependente primeiro pode deixá-lo em execução contra itens pai desatualizados.",
       "staleParentsOverflow": "e mais {count}",
       "staleParentsAccept": "Atualizar mesmo assim"
+    },
+    "selection": {
+      "selectRow": "Selecionar {name}",
+      "selectAll": "Selecionar todos os contêineres visíveis",
+      "barLabel": "Contêineres selecionados",
+      "count": "1 contêiner selecionado | {count} contêineres selecionados",
+      "updateSelected": "Atualizar selecionados",
+      "clear": "Limpar",
+      "reasons": {
+        "stale": "não está mais na lista",
+        "inFlight": "já está atualizando",
+        "noUpdate": "nenhuma atualização disponível"
+      }
     }
   }
 }

@@ -514,6 +514,19 @@
         "failedDetail": "Nie udało się zaktualizować łańcucha zależności dla {name}.",
         "staleChainTitle": "Łańcuch zależności uległ zmianie",
         "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem."
+      },
+      "bulkUpdate": {
+        "header": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
+        "accept": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
+        "acceptWithParents": "Dodaj 1 kontener nadrzędny i zaktualizuj | Dodaj {count} kontenerów nadrzędnych i zaktualizuj",
+        "dispatchHeading": "Zostaną zaktualizowane",
+        "blockedHeading": "Zablokowane, pozostaną bez zmian",
+        "softOverridesHeading": "Aktualizacja mimo ostrzeżeń",
+        "skippedHeading": "Pominięte",
+        "staleParentsHeading": "Kontenery nadrzędne z oczekującymi aktualizacjami, dodawane po zatwierdzeniu",
+        "agentCountInfo": "Obejmuje {count} agentów; każdy agent wykonuje własne aktualizacje.",
+        "stackCountInfo": "Obejmuje {count} stosów.",
+        "successMessage": "Rozpoczęto aktualizację dla 1 kontenera | Rozpoczęto aktualizację dla {count} kontenerów"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} zależy od {parents}, który również ma oczekującą aktualizację. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnego kontenera nadrzędnego. | {name} zależy od {parents}, które również mają oczekujące aktualizacje. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnych kontenerów nadrzędnych.",
       "staleParentsOverflow": "i {count} więcej",
       "staleParentsAccept": "Zaktualizuj mimo to"
+    },
+    "selection": {
+      "selectRow": "Zaznacz {name}",
+      "selectAll": "Zaznacz wszystkie widoczne kontenery",
+      "barLabel": "Wybrane kontenery",
+      "count": "Wybrano 1 kontener | Wybrano {count} kontenerów",
+      "updateSelected": "Zaktualizuj wybrane",
+      "clear": "Wyczyść",
+      "reasons": {
+        "stale": "nie ma już na liście",
+        "inFlight": "już się aktualizuje",
+        "noUpdate": "brak dostępnej aktualizacji"
+      }
     }
   }
 }

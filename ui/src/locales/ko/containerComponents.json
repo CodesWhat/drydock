@@ -514,6 +514,19 @@
         "failedDetail": "{name}의 종속성 체인 업데이트에 실패했습니다.",
         "staleChainTitle": "종속성 체인이 변경됨",
         "staleChainDetail": "{name}의 종속성 체인이 마지막으로 미리 본 이후 변경되었습니다. 확인하기 전에 업데이트 대화상자를 다시 열어 현재 체인을 검토하세요."
+      },
+      "bulkUpdate": {
+        "header": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
+        "accept": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
+        "acceptWithParents": "상위 항목 1개 추가 후 업데이트 | 상위 항목 {count}개 추가 후 업데이트",
+        "dispatchHeading": "업데이트될 항목",
+        "blockedHeading": "차단됨, 그대로 둠",
+        "softOverridesHeading": "경고를 무시하고 업데이트",
+        "skippedHeading": "건너뜀",
+        "staleParentsHeading": "업데이트 대기 중인 상위 항목, 수락 시 추가됨",
+        "agentCountInfo": "{count}개 에이전트에 걸쳐 있습니다. 각 에이전트는 자체적으로 업데이트를 실행합니다.",
+        "stackCountInfo": "{count}개 스택에 걸쳐 있습니다.",
+        "successMessage": "컨테이너 1개에 대한 업데이트가 시작되었습니다 | 컨테이너 {count}개에 대한 업데이트가 시작되었습니다"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name}은(는) {parents}에 종속되어 있으며, 여기에는 대기 중인 업데이트가 있습니다. 종속 항목을 먼저 업데이트하면 오래된 상위 항목에 대해 계속 실행될 수 있습니다. | {name}은(는) {parents}에 종속되어 있으며, 이들에는 대기 중인 업데이트가 있습니다. 종속 항목을 먼저 업데이트하면 오래된 상위 항목들에 대해 계속 실행될 수 있습니다.",
       "staleParentsOverflow": "외 {count}개 더",
       "staleParentsAccept": "그래도 업데이트"
+    },
+    "selection": {
+      "selectRow": "{name} 선택",
+      "selectAll": "표시된 모든 컨테이너 선택",
+      "barLabel": "선택된 컨테이너",
+      "count": "컨테이너 1개 선택됨 | 컨테이너 {count}개 선택됨",
+      "updateSelected": "선택 항목 업데이트",
+      "clear": "지우기",
+      "reasons": {
+        "stale": "더 이상 목록에 없음",
+        "inFlight": "이미 업데이트 중",
+        "noUpdate": "사용 가능한 업데이트 없음"
+      }
     }
   }
 }

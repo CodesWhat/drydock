@@ -514,6 +514,19 @@
         "failedDetail": "Impossibile aggiornare la catena di dipendenze per {name}.",
         "staleChainTitle": "La catena di dipendenze è cambiata",
         "staleChainDetail": "La catena di dipendenze per {name} è cambiata dall'ultima anteprima. Riapri la finestra di dialogo di aggiornamento per rivedere la catena attuale prima di confermare."
+      },
+      "bulkUpdate": {
+        "header": "Aggiorna 1 container | Aggiorna {count} container",
+        "accept": "Aggiorna 1 container | Aggiorna {count} container",
+        "acceptWithParents": "Aggiungi 1 elemento principale e aggiorna | Aggiungi {count} elementi principali e aggiorna",
+        "dispatchHeading": "Verranno aggiornati",
+        "blockedHeading": "Bloccati, lasciati invariati",
+        "softOverridesHeading": "Aggiornamento nonostante gli avvisi",
+        "skippedHeading": "Saltati",
+        "staleParentsHeading": "Elementi principali con aggiornamenti in attesa, aggiunti alla conferma",
+        "agentCountInfo": "Coinvolge {count} agenti; ogni agente esegue i propri aggiornamenti.",
+        "stackCountInfo": "Coinvolge {count} stack.",
+        "successMessage": "Aggiornamento avviato per 1 container | Aggiornamento avviato per {count} container"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} dipende da {parents}, che ha anche un aggiornamento in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro un elemento principale obsoleto. | {name} dipende da {parents}, che hanno anche aggiornamenti in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro elementi principali obsoleti.",
       "staleParentsOverflow": "e altri {count}",
       "staleParentsAccept": "Aggiorna comunque"
+    },
+    "selection": {
+      "selectRow": "Seleziona {name}",
+      "selectAll": "Seleziona tutti i container visibili",
+      "barLabel": "Container selezionati",
+      "count": "1 container selezionato | {count} container selezionati",
+      "updateSelected": "Aggiorna selezionati",
+      "clear": "Cancella",
+      "reasons": {
+        "stale": "non è più nell'elenco",
+        "inFlight": "già in aggiornamento",
+        "noUpdate": "nessun aggiornamento disponibile"
+      }
     }
   }
 }

@@ -5,6 +5,7 @@ import type { PickerColumn } from '../../composables/useViewColumnVisibility';
 import AppIconButton from '../AppIconButton.vue';
 import DataSortControl from '../DataSortControl.vue';
 import DataTableColumnPicker from '../DataTableColumnPicker.vue';
+import ContainerSelectionBar from './ContainerSelectionBar.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import FleetUpdateProgressBanner from './FleetUpdateProgressBanner.vue';
 import {
@@ -313,5 +314,6 @@ const activeFilterChips = computed(() => {
     </DataFilterBar>
 
     <ContainersGroupedViews />
+    <ContainerSelectionBar />
   </div>
 </template>

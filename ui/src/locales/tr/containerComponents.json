@@ -514,6 +514,19 @@
         "failedDetail": "{name} için bağımlılık zinciri güncellenemedi.",
         "staleChainTitle": "Bağımlılık zinciri değişti",
         "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
+      },
+      "bulkUpdate": {
+        "header": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "accept": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "acceptWithParents": "1 üst öğeyi ekle ve güncelle | {count} üst öğeyi ekle ve güncelle",
+        "dispatchHeading": "Güncellenecek",
+        "blockedHeading": "Engellendi, olduğu gibi bırakılacak",
+        "softOverridesHeading": "Uyarılara rağmen güncelleniyor",
+        "skippedHeading": "Atlandı",
+        "staleParentsHeading": "Bekleyen güncellemesi olan üst öğeler, onaylandığında eklenir",
+        "agentCountInfo": "{count} ajanı kapsar; her ajan kendi güncellemelerini çalıştırır.",
+        "stackCountInfo": "{count} yığını kapsar.",
+        "successMessage": "1 kapsayıcı için güncelleme başlatıldı | {count} kapsayıcı için güncelleme başlatıldı"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name}, bekleyen bir güncellemesi olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan bir üst öğeye karşı çalışır durumda bırakabilir. | {name}, bekleyen güncellemeleri olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan üst öğelere karşı çalışır durumda bırakabilir.",
       "staleParentsOverflow": "ve {count} tane daha",
       "staleParentsAccept": "Yine de güncelle"
+    },
+    "selection": {
+      "selectRow": "{name} öğesini seç",
+      "selectAll": "Görünen tüm kapsayıcıları seç",
+      "barLabel": "Seçili kapsayıcılar",
+      "count": "1 kapsayıcı seçildi | {count} kapsayıcı seçildi",
+      "updateSelected": "Seçilenleri güncelle",
+      "clear": "Temizle",
+      "reasons": {
+        "stale": "artık listede değil",
+        "inFlight": "zaten güncelleniyor",
+        "noUpdate": "kullanılabilir güncelleme yok"
+      }
     }
   }
 }

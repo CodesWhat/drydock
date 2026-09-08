@@ -514,6 +514,19 @@
         "failedDetail": "Die Abhängigkeitskette für {name} konnte nicht aktualisiert werden.",
         "staleChainTitle": "Abhängigkeitskette hat sich geändert",
         "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen."
+      },
+      "bulkUpdate": {
+        "header": "1 Container aktualisieren | {count} Container aktualisieren",
+        "accept": "1 Container aktualisieren | {count} Container aktualisieren",
+        "acceptWithParents": "1 übergeordnetes Element hinzufügen und aktualisieren | {count} übergeordnete Elemente hinzufügen und aktualisieren",
+        "dispatchHeading": "Wird aktualisiert",
+        "blockedHeading": "Blockiert, wird unverändert gelassen",
+        "softOverridesHeading": "Wird trotz Warnungen aktualisiert",
+        "skippedHeading": "Übersprungen",
+        "staleParentsHeading": "Übergeordnete Elemente mit ausstehenden Updates, die bei Bestätigung hinzugefügt werden",
+        "agentCountInfo": "Umfasst {count} Agenten; jeder Agent führt seine eigenen Updates aus.",
+        "stackCountInfo": "Umfasst {count} Stacks.",
+        "successMessage": "Update für 1 Container gestartet | Update für {count} Container gestartet"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} hängt von {parents} ab, das ebenfalls ein ausstehendes Update hat. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen ein veraltetes übergeordnetes Element. | {name} hängt von {parents} ab, die ebenfalls ausstehende Updates haben. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen veraltete übergeordnete Elemente.",
       "staleParentsOverflow": "und {count} weitere",
       "staleParentsAccept": "Trotzdem aktualisieren"
+    },
+    "selection": {
+      "selectRow": "{name} auswählen",
+      "selectAll": "Alle sichtbaren Container auswählen",
+      "barLabel": "Ausgewählte Container",
+      "count": "1 Container ausgewählt | {count} Container ausgewählt",
+      "updateSelected": "Auswahl aktualisieren",
+      "clear": "Leeren",
+      "reasons": {
+        "stale": "nicht mehr in der Liste",
+        "inFlight": "wird bereits aktualisiert",
+        "noUpdate": "kein Update verfügbar"
+      }
     }
   }
 }

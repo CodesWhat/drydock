@@ -514,6 +514,19 @@
         "failedDetail": "無法更新 {name} 的依賴鏈。",
         "staleChainTitle": "依賴鏈已變更",
         "staleChainDetail": "{name} 的依賴鏈自上次預覽後已變更。請重新開啟更新對話方塊，在確認前檢視目前的鏈結。"
+      },
+      "bulkUpdate": {
+        "header": "更新 1 個容器 | 更新 {count} 個容器",
+        "accept": "更新 1 個容器 | 更新 {count} 個容器",
+        "acceptWithParents": "新增 1 個上層容器並更新 | 新增 {count} 個上層容器並更新",
+        "dispatchHeading": "將會更新",
+        "blockedHeading": "已阻止，將保持不變",
+        "softOverridesHeading": "忽略警告繼續更新",
+        "skippedHeading": "已略過",
+        "staleParentsHeading": "有待處理更新的上層容器，將在您接受時新增",
+        "agentCountInfo": "涉及 {count} 個代理；每個代理各自執行自己的更新。",
+        "stackCountInfo": "涉及 {count} 個技術堆疊。",
+        "successMessage": "已開始更新 1 個容器 | 已開始更新 {count} 個容器"
       }
     },
     "actionToasts": {
@@ -689,6 +702,19 @@
       "staleParentsWarning": "{name} 依賴於 {parents}，該容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。 | {name} 依賴於 {parents}，這些容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。",
       "staleParentsOverflow": "還有 {count} 個",
       "staleParentsAccept": "仍然更新"
+    },
+    "selection": {
+      "selectRow": "選擇 {name}",
+      "selectAll": "選擇所有可見容器",
+      "barLabel": "已選容器",
+      "count": "已選擇 1 個容器 | 已選擇 {count} 個容器",
+      "updateSelected": "更新所選",
+      "clear": "清除",
+      "reasons": {
+        "stale": "已不在清單中",
+        "inFlight": "已在更新中",
+        "noUpdate": "沒有可用更新"
+      }
     }
   }
 }
