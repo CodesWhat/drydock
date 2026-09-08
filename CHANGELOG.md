@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **A maintenance cut labeled the shipped image with `main`'s commit instead of the commit it was built from.** Both `docker/metadata-action` steps in `release-cut.yml` left `org.opencontainers.image.revision` at its default, `github.sha`, which is the workflow run's own checkout rather than the dev-branch source commit the build used. The v1.6.1-rc.9 staging image carried `5ae315227` in that label instead of `2969675ef`. Both steps now set the label from the release source SHA.
+- **Rolling back a container (auto-rollback on an unhealthy update, or a manual restore) now runs the same runtime-config sanitization as an update, so an entrypoint or command the newer image introduced is no longer copied onto the older image and the rolled-back container starts.**
+- **Tag family matching now requires the candidate's variant suffix to match the current tag's exactly, so a container on 1.27.3-alpine is no longer offered 1.28.0-alpine-perl (or 1.28.0-alpine from -alpine-slim) under dd.tag.family=loose or a dd.tag.include filter.**
+- Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
 
 ## [1.7.0-rc.13] — 2026-09-08
 
