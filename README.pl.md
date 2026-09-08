@@ -219,6 +219,15 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.14</strong></summary>
+
+Przywracanie usuwa teraz odziedziczone punkty wejścia i polecenia, których zapisany obraz nie może uruchomić. Dopasowanie tagów rozróżnia warianty takie jak `alpine` i `alpine-perl`. Etykiety obrazów wydań serwisowych wskazują właściwy commit źródłowy.
+
+Pełne informacje o wydaniu w [CHANGELOG.md](./CHANGELOG.md#170-rc14--2026-09-08).
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.13</strong></summary>
 
 - **Kontenery na płynnym tagu, które drydock po raz pierwszy zobaczył przed v1.5.0-rc.17, mogły zostać oznaczone jako Current na zawsze, nawet gdy registry miało nowszy digest.** `image.digest.watch` jest teraz wyznaczane na nowo przy każdym skanowaniu zamiast być ustalane raz przy pierwszym wykryciu, tak samo jak już robią to `isLocalImage` i `digest.repoDigests`. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))

@@ -5,6 +5,13 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.14 Highlights — September 8, 2026
+
+- Rollback now applies the same runtime-config sanitization as an update, so an entrypoint or command introduced by the newer image is not copied onto an older image that cannot run it. Tag family matching requires an exact variant suffix, with a digit-only precision exception; a trailing dot no longer qualifies ([#1134](https://github.com/CodesWhat/drydock/pull/1134)).
+- Maintenance image labels now name the release source SHA instead of the workflow's main-branch commit ([#1126](https://github.com/CodesWhat/drydock/pull/1126)).
+
+Full release notes are in [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#170-rc14--2026-09-08).
+
 ## v1.7.0-rc.13 Highlights — September 8, 2026
 
 - **Containers on a floating tag from before v1.5.0-rc.17 could stay marked Current forever, even with a newer digest available** — `image.digest.watch` is now re-derived every scan instead of being fixed at first discovery ([#1108](https://github.com/CodesWhat/drydock/pull/1108)).

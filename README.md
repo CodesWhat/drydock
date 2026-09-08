@@ -222,6 +222,15 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.14 highlights</strong></summary>
+
+Rollback now removes inherited entrypoints and commands that the backup image cannot run. Tag matching keeps variants such as `alpine` and `alpine-perl` separate, and maintenance image labels identify the actual source commit.
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc14--2026-09-08).
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.13 highlights</strong></summary>
 
 - **Containers on a floating tag that drydock first saw before v1.5.0-rc.17 could stay marked Current forever, even with a newer digest available.** `image.digest.watch` is now re-derived every scan instead of being fixed at first discovery, the same way `isLocalImage` and `digest.repoDigests` already are. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))

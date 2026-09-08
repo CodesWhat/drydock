@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.14] — 2026-09-08
+
 ### Fixed
 
 - **A maintenance cut labeled the shipped image with `main`'s commit instead of the commit it was built from.** Both `docker/metadata-action` steps in `release-cut.yml` left `org.opencontainers.image.revision` at its default, `github.sha`, which is the workflow run's own checkout rather than the dev-branch source commit the build used. The v1.6.1-rc.9 staging image carried `5ae315227` in that label instead of `2969675ef`. Both steps now set the label from the release source SHA.
@@ -2738,7 +2740,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.13...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.14...HEAD
+[1.7.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.13...v1.7.0-rc.14
 [1.7.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...v1.7.0-rc.13
 [1.7.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.11...v1.7.0-rc.12
 [1.7.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.10...v1.7.0-rc.11
