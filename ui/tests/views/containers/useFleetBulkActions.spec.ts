@@ -38,6 +38,18 @@ function harness(rows: Container[] = [row('one'), row('two', { agent: 'edge' })]
 }
 
 describe('useFleetBulkActions', () => {
+  it.each([0, 1, 2, 7])('pluralizes English fleet counts for %s', (count) => {
+    expect(i18n.global.t('containerComponents.fleetBulk.days', { count })).toBe(
+      `${count} ${count === 1 ? 'day' : 'days'}`,
+    );
+    expect(i18n.global.t('containerComponents.fleetBulk.patchCount', { count })).toBe(
+      `${count} patch ${count === 1 ? 'candidate' : 'candidates'}`,
+    );
+    expect(i18n.global.t('containerComponents.fleetBulk.snoozeConfirm', { count })).toBe(
+      `Snooze ${count} patch ${count === 1 ? 'candidate' : 'candidates'}?`,
+    );
+  });
+
   beforeEach(() => {
     vi.mocked(updateContainerPolicy).mockReset().mockResolvedValue({});
     useConfirmDialog().dismiss();

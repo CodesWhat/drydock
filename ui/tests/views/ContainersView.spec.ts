@@ -514,6 +514,10 @@ describe('ContainersView', () => {
       updateKind: 'patch',
     });
     const wrapper = await mountContainersView([patch]);
+    expect(wrapper.get('[data-test="fleet-snooze-duration"] option[value="1"]').text()).toBe(
+      '1 day',
+    );
+    expect(wrapper.findAll('span').map((span) => span.text())).toContain('1 patch candidate');
     await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('date');
     expect(
       (wrapper.get('[data-test="fleet-bulk-snooze"]').element as HTMLButtonElement).disabled,
