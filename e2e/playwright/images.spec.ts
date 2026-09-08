@@ -6,8 +6,7 @@ import {
 
 registerServerAvailabilityCheck(test);
 
-// Matches the QA fleet's DD_WATCHER_LOCAL_* watcher name (test/qa-compose.yml).
-const LOCAL_HOST_LABEL = 'local';
+const LOCAL_HOST_LABEL = 'Local';
 
 function readContainerActionsFeatureFlag(payload: unknown): boolean | undefined {
   if (!payload || typeof payload !== 'object') {
@@ -27,6 +26,8 @@ async function openImagesView(page: Page): Promise<void> {
   await page.goto('/images');
   await dismissAnnouncementBanners(page);
   await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Toggle filters' }).click();
+  await expect(page.getByLabel('Host')).toBeVisible();
 }
 
 test.describe('Images', () => {
@@ -37,7 +38,9 @@ test.describe('Images', () => {
     expect(await rows.count()).toBeGreaterThan(0);
 
     const hostSelect = page.getByLabel('Host');
-    await expect(hostSelect.locator('option', { hasText: LOCAL_HOST_LABEL })).toHaveCount(1);
+    await expect(
+      hostSelect.getByRole('option', { name: LOCAL_HOST_LABEL, exact: true }),
+    ).toHaveCount(1);
 
     await expect(page.locator('th', { hasText: 'Repository' })).toBeVisible();
   });

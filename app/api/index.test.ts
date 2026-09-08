@@ -231,6 +231,7 @@ function mockActualApiRouterStatsLifecycle() {
     './dependency-groups.js',
     './group.js',
     './icons.js',
+    './images.js',
     './internal-self-update.js',
     './log.js',
     './portwing.js',
