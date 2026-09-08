@@ -1,0 +1,47 @@
+{
+  "imagesView": {
+    "title": "Obrazy",
+    "subtitle": "Wszystkie obrazy na każdym hoście, wraz z tym, co ich używa i ile odzyska czyszczenie",
+    "columns": {
+      "repository": "Repozytorium",
+      "tag": "Tag",
+      "imageId": "ID obrazu",
+      "size": "Rozmiar",
+      "containers": "Kontenery",
+      "created": "Utworzono",
+      "lastSeen": "Ostatnio użyto",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "Wszystkie hosty",
+      "unusedOnly": "Tylko nieużywane"
+    },
+    "dangling": "osierocone",
+    "untagged": "bez tagu",
+    "hostUnsupported": "Agent tego hosta nie udostępnia kontrolerowi API Dockera, więc obrazów nie można tu wyświetlić ani wyczyścić.",
+    "hostError": "Nie udało się wyświetlić obrazów na {host}: {message}",
+    "empty": {
+      "title": "Brak obrazów",
+      "description": "Żaden obraz nie pasuje do bieżących filtrów."
+    },
+    "prune": {
+      "dangling": "Wyczyść osierocone",
+      "unused": "Wyczyść nieużywane",
+      "confirm": {
+        "header": {
+          "dangling": "Wyczyść osierocone obrazy na {host}",
+          "unused": "Wyczyść nieużywane obrazy na {host}"
+        },
+        "message": "To usunie 1 obraz i odzyska około {size}. To tylko szacunek; współdzielone warstwy mogą go obniżyć. | To usunie {count} obrazów i odzyska około {size}. To tylko szacunek; współdzielone warstwy mogą go obniżyć.",
+        "nothing": "Na tym hoście nie ma nic do wyczyszczenia.",
+        "accept": "Wyczyść"
+      },
+      "inProgress": "Czyszczenie obrazów na {host}...",
+      "success": "Usunięto 1 obraz i odzyskano {size} na {host} | Usunięto {count} obrazów i odzyskano {size} na {host}",
+      "stillRunning": "Czyszczenie na {host} wciąż trwa; odśwież listę za chwilę.",
+      "failed": "Czyszczenie na {host} nie powiodło się: {message}"
+    },
+    "refresh": "Odśwież"
+  }
+}

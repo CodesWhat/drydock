@@ -1,0 +1,47 @@
+{
+  "imagesView": {
+    "title": "イメージ",
+    "subtitle": "各ホスト上のすべてのイメージと、その利用状況、およびプルーンで解放できる容量",
+    "columns": {
+      "repository": "リポジトリ",
+      "tag": "タグ",
+      "imageId": "イメージID",
+      "size": "サイズ",
+      "containers": "コンテナ",
+      "created": "作成日時",
+      "lastSeen": "最終使用",
+      "host": "ホスト"
+    },
+    "filters": {
+      "host": "ホスト",
+      "allHosts": "すべてのホスト",
+      "unusedOnly": "未使用のみ"
+    },
+    "dangling": "dangling",
+    "untagged": "タグなし",
+    "hostUnsupported": "このホストのエージェントはコントローラーにDocker APIを公開していないため、ここではイメージの一覧表示もプルーンもできません。",
+    "hostError": "{host} のイメージを一覧表示できませんでした: {message}",
+    "empty": {
+      "title": "イメージがありません",
+      "description": "現在のフィルターに一致するイメージがありません。"
+    },
+    "prune": {
+      "dangling": "danglingをプルーン",
+      "unused": "未使用をプルーン",
+      "confirm": {
+        "header": {
+          "dangling": "{host} のdanglingイメージをプルーン",
+          "unused": "{host} の未使用イメージをプルーン"
+        },
+        "message": "この操作でイメージを1件削除し、約{size}を解放します。この数値は概算であり、共有レイヤーがあるとさらに小さくなることがあります。 | この操作でイメージを{count}件削除し、約{size}を解放します。この数値は概算であり、共有レイヤーがあるとさらに小さくなることがあります。",
+        "nothing": "このホストにはプルーンする対象がありません。",
+        "accept": "プルーン"
+      },
+      "inProgress": "{host} のイメージをプルーンしています...",
+      "success": "{host} でイメージを1件削除し、{size}を解放しました | {host} でイメージを{count}件削除し、{size}を解放しました",
+      "stillRunning": "{host} でのプルーンはまだ実行中です。しばらくしてから一覧を更新してください。",
+      "failed": "{host} でのプルーンに失敗しました: {message}"
+    },
+    "refresh": "更新"
+  }
+}

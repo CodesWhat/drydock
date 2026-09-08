@@ -1,0 +1,47 @@
+{
+  "imagesView": {
+    "title": "映像檔",
+    "subtitle": "每台主機上的所有映像檔，包含使用情況以及清理可回收的空間",
+    "columns": {
+      "repository": "倉庫",
+      "tag": "標籤",
+      "imageId": "映像檔 ID",
+      "size": "大小",
+      "containers": "容器",
+      "created": "建立時間",
+      "lastSeen": "最後使用",
+      "host": "主機"
+    },
+    "filters": {
+      "host": "主機",
+      "allHosts": "所有主機",
+      "unusedOnly": "僅未使用"
+    },
+    "dangling": "懸空",
+    "untagged": "無標籤",
+    "hostUnsupported": "此主機的代理未向控制器公開 Docker API，因此無法在此列出或清理映像檔。",
+    "hostError": "無法列出 {host} 上的映像檔：{message}",
+    "empty": {
+      "title": "沒有映像檔",
+      "description": "沒有映像檔符合目前的篩選條件。"
+    },
+    "prune": {
+      "dangling": "清理懸空映像檔",
+      "unused": "清理未使用映像檔",
+      "confirm": {
+        "header": {
+          "dangling": "清理 {host} 上的懸空映像檔",
+          "unused": "清理 {host} 上的未使用映像檔"
+        },
+        "message": "此操作將移除 1 個映像檔，回收約 {size}。此數字為估計值，共用層可能會使其變小。 | 此操作將移除 {count} 個映像檔，回收約 {size}。此數字為估計值，共用層可能會使其變小。",
+        "nothing": "此主機上沒有可清理的項目。",
+        "accept": "清理"
+      },
+      "inProgress": "正在清理 {host} 上的映像檔...",
+      "success": "已在 {host} 上移除 1 個映像檔，回收 {size} | 已在 {host} 上移除 {count} 個映像檔，回收 {size}",
+      "stillRunning": "{host} 上的清理仍在進行中；請稍後重新整理清單。",
+      "failed": "在 {host} 上清理失敗：{message}"
+    },
+    "refresh": "重新整理"
+  }
+}

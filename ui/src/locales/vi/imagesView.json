@@ -1,0 +1,47 @@
+{
+  "imagesView": {
+    "title": "Image",
+    "subtitle": "Mọi image trên từng máy chủ, kèm những gì đang dùng nó và dung lượng dọn dẹp có thể thu hồi",
+    "columns": {
+      "repository": "Repository",
+      "tag": "Tag",
+      "imageId": "ID image",
+      "size": "Dung lượng",
+      "containers": "Container",
+      "created": "Ngày tạo",
+      "lastSeen": "Dùng lần cuối",
+      "host": "Máy chủ"
+    },
+    "filters": {
+      "host": "Máy chủ",
+      "allHosts": "Tất cả máy chủ",
+      "unusedOnly": "Chỉ image chưa dùng"
+    },
+    "dangling": "dangling",
+    "untagged": "không có tag",
+    "hostUnsupported": "Agent của máy chủ này không cung cấp Docker API cho bộ điều khiển, vì vậy không thể liệt kê hoặc dọn dẹp image tại đây.",
+    "hostError": "Không thể liệt kê image trên {host}: {message}",
+    "empty": {
+      "title": "Không có image",
+      "description": "Không có image nào khớp với bộ lọc hiện tại."
+    },
+    "prune": {
+      "dangling": "Dọn dẹp image dangling",
+      "unused": "Dọn dẹp image chưa dùng",
+      "confirm": {
+        "header": {
+          "dangling": "Dọn dẹp image dangling trên {host}",
+          "unused": "Dọn dẹp image chưa dùng trên {host}"
+        },
+        "message": "Thao tác này xóa 1 image và thu hồi khoảng {size}. Con số này chỉ là ước tính; các lớp dùng chung có thể làm giảm giá trị này. | Thao tác này xóa {count} image và thu hồi khoảng {size}. Con số này chỉ là ước tính; các lớp dùng chung có thể làm giảm giá trị này.",
+        "nothing": "Không có gì để dọn dẹp trên máy chủ này.",
+        "accept": "Dọn dẹp"
+      },
+      "inProgress": "Đang dọn dẹp image trên {host}...",
+      "success": "Đã xóa 1 image và thu hồi {size} trên {host} | Đã xóa {count} image và thu hồi {size} trên {host}",
+      "stillRunning": "Việc dọn dẹp trên {host} vẫn đang chạy; hãy làm mới danh sách sau một lát.",
+      "failed": "Dọn dẹp trên {host} thất bại: {message}"
+    },
+    "refresh": "Làm mới"
+  }
+}

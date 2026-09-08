@@ -1,0 +1,47 @@
+{
+  "imagesView": {
+    "title": "Images",
+    "subtitle": "Toutes les images de chaque hôte, avec ce qui les utilise et ce qu'un nettoyage permettrait de récupérer",
+    "columns": {
+      "repository": "Dépôt",
+      "tag": "Tag",
+      "imageId": "ID de l'image",
+      "size": "Taille",
+      "containers": "Conteneurs",
+      "created": "Créé",
+      "lastSeen": "Dernière utilisation",
+      "host": "Hôte"
+    },
+    "filters": {
+      "host": "Hôte",
+      "allHosts": "Tous les hôtes",
+      "unusedOnly": "Inutilisées uniquement"
+    },
+    "dangling": "orpheline",
+    "untagged": "sans tag",
+    "hostUnsupported": "L'agent de cet hôte n'expose pas l'API Docker au contrôleur ; les images ne peuvent donc pas être listées ni nettoyées ici.",
+    "hostError": "Impossible de lister les images sur {host} : {message}",
+    "empty": {
+      "title": "Aucune image",
+      "description": "Aucune image ne correspond aux filtres actuels."
+    },
+    "prune": {
+      "dangling": "Nettoyer les orphelines",
+      "unused": "Nettoyer les inutilisées",
+      "confirm": {
+        "header": {
+          "dangling": "Nettoyer les images orphelines sur {host}",
+          "unused": "Nettoyer les images inutilisées sur {host}"
+        },
+        "message": "Ceci supprime 1 image et libère environ {size}. Ce chiffre est une estimation ; les couches partagées peuvent le réduire. | Ceci supprime {count} images et libère environ {size}. Ce chiffre est une estimation ; les couches partagées peuvent le réduire.",
+        "nothing": "Rien à nettoyer sur cet hôte.",
+        "accept": "Nettoyer"
+      },
+      "inProgress": "Nettoyage des images sur {host}...",
+      "success": "1 image supprimée et {size} libérés sur {host} | {count} images supprimées et {size} libérés sur {host}",
+      "stillRunning": "Le nettoyage est toujours en cours sur {host} ; actualisez la liste dans un instant.",
+      "failed": "Échec du nettoyage sur {host} : {message}"
+    },
+    "refresh": "Actualiser"
+  }
+}

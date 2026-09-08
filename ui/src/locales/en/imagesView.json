@@ -1,0 +1,47 @@
+{
+  "imagesView": {
+    "title": "Images",
+    "subtitle": "Every image on each host, with what uses it and what a prune would reclaim",
+    "columns": {
+      "repository": "Repository",
+      "tag": "Tag",
+      "imageId": "Image ID",
+      "size": "Size",
+      "containers": "Containers",
+      "created": "Created",
+      "lastSeen": "Last used",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "All hosts",
+      "unusedOnly": "Unused only"
+    },
+    "dangling": "dangling",
+    "untagged": "untagged",
+    "hostUnsupported": "This host's agent does not expose the Docker API to the controller, so images cannot be listed or pruned here.",
+    "hostError": "Could not list images on {host}: {message}",
+    "empty": {
+      "title": "No images",
+      "description": "No images match the current filters."
+    },
+    "prune": {
+      "dangling": "Prune dangling",
+      "unused": "Prune unused",
+      "confirm": {
+        "header": {
+          "dangling": "Prune dangling images on {host}",
+          "unused": "Prune unused images on {host}"
+        },
+        "message": "This removes 1 image and reclaims about {size}. The figure is an estimate; shared layers can lower it. | This removes {count} images and reclaims about {size}. The figure is an estimate; shared layers can lower it.",
+        "nothing": "Nothing to prune on this host.",
+        "accept": "Prune"
+      },
+      "inProgress": "Pruning images on {host}...",
+      "success": "Removed 1 image and reclaimed {size} on {host} | Removed {count} images and reclaimed {size} on {host}",
+      "stillRunning": "Prune is still running on {host}; refresh the list in a moment.",
+      "failed": "Prune failed on {host}: {message}"
+    },
+    "refresh": "Refresh"
+  }
+}
