@@ -1360,6 +1360,42 @@ describe('docker tag candidates module', () => {
 
       expect(result.tags).toEqual([]);
     });
+
+    test('reference "1.2.0-alpine" rejects the punctuation-only "1.3.0-alpine." candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine', '1.3.0-alpine.'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('reference "1.2.0-alpine" rejects the punctuation-only "1.3.0-alpine.." candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine', '1.3.0-alpine..'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('reference "1.2.0-alpine" still accepts the digit-precision "1.3.0-alpine.1" candidate', () => {
+      const container = createContainer({
+        image: { tag: { value: '1.2.0-alpine', semver: true } },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.0-alpine', '1.3.0-alpine.1'], log);
+
+      expect(result.tags).toEqual(['1.3.0-alpine.1']);
+    });
   });
 
   describe('Immich OpenVINO pinned-tag matrix (#498)', () => {
