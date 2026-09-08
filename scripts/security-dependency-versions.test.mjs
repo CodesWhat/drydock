@@ -65,6 +65,39 @@ test('Joi includes the rename and custom-message prototype fixes in app and e2e'
   }
 });
 
+test('Nodemailer includes the address parser and legacy content-access fixes', () => {
+  assert.ok(compareSemver(readJson('app/package.json').dependencies.nodemailer, '9.1.1') >= 0);
+  let resolutions = 0;
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    for (const [path, entry] of Object.entries(
+      readJson(`${workspace}/package-lock.json`).packages,
+    )) {
+      if (!path.endsWith('node_modules/nodemailer')) continue;
+      resolutions += 1;
+      assert.ok(compareSemver(entry.version, '9.1.1') >= 0, `${workspace}/${path}`);
+    }
+  }
+  assert.ok(resolutions > 0, 'expected Nodemailer resolutions in workspace locks');
+});
+
+test('every js-yaml resolution counts empty merge sources against its budget', () => {
+  assert.ok(compareSemver(readJson('e2e/package.json').overrides['js-yaml'], '3.15.2') >= 0);
+  let resolutions = 0;
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    for (const [path, entry] of Object.entries(
+      readJson(`${workspace}/package-lock.json`).packages,
+    )) {
+      if (!path.endsWith('node_modules/js-yaml')) continue;
+      resolutions += 1;
+      const major = Number(entry.version.split('.')[0]);
+      assert.ok(major === 3 || major === 4, `${workspace}/${path} must use a vetted major`);
+      const floor = major === 3 ? '3.15.2' : '4.3.2';
+      assert.ok(compareSemver(entry.version, floor) >= 0, `${workspace}/${path}`);
+    }
+  }
+  assert.ok(resolutions > 0, 'expected js-yaml resolutions in workspace locks');
+});
+
 test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
   const manifest = readJson('e2e/package.json');
   const lockfile = readJson('e2e/package-lock.json');
