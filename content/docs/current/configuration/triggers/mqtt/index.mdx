@@ -60,9 +60,11 @@ the `drydock` device.
 **Migration is automatic and keeps your history.** The discovery config topic and
 the `unique_id` are unchanged by this, so the retained payload drydock publishes
 on startup is a discovery *update* for the entity that already exists rather than
-a new entity. Home Assistant re-attaches it to the new device and keeps the same
-entity id, the same state history, and the same dashboard cards. Nothing is
-orphaned and no entities need to be removed by hand.
+a new entity: entity ids, unique ids, and history are preserved. Existing entities
+move to their container device after you reload the MQTT integration (Settings,
+Devices and services, MQTT, three dots, Reload) or restart Home Assistant; new
+containers appear under their own device immediately. Nothing is orphaned and no
+entities need to be removed by hand.
 
 Two things do change visibly. Each container's update entity moves off the
 `drydock` device onto its own, so anywhere Home Assistant shows a device next to

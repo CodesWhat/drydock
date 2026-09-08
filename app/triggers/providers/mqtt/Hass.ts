@@ -209,13 +209,10 @@ function getHaContainerDeviceModel(container: { image?: { name?: unknown } }): s
  * `getHassUniqueId`).
  *
  * `via_device` nests the container device under the single drydock device
- * that keeps the global and watcher-level entities. That drydock device is
- * registered by the aggregate discovery messages `updateContainerSensors`
- * publishes immediately after this one, so on a brand-new install the very
- * first container device is created before its `via_device` target exists
- * and HA leaves the link unset. HA re-resolves `via_device` on every
- * discovery update, so the link fills itself in on the next publish for that
- * container — there is nothing to repair explicitly.
+ * that keeps the global and watcher-level entities. Current Home Assistant
+ * (2024.12+, home-assistant/core#131588) stub-creates the parent device on
+ * first sight of `via_device`, so publish ordering doesn't matter there; on
+ * older HA the link heals on the next discovery publish.
  */
 function getHaContainerDevice(container: Container, stateTopic: string) {
   return {
