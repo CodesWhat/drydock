@@ -25,6 +25,8 @@ import {
 } from '../../services/container-actions';
 import type { UpdateMode } from '../../services/settings';
 import type { Container } from '../../types/container';
+import { formatBulkUpdateConfirm } from '../../utils/bulk-update-confirm';
+import { type BulkUpdatePlan, withStaleParents } from '../../utils/bulk-update-plan';
 import type { ContainerActionKind } from '../../utils/container-action-key';
 import {
   getContainerActionIdentityKey,
@@ -416,6 +418,137 @@ async function updateAllInGroupState(args: {
     if (acceptedTargetIds.length === 0) {
       args.clearBatch(args.group.key);
     }
+    const nextActionInProgress = new Map(args.actionInProgress.value);
+    nextActionInProgress.delete(firstTargetActionKey);
+    args.actionInProgress.value = nextActionInProgress;
+  }
+}
+
+/**
+ * Dispatches a selective bulk update (roadmap 6.1.1): the same head-tracked,
+ * `apiUpdateContainers`-backed flow as `updateAllInGroupState`, but over an
+ * arbitrary, already-planned `targets` list instead of a dependency group,
+ * and with no batch tracking (there is no group key to key a batch by).
+ */
+async function runBulkUpdateState(args: {
+  containerActionsEnabled: boolean;
+  containerActionsDisabledReason: string;
+  containers: Readonly<Ref<Container[]>>;
+  projectContainerDisplayState: (container: Container) => Container;
+  inputError: Ref<string | null>;
+  actionInProgress: Ref<Map<string, ContainerActionKind>>;
+  actionPending: Ref<Map<string, Container>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
+  startPolling: (pendingKey: string) => void;
+  targets: Container[];
+  loadContainers: () => Promise<void>;
+  t: TranslateFn;
+}) {
+  // c8 ignore next 4: confirmBulkUpdate already bails before opening the
+  // confirm dialog; this stays as a defensive re-check for the window
+  // between opening the dialog and the user clicking accept, where a
+  // reactive containerActionsEnabled could flip in between.
+  /* c8 ignore next 4 */
+  if (!args.containerActionsEnabled) {
+    args.inputError.value = args.containerActionsDisabledReason;
+    return;
+  }
+  const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
+  // The plan resolved eligibility an instant ago; a target that has since
+  // started (or was already mid-flight) is silently dropped rather than
+  // blocking the rest of the dispatch with a warning.
+  const dispatchableTargets = args.targets.filter((container) => {
+    const liveContainer = displayContainers.find((entry) => entry.id === container.id);
+    const operation =
+      liveContainer?.updateOperation ??
+      args.projectContainerDisplayState(container).updateOperation;
+    return !(
+      operation?.status === 'queued' ||
+      operation?.status === 'in-progress' ||
+      args.actionInProgress.value.has(container.id)
+    );
+  });
+  const frozenUpdateTargets = dispatchableTargets.map((container) => ({
+    id: container.id,
+    identityKey: container.identityKey,
+    name: container.name,
+  }));
+  if (frozenUpdateTargets.length === 0) {
+    return;
+  }
+  const targetIds = frozenUpdateTargets.map((target) => target.id);
+  const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
+  const headActionInProgress = new Map(args.actionInProgress.value);
+  headActionInProgress.set(firstTargetActionKey, 'update');
+  args.actionInProgress.value = headActionInProgress;
+  let acceptedTargetIds: string[] = [];
+  try {
+    const response = await apiUpdateContainers(targetIds);
+    acceptedTargetIds = response.accepted.map((accepted) => accepted.containerId);
+    const acceptedTargetIdSet = new Set(acceptedTargetIds);
+
+    const toast = useToast();
+    for (const rejected of response.rejected) {
+      if (isStaleContainerUpdateError(rejected.message)) {
+        continue;
+      }
+      toast.error(
+        args.t('containerComponents.actionToasts.groupUpdateRejected', {
+          name: rejected.containerName,
+          message: rejected.message,
+        }),
+      );
+    }
+
+    await args.loadContainers();
+    const isMultiContainerBatch = acceptedTargetIds.length >= 2;
+    const headTargetId = frozenUpdateTargets[0]!.id;
+    const nextGroupUpdateQueue = new Set(args.groupUpdateQueue.value);
+    for (const container of dispatchableTargets) {
+      if (!acceptedTargetIdSet.has(container.id)) {
+        continue;
+      }
+      markPendingActionState({
+        actionPending: args.actionPending,
+        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        startPolling: args.startPolling,
+        pendingKey: container.id,
+        snapshot: container,
+        mode: 'update',
+      });
+      if (isMultiContainerBatch && container.id !== headTargetId) {
+        // Mark containers waiting behind the batch head as queued right away:
+        // a client-side signal so they render a "Queued" state immediately,
+        // rather than looking stalled until their own updateOperation is next
+        // observed. It clears itself via prunePendingActionsState once that
+        // container's pending action settles.
+        nextGroupUpdateQueue.add(container.id);
+      }
+    }
+    args.groupUpdateQueue.value = nextGroupUpdateQueue;
+    if (acceptedTargetIds.length > 0) {
+      toast.success(
+        args.t('containerComponents.confirmDialogs.bulkUpdate.successMessage', {
+          count: acceptedTargetIds.length,
+        }),
+      );
+    }
+  } catch (error: unknown) {
+    useToast().error(
+      errorMessage(
+        error,
+        args.t('containerComponents.actionToasts.groupUpdateFailed', {
+          name:
+            frozenUpdateTargets.length === 1
+              ? frozenUpdateTargets[0]!.name
+              : `${frozenUpdateTargets.length} containers`,
+        }),
+      ),
+    );
+  } finally {
     const nextActionInProgress = new Map(args.actionInProgress.value);
     nextActionInProgress.delete(firstTargetActionKey);
     args.actionInProgress.value = nextActionInProgress;
@@ -1752,6 +1885,48 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
+  function confirmBulkUpdate(plan: BulkUpdatePlan) {
+    if (!containerActionsEnabled.value) {
+      input.error.value = containerActionsDisabledReason.value;
+      return;
+    }
+    const dialog = formatBulkUpdateConfirm(plan, t as TranslateFn);
+    if (dialog.disabled) {
+      return;
+    }
+    confirm.require({
+      header: dialog.header,
+      message: dialog.message,
+      rejectLabel: t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: dialog.acceptLabel,
+      accept: () => {
+        const finalPlan = plan.staleParents.length > 0 ? withStaleParents(plan) : plan;
+        const byId = new Map(
+          input.containers.value.map((container) => [container.id, container] as const),
+        );
+        const targets = finalPlan.dispatch
+          .map((entry) => byId.get(entry.id))
+          .filter((container): container is Container => Boolean(container));
+        void runBulkUpdateState({
+          containerActionsEnabled: containerActionsEnabled.value,
+          containerActionsDisabledReason: containerActionsDisabledReason.value,
+          containers: input.containers,
+          projectContainerDisplayState,
+          inputError: input.error,
+          actionInProgress,
+          actionPending,
+          actionPendingLifecycleModes,
+          actionPendingLifecycleObserved,
+          groupUpdateQueue,
+          startPolling,
+          targets,
+          loadContainers: input.loadContainers,
+          t: t as TranslateFn,
+        });
+      },
+    });
+  }
+
   return {
     actionInProgress,
     actionPending,
@@ -1765,6 +1940,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearSkipsSelected: policy.clearSkipsSelected,
     maturityMinAgeDaysInput: policy.maturityMinAgeDaysInput,
     maturityModeInput: policy.maturityModeInput,
+    confirmBulkUpdate,
     confirmDelete,
     confirmDependencyGroupUpdate,
     confirmForceUpdate,
