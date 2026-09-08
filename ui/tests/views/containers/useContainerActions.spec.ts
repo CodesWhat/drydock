@@ -2043,6 +2043,65 @@ describe('useContainerActions', () => {
       expect(confirmCall.acceptLabel).toBe('Update');
     });
 
+    it('skips the guard when the target name has no container id', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: {},
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('caps the named parents at five and reports how many more there are', async () => {
+      const parentIds = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'];
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'web', displayName: 'web' },
+          ...parentIds.map((id) => ({ id, name: id, displayName: id })),
+        ],
+        edges: parentIds.map((id) => ({
+          from: 'container-1',
+          to: id,
+          action: 'update',
+          source: 'label',
+        })),
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const parents = parentIds.map((id) => makeContainer({ id, name: id, newTag: '2.0.0' }));
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1' },
+        containers: [web, ...parents],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('p1, p2, p3, p4, p5');
+      expect(confirmCall.message).not.toContain('p6');
+      expect(confirmCall.message).toContain('and 2 more');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
     it('also appends the stale-parent warning to the force-update confirmation', async () => {
       seedGraph();
       const web = makeContainer({ id: 'container-1', name: 'web', bouncer: 'blocked' });
