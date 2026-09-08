@@ -1211,7 +1211,9 @@ function handleCardSortChange(event: Event): void {
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
                 @click="!resizing && isSortableColumn(col) && toggleSort(col.key, sortKey, sortAsc)">
-              <span v-tooltip="col.headerTooltip">{{ col.label }}</span>
+              <slot :name="'header-' + col.key" :column="col">
+                <span v-tooltip="col.headerTooltip">{{ col.label }}</span>
+              </slot>
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon && !isMobile"

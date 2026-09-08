@@ -1102,6 +1102,14 @@ describe('DataTable', () => {
     });
   });
 
+  describe('header slots', () => {
+    it('replaces the header content with a header-<key> slot and passes the column', () => {
+      const w = factory({}, { 'header-name': ({ column }: any) => `Custom: ${column.label}` });
+      const nameHeader = w.findAll('thead th')[0];
+      expect(nameHeader.text()).toBe('Custom: Name');
+    });
+  });
+
   describe('virtual scrolling', () => {
     function makeRows(count: number) {
       return Array.from({ length: count }, (_, i) => ({
