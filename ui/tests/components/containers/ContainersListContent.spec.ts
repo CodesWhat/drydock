@@ -9,6 +9,7 @@ import {
   ref,
   type WritableComputedRef,
 } from 'vue';
+import ContainerSelectionBar from '@/components/containers/ContainerSelectionBar.vue';
 import ContainersListContent from '@/components/containers/ContainersListContent.vue';
 import {
   type ContainersViewTableColumn,
@@ -178,6 +179,13 @@ describe('ContainersListContent', () => {
     wrapper = mountWithContext(context);
 
     expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+  });
+
+  it('mounts the container selection bar alongside the grouped views', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.findComponent(ContainerSelectionBar).exists()).toBe(true);
   });
 
   it('uses 44px icon-button sizes for group and recheck toolbar actions', () => {
