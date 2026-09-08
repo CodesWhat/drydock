@@ -1,3 +1,4 @@
+import type { ContainerUpdateOperationPhase } from '../../../model/container-update-operation.js';
 import {
   IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES,
   TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES,
@@ -68,7 +69,8 @@ test('getHassUpdateProgress reports the ladder percentage for an active phase', 
 });
 
 test('getHassUpdateProgress falls back to an indeterminate spinner for an unmapped phase', () => {
-  expect(getHassUpdateProgress({ phase: 'a-phase-added-later' })).toStrictEqual({
+  const unmappedPhase = 'a-phase-added-later' as unknown as ContainerUpdateOperationPhase;
+  expect(getHassUpdateProgress({ phase: unmappedPhase })).toStrictEqual({
     in_progress: true,
     update_percentage: null,
   });
