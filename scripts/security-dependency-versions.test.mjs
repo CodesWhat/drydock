@@ -83,8 +83,31 @@ test('Nodemailer includes the address parser and legacy content-access fixes', (
   assert.ok(resolutions > 0, 'expected Nodemailer resolutions in workspace locks');
 });
 
+function isJsYamlPatched(version) {
+  const major = Number(version.split('.')[0]);
+  return (
+    (major === 3 && compareSemver(version, '3.15.2') >= 0) ||
+    (major === 4 && compareSemver(version, '4.3.2') >= 0)
+  );
+}
+
+test('isJsYamlPatched accepts only patched releases on vetted major lines', () => {
+  for (const [version, expected] of [
+    ['3.15.1', false],
+    ['3.15.2', true],
+    ['3.16.0', true],
+    ['4.0.0', false],
+    ['4.3.1', false],
+    ['4.3.2', true],
+    ['4.4.0', true],
+    ['5.0.0', false],
+  ]) {
+    assert.equal(isJsYamlPatched(version), expected, version);
+  }
+});
+
 test('every js-yaml resolution counts empty merge sources against its budget', () => {
-  assert.ok(compareSemver(readJson('e2e/package.json').overrides['js-yaml'], '3.15.2') >= 0);
+  assert.ok(isJsYamlPatched(readJson('e2e/package.json').overrides['js-yaml']));
   let resolutions = 0;
   for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
     for (const [path, entry] of Object.entries(
@@ -92,10 +115,7 @@ test('every js-yaml resolution counts empty merge sources against its budget', (
     )) {
       if (!path.endsWith('node_modules/js-yaml')) continue;
       resolutions += 1;
-      const major = Number(entry.version.split('.')[0]);
-      assert.ok(major === 3 || major === 4, `${workspace}/${path} must use a vetted major`);
-      const floor = major === 3 ? '3.15.2' : '4.3.2';
-      assert.ok(compareSemver(entry.version, floor) >= 0, `${workspace}/${path}`);
+      assert.ok(isJsYamlPatched(entry.version), `${workspace}/${path}`);
     }
   }
   assert.ok(resolutions > 0, 'expected js-yaml resolutions in workspace locks');
