@@ -134,21 +134,25 @@ const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
 const mockFilterHidePinned = ref(false);
 
-vi.mock('@/composables/useContainerFilters', () => ({
-  useContainerFilters: vi.fn(() => ({
-    filterSearch: mockFilterSearch,
-    filterStatus: mockFilterStatus,
-    filterRegistry: mockFilterRegistry,
-    filterBouncer: mockFilterBouncer,
-    filterServer: mockFilterServer,
-    filterKind: mockFilterKind,
-    filterHidePinned: mockFilterHidePinned,
-    showFilters: mockShowFilters,
-    activeFilterCount: mockActiveFilterCount,
-    filteredContainers: mockFilteredContainers,
-    clearFilters: mockClearFilters,
-  })),
-}));
+vi.mock('@/composables/useContainerFilters', async () => {
+  const { useFleetDimensions } = await import('@/composables/useFleetDimensions');
+  return {
+    useContainerFilters: vi.fn((containers) => ({
+      fleet: useFleetDimensions(containers),
+      filterSearch: mockFilterSearch,
+      filterStatus: mockFilterStatus,
+      filterRegistry: mockFilterRegistry,
+      filterBouncer: mockFilterBouncer,
+      filterServer: mockFilterServer,
+      filterKind: mockFilterKind,
+      filterHidePinned: mockFilterHidePinned,
+      showFilters: mockShowFilters,
+      activeFilterCount: mockActiveFilterCount,
+      filteredContainers: mockFilteredContainers,
+      clearFilters: mockClearFilters,
+    })),
+  };
+});
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: vi.fn(() => ({
@@ -439,6 +443,118 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  it('plans fleet Update all from live filtered rows without changing selection', async () => {
+    const { useContainerSelection } = await import('@/composables/useContainerSelection');
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const ready = makeContainer({
+      id: 'ready',
+      name: 'ready',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const hidden = makeContainer({
+      id: 'hidden',
+      name: 'hidden',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const wrapper = await mountContainersView([ready, hidden]);
+    const vm = wrapper.vm as any;
+    mockFilteredContainers.value = [ready];
+    await flushPromises();
+    useContainerSelection().toggle('hidden');
+    expect(wrapper.find('[data-test="fleet-bulk-update"]').exists()).toBe(true);
+    expect(vm.fleetBulk?.canUpdate.value).toBe(true);
+    await wrapper.get('[data-test="fleet-bulk-update"]').trigger('click');
+    expect(useConfirmDialog().current.value?.message).toContain('ready');
+    expect(useConfirmDialog().current.value?.message).not.toContain('hidden');
+    expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+    mockFilteredContainers.value = [hidden];
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(mockApiUpdateBulk).toHaveBeenCalledWith(['ready']);
+    expect(useContainerSelection().selectedIds.value).toEqual(new Set(['hidden']));
+    useContainerSelection().clear();
+  });
+
+  it('confirms a frozen patch-only snooze scope and applies container-wide policies once', async () => {
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const patch = makeContainer({
+      id: 'patch',
+      name: 'patch',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const minor = makeContainer({
+      id: 'minor',
+      name: 'minor',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+    });
+    const wrapper = await mountContainersView([patch, minor]);
+    const vm = wrapper.vm as any;
+    expect(vm.fleetBulk?.patchCount.value).toBe(1);
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    expect(useConfirmDialog().current.value?.message).toContain('all updates');
+    expect(mockUpdateContainerPolicy).not.toHaveBeenCalled();
+    mockFilteredContainers.value = [minor];
+    await useConfirmDialog().accept();
+    expect(mockUpdateContainerPolicy).toHaveBeenCalledExactlyOnceWith('patch', 'snooze', {
+      days: 7,
+    });
+    expect(vm.fleetBulk.summary.value).toContain('1');
+  });
+
+  it('wires snooze duration/date controls and renders failure and success summaries', async () => {
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const patch = makeContainer({
+      id: 'patch',
+      name: 'patch',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const wrapper = await mountContainersView([patch]);
+    expect(wrapper.get('[data-test="fleet-snooze-duration"] option[value="1"]').text()).toBe(
+      '1 day',
+    );
+    expect(wrapper.findAll('span').map((span) => span.text())).toContain('1 patch candidate');
+    await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('date');
+    expect(
+      (wrapper.get('[data-test="fleet-bulk-snooze"]').element as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await wrapper.get('[data-test="fleet-snooze-date"]').setValue('2099-04-14');
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    mockUpdateContainerPolicy.mockRejectedValueOnce(new Error('gone'));
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain('Snoozed: 0. Failed: 1.');
+    expect(wrapper.get('[role="status"]').classes()).toContain('dd-text-warning');
+    await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('1');
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(mockUpdateContainerPolicy).toHaveBeenLastCalledWith('patch', 'snooze', { days: 1 });
+    expect(wrapper.get('[role="status"]').classes()).toContain('dd-text-muted');
+  });
+
+  it('exposes the live action scope before display ghosts and honors directed ids', async () => {
+    const first = makeContainer({
+      id: 'first',
+      name: 'first',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const second = makeContainer({ id: 'second', name: 'second' });
+    const wrapper = await mountContainersView([first, second]);
+    const vm = wrapper.vm as any;
+    mockFilteredContainers.value = [first];
+    vm.actionPending = new Map([['gone', makeContainer({ id: 'gone', name: 'gone' })]]);
+    expect(vm.liveActionContainers?.map((row: Container) => row.id)).toEqual(['first']);
+    expect(vm.displayContainers.map((row: Container) => row.id)).toContain('gone');
+    vm.filterContainerIds = new Set(['second', 'missing']);
+    expect(vm.liveActionContainers.map((row: Container) => row.id)).toEqual(['second']);
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRouterReplace.mockResolvedValue(undefined);
@@ -497,6 +613,73 @@ describe('ContainersView', () => {
   });
 
   describe('loading containers', () => {
+    it('reconciles persisted fleet grouping before loading stack groups', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.groupByStack = true;
+      preferences.containers.fleet.groupBy = 'agent';
+      const wrapper = await mountContainersView([makeContainer({ agent: 'edge' })]);
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(false);
+      expect(vm.fleet.groupBy.value).toBe('agent');
+      expect(mockGetContainerGroups).not.toHaveBeenCalled();
+      expect(vm.renderGroups[0].name).toBe('edge');
+    });
+
+    it('keeps an explicit stack route ahead of a persisted fleet grouping', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.fleet.groupBy = 'agent';
+      mockRoute.query = { groupByStack: 'true' };
+      const wrapper = await mountContainersView();
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(true);
+      expect(vm.fleet.groupBy.value).toBe('none');
+    });
+
+    it('clears fleet filters for an external search navigation', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.fleet.agent = JSON.stringify(['agent', 'edge']);
+      mockRoute.query = { q: 'nginx' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).fleet.agent.value).toBe('all');
+    });
+
+    it('projects sorted fleet groups through the existing renderGroups model', async () => {
+      const rows = [
+        makeContainer({ id: 'z', name: 'zebra', agent: 'edge' }),
+        makeContainer({ id: 'a', name: 'alpha', agent: 'edge' }),
+        makeContainer({ id: 'b', name: 'beta' }),
+      ];
+      const wrapper = await mountContainersView(rows);
+      const vm = wrapper.vm as any;
+      vm.fleet.groupBy.value = 'agent';
+      await flushPromises();
+      expect(vm.renderGroups).toHaveLength(2);
+      const edge = vm.renderGroups.find((group: any) => group.name === 'edge');
+      expect(edge.containers.map((row: Container) => row.id)).toEqual(['a', 'z']);
+      expect(edge.containerCount).toBe(2);
+      vm.containerSortAsc = false;
+      await flushPromises();
+      expect(
+        vm.renderGroups
+          .find((group: any) => group.name === 'edge')
+          .containers.map((row: Container) => row.id),
+      ).toEqual(['z', 'a']);
+    });
+
+    it('renders fleet groups and switches back to the existing stack grouping', async () => {
+      const wrapper = await mountContainersView();
+      const vm = wrapper.vm as any;
+      expect(vm.fleet).toBeDefined();
+      vm.fleet.groupBy.value = 'agent';
+      await flushPromises();
+      expect(vm.groupByStack).toBe(false);
+      vm.groupByStack = true;
+      await flushPromises();
+      expect(vm.fleet.groupBy.value).toBe('none');
+      vm.fleet.groupBy.value = 'registry';
+      await flushPromises();
+      expect(vm.groupByStack).toBe(false);
+    });
     it('calls getAllContainers on mount', async () => {
       await mountContainersView([]);
       expect(mockGetAllContainers).toHaveBeenCalledOnce();
@@ -557,6 +740,26 @@ describe('ContainersView', () => {
     });
 
     describe('identical-list dedup optimisation', () => {
+      it.each([
+        { labels: { team: 'new' } },
+        { agent: 'Local' },
+        { registryUrl: 'https://other.example' },
+        { registryName: 'quay' },
+        { tagPrecision: 'specific' as const },
+        { imageTagSemver: true },
+        { isDigestPinned: true },
+      ])('refreshes fleet dimensions when only %j changes', async (patch) => {
+        const container = makeContainer({ labels: { team: 'old' } });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+        const changed = { ...container, ...patch };
+        mockGetAllContainers.mockResolvedValue([changed]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        vi.mocked(mapApiContainers).mockReturnValue([changed]);
+        await vm.loadContainers();
+        expect(vm.containers[0]).toMatchObject(patch);
+      });
+
       it('does not reassign containers.value when a reload returns identical data', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
         const wrapper = await mountContainersView([container]);

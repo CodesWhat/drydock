@@ -158,21 +158,25 @@ const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
 const mockFilterHidePinned = ref(false);
 
-vi.mock('@/composables/useContainerFilters', () => ({
-  useContainerFilters: vi.fn(() => ({
-    filterSearch: mockFilterSearch,
-    filterStatus: mockFilterStatus,
-    filterRegistry: mockFilterRegistry,
-    filterBouncer: mockFilterBouncer,
-    filterServer: mockFilterServer,
-    filterKind: mockFilterKind,
-    filterHidePinned: mockFilterHidePinned,
-    showFilters: mockShowFilters,
-    activeFilterCount: mockActiveFilterCount,
-    filteredContainers: mockFilteredContainers,
-    clearFilters: mockClearFilters,
-  })),
-}));
+vi.mock('@/composables/useContainerFilters', async () => {
+  const { useFleetDimensions } = await import('@/composables/useFleetDimensions');
+  return {
+    useContainerFilters: vi.fn((containers) => ({
+      fleet: useFleetDimensions(containers),
+      filterSearch: mockFilterSearch,
+      filterStatus: mockFilterStatus,
+      filterRegistry: mockFilterRegistry,
+      filterBouncer: mockFilterBouncer,
+      filterServer: mockFilterServer,
+      filterKind: mockFilterKind,
+      filterHidePinned: mockFilterHidePinned,
+      showFilters: mockShowFilters,
+      activeFilterCount: mockActiveFilterCount,
+      filteredContainers: mockFilteredContainers,
+      clearFilters: mockClearFilters,
+    })),
+  };
+});
 
 const mockIsMobile = ref(false);
 const mockWindowNarrow = ref(false);

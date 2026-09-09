@@ -14,6 +14,7 @@ import {
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
+import { resolveSnoozeUntilFromInput } from '../../utils/snooze-date';
 import { findBackendMaturityBlocked } from '../../utils/update-eligibility';
 
 type ContainerListPolicyState = {
@@ -91,17 +92,6 @@ function toDateInputValue(timestamp: string | undefined): string {
   const month = String(parsed.getMonth() + 1).padStart(2, '0');
   const day = String(parsed.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function resolveSnoozeUntilFromInput(dateInput: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-    return undefined;
-  }
-  const parsed = new Date(`${dateInput}T23:59:59`);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-  return parsed.toISOString();
 }
 
 function normalizePolicyEntries(values: unknown): string[] {
