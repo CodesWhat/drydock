@@ -3,7 +3,12 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
-import { getWatcherEditSnapshot, writeWatcherEdits } from '../configuration/file/editor.js';
+import {
+  getNotificationTriggerEditSnapshot,
+  getWatcherEditSnapshot,
+  writeNotificationTriggerEdits,
+  writeWatcherEdits,
+} from '../configuration/file/editor.js';
 import { getConfigFileInfo } from '../configuration/file/layer.js';
 import { reloadConfiguration } from '../configuration/file/reload.js';
 import {
@@ -404,6 +409,8 @@ export function init() {
   router.use(nocache());
   router.get('/editor/watchers', configReadRateLimit, scoped(SESSION_ONLY, readWatcherEditor));
   router.patch('/editor/watchers', configWriteRateLimit, scoped('admin', patchWatcherEditor));
+  router.get('/editor/triggers', configReadRateLimit, scoped(SESSION_ONLY, readTriggerEditor));
+  router.patch('/editor/triggers', configWriteRateLimit, scoped('admin', patchTriggerEditor));
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
   router.get('/:section', configReadRateLimit, scoped(SESSION_ONLY, getConfigurationSection));
   // `admin`, not SESSION_ONLY: this route never returns a configuration
@@ -427,29 +434,60 @@ export function init() {
 }
 
 async function readWatcherEditor(_req: Request, res: Response): Promise<void> {
+  return readConfigurationEditor(res, 'watchers');
+}
+
+async function readTriggerEditor(_req: Request, res: Response): Promise<void> {
+  return readConfigurationEditor(res, 'triggers');
+}
+
+async function readConfigurationEditor(
+  res: Response,
+  editor: 'watchers' | 'triggers',
+): Promise<void> {
+  const label =
+    editor === 'watchers' ? 'watcher configuration editor' : 'notification policy editor';
   try {
-    const snapshot = await getWatcherEditSnapshot();
+    const snapshot =
+      editor === 'watchers'
+        ? await getWatcherEditSnapshot()
+        : await getNotificationTriggerEditSnapshot();
     recordAuditEvent({
       action: 'config-read',
       containerName: 'diagnostics',
       status: 'info',
-      details: 'Read the watcher configuration editor',
+      details: `Read the ${label}`,
     });
     res.status(200).json(snapshot);
   } catch {
-    sendErrorResponse(res, 500, 'Unable to read the watcher configuration editor');
+    sendErrorResponse(res, 500, `Unable to read the ${label}`);
   }
 }
 
 async function patchWatcherEditor(req: Request, res: Response): Promise<void> {
+  return patchConfigurationEditor(req, res, 'watchers');
+}
+
+async function patchTriggerEditor(req: Request, res: Response): Promise<void> {
+  return patchConfigurationEditor(req, res, 'triggers');
+}
+
+async function patchConfigurationEditor(
+  req: Request,
+  res: Response,
+  editor: 'watchers' | 'triggers',
+): Promise<void> {
   try {
-    const { status, ...outcome } = await writeWatcherEdits(req.body);
+    const { status, ...outcome } =
+      editor === 'watchers'
+        ? await writeWatcherEdits(req.body)
+        : await writeNotificationTriggerEdits(req.body);
     try {
       recordAuditEvent({
         action: 'config-written',
         containerName: 'diagnostics',
         status: outcome.applied ? 'info' : 'error',
-        details: `Watcher configuration edit: saved=${outcome.saved}, applied=${outcome.applied}; changed keys: ${outcome.changedKeys.join(', ')}`,
+        details: `${editor === 'watchers' ? 'Watcher configuration' : 'Notification policy'} edit: saved=${outcome.saved}, applied=${outcome.applied}; changed keys: ${outcome.changedKeys.join(', ')}`,
       });
     } catch {
       outcome.errors.push({
@@ -460,6 +498,12 @@ async function patchWatcherEditor(req: Request, res: Response): Promise<void> {
     }
     res.status(status).json(outcome);
   } catch {
-    sendErrorResponse(res, 500, 'Unable to save watcher configuration');
+    sendErrorResponse(
+      res,
+      500,
+      editor === 'watchers'
+        ? 'Unable to save watcher configuration'
+        : 'Unable to save notification policy configuration',
+    );
   }
 }

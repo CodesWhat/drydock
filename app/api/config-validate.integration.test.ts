@@ -100,23 +100,26 @@ describe('POST /api/v1/config/validate — global body gates', () => {
     expect(payload.valid).toBe(true);
   });
 
-  test('the watcher editor inherits the JSON content-type and body-size gates', async () => {
-    const url = `http://127.0.0.1:${port}/api/v1/config/editor/watchers`;
-    const wrongType = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'text/yaml' },
-      body: 'private: sentinel',
-    });
-    expect(wrongType.status).toBe(415);
-    const oversized = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ changes: 'x'.repeat(300 * 1024) }),
-    });
-    expect(oversized.status).toBe(413);
-  });
+  test.each(['watchers', 'triggers'])(
+    'the %s editor inherits the JSON content-type and body-size gates',
+    async (editor) => {
+      const url = `http://127.0.0.1:${port}/api/v1/config/editor/${editor}`;
+      const wrongType = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'text/yaml' },
+        body: 'private: sentinel',
+      });
+      expect(wrongType.status).toBe(415);
+      const oversized = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes: 'x'.repeat(300 * 1024) }),
+      });
+      expect(oversized.status).toBe(413);
+    },
+  );
 
-  test('the watcher editor write limiter rejects the sixth request in its window', async () => {
+  test('watcher and notification editors share the five-write limit', async () => {
     const url = `http://127.0.0.1:${port}/api/v1/config/editor/watchers`;
     for (let index = 0; index < 5; index++) {
       const response = await fetch(url, {
@@ -126,11 +129,22 @@ describe('POST /api/v1/config/validate — global body gates', () => {
       });
       expect(response.status).toBe(400);
     }
-    const limited = await fetch(url, {
+    const limited = await fetch(`http://127.0.0.1:${port}/api/v1/config/editor/triggers`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
+    expect(limited.status).toBe(429);
+  });
+
+  test('watcher and notification editors share the five-read limit', async () => {
+    for (let index = 0; index < 5; index++) {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/v1/config/editor/${index % 2 === 0 ? 'watchers' : 'triggers'}`,
+      );
+      expect(response.status).toBe(200);
+    }
+    const limited = await fetch(`http://127.0.0.1:${port}/api/v1/config/editor/triggers`);
     expect(limited.status).toBe(429);
   });
 });
