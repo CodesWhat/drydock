@@ -51,12 +51,14 @@ describe('reloadConfiguration', () => {
   let originalConfigFileEnv: string | undefined;
   let tempDir: string;
   let configPath: string;
+  let interpolatedSnapshot: Set<string>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockReconcile.mockResolvedValue(defaultReconcileResult());
     ddEnvVarsSnapshot = { ...ddEnvVars };
     configFileSourcesSnapshot = { ...configFileSources };
+    interpolatedSnapshot = new Set(configFileInterpolatedKeys);
     originalConfigFileEnv = process.env.DD_CONFIG_FILE;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-reload-test-'));
     configPath = path.join(tempDir, 'drydock.yml');
@@ -64,6 +66,10 @@ describe('reloadConfiguration', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    configFileInterpolatedKeys.clear();
+    for (const key of interpolatedSnapshot) configFileInterpolatedKeys.add(key);
     for (const key of Object.keys(ddEnvVars)) {
       delete ddEnvVars[key];
     }
@@ -100,6 +106,21 @@ describe('reloadConfiguration', () => {
     expect(getConfigFileLayer()).toStrictEqual({});
   });
 
+  test('resolves secret-file values before Joi and applies the resolved key rather than the file marker', async () => {
+    const credentialPath = path.join(tempDir, 'webhook');
+    fs.writeFileSync(credentialPath, 'https://discord.example/private\n', { mode: 0o600 });
+    writeConfig(
+      `notification:\n  discord:\n    private:\n      url:\n        _file: ${credentialPath}\n`,
+    );
+    const result = await reloadConfiguration();
+    expect(result.applied).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(ddEnvVars.DD_NOTIFICATION_DISCORD_PRIVATE_URL).toBe('https://discord.example/private');
+    expect(ddEnvVars.DD_NOTIFICATION_DISCORD_PRIVATE_URL__FILE).toBeUndefined();
+    expect(result.diff.changed).toContain('DD_NOTIFICATION_DISCORD_PRIVATE_URL');
+    expect(configFileSources.DD_NOTIFICATION_DISCORD_PRIVATE_URL).toBe('file');
+  });
+
   test('refuses the whole reload when the file itself fails to load', async () => {
     writeConfig('not: [valid, yaml,\n');
 
@@ -111,6 +132,68 @@ describe('reloadConfiguration', () => {
     expect(result.reconcile).toBeUndefined();
     expect(mockReconcile).not.toHaveBeenCalled();
   });
+
+  test('updates secret reference ownership even when bytes stay identical, then removes it', async () => {
+    const key = 'DD_NOTIFICATION_DISCORD_PRIVATE_URL';
+    const marker = `${key}__FILE`;
+    const credentialPath = path.join(tempDir, 'webhook');
+    const value = 'https://discord.example/private';
+    fs.writeFileSync(credentialPath, value, { mode: 0o600 });
+    ddEnvVars[key] = value;
+    configFileSources[marker] = 'file';
+    writeConfig(
+      `notification:\n  discord:\n    private:\n      url:\n        _file: ${credentialPath}\n`,
+    );
+    expect((await reloadConfiguration()).diff.changed).not.toContain(key);
+    expect(configFileSources[key]).toBe('file');
+    expect(configFileSources[marker]).toBeUndefined();
+    writeConfig(
+      `notification:\n  discord:\n    private:\n      url:\n        _file: \${PRIVATE_WEBHOOK_PATH:-${credentialPath}}\n`,
+    );
+    expect((await reloadConfiguration()).diff.changed).not.toContain(key);
+    expect(configFileSources[key]).toBe('env');
+    expect(configFileInterpolatedKeys.has(key)).toBe(true);
+    writeConfig(
+      `notification:\n  discord:\n    private:\n      url:\n        _file: ${credentialPath}\n`,
+    );
+    expect((await reloadConfiguration()).applied).toBe(true);
+    expect(configFileSources[key]).toBe('file');
+    expect(configFileInterpolatedKeys.has(key)).toBe(false);
+    writeConfig('{}\n');
+    expect((await reloadConfiguration()).diff.changed).toContain(key);
+    expect(ddEnvVars[key]).toBeUndefined();
+    expect(configFileSources[key]).toBeUndefined();
+  });
+
+  test.each(['missing', 'unreadable'])(
+    'returns a sanitized refusal for a %s secret without changing state',
+    async (failure) => {
+      const credentialPath = path.join(tempDir, 'private-secret-path');
+      if (failure === 'unreadable') {
+        fs.writeFileSync(credentialPath, 'private-sentinel', { mode: 0o600 });
+        vi.spyOn(fs.promises, 'open').mockRejectedValueOnce(new Error(`EACCES ${credentialPath}`));
+      }
+      writeConfig(
+        `notification:\n  discord:\n    private:\n      url:\n        _file: ${credentialPath}\n`,
+      );
+      const before = { ...ddEnvVars };
+      const result = await reloadConfiguration();
+      expect(result).toEqual({
+        applied: false,
+        errors: [
+          {
+            path: 'document',
+            envKey: 'DD_CONFIG_FILE',
+            message: 'Unable to resolve configuration secret files',
+          },
+        ],
+        diff: { changed: [], reload: [], restart: [] },
+      });
+      expect(ddEnvVars).toEqual(before);
+      expect(mockReconcile).not.toHaveBeenCalled();
+      expect(getConfigFileLayer()).toEqual({});
+    },
+  );
 
   test('applies a changed reloadable key and leaves a simultaneously changed restart-only key unapplied', async () => {
     writeConfig(
