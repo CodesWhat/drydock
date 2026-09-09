@@ -2,6 +2,7 @@ import { computed, type Ref, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
 import type { Container } from '../types/container';
 import { matchesHidePinnedFilter } from '../utils/hide-pinned';
+import { useFleetDimensions } from './useFleetDimensions';
 
 const DEFAULT_FILTER_VALUE = 'all';
 
@@ -110,6 +111,7 @@ function matchesContainerFilters(container: Container, criteria: ContainerFilter
 }
 
 export function useContainerFilters(containers: Ref<Container[]>) {
+  const fleet = useFleetDimensions(containers);
   const filterSearch = ref('');
   const filterStatus = ref(preferences.containers.filters.status);
   const filterRegistry = ref(preferences.containers.filters.registry);
@@ -142,7 +144,7 @@ export function useContainerFilters(containers: Ref<Container[]>) {
       filterServer,
       filterKind,
     ].filter((f) => f.value !== DEFAULT_FILTER_VALUE).length;
-    return dropdownCount + (filterHidePinned.value ? 1 : 0);
+    return dropdownCount + (filterHidePinned.value ? 1 : 0) + fleet.activeFilterCount.value;
   });
 
   const filteredContainers = computed(() => {
@@ -155,16 +157,20 @@ export function useContainerFilters(containers: Ref<Container[]>) {
       kind: filterKind.value,
       hidePinned: filterHidePinned.value,
     };
-    return containers.value.filter((container) => matchesContainerFilters(container, criteria));
+    return containers.value.filter(
+      (container) => matchesContainerFilters(container, criteria) && fleet.matches(container),
+    );
   });
 
   function clearFilters() {
+    fleet.clearFilters();
     filterSearch.value = '';
     filterHidePinned.value = false;
     clearPersistedFilterRefs(persistedFilterRefs);
   }
 
   return {
+    fleet,
     filterSearch,
     filterStatus,
     filterRegistry,
