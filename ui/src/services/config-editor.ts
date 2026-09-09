@@ -14,7 +14,7 @@ export interface WatcherIdentity {
   name: string;
   agent?: string;
 }
-export interface WatcherFieldDescriptor {
+interface WatcherFieldDescriptor {
   path?: string[];
   present: boolean;
   value?: Scalar;
@@ -40,7 +40,7 @@ export interface WatcherEditRequest {
   revision: string;
   changes: WatcherEditChange[];
 }
-export interface WatcherEditError {
+interface WatcherEditError {
   path: string;
   envKey: string;
   message: string;
