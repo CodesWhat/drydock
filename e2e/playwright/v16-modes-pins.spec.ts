@@ -1,4 +1,5 @@
 import { expect, type Page, type Route, test } from '@playwright/test';
+import { waitForCountdownFixture } from './helpers/container-fixture.mjs';
 import {
   dismissAnnouncementBanners,
   escapeRegExp,
@@ -171,6 +172,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
   });
 
   test('#406 shows a live stabilization countdown, ETA, and manual override', async ({ page }) => {
+    await waitForCountdownFixture(page.context().request);
     const now = new Date('2026-07-13T16:00:00.000Z');
     const liftableAt = new Date(now.getTime() + 6 * 60_000).toISOString();
     await interceptSettings(page, 'manual');
