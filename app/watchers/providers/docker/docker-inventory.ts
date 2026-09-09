@@ -201,7 +201,7 @@ async function refreshDockerInventory(
     try {
       result.containers = deps
         .getSourceContainers()
-        .map((container) => store.getContainer(container.id)!);
+        .map((container) => store.getContainerRaw(container.id)!);
     } catch (error) {
       fail('store', error);
     }

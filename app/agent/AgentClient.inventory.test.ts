@@ -1,13 +1,20 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import axios from 'axios';
+import type Dockerode from 'dockerode';
+import { refreshWatcherInventory as refreshPublicInventory } from '../api/watcher-inventory.js';
 import * as event from '../event/index.js';
+import type { InventoryRefreshResult } from '../model/inventory-refresh.js';
 import * as registry from '../registry/index.js';
 import * as store from '../store/container.js';
 import type { Database } from '../store/db/driver.js';
 import { createContainerFixture } from '../test/helpers.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import { forgetControllerLocalEnumeration } from '../watchers/controller-local-container-ids.js';
+import Docker from '../watchers/providers/docker/Docker.js';
 import { AgentClient } from './AgentClient.js';
 import * as agentEvents from './api/event.js';
+import { refreshWatcherInventory as refreshNativeInventory } from './api/watcher-inventory.js';
 import { bodySha256Hex, buildCanonicalMessage } from './ed25519-signer.js';
 
 vi.mock('axios');
@@ -97,6 +104,105 @@ test('signs the operation identity in the native request body when using Ed25519
   ).toBe(true);
   expect(body).toEqual({ operationId: expect.any(String) });
 });
+
+test.each(['HTTP only', 'SSE then HTTP'])(
+  'retains real Docker provider env across native %s replication',
+  async (delivery) => {
+    const agentDb = createMigratedMemoryDatabase();
+    const docker = new Docker();
+    docker.name = descriptor.name;
+    docker.type = 'docker';
+    docker.configuration = { watchbydefault: true } as typeof docker.configuration;
+    docker.dockerApi = {
+      listContainers: async () => [
+        { Id: 'native', Image: 'nginx:1.0.0', Names: ['/service'], State: 'running', Labels: {} },
+      ],
+      getContainer: () => ({
+        inspect: async () => ({
+          Id: 'native',
+          Name: '/service',
+          Config: { Image: 'nginx:1.0.0', Labels: {}, Env: ['PASSWORD=actual-secret'] },
+          State: { Status: 'running' },
+        }),
+      }),
+      getImage: () => ({
+        inspect: async () => ({
+          Id: 'native-image',
+          RepoTags: ['nginx:1.0.0'],
+          RepoDigests: ['nginx@sha256:abc'],
+          Architecture: 'amd64',
+          Os: 'linux',
+        }),
+      }),
+    } as unknown as Dockerode;
+    vi.spyOn(docker, 'ensureRemoteAuthHeaders').mockResolvedValue(undefined);
+    const agentState = { registry: {}, watcher: { [`docker.${descriptor.name}`]: docker } };
+    const request = (body: unknown) =>
+      Object.assign(new EventEmitter(), {
+        params: { type: 'docker', name: descriptor.name },
+        body,
+      });
+    const response = () =>
+      Object.assign(new EventEmitter(), {
+        destroyed: false,
+        writableEnded: false,
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn((value: InventoryRefreshResult) => JSON.parse(JSON.stringify(value))),
+      });
+    const nativeResponse = response();
+    const write = vi.fn(() => true);
+    const added = vi.fn();
+    const unsubscribe = event.registerContainerAdded(added);
+    agentEvents.initEvents();
+    agentEvents.subscribeEvents(
+      { ip: '127.0.0.1', on: vi.fn() } as never,
+      { writeHead: vi.fn(), write } as never,
+    );
+    vi.mocked(axios.post).mockImplementation(async (_url, body) => {
+      store.createCollections(agentDb);
+      vi.mocked(registry.getState).mockReturnValue(agentState as never);
+      write.mockClear();
+      await refreshNativeInventory(request(body) as never, nativeResponse as never);
+      expect(nativeResponse.status).toHaveBeenCalledWith(200);
+      expect(added.mock.calls[0][0].details.env[0].value).toBe('[REDACTED]');
+      const frames = write.mock.calls.map(([line]) => JSON.parse(String(line).slice(6)));
+      // Agent and controller have separate process-local ownership indexes.
+      forgetControllerLocalEnumeration(docker);
+      store.createCollections(db);
+      vi.mocked(registry.getState).mockReturnValue(state as never);
+      if (delivery === 'SSE then HTTP') {
+        expect(frames.map(({ type }) => type)).toEqual(['dd:inventory-added']);
+        for (const frame of frames) await client.handleEvent(frame.type, frame.data);
+        expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('actual-secret');
+      }
+      return { data: nativeResponse.json.mock.results[0].value };
+    });
+    try {
+      const completed = await client.refreshInventory('docker', descriptor.name);
+      expect(completed.authoritative).toBe(true);
+      expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('actual-secret');
+      expect(nativeResponse.json.mock.results[0].value.containers[0].details.env[0].value).toBe(
+        'actual-secret',
+      );
+      expect(store.getContainer('native')?.details?.env[0].value).toBe('[REDACTED]');
+      store.createCollections(agentDb);
+      vi.mocked(registry.getState).mockReturnValue(agentState as never);
+      const publicResponse = response();
+      await refreshPublicInventory(request({}) as never, publicResponse as never);
+      expect(publicResponse.status).toHaveBeenCalledWith(200);
+      expect(publicResponse.json.mock.results[0].value.containers[0].details.env[0].value).toBe(
+        '[REDACTED]',
+      );
+      expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('actual-secret');
+    } finally {
+      unsubscribe();
+      forgetControllerLocalEnumeration(docker);
+      store.createCollections(db);
+      vi.mocked(registry.getState).mockReturnValue(state as never);
+      agentDb.close();
+    }
+  },
+);
 
 test('replicates real agent store lifecycle frames and raw HTTP without registry enrichment', async () => {
   const agentDb = createMigratedMemoryDatabase();
