@@ -30,6 +30,7 @@ export const openApiDocument = {
         'Scoped API key management. Reachable with a session, or with a key that holds api-keys:manage.',
     },
     { name: 'Containers', description: 'Container inventory and container-scoped operations' },
+    { name: 'Images', description: 'Image inventory and prune operations across image hosts' },
     { name: 'Triggers', description: 'Trigger discovery and trigger execution' },
     {
       name: 'Actions',

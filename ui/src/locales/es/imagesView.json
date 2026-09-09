@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "Imágenes",
+    "subtitle": "Todas las imágenes de cada host, con lo que las usa y lo que un prune recuperaría",
+    "loading": "Cargando imágenes...",
+    "loadFailed": "No se pudieron cargar las imágenes",
+    "columns": {
+      "repository": "Repositorio",
+      "tag": "Etiqueta",
+      "imageId": "ID de imagen",
+      "size": "Tamaño",
+      "containers": "Contenedores",
+      "created": "Creado",
+      "lastSeen": "Último uso",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "Todos los hosts",
+      "unusedOnly": "Solo sin usar"
+    },
+    "dangling": "huérfanas",
+    "untagged": "sin etiqueta",
+    "hostUnsupported": "El agente de este host no expone la API de Docker al controlador, por lo que las imágenes no se pueden listar ni depurar aquí.",
+    "hostError": "No se pudieron listar las imágenes en {host}: {message}",
+    "empty": {
+      "title": "Sin imágenes",
+      "description": "Ninguna imagen coincide con los filtros actuales."
+    },
+    "prune": {
+      "dangling": "Depurar huérfanas",
+      "unused": "Depurar sin usar",
+      "confirm": {
+        "header": {
+          "dangling": "Depurar imágenes huérfanas en {host}",
+          "unused": "Depurar imágenes sin usar en {host}"
+        },
+        "message": "Esto elimina 1 imagen y recupera unos {size}. La cifra es una estimación; las capas compartidas pueden reducirla. | Esto elimina {count} imágenes y recupera unos {size}. La cifra es una estimación; las capas compartidas pueden reducirla.",
+        "nothing": "No hay nada que depurar en este host.",
+        "accept": "Depurar"
+      },
+      "inProgress": "Depurando imágenes en {host}...",
+      "success": "Se eliminó 1 imagen y se recuperaron {size} en {host} | Se eliminaron {count} imágenes y se recuperaron {size} en {host}",
+      "stillRunning": "El proxy de Docker del agente no devolvió ningún resultado para {host}; la depuración puede seguir en curso. Actualice la lista en un momento.",
+      "failed": "Error al depurar en {host}: {message}"
+    },
+    "refresh": "Actualizar"
+  }
+}

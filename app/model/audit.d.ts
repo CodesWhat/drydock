@@ -51,7 +51,8 @@ export interface AuditEntry {
     | 'mqtt-command-update'
     | 'api-key-created'
     | 'api-key-revoked'
-    | 'api-key-auth-failed';
+    | 'api-key-auth-failed'
+    | 'image-prune';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;

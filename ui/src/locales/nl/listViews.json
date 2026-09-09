@@ -71,7 +71,8 @@
       "agent-disconnect": "Agent verbroken",
       "notification-delivery-failed": "Melding mislukt",
       "security-alert": "Beveiligingswaarschuwing",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "Image-opruiming"
     },
     "target": {
       "container": "Container",
