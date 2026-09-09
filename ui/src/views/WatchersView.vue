@@ -173,7 +173,7 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     config: Object.fromEntries(
       Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ),
-    agent: watcher.agent,
+    agent: watcher.agent ?? undefined,
   };
 }
 
