@@ -26,13 +26,19 @@ const {
   mockWriteConfigurationSection: vi.fn(),
 }));
 
-const { mockEditSnapshot, mockWatcherEdits } = vi.hoisted(() => ({
-  mockEditSnapshot: vi.fn(),
-  mockWatcherEdits: vi.fn(),
-}));
+const { mockEditSnapshot, mockWatcherEdits, mockTriggerSnapshot, mockTriggerEdits } = vi.hoisted(
+  () => ({
+    mockEditSnapshot: vi.fn(),
+    mockWatcherEdits: vi.fn(),
+    mockTriggerSnapshot: vi.fn(),
+    mockTriggerEdits: vi.fn(),
+  }),
+);
 vi.mock('../configuration/file/editor.js', () => ({
   getWatcherEditSnapshot: mockEditSnapshot,
   writeWatcherEdits: mockWatcherEdits,
+  getNotificationTriggerEditSnapshot: mockTriggerSnapshot,
+  writeNotificationTriggerEdits: mockTriggerEdits,
 }));
 
 vi.mock('express', () => ({
@@ -106,6 +112,79 @@ function getPutHandler(path: string) {
 }
 
 describe('Config Router', () => {
+  test('notification editor shares limiters and keeps session-only reads and admin writes', async () => {
+    configRouter.init();
+    const get = mockRouter.get.mock.calls.find(([path]) => path === '/editor/triggers');
+    const patch = mockRouter.patch.mock.calls.find(([path]) => path === '/editor/triggers');
+    expect(get?.at(-1)).toEqual(expect.any(Function));
+    expect(patch?.at(-1)).toEqual(expect.any(Function));
+    expect(get?.[1]).toBe(
+      mockRouter.get.mock.calls.find(([path]) => path === '/editor/watchers')?.[1],
+    );
+    expect(patch?.[1]).toBe(
+      mockRouter.patch.mock.calls.find(([path]) => path === '/editor/watchers')?.[1],
+    );
+    for (const [handler, scopes] of [
+      [get?.at(-1), ['admin']],
+      [patch?.at(-1), ['read']],
+    ]) {
+      const res = createResponse();
+      await handler({ principal: { kind: 'api-key', scopes } }, res);
+      expect(res.status).toHaveBeenCalledWith(403);
+    }
+  });
+
+  test('notification editor returns only its safe snapshot and audits the read', async () => {
+    mockTriggerSnapshot.mockResolvedValueOnce({ available: false, triggers: [] });
+    configRouter.init();
+    const res = createResponse();
+    await getHandler('/editor/triggers')({}, res);
+    expect(res.json).toHaveBeenCalledWith({ available: false, triggers: [] });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'config-read' }),
+    );
+  });
+
+  test.each([true, false])(
+    'notification editor keeps saved and applied distinct: %s',
+    async (applied) => {
+      mockTriggerEdits.mockResolvedValueOnce({
+        status: 200,
+        saved: true,
+        applied,
+        changedKeys: ['DD_NOTIFICATION_DISCORD_PRIVATE_ONCE'],
+        errors: [],
+        restartRequired: [],
+      });
+      configRouter.init();
+      const res = createResponse();
+      await mockRouter.patch.mock.calls.find(([path]) => path === '/editor/triggers')?.at(-1)(
+        {
+          body: { private: 'private-sentinel' },
+          principal: { kind: 'api-key', scopes: ['admin'] },
+        },
+        res,
+      );
+      expect(res.json.mock.calls[0][0]).toMatchObject({ saved: true, applied });
+      expect(JSON.stringify(mockRecordAuditEvent.mock.calls)).not.toContain('private-sentinel');
+    },
+  );
+
+  test.each(['get', 'patch'])('notification editor sanitizes %s failures', async (method) => {
+    mockTriggerSnapshot.mockRejectedValueOnce(new Error('private-sentinel'));
+    mockTriggerEdits.mockRejectedValueOnce(new Error('private-sentinel'));
+    configRouter.init();
+    const res = createResponse();
+    const handler =
+      method === 'get'
+        ? getHandler('/editor/triggers')
+        : mockRouter.patch.mock.calls.find(([path]) => path === '/editor/triggers')?.at(-1);
+    await handler({ body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(res.json.mock.calls)).not.toContain('private-sentinel');
+    mockTriggerSnapshot.mockReset();
+    mockTriggerEdits.mockReset();
+  });
   test('registers the editor behind the existing read/write limiters and session/admin scopes', async () => {
     configRouter.init();
     const get = mockRouter.get.mock.calls.find(([path]) => path === '/editor/watchers');

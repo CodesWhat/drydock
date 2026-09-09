@@ -297,7 +297,7 @@ const watcherEditOutcomeSchema = {
   additionalProperties: false,
 } as const;
 
-export const configPaths = {
+const watcherEditorPaths = {
   '/api/v1/config/editor/watchers': {
     get: {
       tags: ['System'],
@@ -385,6 +385,77 @@ export const configPaths = {
         429: errorResponse('Config write rate limit exceeded'),
         500: jsonResponse('Unable to save before writing', watcherEditOutcomeSchema),
       },
+    },
+  },
+} as const;
+
+const notificationTriggerSnapshotSchema = {
+  type: 'object',
+  properties: {
+    available: { type: 'boolean' },
+    revision: { type: 'string' },
+    readOnlyReason: { type: 'string' },
+    triggers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string' },
+          name: { type: 'string' },
+          category: { type: 'string', enum: ['notification'] },
+          agent: { type: 'string' },
+          fields: {
+            type: 'object',
+            properties: {
+              threshold: editFieldSchema,
+              once: editFieldSchema,
+              mode: editFieldSchema,
+              securitymode: editFieldSchema,
+              digestcron: editFieldSchema,
+              resolvenotifications: editFieldSchema,
+            },
+            required: [
+              'threshold',
+              'once',
+              'mode',
+              'securitymode',
+              'digestcron',
+              'resolvenotifications',
+            ],
+            additionalProperties: false,
+          },
+        },
+        required: ['id', 'type', 'name', 'category', 'fields'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['available', 'triggers'],
+  additionalProperties: false,
+} as const;
+
+export const configPaths = {
+  ...watcherEditorPaths,
+  '/api/v1/config/editor/triggers': {
+    get: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].get,
+      summary: 'Get a safe notification trigger policy snapshot',
+      operationId: 'getNotificationTriggerEditSnapshot',
+      description:
+        'Session-only projection of six common notification policy fields. Action providers are excluded; agents, environment-owned and referenced fields remain read-only. Provider-forced settings such as MQTT mode remain read-only. No credentials, destinations or templates are returned.',
+      responses: {
+        ...watcherEditorPaths['/api/v1/config/editor/watchers'].get.responses,
+        200: jsonResponse('Notification policy edit snapshot', notificationTriggerSnapshotSchema),
+        500: errorResponse('Unable to read the notification policy editor'),
+      },
+    },
+    patch: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch,
+      summary: 'Edit allowlisted notification trigger policy leaves',
+      operationId: 'writeNotificationTriggerEdits',
+      description:
+        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron and resolvenotifications. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
     },
   },
   '/api/v1/config': {

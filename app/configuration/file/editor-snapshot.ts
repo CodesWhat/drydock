@@ -6,7 +6,7 @@ import { configFileSources, WATCHER_MAINTENANCE_ENV_ALIASES } from '../index.js'
 import { getConfigFileInfo, getConfigFileLayer } from './layer.js';
 
 const revisionKey = randomBytes(32);
-export const WATCHER_EDIT_FIELDS = [
+const WATCHER_EDIT_FIELDS = [
   'cron',
   'maintenancewindow',
   'maintenancewindowtz',
@@ -14,7 +14,7 @@ export const WATCHER_EDIT_FIELDS = [
 ] as const;
 type WatcherEditField = (typeof WATCHER_EDIT_FIELDS)[number];
 type ScalarValue = string | number | boolean;
-export interface WatcherEditFieldDescriptor {
+export interface ConfigurationEditFieldDescriptor {
   path?: string[];
   present: boolean;
   value?: ScalarValue;
@@ -47,7 +47,7 @@ export async function readEditorDocument() {
   return { path: info.path, raw, doc, revision: configurationRevision(bytes) };
 }
 
-function scalar(value: unknown): value is ScalarValue {
+export function scalar(value: unknown): value is ScalarValue {
   return (
     typeof value === 'string' ||
     typeof value === 'boolean' ||
@@ -55,7 +55,7 @@ function scalar(value: unknown): value is ScalarValue {
   );
 }
 
-function matchingKeys(map: unknown, name: string): string[] {
+export function matchingKeys(map: unknown, name: string): string[] {
   if (!isMap(map)) return [];
   return map.items.flatMap(({ key }) =>
     isScalar(key) && typeof key.value === 'string' && key.value.toLowerCase() === name
@@ -140,17 +140,20 @@ export function watcherSnapshot(document: Awaited<ReturnType<typeof readEditorDo
             : rawNode !== undefined
               ? 'file'
               : 'default';
-        const descriptor: WatcherEditFieldDescriptor = { present: rawNode !== undefined, source };
+        const descriptor: ConfigurationEditFieldDescriptor = {
+          present: rawNode !== undefined,
+          source,
+        };
         if (readOnlyReason) descriptor.readOnlyReason = readOnlyReason;
         else descriptor.path = fieldPath;
-        if (!reference && !watcher.agent) {
+        if (!reference && !watcher.agent && matches.length < 2) {
           if (isScalar(rawNode) && scalar(rawNode.value)) descriptor.value = rawNode.value;
           const effective = (watcher.configuration as Record<string, unknown>)[field];
           if (scalar(effective)) descriptor.effectiveValue = effective;
         }
         return [field, descriptor];
       }),
-    ) as Record<WatcherEditField, WatcherEditFieldDescriptor>;
+    ) as Record<WatcherEditField, ConfigurationEditFieldDescriptor>;
     return { id, name: watcher.name, ...(watcher.agent ? { agent: watcher.agent } : {}), fields };
   });
   return {

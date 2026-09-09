@@ -133,6 +133,16 @@ describe('watcher configuration editor', () => {
     expect(result.saved).toBe(false);
   });
 
+  test('omits values when case-colliding watcher aliases include a secret reference', async () => {
+    fixture(
+      'watcher:\n  local:\n    cron: "0 */6 * * *"\n    Cron:\n      _file: /private/schedule\n',
+    );
+    const field = (await getWatcherEditSnapshot()).watchers[0].fields.cron;
+    expect(field.readOnlyReason).toBe('ambiguous-field-alias');
+    expect(field.value).toBeUndefined();
+    expect(field.effectiveValue).toBeUndefined();
+  });
+
   test('does not reveal a still-live secret after an external edit replaces its reference on disk', async () => {
     fixture('watcher:\n  local:\n    cron: "0 */6 * * *"\n');
     setConfigFileLayer({ DD_WATCHER_LOCAL_CRON__FILE: '/private/credential' }, new Set(), {

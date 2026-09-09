@@ -65,6 +65,7 @@
         "hosts": "Хости",
         "registries": "Реєстри",
         "watchers": "Спостерігачі",
+        "images": "Образи",
         "settingsGroup": "Налаштування",
         "general": "Загальні",
         "notifications": "Сповіщення",

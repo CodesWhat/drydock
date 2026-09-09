@@ -65,6 +65,7 @@
         "hosts": "主機",
         "registries": "倉庫",
         "watchers": "監視器",
+        "images": "映像檔",
         "settingsGroup": "設定",
         "general": "通用",
         "notifications": "通知",

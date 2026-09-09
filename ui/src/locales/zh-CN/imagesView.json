@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "镜像",
+    "subtitle": "每台主机上的所有镜像，包括使用情况以及清理可回收的空间",
+    "loading": "正在加载镜像...",
+    "loadFailed": "无法加载镜像",
+    "columns": {
+      "repository": "仓库",
+      "tag": "标签",
+      "imageId": "镜像 ID",
+      "size": "大小",
+      "containers": "容器",
+      "created": "创建时间",
+      "lastSeen": "最后使用",
+      "host": "主机"
+    },
+    "filters": {
+      "host": "主机",
+      "allHosts": "所有主机",
+      "unusedOnly": "仅未使用"
+    },
+    "dangling": "悬空",
+    "untagged": "无标签",
+    "hostUnsupported": "此主机的代理未向控制器公开 Docker API，因此无法在此列出或清理镜像。",
+    "hostError": "无法列出 {host} 上的镜像：{message}",
+    "empty": {
+      "title": "没有镜像",
+      "description": "没有镜像匹配当前的过滤条件。"
+    },
+    "prune": {
+      "dangling": "清理悬空镜像",
+      "unused": "清理未使用镜像",
+      "confirm": {
+        "header": {
+          "dangling": "清理 {host} 上的悬空镜像",
+          "unused": "清理 {host} 上的未使用镜像"
+        },
+        "message": "此操作将删除 1 个镜像，回收约 {size}。该数字为估算值，共享层可能会使其变小。 | 此操作将删除 {count} 个镜像，回收约 {size}。该数字为估算值，共享层可能会使其变小。",
+        "nothing": "此主机上没有可清理的内容。",
+        "accept": "清理"
+      },
+      "inProgress": "正在清理 {host} 上的镜像...",
+      "success": "已在 {host} 上删除 1 个镜像，回收 {size} | 已在 {host} 上删除 {count} 个镜像，回收 {size}",
+      "stillRunning": "代理的 Docker 代理未返回 {host} 的结果；清理可能仍在进行。请稍后刷新列表。",
+      "failed": "在 {host} 上清理失败：{message}"
+    },
+    "refresh": "刷新"
+  }
+}

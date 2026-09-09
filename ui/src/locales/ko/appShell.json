@@ -65,6 +65,7 @@
         "hosts": "호스트",
         "registries": "레지스트리",
         "watchers": "워처",
+        "images": "이미지",
         "settingsGroup": "설정",
         "general": "일반",
         "notifications": "알림",

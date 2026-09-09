@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { REDACTED_VALUE } from '../../debug/redact.js';
 import { resolveCandidateEnvAndDiff } from './candidate.js';
-import { configurationRevision, readEditorDocument, watcherSnapshot } from './editor-snapshot.js';
+import {
+  type ConfigurationEditFieldDescriptor,
+  configurationRevision,
+  readEditorDocument,
+  watcherSnapshot,
+} from './editor-snapshot.js';
+import { notificationTriggerSnapshot } from './editor-trigger-snapshot.js';
 import { flattenConfigTree } from './flatten.js';
 import { interpolateConfigTree } from './interpolate.js';
 import { reloadConfiguration } from './reload.js';
@@ -85,17 +91,33 @@ export async function getWatcherEditSnapshot() {
   return watcherSnapshot(await readEditorDocument());
 }
 
-async function performEdits(request: unknown) {
+export async function getNotificationTriggerEditSnapshot() {
+  return notificationTriggerSnapshot(await readEditorDocument());
+}
+
+export async function writeNotificationTriggerEdits(request: unknown) {
+  return writeEditorEdits(request, 'triggers');
+}
+
+async function performEdits(request: unknown, editor: 'watchers' | 'triggers') {
   const body = changesFromRequest(request);
-  if (!body) return refusal(400, 'Invalid watcher edit request');
+  if (!body)
+    return refusal(
+      400,
+      editor === 'watchers'
+        ? 'Invalid watcher edit request'
+        : 'Invalid notification policy edit request',
+    );
   const document = await readEditorDocument();
   if (!document) return refusal(409, 'No configuration file is available to edit');
   if (body.revision !== document.revision)
     return refusal(409, 'Configuration changed; reload the editor');
-  const allowedPaths = watcherSnapshot(document).watchers.flatMap((watcher) =>
-    Object.values(watcher.fields).flatMap((field) =>
-      field.path ? [JSON.stringify(field.path)] : [],
-    ),
+  const rows: Array<{ fields: Record<string, ConfigurationEditFieldDescriptor> }> =
+    editor === 'watchers'
+      ? watcherSnapshot(document).watchers
+      : notificationTriggerSnapshot(document).triggers;
+  const allowedPaths = rows.flatMap((row) =>
+    Object.values(row.fields).flatMap((field) => (field.path ? [JSON.stringify(field.path)] : [])),
   );
   if (body.changes.some((change) => !allowedPaths.includes(JSON.stringify(change.path))))
     return refusal(409, 'A requested field is not editable');
@@ -176,11 +198,20 @@ async function performEdits(request: unknown) {
 }
 
 export async function writeWatcherEdits(request: unknown) {
+  return writeEditorEdits(request, 'watchers');
+}
+
+async function writeEditorEdits(request: unknown, editor: 'watchers' | 'triggers') {
   return withConfigurationWrite(async () => {
     try {
-      return await performEdits(request);
+      return await performEdits(request, editor);
     } catch {
-      return refusal(500, 'Unable to save watcher configuration');
+      return refusal(
+        500,
+        editor === 'watchers'
+          ? 'Unable to save watcher configuration'
+          : 'Unable to save notification policy configuration',
+      );
     }
   });
 }

@@ -361,6 +361,7 @@ const routes = [
   "/docs/v1.7/configuration",
   "/docs/v1.7/configuration/actions",
   "/docs/v1.7/configuration/actions/approvals",
+  "/docs/v1.7/configuration/actions/images",
   "/docs/v1.7/configuration/actions/update-eligibility",
   "/docs/v1.7/configuration/agents",
   "/docs/v1.7/configuration/authentications",
