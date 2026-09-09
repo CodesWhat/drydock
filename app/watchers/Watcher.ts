@@ -1,5 +1,6 @@
 import type { Container, ContainerReport } from '../model/container.js';
 import Component, { type ComponentConfiguration } from '../registry/Component.js';
+import { type InventoryRefreshProvider, isInventoryRefreshSupported } from './inventory-refresh.js';
 
 /**
  * Watcher abstract class.
@@ -22,6 +23,7 @@ abstract class Watcher<
     return {
       lastRunAt: this.lastRunAt,
       nextRunAt: this.getNextRunAt(),
+      inventoryRefreshSupported: isInventoryRefreshSupported(this as InventoryRefreshProvider),
     };
   }
 

@@ -16,6 +16,7 @@ import * as containerApi from './container.js';
 import * as eventApi from './event.js';
 import * as triggerApi from './trigger.js';
 import * as watcherApi from './watcher.js';
+import { refreshWatcherInventory } from './watcher-inventory.js';
 
 const log = logger.child({ component: 'agent-server' });
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
@@ -234,6 +235,7 @@ export async function init() {
   app.post('/api/triggers/:type/:name', triggerApi.runTrigger);
   app.post('/api/triggers/:type/:name/batch', triggerApi.runTriggerBatch);
   app.post('/api/watchers/:type/:name', watcherApi.watchWatcher);
+  app.post('/api/watchers/:type/:name/inventory', refreshWatcherInventory);
   app.post('/api/watchers/:type/:name/container/:id', watcherApi.watchContainer);
 
   // Start Server

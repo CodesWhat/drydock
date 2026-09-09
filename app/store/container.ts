@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 import { byString, byValues } from 'sort-es';
 import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
-import type { ContainerLifecycleEventPayload } from '../event/index.js';
+import type {
+  ContainerLifecycleEventContext,
+  ContainerLifecycleEventPayload,
+} from '../event/index.js';
 import * as container from '../model/container.js';
 import { toPositiveInteger } from '../util/parse.js';
 
@@ -1400,7 +1403,7 @@ function restoreRetainedUpdatePolicy(container) {
  * Insert new Container.
  * @param container
  */
-export function insertContainer(container) {
+export function insertContainer(container, context?: ContainerLifecycleEventContext) {
   restoreRetainedUpdatePolicy(container);
   // #386: skip the security-state cache entirely for remote-agent containers;
   // the cache is only written by the controller's local Docker trigger and is
@@ -1469,7 +1472,7 @@ export function insertContainer(container) {
     const containerAddedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
       ...containerToSave,
     });
-    emitContainerAdded(containerAddedEventPayload);
+    emitContainerAdded(containerAddedEventPayload, ...(context ? [context] : []));
   }
   return containerToSave;
 }
@@ -1622,6 +1625,7 @@ export function updateContainer(
 export function updateContainerFields(
   id: string,
   patch: Omit<Partial<container.Container>, 'id'>,
+  context?: ContainerLifecycleEventContext,
 ): container.Container | undefined {
   if (!db) {
     return undefined;
@@ -1672,7 +1676,10 @@ export function updateContainerFields(
       });
     }
     if (isRollback && !wasRollback) {
-      emitContainerRemoved(redactContainerRuntimeEnv({ ...containerCurrent }));
+      emitContainerRemoved(
+        redactContainerRuntimeEnv({ ...containerCurrent }),
+        ...(context ? [context] : []),
+      );
     } else if (
       !isRollback &&
       (wasRollback ||
@@ -1685,7 +1692,7 @@ export function updateContainerFields(
     ) {
       const containerUpdatedEventPayload: ContainerLifecycleEventPayload =
         redactContainerRuntimeEnv({ ...containerToReturn });
-      emitContainerUpdated(containerUpdatedEventPayload);
+      emitContainerUpdated(containerUpdatedEventPayload, ...(context ? [context] : []));
     }
 
     return containerToReturn;
@@ -1916,6 +1923,7 @@ export function clearMaturityGatePendingSince(id: string): boolean {
 }
 
 interface DeleteContainerOptions {
+  context?: ContainerLifecycleEventContext;
   /** A recreate: same identity, new Docker id. */
   replacementExpected?: boolean;
   /**
@@ -2000,10 +2008,10 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       }
     }
     if (!isRollbackContainerName(container.name)) {
-      emitContainerRemoved({
-        ...container,
-        replacementExpected: options.replacementExpected,
-      });
+      emitContainerRemoved(
+        { ...container, replacementExpected: options.replacementExpected },
+        ...(options.context ? [options.context] : []),
+      );
     }
   }
 }

@@ -21,6 +21,7 @@ import { notificationOutboxPaths } from './notification-outbox.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
 import { triggerPaths } from './triggers.js';
+import { watcherInventoryPaths } from './watcher-inventory.js';
 
 const updateOperationIdPathParam = {
   name: 'id',
@@ -505,6 +506,7 @@ export const openApiPaths = {
   ...triggerPaths,
   ...portwingPaths,
   ...componentReadPaths,
+  ...watcherInventoryPaths,
   '/api/v1/agents': {
     get: {
       tags: ['Agents'],

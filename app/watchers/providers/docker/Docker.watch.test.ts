@@ -828,6 +828,7 @@ describe('Docker Watcher', () => {
       expect(docker.getMetadata()).toStrictEqual({
         lastRunAt: undefined,
         nextRunAt: undefined,
+        inventoryRefreshSupported: true,
       });
 
       await docker.watch();
