@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "通知策略",
+    "edit": "编辑通知策略",
+    "boundary": "仅编辑发送策略。保存不会测试触发器或发送通知。凭据、目标、模板和执行设置仍为只读。",
+    "providerForced": "此值由提供程序控制，无法在此编辑。",
+    "triggerUnavailable": "编辑器快照中没有此确切的通知触发器。",
+    "apiUnavailable": "此服务器不提供通知策略编辑器 API。",
+    "fields": {
+      "threshold": "更新阈值",
+      "once": "仅通知一次",
+      "mode": "发送模式",
+      "securitymode": "安全通知发送模式",
+      "digestcron": "摘要计划（cron）",
+      "resolvenotifications": "发送问题解决通知"
+    }
+  }
+}

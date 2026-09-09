@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Notification policy",
+    "edit": "Edit notification policy",
+    "boundary": "Edit delivery policy only. Saving does not test the trigger or send a notification. Credentials, destinations, templates and execution settings remain read-only.",
+    "providerForced": "This provider controls this value. It cannot be edited here.",
+    "triggerUnavailable": "This exact notification trigger is not available in the editor snapshot.",
+    "apiUnavailable": "This server does not provide the notification policy editor API.",
+    "fields": {
+      "threshold": "Update threshold",
+      "once": "Notify only once",
+      "mode": "Delivery mode",
+      "securitymode": "Security delivery mode",
+      "digestcron": "Digest schedule (cron)",
+      "resolvenotifications": "Send resolution notifications"
+    }
+  }
+}

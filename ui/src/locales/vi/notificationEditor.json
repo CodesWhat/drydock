@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Chính sách thông báo",
+    "edit": "Sửa chính sách thông báo",
+    "boundary": "Chỉ sửa chính sách gửi. Lưu không kiểm tra trình kích hoạt hay gửi thông báo. Thông tin xác thực, đích đến, mẫu và cài đặt thực thi vẫn chỉ đọc.",
+    "providerForced": "Giá trị này do nhà cung cấp kiểm soát và không thể sửa tại đây.",
+    "triggerUnavailable": "Không có trình kích hoạt thông báo khớp chính xác này trong ảnh chụp của trình sửa.",
+    "apiUnavailable": "Máy chủ này không cung cấp API sửa chính sách thông báo.",
+    "fields": {
+      "threshold": "Ngưỡng cập nhật",
+      "once": "Chỉ thông báo một lần",
+      "mode": "Chế độ gửi",
+      "securitymode": "Chế độ gửi cảnh báo bảo mật",
+      "digestcron": "Lịch tổng hợp (cron)",
+      "resolvenotifications": "Gửi thông báo đã giải quyết"
+    }
+  }
+}
