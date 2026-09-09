@@ -3,8 +3,10 @@ import { chmod, open, readFile, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import yaml, { isMap, isScalar } from 'yaml';
 import { configFileSources } from '../index.js';
-import { buildCandidateEnvAndDiff, ddEnvKeyToSection, RELOADABLE_SECTIONS } from './diff.js';
+import { resolveCandidateEnvAndDiff } from './candidate.js';
+import { ddEnvKeyToSection, RELOADABLE_SECTIONS } from './diff.js';
 import { flattenConfigTree } from './flatten.js';
+import { interpolateConfigTree } from './interpolate.js';
 import { getConfigFileInfo } from './layer.js';
 import { type ConfigurationReloadResult, reloadConfiguration } from './reload.js';
 import { type ConfigurationValidationResult, validateConfiguration } from './validate.js';
@@ -134,7 +136,7 @@ function findExistingSectionKey(
  * `targetPath` itself completely untouched, which is the whole point of
  * writing beside it first instead of in place.
  */
-async function writeFileAtomically(targetPath: string, content: string): Promise<void> {
+export async function writeFileAtomically(targetPath: string, content: string): Promise<void> {
   const tempPath = join(dirname(targetPath), `.${basename(targetPath)}.tmp-${randomUUID()}`);
   const handle = await open(tempPath, 'w', 0o600);
   try {
@@ -185,13 +187,19 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
   const candidateTree: Record<string, unknown> = Object.fromEntries(candidateTreeEntries);
 
   let candidateFileLayer: Record<string, string>;
+  let interpolatedKeys: Set<string>;
   try {
-    candidateFileLayer = flattenConfigTree(candidateTree);
+    const interpolated = interpolateConfigTree(candidateTree);
+    candidateFileLayer = flattenConfigTree(interpolated.tree);
+    interpolatedKeys = interpolated.interpolatedKeys;
   } catch (error) {
     return { kind: 'invalid', errors: singleDocumentError((error as Error).message) };
   }
 
-  const { candidateEnv, diff } = buildCandidateEnvAndDiff(candidateFileLayer);
+  const { candidateEnv, diff } = await resolveCandidateEnvAndDiff(
+    candidateFileLayer,
+    interpolatedKeys,
+  );
   const validationResult = await validateConfiguration(candidateEnv);
   if (validationResult.errors.length > 0) {
     return { kind: 'invalid', errors: validationResult.errors };
@@ -232,7 +240,10 @@ export async function writeConfigurationSection(
   section: string,
   sectionBody: unknown,
 ): Promise<ConfigWriteOutcome> {
-  const task = () => performWrite(section, sectionBody);
+  return withConfigurationWrite(() => performWrite(section, sectionBody));
+}
+
+export async function withConfigurationWrite<T>(task: () => Promise<T>): Promise<T> {
   const result = writeChain.then(task, task);
   writeChain = result.then(
     () => undefined,
