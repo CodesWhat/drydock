@@ -69,13 +69,20 @@ export async function saveNotificationEdits(
     body: JSON.stringify(request),
     signal: AbortSignal.timeout(15000),
   });
-  const body = await readJsonResponse<Partial<WatcherEditOutcome>>(response, 'Notification editor');
+  let body: Partial<WatcherEditOutcome>;
+  try {
+    body = await readJsonResponse<Partial<WatcherEditOutcome>>(response, 'Notification editor');
+  } catch (error) {
+    if (!response.ok) throw new NotificationEditorHttpError(response.status);
+    throw error;
+  }
   if (
     typeof body?.saved !== 'boolean' ||
     typeof body.applied !== 'boolean' ||
     !Array.isArray(body.errors) ||
     !Array.isArray(body.changedKeys) ||
-    !Array.isArray(body.restartRequired)
+    !Array.isArray(body.restartRequired) ||
+    (body.reload !== undefined && !Array.isArray(body.reload?.errors))
   )
     throw new NotificationEditorHttpError(response.status);
   return { ...body, status: response.status } as WatcherEditOutcome;

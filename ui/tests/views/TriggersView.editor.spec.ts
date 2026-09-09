@@ -208,6 +208,74 @@ describe('notification policy editor integration', () => {
     }
   });
 
+  it.each([
+    {
+      status: 401,
+      body: 'Unauthorized',
+      contentType: '',
+      message: 'Your session is not authorized',
+    },
+    {
+      status: 403,
+      body: 'Forbidden',
+      contentType: 'text/plain',
+      message: 'Your session is not authorized',
+    },
+    {
+      status: 429,
+      body: 'Too many requests',
+      contentType: 'text/plain',
+      message: 'Too many editor requests',
+    },
+    {
+      status: 502,
+      body: 'Bad gateway',
+      contentType: 'text/plain',
+      message: 'The save outcome could not be confirmed',
+    },
+    {
+      status: 200,
+      body: 'invalid JSON',
+      contentType: 'application/json',
+      message: 'The save outcome could not be confirmed',
+    },
+    ...[{}, { errors: null }].map((reload) => ({
+      status: 200,
+      body: JSON.stringify({ ...notificationOutcome(), reload }),
+      contentType: 'application/json',
+      message: 'The save outcome could not be confirmed',
+    })),
+  ])(
+    'retains the draft without automatic requests after rejected HTTP$status ($body)',
+    async ({ status, body, contentType, message }) => {
+      const { wrapper, calls } = await setup((_path, options) => {
+        if (options?.method !== 'PATCH') return undefined;
+        const response = new Response(body, { status });
+        response.headers.set('content-type', contentType);
+        return response;
+      });
+      try {
+        await wrapper.get('[data-field="mode"]').setValue('digest');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        expect(wrapper.get('[role="alert"]').text()).toContain(message);
+        expect(wrapper.get<HTMLSelectElement>('[data-field="mode"]').element.value).toBe('digest');
+        expect(
+          wrapper.get('[data-testid="save-notification-policy"]').attributes('disabled'),
+        ).toBeDefined();
+        expect(wrapper.find('[data-testid="reload-notification-policy"]').exists()).toBe(true);
+        expect(wrapper.text()).not.toContain('Saved and applied');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        expect(calls).toHaveLength(4);
+        expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+        expect(calls.some((call) => call.method === 'POST')).toBe(false);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
   it('reports a missing configuration file without enabling any edit', async () => {
     const { wrapper, calls } = await setup((path) =>
       path === '/api/v1/config/editor/triggers'

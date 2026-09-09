@@ -24,13 +24,13 @@ describe('notification editor HTTP boundary', () => {
       expect(isNotificationProvider(type)).toBe(false);
     expect(isNotificationProvider('discord')).toBe(true);
   });
-  it('loads via session and preserves a valid error outcome without retrying', async () => {
+  it.each([400, 409])('preserves session auth and HTTP%s refusals', async (status) => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json(notificationSnapshot()))
       .mockResolvedValueOnce(
-        Response.json(notificationOutcome({ status: 409, saved: false, applied: false }), {
-          status: 409,
+        Response.json(notificationOutcome({ status, saved: false, applied: false }), {
+          status,
         }),
       );
     vi.stubGlobal('fetch', fetch);
@@ -50,7 +50,7 @@ describe('notification editor HTTP boundary', () => {
         },
       ],
     };
-    expect(await saveNotificationEdits(body)).toMatchObject({ status: 409, saved: false });
+    expect(await saveNotificationEdits(body)).toMatchObject({ status, saved: false });
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual(body);
     expect(fetch.mock.calls[1][1]).toMatchObject({
       method: 'PATCH',
@@ -76,5 +76,64 @@ describe('notification editor HTTP boundary', () => {
     await expect(
       saveNotificationEdits({ revision: 'initial', changes: [] }),
     ).rejects.toBeInstanceOf(NotificationEditorHttpError);
+  });
+
+  it.each([
+    [401, 'Unauthorized', ''],
+    [403, '<html>Forbidden</html>', 'text/html'],
+    [429, 'Too many requests', 'text/plain'],
+    [502, 'Bad gateway', 'text/plain'],
+  ] as const)(
+    'preserves HTTP%s when a save response is not JSON',
+    async (status, body, contentType) => {
+      const response = new Response(body, { status });
+      response.headers.set('content-type', contentType);
+      const fetch = vi.fn().mockResolvedValue(response);
+      vi.stubGlobal('fetch', fetch);
+      await expect(
+        saveNotificationEdits({ revision: 'initial', changes: [] }),
+      ).rejects.toMatchObject({ status });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('keeps malformed successful responses uncertain', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('invalid JSON', { headers: { 'content-type': 'application/json' } }),
+        ),
+    );
+    await expect(saveNotificationEdits({ revision: 'initial', changes: [] })).rejects.toThrow(
+      'returned invalid JSON',
+    );
+  });
+
+  it.each([{}, null, { errors: null }, { errors: 'invalid' }])(
+    'rejects malformed present reload %j',
+    async (reload) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ ...notificationOutcome(), reload })),
+      );
+      await expect(
+        saveNotificationEdits({ revision: 'initial', changes: [] }),
+      ).rejects.toMatchObject({ status: 200 });
+    },
+  );
+
+  it('preserves valid nested reload errors', async () => {
+    const errors = [{ path: 'document', envKey: 'DD_CONFIG_FILE', message: 'Reload incomplete' }];
+    const outcome = notificationOutcome({
+      applied: false,
+      errors,
+      reload: { applied: false, errors },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(outcome)));
+    await expect(saveNotificationEdits({ revision: 'initial', changes: [] })).resolves.toEqual(
+      outcome,
+    );
   });
 });
