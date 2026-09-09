@@ -127,7 +127,7 @@ export class AgentInventoryRefresh {
       operation.errors.push({ phase, id, message: '' });
   }
 
-  private remove(operation: Operation, id: string): void {
+  private remove(operation: Operation, id: string, replacementExpected: boolean): void {
     if (!operation.current()) return;
     const current = store.getContainerRaw(id);
     if (!current) return;
@@ -136,7 +136,7 @@ export class AgentInventoryRefresh {
       this.fail(operation, 'ownership', id);
       return;
     }
-    store.deleteContainer(id, { replacementExpected: true, context: operation.context });
+    store.deleteContainer(id, { replacementExpected, context: operation.context });
     operation.removed.add(id);
     operation.baseline.delete(id);
     this.dependencies.onMutation?.();
@@ -222,9 +222,10 @@ export class AgentInventoryRefresh {
     const operation = this.active.get(key(source.type, source.name));
     if (!operation || !operation.current() || !matches(value.context, operation)) return;
     if (eventName === 'dd:inventory-removed') {
-      if (record(value.container) && validId(value.container.id))
-        this.mutate(operation, value.container.id, () =>
-          this.remove(operation, (value.container as { id: string }).id),
+      const container = value.container;
+      if (record(container) && validId(container.id))
+        this.mutate(operation, container.id, () =>
+          this.remove(operation, container.id as string, container.replacementExpected === true),
         );
       return;
     }
@@ -270,8 +271,12 @@ export class AgentInventoryRefresh {
     operation.errors.push(...sanitizeInventoryErrors(parsed.errors));
     if (!parsed.errors.some((error) => error.id === undefined)) {
       const failedIds = new Set(parsed.errors.map((error) => error.id));
+      const identityKeys = new Set(incoming.map((container) => container.identityKey));
       for (const id of parsed.removedIds)
-        if (!failedIds.has(id)) this.mutate(operation, id, () => this.remove(operation, id));
+        if (!failedIds.has(id))
+          this.mutate(operation, id, () =>
+            this.remove(operation, id, identityKeys.has(operation.baseline.get(id)?.identityKey)),
+          );
       for (const container of incoming)
         if (!failedIds.has(container.id))
           this.mutate(operation, container.id, () => this.upsert(operation, container));

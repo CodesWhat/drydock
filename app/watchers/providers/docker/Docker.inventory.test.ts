@@ -117,7 +117,7 @@ test('forwards inventory recreation and updates separately from ordinary scan li
   });
   expect(frames[1].data.context).toEqual(firstContext);
   expect(frames[3].data.context.operationId).not.toBe(firstContext.operationId);
-  expect(frames[0].data.container).toEqual({ id: 'old' });
+  expect(frames[0].data.container).toEqual({ id: 'old', replacementExpected: true });
   expect(frames[1].data.container.id).toBe('new');
   expect(frames[1].data.container.details.env).toEqual([
     { key: 'PASSWORD', value: 'secret' },
@@ -132,6 +132,33 @@ test('forwards inventory recreation and updates separately from ordinary scan li
   await vi.advanceTimersByTimeAsync(120_000);
   expect(report).not.toHaveBeenCalled();
   expect(reports).not.toHaveBeenCalled();
+});
+
+test('marks a genuine local removal as nonreplacement in lifecycle and native SSE only', async () => {
+  seed('old', { updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' } });
+  list.mockResolvedValue([]);
+  inspect.mockRejectedValue(Object.assign(new Error('not found'), { statusCode: 404 }));
+  const removed = vi.fn();
+  unsubscribe.push(event.registerContainerRemoved(removed));
+  const write = vi.fn(() => true);
+  agentEvent.initEvents();
+  agentEvent.subscribeEvents(
+    { ip: '127.0.0.1', on: vi.fn() } as unknown as Request,
+    { writeHead: vi.fn(), write } as unknown as Response,
+  );
+  write.mockClear();
+  expect((await docker.refreshInventory()).removedIds).toEqual(['old']);
+  expect(removed.mock.calls[0][0].replacementExpected).toBe(false);
+  const frame = JSON.parse(String(write.mock.calls[0][0]).slice(6));
+  expect(frame.data.container).toEqual({ id: 'old', replacementExpected: false });
+  seed('new');
+  expect(store.getContainerRaw('new')?.updatePolicyOverrides?.snoozeUntil).toBeUndefined();
+  write.mockClear();
+  store.deleteContainer('new', { replacementExpected: true });
+  expect(JSON.parse(String(write.mock.calls[0][0]).slice(6))).toEqual({
+    type: 'dd:container-removed',
+    data: { id: 'new' },
+  });
 });
 
 test('correlates an explicit operation id across inventory result and lifecycle events', async () => {

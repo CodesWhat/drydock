@@ -1,9 +1,11 @@
 import * as event from '../event/index.js';
+import log from '../log/index.js';
 import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
 import * as store from '../store/container.js';
 import type { Database } from '../store/db/driver.js';
 import { createContainerFixture } from '../test/helpers.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import Hass from '../triggers/providers/mqtt/Hass.js';
 import {
   forgetControllerLocalEnumeration,
   recordControllerLocalEnumeration,
@@ -159,8 +161,8 @@ test('does not notify when a store update does not persist a row', async () => {
 test('confirmed removals precede recreation and retain controller policy', async () => {
   seed('old', { updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' } });
   const pending = inventory.refresh('docker', 'local');
-  frame('removed', { id: 'old' });
-  frame('removed', { id: 'old' });
+  frame('removed', { id: 'old', replacementExpected: true });
+  frame('removed', { id: 'old', replacementExpected: true });
   frame('added', remote('new'));
   resolve(result([remote('new')], { removedIds: ['old'] }));
   const completed = await pending;
@@ -170,6 +172,60 @@ test('confirmed removals precede recreation and retain controller policy', async
   );
   expect(completed.removedIds).toEqual(['old']);
 });
+
+test.each([
+  ['HTTP', false],
+  ['HTTP', true],
+  ['SSE', false],
+  ['SSE', true],
+] as const)(
+  '%s removal cleans up HA discovery only without a replacement (%s)',
+  async (delivery, replacement) => {
+    seed('old', { updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' } });
+    const publish = vi.fn();
+    const hass = new Hass({
+      client: { publish },
+      configuration: { topic: 'topic', hass: { discovery: true, prefix: 'homeassistant' } },
+      log,
+      isContainerAllowed: () => true,
+    });
+    vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const cleanup: Promise<void>[] = [];
+    event.registerContainerRemoved((container) => {
+      cleanup.push(hass.removeContainerSensor(container));
+    });
+    const pending = inventory.refresh('docker', 'local');
+    if (delivery === 'SSE') {
+      frame('removed', { id: 'old', replacementExpected: replacement });
+      if (replacement) frame('added', remote('new'));
+    }
+    resolve(result(replacement ? [remote('new')] : [], { removedIds: ['old'] }));
+    expect((await pending).removedIds).toEqual(['old']);
+    await Promise.all(cleanup);
+    const discoveryRemovals = publish.mock.calls.filter(
+      ([topic, payload]) => topic.startsWith('homeassistant/update/') && payload === '',
+    );
+    expect(discoveryRemovals.length > 0).toBe(!replacement);
+    if (!replacement) seed('new');
+    expect(store.getContainerRaw('new')?.updatePolicyOverrides?.snoozeUntil).toBe(
+      replacement ? '2027-01-01T00:00:00.000Z' : undefined,
+    );
+  },
+);
+
+test.each([undefined, 'true', 1])(
+  'does not treat an untrusted replacement hint %j as true',
+  async (replacementExpected) => {
+    seed('old');
+    const removed = vi.fn();
+    event.registerContainerRemoved(removed);
+    const pending = inventory.refresh('docker', 'local');
+    frame('removed', { id: 'old', replacementExpected });
+    resolve(result([], { removedIds: ['old'] }));
+    await pending;
+    expect(removed.mock.calls[0][0].replacementExpected).toBe(false);
+  },
+);
 
 test.each([
   {},

@@ -468,7 +468,14 @@ function forwardContainerLifecycle(
 ) {
   const payload =
     kind === 'removed' ? { id: container.id } : getAgentContainerSsePayload(container);
-  if (context) sendSseEvent(`dd:inventory-${kind}`, { context, container: payload });
+  if (context)
+    sendSseEvent(`dd:inventory-${kind}`, {
+      context,
+      container:
+        kind === 'removed'
+          ? { id: container.id, replacementExpected: container.replacementExpected === true }
+          : payload,
+    });
   else sendSseEvent(`dd:container-${kind}`, payload);
 }
 

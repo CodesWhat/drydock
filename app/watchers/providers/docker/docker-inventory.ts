@@ -169,6 +169,7 @@ function confirmRecreatedRemovals(observations: Observation[]) {
     )
       observation.remove = true;
   }
+  return replacements;
 }
 
 async function refreshDockerInventory(
@@ -299,7 +300,7 @@ async function refreshDockerInventory(
 
   if (!current()) return finish();
   deps.recordEnumeration([...listedById.keys()]);
-  confirmRecreatedRemovals(observations);
+  const replacementIdentities = confirmRecreatedRemovals(observations);
   const priorIdsByName = new Map<string, string[]>();
   for (const container of previous) {
     const key = nameIdentity(container);
@@ -320,7 +321,10 @@ async function refreshDockerInventory(
         continue;
       }
       if (remove) {
-        store.deleteContainer(id, { replacementExpected: true, context: deps.context });
+        store.deleteContainer(id, {
+          replacementExpected: replacementIdentities.has(nameIdentity(prior!)),
+          context: deps.context,
+        });
         result.removedIds.push(id);
       } else if (latest) deps.update(latest, inspect!);
       else {
