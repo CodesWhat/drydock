@@ -7,6 +7,8 @@ import { init } from './watcher.js';
 
 vi.mock('../registry/index.js', () => ({ getState: vi.fn() }));
 vi.mock('../agent/manager.js', () => ({ getAgent: vi.fn() }));
+const { logWarn } = vi.hoisted(() => ({ logWarn: vi.fn() }));
+vi.mock('../log/index.js', () => ({ default: { child: () => ({ warn: logWarn }) } }));
 
 function request(params = {}, body: unknown = {}) {
   return Object.assign(new EventEmitter(), {
@@ -128,6 +130,7 @@ test.each([
   expect(res.status).toHaveBeenCalledWith(status);
   expect(watcher.refreshInventory).not.toHaveBeenCalled();
   expect(watcher.watch).not.toHaveBeenCalled();
+  expect(logWarn).not.toHaveBeenCalled();
 });
 
 test('requires watch scope and rejects public operation-id injection', async () => {
@@ -220,6 +223,22 @@ test('does not expose unexpected provider error text', async () => {
   await handler()(request(), res);
   expect(res.status).toHaveBeenCalledWith(500);
   expect(res.json).toHaveBeenCalledWith({ error: 'Inventory refresh failed' });
+  expect(logWarn).toHaveBeenCalledExactlyOnceWith('Inventory refresh failed for docker.local');
+});
+
+test('logs unexpected failures with a sanitized watcher identity even after disconnection', async () => {
+  const watcher = provider();
+  watcher.refreshInventory.mockRejectedValue(new Error('password=private-value\nforged log'));
+  vi.mocked(registry.getState).mockReturnValue({
+    watcher: { 'docker.local\nforged': watcher },
+  } as never);
+  const res = response();
+  res.destroyed = true;
+  await handler()(request({ name: 'local\nforged' }), res);
+  expect(logWarn).toHaveBeenCalledExactlyOnceWith(
+    'Inventory refresh failed for docker.localforged',
+  );
+  expect(res.json).not.toHaveBeenCalled();
 });
 
 test.each(['watcher', 'client', 'disconnected'] as const)(

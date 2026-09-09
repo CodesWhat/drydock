@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import { getAgent } from '../agent/manager.js';
+import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { InventoryRefreshResult } from '../model/inventory-refresh.js';
 import * as registry from '../registry/index.js';
 import {
@@ -10,6 +12,8 @@ import {
 } from '../watchers/inventory-refresh.js';
 import { redactContainersRuntimeEnv } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
+
+const log = logger.child({ component: 'watcher-inventory' });
 
 function sanitizeInventoryResult(result: InventoryRefreshResult): InventoryRefreshResult {
   return {
@@ -60,6 +64,8 @@ export async function refreshWatcherInventory(
     });
     if (!res.destroyed && !res.writableEnded) res.status(200).json(sanitizeInventoryResult(result));
   } catch (error) {
+    if (!(error instanceof InventoryRefreshOperationError))
+      log.warn(`Inventory refresh failed for ${sanitizeLogParam(id)}`);
     if (!res.destroyed && !res.writableEnded) {
       sendErrorResponse(
         res,
