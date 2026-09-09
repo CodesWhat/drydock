@@ -165,6 +165,30 @@ function sendFrame(ws: ReturnType<typeof createMockWs>, type: string, data: unkn
   ws.emit('message', JSON.stringify({ type, data }));
 }
 
+describe('EdgeAgentAdapter — retired proxy admission', () => {
+  test.each(['sendRequest', 'sendStreamRequest'] as const)(
+    '%s rejects after disconnect without creating a timer or sending a frame',
+    async (method) => {
+      vi.useFakeTimers();
+      const { adapter, ws } = createAdapter();
+      try {
+        adapter.activate();
+        await adapter.onDisconnect();
+        vi.mocked(ws.send).mockClear();
+        const timersBefore = vi.getTimerCount();
+        const result = adapter[method]('GET', '/containers/json').catch((error: Error) => error);
+        expect(ws.send).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(timersBefore);
+        await expect(result).resolves.toMatchObject({ message: 'connection closed' });
+      } finally {
+        await adapter.onDisconnect();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
+});
+
 describe('EdgeAgentAdapter — activate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -212,7 +236,13 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     expect(
       (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
-    ).toHaveBeenCalledWith(watchers, triggers);
+    ).toHaveBeenCalledWith(watchers, triggers, expect.any(Function));
+    const isOwnerValid = vi.mocked(client.handleComponentSync).mock.calls[0][2];
+    expect(isOwnerValid?.()).toBe(true);
+    vi.mocked(manager.getAgent).mockReturnValueOnce(undefined);
+    expect(isOwnerValid?.()).toBe(false);
+    await adapter.onDisconnect();
+    expect(isOwnerValid?.()).toBe(false);
   });
 
   test('serializes component sync before the following container sync in wire order', async () => {
@@ -2652,7 +2682,7 @@ describe('EdgeAgentAdapter — false-branch coverage for ternary fallbacks', () 
 
     expect(
       (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
-    ).toHaveBeenCalledWith([], []);
+    ).toHaveBeenCalledWith([], [], expect.any(Function));
   });
 
   test('metrics frame with zero memoryTotal and zero uptime uses fallback values', async () => {

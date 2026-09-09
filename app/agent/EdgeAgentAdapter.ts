@@ -466,7 +466,11 @@ export class EdgeAgentAdapter {
     const triggers = Array.isArray(data.triggers)
       ? (data.triggers as AgentComponentDescriptor[])
       : [];
-    await this.client.handleComponentSync(watchers, triggers);
+    await this.client.handleComponentSync(
+      watchers,
+      triggers,
+      () => !this.disconnected && getAgent(this.agentName) === this.client,
+    );
   }
 
   private handleMetrics(data: Record<string, unknown>): void {
@@ -1108,6 +1112,7 @@ export class EdgeAgentAdapter {
     headers?: Record<string, string>,
     body?: unknown,
   ): Promise<unknown> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
@@ -1147,6 +1152,7 @@ export class EdgeAgentAdapter {
     headers?: Record<string, string>,
     body?: unknown,
   ): Promise<unknown> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       const requestId = uuidv7();
       try {
