@@ -71,7 +71,8 @@
       "agent-disconnect": "エージェント切断",
       "notification-delivery-failed": "通知送信失敗",
       "security-alert": "セキュリティアラート",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "イメージプルーン"
     },
     "target": {
       "container": "コンテナ",

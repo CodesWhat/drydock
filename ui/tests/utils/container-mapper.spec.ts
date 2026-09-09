@@ -29,6 +29,14 @@ function makeApiContainer(overrides: Record<string, any> = {}) {
 }
 
 describe('container-mapper', () => {
+  it('preserves lossless label values separately from display labels', () => {
+    const labels = { empty: '', disabled: false, zero: 0, expression: 'a=b', absent: null };
+    const mapped = mapApiContainer(makeApiContainer({ labels }));
+    expect(mapped.labels).toEqual(labels);
+    expect(mapped.labels).not.toBe(labels);
+    expect(mapApiContainer(makeApiContainer()).labels).toEqual({});
+  });
+
   describe('deriveServer', () => {
     it('returns agent name when agent is set', () => {
       const c = mapApiContainer(makeApiContainer({ agent: 'remote-agent-1' }));

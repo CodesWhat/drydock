@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "Immagini",
+    "subtitle": "Tutte le immagini su ogni host, con cosa le usa e cosa un prune libererebbe",
+    "loading": "Caricamento immagini...",
+    "loadFailed": "Impossibile caricare le immagini",
+    "columns": {
+      "repository": "Repository",
+      "tag": "Tag",
+      "imageId": "ID immagine",
+      "size": "Dimensione",
+      "containers": "Container",
+      "created": "Creata",
+      "lastSeen": "Ultimo utilizzo",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "Tutti gli host",
+      "unusedOnly": "Solo inutilizzate"
+    },
+    "dangling": "orfane",
+    "untagged": "senza tag",
+    "hostUnsupported": "L'agente di questo host non espone l'API Docker al controller, quindi qui le immagini non possono essere elencate né sottoposte a prune.",
+    "hostError": "Impossibile elencare le immagini su {host}: {message}",
+    "empty": {
+      "title": "Nessuna immagine",
+      "description": "Nessuna immagine corrisponde ai filtri correnti."
+    },
+    "prune": {
+      "dangling": "Prune delle orfane",
+      "unused": "Prune delle inutilizzate",
+      "confirm": {
+        "header": {
+          "dangling": "Prune delle immagini orfane su {host}",
+          "unused": "Prune delle immagini inutilizzate su {host}"
+        },
+        "message": "Questo rimuove 1 immagine e libera circa {size}. Il valore è una stima; i layer condivisi possono ridurlo. | Questo rimuove {count} immagini e libera circa {size}. Il valore è una stima; i layer condivisi possono ridurlo.",
+        "nothing": "Niente da eliminare su questo host.",
+        "accept": "Esegui prune"
+      },
+      "inProgress": "Prune delle immagini su {host} in corso...",
+      "success": "Rimossa 1 immagine e liberati {size} su {host} | Rimosse {count} immagini e liberati {size} su {host}",
+      "stillRunning": "Il proxy Docker dell'agent non ha restituito alcun risultato per {host}; il prune potrebbe essere ancora in corso. Aggiorna l'elenco tra poco.",
+      "failed": "Prune non riuscito su {host}: {message}"
+    },
+    "refresh": "Aggiorna"
+  }
+}

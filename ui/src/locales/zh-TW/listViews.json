@@ -71,7 +71,8 @@
       "agent-disconnect": "代理已斷線",
       "notification-delivery-failed": "通知傳送失敗",
       "security-alert": "安全警報",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "映像檔清理"
     },
     "target": {
       "container": "容器",

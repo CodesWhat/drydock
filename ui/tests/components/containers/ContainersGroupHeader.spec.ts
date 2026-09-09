@@ -30,6 +30,13 @@ function mountHeader(
 }
 
 describe('ContainersGroupHeader', () => {
+  it('can hide the stack action while retaining the update count', () => {
+    const wrapper = mountHeader({ showUpdateAll: false });
+    expect(wrapper.text()).toContain('3 updates');
+    expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('renders the idle update-all state when no batch is active', () => {
     const wrapper = mountHeader();
 
