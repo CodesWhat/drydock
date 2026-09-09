@@ -461,18 +461,36 @@ export function subscribeEvents(req: Request, res: Response): boolean {
   return true;
 }
 
+function forwardContainerLifecycle(
+  kind: 'added' | 'updated' | 'removed',
+  container: event.ContainerLifecycleEventPayload,
+  context?: event.ContainerLifecycleEventContext,
+) {
+  const payload =
+    kind === 'removed' ? { id: container.id } : getAgentContainerSsePayload(container);
+  if (context)
+    sendSseEvent(`dd:inventory-${kind}`, {
+      context,
+      container:
+        kind === 'removed'
+          ? { id: container.id, replacementExpected: container.replacementExpected === true }
+          : payload,
+    });
+  else sendSseEvent(`dd:container-${kind}`, payload);
+}
+
 /**
  * Initialize event listeners.
  */
 export function initEvents() {
-  event.registerContainerAdded((container: event.ContainerLifecycleEventPayload) =>
-    sendSseEvent('dd:container-added', getAgentContainerSsePayload(container)),
+  event.registerContainerAdded((container, context) =>
+    forwardContainerLifecycle('added', container, context),
   );
-  event.registerContainerUpdated((container: event.ContainerLifecycleEventPayload) =>
-    sendSseEvent('dd:container-updated', getAgentContainerSsePayload(container)),
+  event.registerContainerUpdated((container, context) =>
+    forwardContainerLifecycle('updated', container, context),
   );
-  event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
-    sendSseEvent('dd:container-removed', { id: container.id }),
+  event.registerContainerRemoved((container, context) =>
+    forwardContainerLifecycle('removed', container, context),
   );
   event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) => {
     const sanitized = sanitizeWatcherSnapshotPayloadForAgentSse(payload);
