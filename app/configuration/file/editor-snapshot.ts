@@ -6,7 +6,7 @@ import { configFileSources, WATCHER_MAINTENANCE_ENV_ALIASES } from '../index.js'
 import { getConfigFileInfo, getConfigFileLayer } from './layer.js';
 
 const revisionKey = randomBytes(32);
-export const WATCHER_EDIT_FIELDS = [
+const WATCHER_EDIT_FIELDS = [
   'cron',
   'maintenancewindow',
   'maintenancewindowtz',
