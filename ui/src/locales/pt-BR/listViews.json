@@ -71,7 +71,8 @@
       "agent-disconnect": "Desconexão de agente",
       "notification-delivery-failed": "Falha ao entregar notificação",
       "security-alert": "Alerta de segurança",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "Limpeza de imagem"
     },
     "target": {
       "container": "Contêiner",

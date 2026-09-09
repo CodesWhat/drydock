@@ -65,6 +65,7 @@ export interface PreferencesSchema {
     registries: { mode: ViewMode };
     notifications: { mode: ViewMode };
     auth: { mode: ViewMode };
+    images: { mode: ViewMode; hiddenColumns: string[] };
   };
   sync: { enabled: boolean };
 }
@@ -83,6 +84,7 @@ export const VIEW_TABLE_COLUMN_KEYS = {
   servers: ['name', 'host', 'status', 'containers', 'lastSeen'],
   audit: ['timestamp', 'action', 'containerName', 'status', 'details'],
   agents: ['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen'],
+  images: ['repository', 'tag', 'imageId', 'size', 'containers', 'created', 'lastSeen', 'host'],
 } as const;
 
 export type ViewTableColumnKey = keyof typeof VIEW_TABLE_COLUMN_KEYS;
@@ -93,6 +95,7 @@ export const VIEW_TABLE_REQUIRED_COLUMN_KEYS = {
   servers: ['name'],
   audit: ['containerName'],
   agents: ['name'],
+  images: ['repository'],
 } as const;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
@@ -171,6 +174,7 @@ export const DEFAULTS: PreferencesSchema = {
     registries: { mode: 'table' },
     notifications: { mode: 'table' },
     auth: { mode: 'table' },
+    images: { mode: 'table', hiddenColumns: ['imageId', 'created'] },
   },
   sync: { enabled: false },
 };

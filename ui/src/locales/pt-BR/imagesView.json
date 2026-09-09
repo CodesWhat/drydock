@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "Imagens",
+    "subtitle": "Todas as imagens em cada host, com o que as usa e o que uma limpeza recuperaria",
+    "loading": "Carregando imagens...",
+    "loadFailed": "Falha ao carregar imagens",
+    "columns": {
+      "repository": "Repositório",
+      "tag": "Tag",
+      "imageId": "ID da imagem",
+      "size": "Tamanho",
+      "containers": "Contêineres",
+      "created": "Criado",
+      "lastSeen": "Último uso",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "Todos os hosts",
+      "unusedOnly": "Somente não utilizadas"
+    },
+    "dangling": "órfãs",
+    "untagged": "sem tag",
+    "hostUnsupported": "O agente deste host não expõe a API do Docker ao controlador, portanto as imagens não podem ser listadas nem limpas aqui.",
+    "hostError": "Não foi possível listar as imagens em {host}: {message}",
+    "empty": {
+      "title": "Nenhuma imagem",
+      "description": "Nenhuma imagem corresponde aos filtros atuais."
+    },
+    "prune": {
+      "dangling": "Limpar órfãs",
+      "unused": "Limpar não utilizadas",
+      "confirm": {
+        "header": {
+          "dangling": "Limpar imagens órfãs em {host}",
+          "unused": "Limpar imagens não utilizadas em {host}"
+        },
+        "message": "Isso remove 1 imagem e recupera cerca de {size}. O valor é uma estimativa; camadas compartilhadas podem reduzi-lo. | Isso remove {count} imagens e recupera cerca de {size}. O valor é uma estimativa; camadas compartilhadas podem reduzi-lo.",
+        "nothing": "Não há nada para limpar neste host.",
+        "accept": "Limpar"
+      },
+      "inProgress": "Limpando imagens em {host}...",
+      "success": "1 imagem removida e {size} recuperados em {host} | {count} imagens removidas e {size} recuperados em {host}",
+      "stillRunning": "O proxy Docker do agente não retornou resultado para {host}; a limpeza ainda pode estar em andamento. Atualize a lista em instantes.",
+      "failed": "Falha ao limpar em {host}: {message}"
+    },
+    "refresh": "Atualizar"
+  }
+}
