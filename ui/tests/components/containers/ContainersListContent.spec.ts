@@ -16,6 +16,7 @@ import {
   type ContainersViewTemplateContext,
   containersViewTemplateContextKey,
 } from '@/components/containers/containersViewTemplateContext';
+import FleetDimensionsControls from '@/components/containers/FleetDimensionsControls.vue';
 import { useContainerFilters } from '@/composables/useContainerFilters';
 import type { ViewMode } from '@/preferences/schema';
 import { resetPreferences } from '@/preferences/store';
@@ -220,6 +221,14 @@ describe('ContainersListContent', () => {
     await wrapper.get('[data-test="fleet-label-match"]').setValue('equals');
     await wrapper.get('[data-test="fleet-label-value"]').setValue('a=b');
     expect(filters.fleet.labelValue.value).toBe('a=b');
+    const controls = wrapper
+      .findAllComponents(FleetDimensionsControls)
+      .flatMap((group) => group.findAll('select, input'));
+    expect(controls).toHaveLength(8);
+    for (const control of controls) {
+      expect(control.classes()).toContain('focus:ring-2');
+      expect(control.classes()).toContain('focus:ring-[var(--dd-secondary)]');
+    }
     expect(wrapper.find('button[data-icon="stack"]').exists()).toBe(true);
   });
 

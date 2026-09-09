@@ -776,9 +776,13 @@ const groupByStack = usePreference(
   },
 );
 
-watch(fleet.groupBy, (value) => {
-  if (value !== 'none') groupByStack.value = false;
-});
+watch(
+  fleet.groupBy,
+  (value) => {
+    if (value !== 'none') groupByStack.value = false;
+  },
+  { immediate: true },
+);
 watch(groupByStack, (value) => {
   if (value) fleet.groupBy.value = 'none';
 });

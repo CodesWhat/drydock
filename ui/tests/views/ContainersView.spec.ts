@@ -613,6 +613,28 @@ describe('ContainersView', () => {
   });
 
   describe('loading containers', () => {
+    it('reconciles persisted fleet grouping before loading stack groups', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.groupByStack = true;
+      preferences.containers.fleet.groupBy = 'agent';
+      const wrapper = await mountContainersView([makeContainer({ agent: 'edge' })]);
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(false);
+      expect(vm.fleet.groupBy.value).toBe('agent');
+      expect(mockGetContainerGroups).not.toHaveBeenCalled();
+      expect(vm.renderGroups[0].name).toBe('edge');
+    });
+
+    it('keeps an explicit stack route ahead of a persisted fleet grouping', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.fleet.groupBy = 'agent';
+      mockRoute.query = { groupByStack: 'true' };
+      const wrapper = await mountContainersView();
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(true);
+      expect(vm.fleet.groupBy.value).toBe('none');
+    });
+
     it('clears fleet filters for an external search navigation', async () => {
       const { preferences } = await import('@/preferences/store');
       preferences.containers.fleet.agent = JSON.stringify(['agent', 'edge']);

@@ -6,7 +6,7 @@
       "snoozePatch": "Odłóż wszystkie poprawki",
       "patchCount": "Kandydaci poprawek: {count}",
       "duration": "Czas odroczenia",
-      "days": "{count} dni",
+      "days": "{count} dzień | {count} dni",
       "untilDate": "Do daty",
       "date": "Odłóż do tej daty",
       "snoozeConfirm": "Odłożyć {count} kandydatów poprawek?",

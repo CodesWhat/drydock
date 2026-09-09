@@ -6,7 +6,7 @@
       "snoozePatch": "Alle patches uitstellen",
       "patchCount": "{count} patchkandidaten",
       "duration": "Uitstelduur",
-      "days": "{count} dagen",
+      "days": "{count} dag | {count} dagen",
       "untilDate": "Tot datum",
       "date": "Uitstellen tot en met datum",
       "snoozeConfirm": "{count} patchkandidaten uitstellen?",

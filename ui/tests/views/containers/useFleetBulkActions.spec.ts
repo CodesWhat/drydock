@@ -137,9 +137,13 @@ describe('useFleetBulkActions', () => {
     actions.snoozeAllPatch();
     input.busy.value = false;
     actions.duration.value = 'date';
-    actions.date.value = 'invalid';
-    actions.snoozeAllPatch();
-    expect(confirm.visible.value).toBe(false);
+    for (const date of ['invalid', '2027-02-29', '2027-04-31']) {
+      actions.date.value = date;
+      actions.snoozeAllPatch();
+      expect(confirm.visible.value).toBe(false);
+      expect(updateContainerPolicy).not.toHaveBeenCalled();
+      expect(input.loadContainers).not.toHaveBeenCalled();
+    }
     actions.duration.value = '1';
     actions.snoozeAllPatch();
     expect(confirm.visible.value).toBe(true);
