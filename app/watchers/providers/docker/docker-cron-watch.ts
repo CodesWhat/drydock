@@ -155,15 +155,16 @@ export function resetCronWatchState(watcher: CronWatchOrchestrationWatcher): voi
  */
 const CRON_WATCH_DEADLINE_INTERVAL_MULTIPLIER = 2;
 const CRON_WATCH_DEADLINE_FLOOR_MS = 10 * 60 * 1000; // 10 minutes
+const CRON_WATCH_DEADLINE_CEILING_MS = 2147483647; // Larger Node timers expire after 1ms.
 
 function getCronWatchDeadlineMs(watcher: CronWatchOrchestrationWatcher): number {
   const intervalMs = getCronIntervalMs(watcher);
   if (!intervalMs || intervalMs <= 0) {
     return CRON_WATCH_DEADLINE_FLOOR_MS;
   }
-  return Math.max(
-    intervalMs * CRON_WATCH_DEADLINE_INTERVAL_MULTIPLIER,
-    CRON_WATCH_DEADLINE_FLOOR_MS,
+  return Math.min(
+    CRON_WATCH_DEADLINE_CEILING_MS,
+    Math.max(intervalMs * CRON_WATCH_DEADLINE_INTERVAL_MULTIPLIER, CRON_WATCH_DEADLINE_FLOOR_MS),
   );
 }
 
