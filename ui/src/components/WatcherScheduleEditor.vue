@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useId } from 'vue';
+import { useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppButton from './AppButton.vue';
 import { useWatcherEditor } from '../composables/useWatcherEditor';
@@ -10,6 +10,7 @@ import {
 } from '../services/config-editor';
 
 const props = defineProps<{ watcher: WatcherIdentity }>();
+const emit = defineEmits<{ saved: [watcher: WatcherIdentity] }>();
 const { t } = useI18n();
 const id = useId();
 const inputStyle = { backgroundColor: 'var(--dd-bg)', border: '1px solid var(--dd-border)' };
@@ -32,6 +33,9 @@ const {
   cancel,
   save,
 } = useWatcherEditor(() => props.watcher);
+watch(result, (outcome) => {
+  if (outcome?.saved) emit('saved', { ...props.watcher });
+});
 const reasonKeys: Record<string, string> = {
   'environment-owned': 'environment',
   'referenced-field': 'reference',

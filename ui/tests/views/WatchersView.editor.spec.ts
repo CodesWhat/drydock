@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import DetailField from '@/components/DetailField.vue';
 import WatcherScheduleEditor from '@/components/WatcherScheduleEditor.vue';
 import { resetPreferences } from '@/preferences/store';
 import WatchersView from '@/views/WatchersView.vue';
@@ -20,6 +21,10 @@ describe('watcher detail editor API identity boundary', () => {
       id: 'docker.local',
       name: 'local',
     },
+    intercept?: (
+      path: string,
+      options: RequestInit | undefined,
+    ) => Response | Promise<Response> | undefined,
   ) {
     const watcher = {
       id: 'docker.local',
@@ -33,7 +38,11 @@ describe('watcher detail editor API identity boundary', () => {
       'fetch',
       vi.fn(async (path: string, options?: RequestInit) => {
         requests.push({ path, method: options?.method ?? 'GET' });
-        if (path === '/api/v1/watchers') return Response.json({ data: [watcher], total: 1 });
+        const intercepted = intercept?.(path, options);
+        if (intercepted) return intercepted;
+        const other = { ...watcher, id: 'docker.other', name: 'other' };
+        if (path === '/api/v1/watchers') return Response.json({ data: [watcher, other], total: 2 });
+        if (path === '/api/v1/watchers/docker/other') return Response.json(other);
         if (path === `/api/v1/watchers/docker/local${agent ? `/${agent}` : ''}`)
           return Response.json(watcher);
         if (path === '/api/v1/config/editor/watchers')
@@ -70,6 +79,210 @@ describe('watcher detail editor API identity boundary', () => {
     await flushPromises();
     return { wrapper, requests };
   }
+
+  it.each(['complete', 'audit-warning', 'partial'] as const)(
+    'refreshes outer detail and matching table row after a %s save without losing editor outcome',
+    async (mode) => {
+      let saved = false;
+      const values = {
+        cron: '0 7 * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowtz: 'America/New_York',
+        maintenancewindowscope: 'scan',
+      };
+      const { wrapper, requests } = await openEditor(null, undefined, (path, options) => {
+        if (options?.method === 'PATCH') {
+          saved = true;
+          return Response.json({
+            saved: true,
+            applied: mode !== 'partial',
+            revision: 'new',
+            changedKeys: [],
+            restartRequired: [],
+            errors:
+              mode === 'complete'
+                ? []
+                : [
+                    {
+                      path: 'document',
+                      envKey: 'DD_CONFIG_FILE',
+                      message: mode === 'partial' ? 'Reload incomplete' : 'Audit failed',
+                    },
+                  ],
+          });
+        }
+        if (saved && path === '/api/v1/watchers/docker/local')
+          return Response.json({
+            id: 'docker.local',
+            name: 'local',
+            type: 'docker',
+            agent: null,
+            configuration: values,
+          });
+      });
+      try {
+        for (const [field, value] of Object.entries(values))
+          await wrapper.get(`[data-field="${field}"]`).setValue(value);
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        const rows = wrapper.findComponent(dataViewStubs.DataTable).props('rows');
+        expect(rows.find((row: { id: string }) => row.id === 'docker.local').cron).toBe(
+          values.cron,
+        );
+        expect(rows.find((row: { id: string }) => row.id === 'docker.other').cron).toBe(
+          '0 6 * * *',
+        );
+        const detail = (label: string) =>
+          wrapper
+            .findAllComponents(DetailField)
+            .find((field) => field.props('label') === label)!
+            .text();
+        expect(detail('Schedule')).toContain(values.cron);
+        expect(detail('maintenancewindowtz')).toContain(values.maintenancewindowtz);
+        expect(wrapper.get<HTMLInputElement>('[data-field="cron"]').element.value).toBe(
+          values.cron,
+        );
+        expect(wrapper.get('[data-testid="save-schedule"]').attributes('disabled')).toBeDefined();
+        expect(wrapper.text()).toContain(
+          mode === 'complete'
+            ? 'Saved and applied'
+            : mode === 'partial'
+              ? 'Reload incomplete'
+              : 'Audit failed',
+        );
+        expect(
+          requests.filter(
+            (request) =>
+              request.path === '/api/v1/config/editor/watchers' && request.method === 'GET',
+          ),
+        ).toHaveLength(1);
+        expect(requests).toHaveLength(5);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it.each([400, 409])(
+    'does not refresh or discard editor draft after HTTP%s save refusal',
+    async (status) => {
+      const { wrapper, requests } = await openEditor(null, undefined, (_path, options) =>
+        options?.method === 'PATCH'
+          ? Response.json(
+              {
+                saved: false,
+                applied: false,
+                changedKeys: [],
+                restartRequired: [],
+                errors: [
+                  { path: 'cron', envKey: 'DD_WATCHER_LOCAL_CRON', message: 'Rejected edit' },
+                ],
+              },
+              { status },
+            )
+          : undefined,
+      );
+      try {
+        await wrapper.get('[data-field="cron"]').setValue('draft');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        expect(wrapper.get<HTMLInputElement>('[data-field="cron"]').element.value).toBe('draft');
+        expect(wrapper.text()).toContain('Rejected edit');
+        expect(requests).toHaveLength(4);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it('does not refresh after an obsolete save resolves following panel close', async () => {
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    const { wrapper, requests } = await openEditor(null, undefined, (_path, options) =>
+      options?.method === 'PATCH' ? pending : undefined,
+    );
+    try {
+      await wrapper.get('[data-field="cron"]').setValue('draft');
+      await wrapper.get('form').trigger('submit');
+      await wrapper.get('.close-detail').trigger('click');
+      finish(
+        Response.json({
+          saved: true,
+          applied: true,
+          changedKeys: [],
+          restartRequired: [],
+          errors: [],
+        }),
+      );
+      await flushPromises();
+      expect(requests).toHaveLength(4);
+      expect(wrapper.findComponent(WatcherScheduleEditor).exists()).toBe(false);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it.each(['close', 'switch', 'failure'] as const)(
+    'guards refresh on %s without clearing saved feedback',
+    async (action) => {
+      let finish!: (response: Response) => void;
+      const pending = new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+      let saved = false;
+      const { wrapper, requests } = await openEditor(null, undefined, (path, options) => {
+        if (options?.method === 'PATCH') {
+          saved = true;
+          return Response.json({
+            saved: true,
+            applied: true,
+            changedKeys: [],
+            restartRequired: [],
+            errors: [],
+          });
+        }
+        if (saved && path === '/api/v1/watchers/docker/local') return pending;
+      });
+      try {
+        await wrapper.get('[data-field="cron"]').setValue('draft');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        expect(requests).toHaveLength(5);
+        if (action === 'close') await wrapper.get('.close-detail').trigger('click');
+        if (action === 'switch') {
+          await wrapper.get('.row-click-second').trigger('click');
+          await flushPromises();
+        }
+        finish(
+          action === 'failure'
+            ? Response.json({}, { status: 503 })
+            : Response.json({
+                id: 'docker.local',
+                name: 'local',
+                type: 'docker',
+                agent: null,
+                configuration: { cron: 'late' },
+              }),
+        );
+        await flushPromises();
+        const rows = wrapper.findComponent(dataViewStubs.DataTable).props('rows');
+        expect(rows.find((row: { id: string }) => row.id === 'docker.local').cron).toBe(
+          '0 6 * * *',
+        );
+        if (action === 'failure') {
+          expect(wrapper.text()).toContain('Saved and applied');
+          expect(wrapper.text()).toContain('Unable to load');
+        }
+        if (action === 'switch') expect(wrapper.get('.detail-header').text()).toContain('other');
+        if (action === 'close')
+          expect(wrapper.findComponent(WatcherScheduleEditor).exists()).toBe(false);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
 
   it.each([null, undefined])(
     'opens local detail with agent %s against an agent-omitted editor row',
