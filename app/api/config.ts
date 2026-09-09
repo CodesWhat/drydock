@@ -3,6 +3,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
+import { getWatcherEditSnapshot, writeWatcherEdits } from '../configuration/file/editor.js';
 import { getConfigFileInfo } from '../configuration/file/layer.js';
 import { reloadConfiguration } from '../configuration/file/reload.js';
 import {
@@ -401,6 +402,8 @@ export function init() {
   });
 
   router.use(nocache());
+  router.get('/editor/watchers', configReadRateLimit, scoped(SESSION_ONLY, readWatcherEditor));
+  router.patch('/editor/watchers', configWriteRateLimit, scoped('admin', patchWatcherEditor));
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
   router.get('/:section', configReadRateLimit, scoped(SESSION_ONLY, getConfigurationSection));
   // `admin`, not SESSION_ONLY: this route never returns a configuration
@@ -421,4 +424,42 @@ export function init() {
   // never widens past what `/validate` and `/reload` already allow.
   router.put('/:section', configWriteRateLimit, scoped('admin', writeConfigurationSection));
   return router;
+}
+
+async function readWatcherEditor(_req: Request, res: Response): Promise<void> {
+  try {
+    const snapshot = await getWatcherEditSnapshot();
+    recordAuditEvent({
+      action: 'config-read',
+      containerName: 'diagnostics',
+      status: 'info',
+      details: 'Read the watcher configuration editor',
+    });
+    res.status(200).json(snapshot);
+  } catch {
+    sendErrorResponse(res, 500, 'Unable to read the watcher configuration editor');
+  }
+}
+
+async function patchWatcherEditor(req: Request, res: Response): Promise<void> {
+  try {
+    const { status, ...outcome } = await writeWatcherEdits(req.body);
+    try {
+      recordAuditEvent({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: outcome.applied ? 'info' : 'error',
+        details: `Watcher configuration edit: saved=${outcome.saved}, applied=${outcome.applied}; changed keys: ${outcome.changedKeys.join(', ')}`,
+      });
+    } catch {
+      outcome.errors.push({
+        path: 'document',
+        envKey: 'DD_CONFIG_FILE',
+        message: 'Configuration outcome could not be audited',
+      });
+    }
+    res.status(status).json(outcome);
+  } catch {
+    sendErrorResponse(res, 500, 'Unable to save watcher configuration');
+  }
 }

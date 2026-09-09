@@ -387,7 +387,7 @@ export function getPortwingAuthorizedKeysPath(): string | undefined {
 // Longest suffix first: `_MAINTENANCE_WINDOW` is a prefix of the other two as a string, so a
 // shorter-first walk would never reach `_MAINTENANCE_WINDOW_TZ` / `_MAINTENANCE_WINDOW_SCOPE`
 // if the match were ever loosened from endsWith to includes.
-const WATCHER_MAINTENANCE_ENV_ALIASES = [
+export const WATCHER_MAINTENANCE_ENV_ALIASES = [
   ['_MAINTENANCE_WINDOW_SCOPE', 'maintenancewindowscope'],
   ['_MAINTENANCE_WINDOW_TZ', 'maintenancewindowtz'],
   ['_MAINTENANCE_WINDOW', 'maintenancewindow'],

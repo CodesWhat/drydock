@@ -214,7 +214,179 @@ const writeConfigurationInvalidResponseSchema = {
   additionalProperties: false,
 } as const;
 
+const editScalarSchema = {
+  oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+} as const;
+const editFieldSchema = {
+  type: 'object',
+  properties: {
+    present: { type: 'boolean' },
+    path: { type: 'array', items: { type: 'string' } },
+    value: editScalarSchema,
+    effectiveValue: editScalarSchema,
+    source: { type: 'string', enum: ['file', 'env', 'default', 'reference'] },
+    readOnlyReason: { type: 'string' },
+  },
+  required: ['present', 'source'],
+  additionalProperties: false,
+} as const;
+const watcherEditSnapshotSchema = {
+  type: 'object',
+  properties: {
+    available: { type: 'boolean' },
+    revision: { type: 'string' },
+    readOnlyReason: { type: 'string' },
+    watchers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          agent: { type: 'string' },
+          fields: {
+            type: 'object',
+            properties: {
+              cron: editFieldSchema,
+              maintenancewindow: editFieldSchema,
+              maintenancewindowtz: editFieldSchema,
+              maintenancewindowscope: editFieldSchema,
+            },
+            required: [
+              'cron',
+              'maintenancewindow',
+              'maintenancewindowtz',
+              'maintenancewindowscope',
+            ],
+            additionalProperties: false,
+          },
+        },
+        required: ['id', 'name', 'fields'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['available', 'watchers'],
+  additionalProperties: false,
+} as const;
+const watcherEditOutcomeSchema = {
+  type: 'object',
+  properties: {
+    saved: { type: 'boolean' },
+    applied: { type: 'boolean' },
+    revision: { type: 'string' },
+    changedKeys: { type: 'array', items: { type: 'string' } },
+    restartRequired: { type: 'array', items: { type: 'string' } },
+    errors: { type: 'array', items: configurationValidationErrorSchema },
+    reload: {
+      type: 'object',
+      properties: {
+        applied: { type: 'boolean' },
+        errors: { type: 'array', items: configurationValidationErrorSchema },
+        reconcile: {
+          ...reconcileSummarySchema,
+          description: 'Component reconciliation counts, including incomplete reconciliation.',
+        },
+        orphanedRules: { type: 'array', items: orphanedNotificationRuleReferenceSchema },
+      },
+      required: ['applied', 'errors'],
+      additionalProperties: false,
+    },
+  },
+  required: ['saved', 'applied', 'changedKeys', 'restartRequired', 'errors'],
+  additionalProperties: false,
+} as const;
+
 export const configPaths = {
+  '/api/v1/config/editor/watchers': {
+    get: {
+      tags: ['System'],
+      summary: 'Get a safe watcher configuration edit snapshot',
+      operationId: 'getWatcherEditSnapshot',
+      description:
+        'Session-only projection of existing watcher cron and maintenance fields. Exact editable YAML paths are returned only for controller-local file-owned fields. Secret references omit both raw and effective values. No file is created when unavailable.',
+      responses: {
+        200: jsonResponse('Watcher edit snapshot', watcherEditSnapshotSchema),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('This route is not reachable with an API key'),
+        429: errorResponse('Config read rate limit exceeded'),
+        500: errorResponse('Unable to read the watcher configuration editor'),
+      },
+    },
+    patch: {
+      tags: ['System'],
+      summary: 'Edit allowlisted watcher configuration leaves',
+      operationId: 'writeWatcherEdits',
+      description:
+        'Admin-only changed-leaf edits guarded by an opaque revision over the actual file bytes. Shares the legacy write queue and preserves untouched YAML nodes. A saved file may have applied:false when reload is incomplete; no rollback is implied. This is not cross-process filesystem locking.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                revision: { type: 'string', pattern: '^[A-Za-z0-9_-]{43}$' },
+                changes: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: 32,
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        properties: {
+                          path: {
+                            type: 'array',
+                            minItems: 3,
+                            maxItems: 5,
+                            items: { type: 'string' },
+                          },
+                          operation: { type: 'string', enum: ['set'] },
+                          value: editScalarSchema,
+                        },
+                        required: ['path', 'operation', 'value'],
+                        additionalProperties: false,
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          path: {
+                            type: 'array',
+                            minItems: 3,
+                            maxItems: 5,
+                            items: { type: 'string' },
+                          },
+                          operation: { type: 'string', enum: ['remove'] },
+                        },
+                        required: ['path', 'operation'],
+                        additionalProperties: false,
+                      },
+                    ],
+                  },
+                },
+              },
+              required: ['revision', 'changes'],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Saved and applied outcomes', watcherEditOutcomeSchema),
+        400: jsonResponse('Invalid request or candidate', watcherEditOutcomeSchema),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        409: jsonResponse(
+          'Stale revision, unavailable file or read-only field',
+          watcherEditOutcomeSchema,
+        ),
+        413: errorResponse('Payload exceeds the global 256kb body limit'),
+        429: errorResponse('Config write rate limit exceeded'),
+        500: jsonResponse('Unable to save before writing', watcherEditOutcomeSchema),
+      },
+    },
+  },
   '/api/v1/config': {
     get: {
       tags: ['System'],

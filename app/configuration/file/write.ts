@@ -136,7 +136,7 @@ function findExistingSectionKey(
  * `targetPath` itself completely untouched, which is the whole point of
  * writing beside it first instead of in place.
  */
-async function writeFileAtomically(targetPath: string, content: string): Promise<void> {
+export async function writeFileAtomically(targetPath: string, content: string): Promise<void> {
   const tempPath = join(dirname(targetPath), `.${basename(targetPath)}.tmp-${randomUUID()}`);
   const handle = await open(tempPath, 'w', 0o600);
   try {
@@ -240,7 +240,10 @@ export async function writeConfigurationSection(
   section: string,
   sectionBody: unknown,
 ): Promise<ConfigWriteOutcome> {
-  const task = () => performWrite(section, sectionBody);
+  return withConfigurationWrite(() => performWrite(section, sectionBody));
+}
+
+export async function withConfigurationWrite<T>(task: () => Promise<T>): Promise<T> {
   const result = writeChain.then(task, task);
   writeChain = result.then(
     () => undefined,

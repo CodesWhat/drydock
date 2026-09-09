@@ -17,13 +17,22 @@ const {
   mockReloadConfiguration,
   mockWriteConfigurationSection,
 } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn(), put: vi.fn() },
+  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() },
   mockGetServerConfiguration: vi.fn(() => ({}) as Record<string, unknown>),
   mockGetConfigFileInfo: vi.fn(() => undefined as { path: string; modifiedAt: string } | undefined),
   mockDdEnvVars: {} as Record<string, string | undefined>,
   mockConfigFileSources: {} as Record<string, string>,
   mockReloadConfiguration: vi.fn(),
   mockWriteConfigurationSection: vi.fn(),
+}));
+
+const { mockEditSnapshot, mockWatcherEdits } = vi.hoisted(() => ({
+  mockEditSnapshot: vi.fn(),
+  mockWatcherEdits: vi.fn(),
+}));
+vi.mock('../configuration/file/editor.js', () => ({
+  getWatcherEditSnapshot: mockEditSnapshot,
+  writeWatcherEdits: mockWatcherEdits,
 }));
 
 vi.mock('express', () => ({
@@ -97,6 +106,108 @@ function getPutHandler(path: string) {
 }
 
 describe('Config Router', () => {
+  test('registers the editor behind the existing read/write limiters and session/admin scopes', async () => {
+    configRouter.init();
+    const get = mockRouter.get.mock.calls.find(([path]) => path === '/editor/watchers');
+    const patch = mockRouter.patch.mock.calls.find(([path]) => path === '/editor/watchers');
+    expect(get?.at(-1)).toEqual(expect.any(Function));
+    expect(patch?.at(-1)).toEqual(expect.any(Function));
+    expect(get?.[1]).toBe(mockRouter.get.mock.calls.find(([path]) => path === '/')?.[1]);
+    expect(patch?.[1]).toBe(mockRouter.put.mock.calls.find(([path]) => path === '/:section')?.[1]);
+    const readRes = createResponse();
+    await get?.at(-1)({ principal: { kind: 'api-key', scopes: ['admin'] } }, readRes);
+    expect(readRes.status).toHaveBeenCalledWith(403);
+    const writeRes = createResponse();
+    await patch?.at(-1)({ principal: { kind: 'api-key', scopes: ['read'] } }, writeRes);
+    expect(writeRes.status).toHaveBeenCalledWith(403);
+  });
+
+  test('returns and audits only the safe editor snapshot', async () => {
+    mockEditSnapshot.mockResolvedValueOnce({ available: false, watchers: [] });
+    configRouter.init();
+    const res = createResponse();
+    await getHandler('/editor/watchers')({}, res);
+    expect(res.json).toHaveBeenCalledWith({ available: false, watchers: [] });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'config-read' }),
+    );
+  });
+
+  test.each([true, false])(
+    'reports editor saved/applied outcomes without value-bearing audit data: %s',
+    async (applied) => {
+      mockWatcherEdits.mockResolvedValueOnce({
+        status: 200,
+        saved: true,
+        applied,
+        changedKeys: ['DD_WATCHER_LOCAL_CRON'],
+        errors: [],
+        restartRequired: [],
+      });
+      configRouter.init();
+      const res = createResponse();
+      const request = {
+        principal: { kind: 'api-key', scopes: ['admin'] },
+        body: { private: 'private-sentinel' },
+      };
+      await mockRouter.patch.mock.calls.find(([path]) => path === '/editor/watchers')?.at(-1)(
+        request,
+        res,
+      );
+      expect(mockWatcherEdits).toHaveBeenCalledWith(request.body);
+      expect(res.json).toHaveBeenCalledWith({
+        saved: true,
+        applied,
+        changedKeys: ['DD_WATCHER_LOCAL_CRON'],
+        errors: [],
+        restartRequired: [],
+      });
+      expect(JSON.stringify(mockRecordAuditEvent.mock.calls)).not.toContain('private-sentinel');
+    },
+  );
+
+  test.each(['get', 'patch'])('sanitizes editor %s handler failures', async (method) => {
+    mockEditSnapshot.mockRejectedValueOnce(new Error('private-sentinel'));
+    mockWatcherEdits.mockRejectedValueOnce(new Error('private-sentinel'));
+    configRouter.init();
+    const res = createResponse();
+    const handler =
+      method === 'get'
+        ? getHandler('/editor/watchers')
+        : mockRouter.patch.mock.calls.find(([path]) => path === '/editor/watchers')?.at(-1);
+    await handler({ body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(res.json.mock.calls)).not.toContain('private-sentinel');
+    mockEditSnapshot.mockReset();
+    mockWatcherEdits.mockReset();
+  });
+
+  test('does not misreport a saved editor write if audit recording fails afterward', async () => {
+    mockWatcherEdits.mockResolvedValueOnce({
+      status: 200,
+      saved: true,
+      applied: true,
+      changedKeys: [],
+      errors: [],
+      restartRequired: [],
+    });
+    mockRecordAuditEvent.mockImplementationOnce(() => {
+      throw new Error('private-sentinel');
+    });
+    configRouter.init();
+    const res = createResponse();
+    await mockRouter.patch.mock.calls.find(([path]) => path === '/editor/watchers')?.at(-1)(
+      { body: {} },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({
+      saved: true,
+      applied: true,
+      errors: [{ message: 'Configuration outcome could not be audited' }],
+    });
+    expect(JSON.stringify(res.json.mock.calls)).not.toContain('private-sentinel');
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetServerConfiguration.mockReturnValue({});
