@@ -1,5 +1,6 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -2590,9 +2591,31 @@ describe('ContainersView', () => {
 
       await vm.updateAllInGroup(vm.groupedContainers[0]);
 
+      expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+      expect(useConfirmDialog().visible.value).toBe(true);
+      await useConfirmDialog().accept();
       expect(mockApiUpdateBulk).toHaveBeenCalledWith(['c1', 'c3']);
       expect(mockApiUpdate).not.toHaveBeenCalled();
     });
+
+    it.each(['reject', 'dismiss'] as const)(
+      'leaves a stack untouched after dialog %s',
+      async (action) => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0' });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+        vm.updateAllInGroup({ key: 'web-stack', containers: [container] });
+        const dialog = useConfirmDialog();
+        expect(dialog.visible.value).toBe(true);
+        dialog[action]();
+        expect(dialog.visible.value).toBe(false);
+        expect(dialog.current.value).toBeNull();
+        await dialog.accept();
+        expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+        expect(vm.isContainerUpdateInProgress(container)).toBe(false);
+        expect(vm.actionPending.size).toBe(0);
+      },
+    );
 
     it('marks the first grouped container as updating while the bulk request is in flight', async () => {
       const containers = [
@@ -2622,7 +2645,8 @@ describe('ContainersView', () => {
       vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack' };
       await flushPromises();
 
-      const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
+      vm.updateAllInGroup(vm.groupedContainers[0]);
+      const pending = useConfirmDialog().accept();
       expect(vm.isContainerUpdateInProgress(containers[0])).toBe(true);
 
       resolveBulkUpdate?.();
@@ -2852,6 +2876,7 @@ describe('ContainersView', () => {
       await vm.updateAllInGroup(
         vm.groupedContainers.find((group: { key: string }) => group.key === 'web-stack'),
       );
+      await useConfirmDialog().accept();
       await flushPromises();
       expect(vm.actionPending.has('c1')).toBe(true);
       expect(vm.actionPending.has('c2')).toBe(true);
