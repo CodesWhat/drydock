@@ -139,6 +139,31 @@ describe('Config Router', () => {
     });
   });
 
+  test.each(['/', '/:section'])(
+    'redacts provider-specific credentials before flattening their context away: %s',
+    (route) => {
+      const credentials = {
+        DD_NOTIFICATION_PUSHOVER_PRIVATE_USER: 'pushover-private-sentinel',
+        DD_NOTIFICATION_TELEGRAM_PRIVATE_CHATID: 'telegram-private-sentinel',
+        DD_NOTIFICATION_ROCKETCHAT_PRIVATE_ID: 'rocketchat-private-sentinel',
+        DD_NOTIFICATION_APPRISE_PRIVATE_URLS: 'apprise-private-sentinel',
+      };
+      Object.assign(mockDdEnvVars, credentials, {
+        DD_NOTIFICATION_SMTP_PUBLIC_USER: 'mailbox@example.com',
+      });
+      configRouter.init();
+      const res = createResponse();
+      getHandler(route)({ params: { section: 'notification' } }, res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      const serialized = JSON.stringify(res.json.mock.calls[0][0]);
+      for (const credential of Object.values(credentials)) {
+        expect(serialized).not.toContain(credential);
+      }
+      expect(serialized).toContain('mailbox@example.com');
+      expect(serialized).toContain('[REDACTED]');
+    },
+  );
+
   test('registers nocache middleware and rate-limited, session-only GET routes', () => {
     const router = configRouter.init();
     expect(router.use).toHaveBeenCalledWith('nocache-middleware');

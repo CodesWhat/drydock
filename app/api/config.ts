@@ -101,7 +101,7 @@ function ddEnvKeyToSegments(envKey: string): string[] {
 function buildSections(): Record<string, Record<string, unknown>> {
   const sections: Record<string, Record<string, unknown>> = {};
 
-  for (const [envKey, value] of Object.entries(ddEnvVars)) {
+  for (const [envKey, value] of Object.entries(redactConfigurationTree(ddEnvVars))) {
     if (value === undefined || !envKey.toUpperCase().startsWith(DD_ENV_KEY_PREFIX)) {
       continue;
     }
