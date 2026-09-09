@@ -77,11 +77,17 @@ export function buildCandidateEnvAndDiff(
   diff: ConfigurationValidationDiff;
 } {
   const envOnly: Record<string, string | undefined> = { ...ddEnvVars };
+  const removeFileValue = (key: string) => {
+    const resolvedKey = key.endsWith('__FILE') ? key.slice(0, -'__FILE'.length) : key;
+    delete envOnly[key];
+    delete envOnly[resolvedKey];
+    if (process.env[resolvedKey] !== undefined) envOnly[resolvedKey] = process.env[resolvedKey];
+  };
   const currentFileKeys = new Set<string>();
   for (const key of Object.keys(configFileSources)) {
     if (configFileSources[key] === 'file') {
       currentFileKeys.add(key);
-      delete envOnly[key];
+      removeFileValue(key);
     }
   }
   // An interpolated key attributes as `'env'` in `configFileSources` (decision
@@ -92,7 +98,7 @@ export function buildCandidateEnvAndDiff(
   // `../index.ts`).
   for (const key of configFileInterpolatedKeys) {
     currentFileKeys.add(key);
-    delete envOnly[key];
+    removeFileValue(key);
   }
 
   const changedKeys = new Set<string>();
