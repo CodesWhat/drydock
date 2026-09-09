@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Programación del monitor",
+    "edit": "Editar programación",
+    "boundary": "Aquí solo se pueden editar el horario de análisis y la ventana de mantenimiento. La conexión, las credenciales, TLS y los agentes siguen siendo de solo lectura.",
+    "reload": "Descartar borrador y recargar",
+    "reset": "Quitar valor del archivo / usar predeterminado",
+    "pendingRemoval": "Este valor se eliminará del archivo al guardar.",
+    "current": "Valor efectivo: {value}",
+    "none": "Sin definir",
+    "install": "Solo instalación automática",
+    "scan": "Análisis e instalación",
+    "sources": {
+      "file": "Origen: archivo de configuración",
+      "env": "Origen: entorno",
+      "default": "Origen: valor predeterminado",
+      "reference": "Origen: referencia (valor oculto)"
+    },
+    "readOnly": {
+      "environment": "Definido por el entorno. Cámbialo fuera de este editor.",
+      "reference": "Los valores referenciados permanecen en el servidor y no se pueden editar aquí.",
+      "agent": "La configuración de agentes es de solo lectura aquí.",
+      "other": "Este campo no se puede editar."
+    },
+    "fileUnavailable": "No hay un archivo de configuración disponible. Monta uno antes de editar.",
+    "watcherUnavailable": "Este monitor exacto no está disponible en la instantánea del editor.",
+    "accessDenied": "Tu sesión no tiene permiso para usar este editor.",
+    "apiUnavailable": "Este servidor no proporciona la API del editor.",
+    "rateLimited": "Demasiadas solicitudes. Espera un minuto antes de recargar.",
+    "loadFailed": "No se pudo cargar el editor. No se enviaron cambios.",
+    "saveUncertain": "No se pudo confirmar el guardado. Recarga antes de cambiar otra cosa.",
+    "conflict": "La configuración cambió o un campo pasó a ser de solo lectura. Se conserva el borrador. Descártalo y recarga antes de editar.",
+    "saved": "Guardado y aplicado en vivo.",
+    "notApplied": "Guardado, pero se notificaron problemas. Revisa los detalles antes de continuar.",
+    "notSaved": "La configuración no se guardó.",
+    "reconciled": "Recarga: {added} añadidos, {changed} modificados, {removed} eliminados, {unchanged} sin cambios, {errors} errores.",
+    "restart": "Reinicio necesario para: {fields}",
+    "orphaned": "La regla {ruleId} sigue apuntando al activador ausente {triggerId}.",
+    "fields": {
+      "cron": "Horario de análisis (cron)",
+      "maintenancewindow": "Ventana de mantenimiento (cron)",
+      "maintenancewindowtz": "Zona horaria de mantenimiento",
+      "maintenancewindowscope": "Alcance del mantenimiento"
+    }
+  }
+}

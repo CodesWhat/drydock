@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Pianificazione del watcher",
+    "edit": "Modifica pianificazione",
+    "boundary": "Qui puoi modificare solo la pianificazione delle scansioni e la finestra di manutenzione. Connessione, credenziali, TLS e agenti restano in sola lettura.",
+    "reload": "Scarta bozza e ricarica",
+    "reset": "Rimuovi valore dal file / usa predefinito",
+    "pendingRemoval": "Questo valore verrà rimosso dal file al salvataggio.",
+    "current": "Valore effettivo: {value}",
+    "none": "Non impostato",
+    "install": "Solo installazione automatica",
+    "scan": "Scansione e installazione",
+    "sources": {
+      "file": "Origine: file di configurazione",
+      "env": "Origine: ambiente",
+      "default": "Origine: valore predefinito",
+      "reference": "Origine: riferimento (valore nascosto)"
+    },
+    "readOnly": {
+      "environment": "Impostato dall’ambiente. Modificalo fuori da questo editor.",
+      "reference": "I valori referenziati restano sul server e non sono modificabili qui.",
+      "agent": "La configurazione degli agenti è in sola lettura qui.",
+      "other": "Questo campo non è modificabile."
+    },
+    "fileUnavailable": "Nessun file di configurazione disponibile. Montane uno prima di modificare.",
+    "watcherUnavailable": "Questo watcher esatto non è presente nell’istantanea dell’editor.",
+    "accessDenied": "La sessione non è autorizzata a usare questo editor.",
+    "apiUnavailable": "Il server non fornisce l’API dell’editor.",
+    "rateLimited": "Troppe richieste. Attendi un minuto prima di ricaricare.",
+    "loadFailed": "Impossibile caricare l’editor. Nessuna modifica inviata.",
+    "saveUncertain": "Esito del salvataggio non confermato. Ricarica prima di altre modifiche.",
+    "conflict": "La configurazione è cambiata o un campo è diventato di sola lettura. La bozza è conservata. Scartala e ricarica.",
+    "saved": "Salvato e applicato immediatamente.",
+    "notApplied": "Salvato, ma sono stati segnalati problemi. Controlla i dettagli.",
+    "notSaved": "Configurazione non salvata.",
+    "reconciled": "Ricaricamento: {added} aggiunti, {changed} modificati, {removed} rimossi, {unchanged} invariati, {errors} errori.",
+    "restart": "Riavvio necessario per: {fields}",
+    "orphaned": "La regola {ruleId} fa ancora riferimento al trigger mancante {triggerId}.",
+    "fields": {
+      "cron": "Pianificazione scansioni (cron)",
+      "maintenancewindow": "Finestra di manutenzione (cron)",
+      "maintenancewindowtz": "Fuso orario di manutenzione",
+      "maintenancewindowscope": "Ambito della manutenzione"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "감시자 일정",
+    "edit": "일정 편집",
+    "boundary": "여기서는 검사 일정과 유지 관리 시간대만 편집할 수 있습니다. 연결, 자격 증명, TLS 및 에이전트 설정은 읽기 전용입니다.",
+    "reload": "초안 버리고 다시 불러오기",
+    "reset": "파일 값 제거 / 기본값 사용",
+    "pendingRemoval": "저장하면 이 파일 값이 제거됩니다.",
+    "current": "적용 중인 값: {value}",
+    "none": "설정 안 됨",
+    "install": "자동 설치만",
+    "scan": "검사 및 설치",
+    "sources": {
+      "file": "출처: 설정 파일",
+      "env": "출처: 환경 변수",
+      "default": "출처: 기본값",
+      "reference": "출처: 참조(값 숨김)"
+    },
+    "readOnly": {
+      "environment": "환경 변수로 설정되었습니다. 이 편집기 밖에서 변경하세요.",
+      "reference": "참조 값은 서버에 보관되며 여기서 편집할 수 없습니다.",
+      "agent": "에이전트 설정은 여기서 읽기 전용입니다.",
+      "other": "이 필드는 편집할 수 없습니다."
+    },
+    "fileUnavailable": "사용 가능한 설정 파일이 없습니다. 편집 전에 파일을 마운트하세요.",
+    "watcherUnavailable": "편집기 스냅샷에 정확히 일치하는 감시자가 없습니다.",
+    "accessDenied": "현재 세션에 이 편집기를 사용할 권한이 없습니다.",
+    "apiUnavailable": "이 서버는 감시자 편집기 API를 제공하지 않습니다.",
+    "rateLimited": "요청이 너무 많습니다. 1분 후 다시 불러오세요.",
+    "loadFailed": "편집기를 불러오지 못했습니다. 변경 사항은 전송되지 않았습니다.",
+    "saveUncertain": "저장 결과를 확인할 수 없습니다. 다시 변경하기 전에 새로 불러오세요.",
+    "conflict": "설정이 변경되었거나 필드가 읽기 전용이 되었습니다. 초안은 유지됩니다. 초안을 버리고 다시 불러온 후 편집하세요.",
+    "saved": "저장하고 실행 중인 설정에 적용했습니다.",
+    "notApplied": "저장했지만 문제가 보고되었습니다. 계속하기 전에 세부 정보를 확인하세요.",
+    "notSaved": "설정이 저장되지 않았습니다.",
+    "reconciled": "다시 불러오기: 추가 {added}, 변경 {changed}, 제거 {removed}, 유지 {unchanged}, 오류 {errors}.",
+    "restart": "다음 항목은 재시작이 필요합니다: {fields}",
+    "orphaned": "규칙 {ruleId}에서 없는 트리거 {triggerId}을(를) 계속 참조합니다.",
+    "fields": {
+      "cron": "검사 일정(cron)",
+      "maintenancewindow": "유지 관리 시간대(cron)",
+      "maintenancewindowtz": "유지 관리 표준 시간대",
+      "maintenancewindowscope": "유지 관리 범위"
+    }
+  }
+}

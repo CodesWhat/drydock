@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "İzleyici zamanlaması",
+    "edit": "Zamanlamayı düzenle",
+    "boundary": "Burada yalnızca tarama zamanlaması ve bakım aralığı düzenlenebilir. Bağlantı, kimlik bilgileri, TLS ve aracı yapılandırması salt okunur kalır.",
+    "reload": "Taslağı at ve yeniden yükle",
+    "reset": "Dosya değerini kaldır / varsayılanı kullan",
+    "pendingRemoval": "Bu dosya değeri kaydedildiğinde kaldırılacak.",
+    "current": "Etkin değer: {value}",
+    "none": "Ayarlanmadı",
+    "install": "Yalnızca otomatik kurulum",
+    "scan": "Tarama ve kurulum",
+    "sources": {
+      "file": "Kaynak: yapılandırma dosyası",
+      "env": "Kaynak: ortam",
+      "default": "Kaynak: varsayılan",
+      "reference": "Kaynak: başvuru (değer gizli)"
+    },
+    "readOnly": {
+      "environment": "Ortam tarafından ayarlanmış. Bu düzenleyicinin dışında değiştirin.",
+      "reference": "Başvurulan değerler sunucuda kalır ve burada düzenlenemez.",
+      "agent": "Aracı yapılandırması burada salt okunurdur.",
+      "other": "Bu alan düzenlemeye açık değil."
+    },
+    "fileUnavailable": "Yapılandırma dosyası yok. Düzenlemeden önce bir dosya bağlayın.",
+    "watcherUnavailable": "Bu izleyici düzenleyici anlık görüntüsünde bulunmuyor.",
+    "accessDenied": "Oturumunuzun bu düzenleyiciyi kullanma yetkisi yok.",
+    "apiUnavailable": "Bu sunucu düzenleyici API’sini sağlamıyor.",
+    "rateLimited": "Çok fazla istek. Yeniden yüklemeden önce bir dakika bekleyin.",
+    "loadFailed": "Düzenleyici yüklenemedi. Değişiklik gönderilmedi.",
+    "saveUncertain": "Kaydetme sonucu doğrulanamadı. Başka değişiklik yapmadan önce yeniden yükleyin.",
+    "conflict": "Yapılandırma değişti veya alan salt okunur oldu. Taslağınız korundu. Düzenlemeden önce atıp yeniden yükleyin.",
+    "saved": "Kaydedildi ve canlı olarak uygulandı.",
+    "notApplied": "Kaydedildi ancak sorunlar bildirildi. Devam etmeden önce ayrıntıları inceleyin.",
+    "notSaved": "Yapılandırma kaydedilmedi.",
+    "reconciled": "Yeniden yükleme: {added} eklendi, {changed} değişti, {removed} kaldırıldı, {unchanged} değişmedi, {errors} hata.",
+    "restart": "Şunlar için yeniden başlatma gerekli: {fields}",
+    "orphaned": "{ruleId} kuralı hâlâ eksik {triggerId} tetikleyicisine başvuruyor.",
+    "fields": {
+      "cron": "Tarama zamanlaması (cron)",
+      "maintenancewindow": "Bakım aralığı (cron)",
+      "maintenancewindowtz": "Bakım saat dilimi",
+      "maintenancewindowscope": "Bakım kapsamı"
+    }
+  }
+}
