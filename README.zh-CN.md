@@ -219,6 +219,15 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.14 亮点</strong></summary>
+
+回滚现在会移除备份镜像无法运行的继承入口点和命令。标签匹配会区分 `alpine` 和 `alpine-perl` 等变体。维护版本的镜像标签现在会标明实际的源代码提交。
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc14--2026-09-08).
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.13 亮点</strong></summary>
 
 - **drydock 在 v1.5.0-rc.17 之前首次发现的浮动标签容器，即使镜像仓库中已有更新的 digest，也可能永远被标记为 Current。** `image.digest.watch` 现在会在每次扫描时重新计算，而不是在首次发现时一次性写死，`isLocalImage` 和 `digest.repoDigests` 早已是这样处理的。([#1108](https://github.com/CodesWhat/drydock/pull/1108))

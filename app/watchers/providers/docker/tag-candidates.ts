@@ -163,6 +163,30 @@ export function isPrereleaseSuffix(suffix: string): boolean {
 }
 
 /**
+ * DR-125: true when `longerTemplate` is `shorterTemplate` plus a trailing
+ * extension made up entirely of digit placeholders ("#") and their
+ * separators ("."), e.g. "-alpine" -> "-alpine#.#" ("-alpine3.21"). This is
+ * the *only* startsWith-style relationship isSuffixCompatible still allows:
+ * it lets a bare variant suffix and a more numerically-precise spelling of
+ * the same variant see each other (see compareSuffixCounters's "-alpine" vs
+ * "-alpine3.21" comment), while still requiring an exact template match for
+ * everything else. A trailing extension that introduces new letters (e.g.
+ * "-alpine" -> "-alpine-perl", "-alpine-slim" -> "-alpine") names a
+ * different variant, not a more precise version of the same one, and must
+ * stay rejected.
+ */
+function isPrecisionOnlyExtension(shorterTemplate: string, longerTemplate: string): boolean {
+  if (!longerTemplate.startsWith(shorterTemplate)) {
+    return false;
+  }
+  const extra = longerTemplate.slice(shorterTemplate.length);
+  // A genuine precision-only extension needs at least one digit placeholder
+  // ("#"); punctuation alone (e.g. a trailing "." or "..") is not a more
+  // precise spelling of the same variant and must stay rejected.
+  return extra.length > 0 && /^\.?#(?:\.#)*$/.test(extra);
+}
+
+/**
  * #501: `allowPrereleaseToGA` scopes the #498 prerelease->GA widening to the
  * informational insight path only (computePinGateInsight). It defaults to
  * false, so the actionable path — which shares this function via
@@ -188,11 +212,16 @@ function isSuffixCompatible(
   }
   const referenceTemplate = normalizeSuffixTemplate(referenceSuffix);
   const candidateTemplate = normalizeSuffixTemplate(candidateSuffix);
-  return (
-    candidateTemplate === referenceTemplate ||
-    candidateTemplate.startsWith(referenceTemplate) ||
-    referenceTemplate.startsWith(candidateTemplate)
-  );
+  if (candidateTemplate === referenceTemplate) {
+    return true;
+  }
+  // DR-125: a candidate whose variant template merely names a different
+  // build/variant (e.g. "-alpine-perl", "-alpine-slim", "-perl" against an
+  // "-alpine" reference) must be rejected under both family policies — only
+  // a same-variant, precision-only extension (digits/dots) is accepted.
+  return candidateTemplate.length > referenceTemplate.length
+    ? isPrecisionOnlyExtension(referenceTemplate, candidateTemplate)
+    : isPrecisionOnlyExtension(candidateTemplate, referenceTemplate);
 }
 
 function getTagFamilyPolicy(

@@ -5690,6 +5690,192 @@ describe('additional direct wrapper coverage', () => {
     expect(getCreatedContainerCandidate(createError)).toBeUndefined();
   });
 
+  test('recreateContainer (DR-126) resolves clone options through getCloneRuntimeConfigOptions so an entrypoint the newer image materialized is dropped on rollback', async () => {
+    // Reproduces the rollback scenario: the running container is on image B,
+    // which (unlike image A) defines an Entrypoint, so the daemon materialized
+    // it onto Config with no dd.runtime.entrypoint.origin label. Rolling back
+    // to image A must not clone that Entrypoint verbatim — A has no such file.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi
+          .fn()
+          .mockResolvedValue(
+            imageRef === 'app:b'
+              ? { Config: { Entrypoint: ['/docker-entrypoint.sh'] } }
+              : { Config: { Entrypoint: null } },
+          ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toBeUndefined();
+  });
+
+  test('recreateContainer (DR-126) preserves a runtime field when the source image cannot establish inheritance, regardless of what the target defines', async () => {
+    // Origin-unknown (no label), but unlike the drop case above the source
+    // image (B, the one the container is currently on) can't be inspected —
+    // sourceImageConfig ends up undefined, so shouldDropClonedRuntimeField's
+    // inheritedFromSource check can never be true (it compares the cloned
+    // value against sourceImageConfig?.[field], which is undefined either
+    // way). isInheritedRuntimeField's own unit tests document this as
+    // "conservative keep": with no reliable source data, the field is
+    // treated as a potential explicit override and preserved outright — the
+    // target-match comparison in shouldDropClonedRuntimeField is never even
+    // reached. The rollback target (A) defining the identical Entrypoint
+    // here is therefore incidental, not the reason it's kept; the sibling
+    // test below proves that by giving the target a different value and
+    // getting the same (kept) outcome.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi.fn(() =>
+          imageRef === 'app:b'
+            ? Promise.reject(new Error('image app:b not found'))
+            : Promise.resolve({ Config: { Entrypoint: ['/docker-entrypoint.sh'] } }),
+        ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  });
+
+  test('recreateContainer (DR-126) preserves that same runtime field even when the target defines a different value', async () => {
+    // Same source-unavailable, origin-unknown shape as above, but now the
+    // rollback target (A) defines a *different* Entrypoint than the one
+    // cloned from the running container. The outcome doesn't change: with
+    // sourceImageConfig undefined, isInheritedRuntimeField never gets past
+    // the inheritedFromSource check, so the target's value — matching or
+    // not — is irrelevant here. This is what makes the two tests together
+    // prove the field is kept because the source can't vouch for it, not
+    // because it happens to match the target.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi.fn(() =>
+          imageRef === 'app:b'
+            ? Promise.reject(new Error('image app:b not found'))
+            : Promise.resolve({ Config: { Entrypoint: ['/other-entrypoint.sh'] } }),
+        ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  });
+
+  test('recreateContainer (DR-126) drops the runtime field when the rollback target defines a different value than the source', async () => {
+    // This is the scenario that actually exercises
+    // shouldDropClonedRuntimeField's target-match comparison: the source
+    // image (B) is known and defines the identical Entrypoint the container
+    // is running with, so isInheritedRuntimeField treats it as inherited —
+    // but the rollback target (A) defines a *different* Entrypoint, not
+    // merely no Entrypoint at all (that's the DR-126 test above). Dropping
+    // here proves the manager compares cloned-vs-target by value rather than
+    // just checking whether the target defines the field.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi
+          .fn()
+          .mockResolvedValue(
+            imageRef === 'app:b'
+              ? { Config: { Entrypoint: ['/docker-entrypoint.sh'] } }
+              : { Config: { Entrypoint: ['/other-entrypoint.sh'] } },
+          ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toBeUndefined();
+  });
+
   test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {
     vi.useFakeTimers();
     const dateNowSpy = vi.spyOn(Date, 'now');

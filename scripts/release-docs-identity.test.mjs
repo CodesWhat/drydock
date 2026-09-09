@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.13';
-const PREV_RC_VERSION = '1.7.0-rc.12';
+const RC_VERSION = '1.7.0-rc.14';
+const PREV_RC_VERSION = '1.7.0-rc.13';
 const RC_DATE = '2026-09-08';
 const RC_DISPLAY_DATE = 'September 8, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
@@ -155,15 +155,12 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const pull of [1080, 1108]) {
+  for (const pull of [1126, 1134]) {
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${pull}`;
     assert.ok(updates.includes(pullLink), `updates page must link PR #${pull}`);
   }
 
-  for (const fragment of [
-    '`image.digest.watch`',
-    'caps the spider at 10 minutes and the active scan at 35',
-  ]) {
+  for (const fragment of ['runtime-config sanitization', 'variant suffix', 'release source SHA']) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }

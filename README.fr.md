@@ -219,6 +219,15 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.14</strong></summary>
+
+Les restaurations suppriment les points d’entrée et commandes hérités que l’image sauvegardée ne peut pas exécuter. La comparaison des tags distingue les variantes comme `alpine` et `alpine-perl`. Les labels des images de maintenance indiquent le véritable commit source.
+
+Notes de version complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc14--2026-09-08).
+
+</details>
+
+<details>
 <summary><strong>Points forts de la v1.7.0-rc.13</strong></summary>
 
 - **Les conteneurs sur un tag flottant que drydock avait vu pour la première fois avant v1.5.0-rc.17 pouvaient rester marqués Current pour toujours, même avec un digest plus récent disponible.** `image.digest.watch` est désormais recalculé à chaque scan au lieu d'être fixé lors de la première découverte, de la même façon que le font déjà `isLocalImage` et `digest.repoDigests`. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))

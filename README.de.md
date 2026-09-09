@@ -219,6 +219,15 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.14</strong></summary>
+
+Rollbacks entfernen jetzt geerbte Entrypoints und Befehle, die das gesicherte Image nicht ausführen kann. Der Tag-Abgleich hält Varianten wie `alpine` und `alpine-perl` getrennt. Image-Labels von Wartungsreleases nennen den tatsächlichen Quell-Commit.
+
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc14--2026-09-08).
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.13</strong></summary>
 
 - **Container auf einem Floating-Tag, die Drydock erstmals vor v1.5.0-rc.17 gesehen hat, konnten für immer als Current markiert bleiben, selbst wenn die Registry einen neueren Digest hatte.** `image.digest.watch` wird jetzt bei jedem Scan neu ermittelt, statt einmalig bei der ersten Erkennung festgeschrieben zu werden, genau wie `isLocalImage` und `digest.repoDigests` es bereits tun. ([#1108](https://github.com/CodesWhat/drydock/pull/1108))

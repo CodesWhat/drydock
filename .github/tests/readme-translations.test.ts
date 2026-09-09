@@ -66,38 +66,38 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.13</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.14</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.13</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.14</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.13</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.14</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.13</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.14</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.13</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.14</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.13 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.14 亮点</strong></summary>',
   },
 };
 
@@ -211,6 +211,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc11--2026-09-05',
   './CHANGELOG.md#170-rc12--2026-09-06',
   './CHANGELOG.md#170-rc13--2026-09-08',
+  './CHANGELOG.md#170-rc14--2026-09-08',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -260,10 +261,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).toContain(surface.releaseHeading);
   });
 
-  test('maps localized v1.7 release bullets to their source links', () => {
+  test('maps archived rc.13 release bullets to their source links', () => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
-    const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
+    const releaseBlock = getReleaseBlock(
+      content,
+      surface.releaseHeading.replace('v1.7.0-rc.14', 'v1.7.0-rc.13'),
+    );
     const releaseBullets = [release.digestWatchHeader, release.dastTimeoutHeader].map((fragment) =>
       getBullet(releaseBlock, fragment),
     );
