@@ -1375,4 +1375,37 @@ describe('preferences migration', () => {
       expect(result.views.servers).toEqual(DEFAULTS.views.servers);
     });
   });
+
+  describe('view hiddenColumns (images)', () => {
+    it('backfills views.images to the defaults when absent from a stored preferences blob', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          watchers: { hiddenColumns: ['cron'] },
+        },
+      });
+      expect(result.views.images).toEqual(DEFAULTS.views.images);
+      expect(result.views.images.hiddenColumns).toEqual(['imageId', 'created']);
+    });
+
+    it('drops unknown column keys from persisted images hiddenColumns', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          images: { hiddenColumns: ['tag', 'bogus-key'] },
+        },
+      });
+      expect(result.views.images.hiddenColumns).toEqual(['tag']);
+    });
+
+    it('drops the required repository column key from persisted images hiddenColumns', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          images: { hiddenColumns: ['repository', 'tag'] },
+        },
+      });
+      expect(result.views.images.hiddenColumns).toEqual(['tag']);
+    });
+  });
 });

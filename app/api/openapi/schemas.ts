@@ -1576,4 +1576,97 @@ export const openApiSchemas = {
     required: ['id', 'status', 'phase', 'containerName', 'createdAt', 'updatedAt'],
     additionalProperties: true,
   },
+  ImageInventoryItem: {
+    type: 'object',
+    description: 'One image on one image host, with its reclaimable share of shared layers.',
+    properties: {
+      id: { type: 'string' },
+      repoTags: { type: 'array', items: { type: 'string' } },
+      repoDigests: { type: 'array', items: { type: 'string' } },
+      size: { type: 'integer', minimum: 0 },
+      reclaimable: { type: 'integer', minimum: 0 },
+      created: { type: 'string', format: 'date-time' },
+      containers: { type: 'integer', minimum: 0 },
+      dangling: { type: 'boolean' },
+      watcher: { type: 'string' },
+      agent: { type: 'string' },
+      lastSeen: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'repoTags',
+      'repoDigests',
+      'size',
+      'reclaimable',
+      'created',
+      'containers',
+      'dangling',
+      'watcher',
+    ],
+    additionalProperties: false,
+  },
+  ImageHostSummary: {
+    type: 'object',
+    description:
+      'One Docker watcher host that image inventory can be requested from. `supported` is false for an agent-owned watcher without controller Docker transport, in which case `reason` explains why.',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      agent: { type: 'string' },
+      supported: { type: 'boolean' },
+      reason: { type: 'string', enum: ['agent-transport-unsupported'] },
+      error: { type: 'string' },
+    },
+    required: ['id', 'name', 'supported'],
+    additionalProperties: false,
+  },
+  ImageInventoryResponse: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ImageInventoryItem' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      hosts: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ImageHostSummary' },
+      },
+    },
+    required: ['data', 'total', 'hosts'],
+    additionalProperties: false,
+  },
+  PruneEstimate: {
+    type: 'object',
+    description:
+      'A dry-run estimate of what a prune with this mode would reclaim, no images deleted.',
+    properties: {
+      host: { type: 'string' },
+      mode: { type: 'string', enum: ['dangling', 'unused'] },
+      images: { type: 'integer', minimum: 0 },
+      reclaimable: { type: 'integer', minimum: 0 },
+    },
+    required: ['host', 'mode', 'images', 'reclaimable'],
+    additionalProperties: false,
+  },
+  ImagePruneResult: {
+    type: 'object',
+    properties: {
+      host: { type: 'string' },
+      mode: { type: 'string', enum: ['dangling', 'unused'] },
+      imagesDeleted: { type: 'integer', minimum: 0 },
+      spaceReclaimed: { type: 'integer', minimum: 0 },
+    },
+    required: ['host', 'mode', 'imagesDeleted', 'spaceReclaimed'],
+    additionalProperties: false,
+  },
+  ImagePruneResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      result: { $ref: '#/components/schemas/ImagePruneResult' },
+    },
+    required: ['message', 'result'],
+    additionalProperties: true,
+  },
 } as const;

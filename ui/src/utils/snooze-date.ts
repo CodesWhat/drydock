@@ -3,7 +3,13 @@ export function resolveSnoozeUntilFromInput(dateInput: string): string | undefin
     return undefined;
   }
   const parsed = new Date(`${dateInput}T23:59:59`);
-  if (Number.isNaN(parsed.getTime())) {
+  const [year, month, day] = dateInput.split('-').map(Number);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
     return undefined;
   }
   return parsed.toISOString();

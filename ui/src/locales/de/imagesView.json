@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "Images",
+    "subtitle": "Alle Images auf jedem Host, mit Angabe der Nutzung und der durch ein Prune freizugebenden Größe",
+    "loading": "Images werden geladen...",
+    "loadFailed": "Images konnten nicht geladen werden",
+    "columns": {
+      "repository": "Repository",
+      "tag": "Tag",
+      "imageId": "Image-ID",
+      "size": "Größe",
+      "containers": "Container",
+      "created": "Erstellt",
+      "lastSeen": "Zuletzt verwendet",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "Alle Hosts",
+      "unusedOnly": "Nur ungenutzte"
+    },
+    "dangling": "verwaist",
+    "untagged": "ohne Tag",
+    "hostUnsupported": "Der Agent dieses Hosts stellt der Steuerung keine Docker-API zur Verfügung, daher können Images hier weder aufgelistet noch bereinigt werden.",
+    "hostError": "Images auf {host} konnten nicht aufgelistet werden: {message}",
+    "empty": {
+      "title": "Keine Images",
+      "description": "Keine Images entsprechen den aktuellen Filtern."
+    },
+    "prune": {
+      "dangling": "Verwaiste bereinigen",
+      "unused": "Ungenutzte bereinigen",
+      "confirm": {
+        "header": {
+          "dangling": "Verwaiste Images auf {host} bereinigen",
+          "unused": "Ungenutzte Images auf {host} bereinigen"
+        },
+        "message": "Dies entfernt 1 Image und gibt etwa {size} frei. Der Wert ist eine Schätzung; gemeinsam genutzte Layer können ihn verringern. | Dies entfernt {count} Images und gibt etwa {size} frei. Der Wert ist eine Schätzung; gemeinsam genutzte Layer können ihn verringern.",
+        "nothing": "Auf diesem Host gibt es nichts zu bereinigen.",
+        "accept": "Bereinigen"
+      },
+      "inProgress": "Images auf {host} werden bereinigt ...",
+      "success": "1 Image entfernt und {size} auf {host} freigegeben | {count} Images entfernt und {size} auf {host} freigegeben",
+      "stillRunning": "Der Docker-Proxy des Agents hat für {host} kein Ergebnis geliefert; die Bereinigung läuft möglicherweise noch. Aktualisieren Sie die Liste in Kürze.",
+      "failed": "Bereinigung auf {host} fehlgeschlagen: {message}"
+    },
+    "refresh": "Aktualisieren"
+  }
+}

@@ -6,7 +6,7 @@ import { FLEET_GROUP_DIMENSIONS, FLEET_TAG_TYPES } from '../../preferences/schem
 defineProps<{ fleet: ReturnType<typeof useFleetDimensions>; mode: 'filters' | 'grouping' }>();
 const { t } = useI18n();
 const controlClass =
-  'px-2 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text min-w-0 max-w-48';
+  'px-2 py-1.5 dd-rounded text-2xs-plus font-medium outline-none focus:ring-2 focus:ring-[var(--dd-secondary)] dd-bg dd-text min-w-0 max-w-48';
 </script>
 
 <template>

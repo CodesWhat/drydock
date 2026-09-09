@@ -65,6 +65,7 @@
         "hosts": "Hosts",
         "registries": "Registries",
         "watchers": "Watchers",
+        "images": "Images",
         "settingsGroup": "Settings",
         "general": "General",
         "notifications": "Notifications",
