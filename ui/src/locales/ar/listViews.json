@@ -71,7 +71,8 @@
       "agent-disconnect": "قطع اتصال الوكيل",
       "notification-delivery-failed": "فشل تسليم الإشعار",
       "security-alert": "تنبيه أمني",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "تنظيف الصورة"
     },
     "target": {
       "container": "الحاوية",

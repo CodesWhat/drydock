@@ -71,7 +71,8 @@
       "agent-disconnect": "Agent ngắt kết nối",
       "notification-delivery-failed": "Gửi thông báo thất bại",
       "security-alert": "Cảnh báo bảo mật",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "Dọn dẹp Image"
     },
     "target": {
       "container": "Container",

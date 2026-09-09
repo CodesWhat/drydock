@@ -71,7 +71,8 @@
       "agent-disconnect": "Отключение агента",
       "notification-delivery-failed": "Ошибка доставки уведомления",
       "security-alert": "Предупреждение безопасности",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "Очистка образа"
     },
     "target": {
       "container": "Контейнер",

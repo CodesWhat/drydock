@@ -21,6 +21,7 @@ import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
 import { isIconProxyApiPath } from './icons/route.js';
 import * as iconsRouter from './icons.js';
+import * as imagesRouter from './images.js';
 import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
@@ -213,6 +214,9 @@ export function init(): express.Router {
 
   // Mount container actions router (start/stop/restart)
   mountRouter(router, '/containers', containerActionsRouter.init());
+
+  // Mount images router (image inventory and prune, sibling of /containers)
+  mountRouter(router, '/images', imagesRouter.init());
 
   // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
   mountRouter(router, '/stats', statsRouter.init());
