@@ -84,6 +84,51 @@ describe('preferences migration', () => {
   });
 
   describe('migrate', () => {
+    it('adds fleet dimensions without changing legacy stack and filter preferences', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        containers: { groupByStack: true, filters: { server: 'edge' } },
+      });
+      expect(result.containers.fleet).toMatchObject({
+        agent: 'all',
+        groupBy: 'none',
+        labelMatch: 'exists',
+      });
+      expect(result.containers.groupByStack).toBe(true);
+      expect(result.containers.filters.server).toBe('edge');
+    });
+
+    it('sanitizes malformed fleet preferences while preserving literal label values', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        containers: {
+          fleet: {
+            agent: 2,
+            registry: {},
+            tagType: 'patch',
+            groupBy: 'bogus',
+            groupLabel: [],
+            labelKey: 'team',
+            labelValue: '',
+            labelMatch: 'bogus',
+          },
+        },
+      });
+      expect(result.containers.fleet).toEqual({
+        agent: 'all',
+        registry: 'all',
+        tagType: 'all',
+        groupBy: 'none',
+        groupLabel: '',
+        labelKey: 'team',
+        labelValue: '',
+        labelMatch: 'exists',
+      });
+      expect(migrate({ containers: { fleet: null } }).containers.fleet).toEqual(
+        DEFAULTS.containers.fleet,
+      );
+    });
+
     it('adds manual container groups when migrating schema version 11', () => {
       const result = migrate({ schemaVersion: 11, containers: { groupByStack: true } });
 

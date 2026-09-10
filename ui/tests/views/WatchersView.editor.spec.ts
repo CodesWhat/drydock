@@ -195,6 +195,80 @@ describe('watcher detail editor API identity boundary', () => {
     },
   );
 
+  it.each([
+    {
+      status: 401,
+      body: 'Unauthorized',
+      contentType: '',
+      message: 'Your session is not authorized',
+    },
+    {
+      status: 403,
+      body: 'Forbidden',
+      contentType: 'text/plain',
+      message: 'Your session is not authorized',
+    },
+    {
+      status: 429,
+      body: 'Too many requests',
+      contentType: 'text/plain',
+      message: 'Too many editor requests',
+    },
+    {
+      status: 502,
+      body: 'Bad gateway',
+      contentType: 'text/plain',
+      message: 'The save outcome could not be confirmed',
+    },
+    {
+      status: 200,
+      body: 'invalid JSON',
+      contentType: 'application/json',
+      message: 'The save outcome could not be confirmed',
+    },
+    ...[{ reload: {} }, { reload: { errors: null } }, { restartRequired: null }].map((invalid) => ({
+      status: 200,
+      body: JSON.stringify({
+        saved: true,
+        applied: true,
+        changedKeys: [],
+        restartRequired: [],
+        errors: [],
+        ...invalid,
+      }),
+      contentType: 'application/json',
+      message: 'The save outcome could not be confirmed',
+    })),
+  ])(
+    'retains the draft without automatic requests after rejected HTTP$status ($body)',
+    async ({ status, body, contentType, message }) => {
+      const { wrapper, requests } = await openEditor(null, undefined, (_path, options) => {
+        if (options?.method !== 'PATCH') return undefined;
+        const response = new Response(body, { status });
+        response.headers.set('content-type', contentType);
+        return response;
+      });
+      try {
+        await wrapper.get('[data-field="cron"]').setValue('0 7 * * *');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        expect(wrapper.get('[role="alert"]').text()).toContain(message);
+        expect(wrapper.get<HTMLInputElement>('[data-field="cron"]').element.value).toBe(
+          '0 7 * * *',
+        );
+        expect(wrapper.get('[data-testid="save-schedule"]').attributes('disabled')).toBeDefined();
+        expect(wrapper.find('[data-testid="reload-schedule"]').exists()).toBe(true);
+        expect(wrapper.text()).not.toContain('Saved and applied');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        expect(requests).toHaveLength(4);
+        expect(requests.filter((request) => request.method === 'PATCH')).toHaveLength(1);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
   it('does not refresh after an obsolete save resolves following panel close', async () => {
     let finish!: (response: Response) => void;
     const pending = new Promise<Response>((resolve) => {

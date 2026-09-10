@@ -92,11 +92,19 @@ export async function saveWatcherEdits(request: WatcherEditRequest): Promise<Wat
     body: JSON.stringify(request),
     signal: AbortSignal.timeout(15000),
   });
-  const body = await readJsonResponse<Partial<WatcherEditOutcome>>(response, 'Watcher editor');
+  let body: Partial<WatcherEditOutcome>;
+  try {
+    body = await readJsonResponse<Partial<WatcherEditOutcome>>(response, 'Watcher editor');
+  } catch (error) {
+    if (!response.ok) throw new WatcherEditorHttpError(response.status);
+    throw error;
+  }
   if (
     typeof body?.saved !== 'boolean' ||
     typeof body.applied !== 'boolean' ||
-    !Array.isArray(body.errors)
+    !Array.isArray(body.errors) ||
+    !Array.isArray(body.restartRequired) ||
+    (body.reload !== undefined && !Array.isArray(body.reload?.errors))
   )
     throw new WatcherEditorHttpError(response.status);
   return { ...body, status: response.status } as WatcherEditOutcome;

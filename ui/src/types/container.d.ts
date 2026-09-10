@@ -188,6 +188,7 @@ export interface Container {
   imageCreated?: string;
   server: string;
   agent?: string;
+  labels?: Record<string, unknown>;
   portLabel?: string;
   includeTags?: string;
   excludeTags?: string;

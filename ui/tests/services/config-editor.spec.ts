@@ -15,7 +15,7 @@ describe('watcher configuration editor service', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves conflict and saved-but-unapplied outcomes without retrying', async () => {
+  it.each([400, 409])('preserves HTTP%s write refusals without retrying', async (status) => {
     const request = {
       revision: 'old',
       changes: [{ path: ['watcher', 'local', 'cron'], operation: 'set' as const, value: '' }],
@@ -27,9 +27,9 @@ describe('watcher configuration editor service', () => {
       restartRequired: [],
       errors: [{ path: 'document', envKey: 'DD_CONFIG_FILE', message: 'Configuration changed' }],
     };
-    const fetch = vi.fn().mockResolvedValue(Response.json(body, { status: 409 }));
+    const fetch = vi.fn().mockResolvedValue(Response.json(body, { status }));
     vi.stubGlobal('fetch', fetch);
-    await expect(saveWatcherEdits(request)).resolves.toEqual({ status: 409, ...body });
+    await expect(saveWatcherEdits(request)).resolves.toEqual({ status, ...body });
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/config/editor/watchers',
       expect.objectContaining({
@@ -61,6 +61,80 @@ describe('watcher configuration editor service', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body, { status: 500 })));
     await expect(saveWatcherEdits({ revision: 'first', changes: [] })).rejects.toMatchObject({
       status: 500,
+    });
+  });
+
+  it.each([
+    [401, 'Unauthorized', ''],
+    [403, '<html>Forbidden</html>', 'text/html'],
+    [429, 'Too many requests', 'text/plain'],
+    [502, 'Bad gateway', 'text/plain'],
+  ])('preserves HTTP%s when the write response is not JSON', async (status, body, contentType) => {
+    const response = new Response(body as string, { status: status as number });
+    response.headers.set('content-type', contentType as string);
+    const fetch = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal('fetch', fetch);
+    await expect(saveWatcherEdits({ revision: 'first', changes: [] })).rejects.toMatchObject({
+      status,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps malformed successful responses uncertain', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('invalid JSON', { headers: { 'content-type': 'application/json' } }),
+        ),
+    );
+    await expect(saveWatcherEdits({ revision: 'first', changes: [] })).rejects.toThrow(
+      'returned invalid JSON',
+    );
+  });
+
+  it.each([
+    { reload: {} },
+    { reload: null },
+    { reload: { errors: null } },
+    { reload: { errors: 'invalid' } },
+    { restartRequired: undefined },
+    { restartRequired: null },
+    { restartRequired: 'invalid' },
+  ])('rejects malformed consumed outcome collections %j', async (invalid) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          saved: true,
+          applied: true,
+          changedKeys: [],
+          restartRequired: [],
+          errors: [],
+          ...invalid,
+        }),
+      ),
+    );
+    await expect(saveWatcherEdits({ revision: 'first', changes: [] })).rejects.toMatchObject({
+      status: 200,
+    });
+  });
+
+  it('preserves valid nested reload errors', async () => {
+    const errors = [{ path: 'document', envKey: 'DD_CONFIG_FILE', message: 'Reload incomplete' }];
+    const body = {
+      saved: true,
+      applied: false,
+      changedKeys: [],
+      restartRequired: [],
+      errors,
+      reload: { applied: false, errors },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body)));
+    await expect(saveWatcherEdits({ revision: 'first', changes: [] })).resolves.toEqual({
+      status: 200,
+      ...body,
     });
   });
 
