@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
+import { i18n } from '@/boot/i18n';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { tooltip as tooltipDirective } from '@/directives/tooltip';
 import { type SseBusEvent, useEventStreamStore } from '@/stores/eventStream';
@@ -73,6 +74,7 @@ describe('NotificationBell', () => {
       wrapper.unmount();
     }
     vi.useRealTimers();
+    i18n.global.locale.value = 'en';
   });
 
   function factory() {
@@ -95,6 +97,60 @@ describe('NotificationBell', () => {
   it('renders the bell button', () => {
     const wrapper = factory();
     expect(wrapper.find('button[aria-label="Notifications"]').exists()).toBe(true);
+  });
+
+  it.each([
+    { age: 30_000, expected: "à l'instant" },
+    { age: 120_000, expected: 'il y a 2\u00a0min' },
+  ])('renders a $age ms old notification in French', async ({ age, expected }) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'));
+    i18n.global.locale.value = 'fr';
+    mockGetAuditLog.mockResolvedValue({
+      entries: [{ ...mockEntries[0], timestamp: new Date(Date.now() - age).toISOString() }],
+    });
+
+    const wrapper = factory();
+    await openBell(wrapper);
+
+    expect(findEntryRows(wrapper)[0].text()).toContain(expected);
+  });
+
+  it('updates relative times when the locale changes while the bell stays open', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'));
+    mockGetAuditLog.mockResolvedValue({
+      entries: mockEntries.map((entry, index) => ({
+        ...entry,
+        timestamp: new Date(Date.now() - (index === 0 ? 30_000 : 120_000)).toISOString(),
+      })),
+    });
+    const wrapper = factory();
+    await openBell(wrapper);
+    const rows = findEntryRows(wrapper);
+    expect(rows[0].text()).toContain('just now');
+    expect(rows[1].text()).toContain('2 min. ago');
+    mockGetAuditLog.mockClear();
+
+    i18n.global.locale.value = 'fr';
+    await nextTick();
+
+    expect.soft(rows[0].text()).toContain("à l'instant");
+    expect.soft(rows[1].text()).toContain('il y a 2\u00a0min');
+    expect(findDropdown(wrapper).exists()).toBe(true);
+    expect(findEntryRows(wrapper).map((row) => row.find('[title]').attributes('title'))).toEqual([
+      'nginx',
+      'redis',
+    ]);
+    expect(wrapper.find('.badge-pulse').text()).toBe('2');
+    expect(mockGetAuditLog).not.toHaveBeenCalled();
+
+    await rows[0].find('[data-test="notification-dismiss"]').trigger('click');
+    expect(findEntryRows(wrapper)).toHaveLength(1);
+    expect(findEntryRows(wrapper)[0].text()).toContain('redis');
+    expect(wrapper.find('.badge-pulse').text()).toBe('1');
+    await wrapper.find('[data-test="mark-all-read-btn"]').trigger('click');
+    expect(wrapper.find('.badge-pulse').exists()).toBe(false);
   });
 
   it('fetches entries on mount with actionable action filter', async () => {
