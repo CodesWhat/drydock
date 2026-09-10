@@ -10,6 +10,40 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `docker` watcher lets you configure the Docker hosts you want to watch.
 
+## Edit a watcher schedule in the UI
+
+Open **Watchers**, select a watcher, then choose **Edit schedule** in its detail
+panel. This editor changes four settings for existing controller-local watchers:
+`cron`, `maintenancewindow`, `maintenancewindowtz`, and `maintenancewindowscope`.
+It requires a mounted configuration file and an authorized session. Agent
+watchers, environment-owned values and referenced values are read-only. The
+panel shows whether each field comes from the file, environment, a reference or
+a default. An unavailable API or file disables editing; the UI does not create
+a configuration file.
+
+**Save** sends only changed fields through `PATCH /api/v1/config/editor/watchers`.
+**Remove file value / use default** explicitly removes that setting from YAML.
+For the optional maintenance window, removal leaves no window configured. An
+empty text value is instead submitted as a value and checked by the server's
+startup Joi validation. **Cancel** or closing the panel before Save sends no
+write. There is no autosave or background snapshot polling.
+
+The editor loads a revision with its snapshot. A stale revision or a field that
+has become read-only produces a conflict, retains the draft and disables Save.
+Use **Discard draft and reload** to explicitly replace the draft with a fresh
+snapshot. The UI never retries a save with a newer revision automatically.
+After saving, it distinguishes a file saved and applied live from a saved file
+whose reload or audit reported problems. Reload counts, errors, restart fields
+and orphaned notification-rule references are shown when reported. An uncertain
+network outcome requires reloading before another change.
+
+Untouched credentials, `_file` references, interpolation expressions and YAML
+comments stay on the server. Referenced fields omit both raw and effective
+values from the editor snapshot; the browser never round-trips current secret
+values. Connection settings, sockets, credentials, TLS, registry configuration
+and agent configuration remain outside this editor. Other configuration panels
+and label-backed settings are not made editable by this four-field feature.
+
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |

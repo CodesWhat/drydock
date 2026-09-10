@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Lịch của trình theo dõi",
+    "edit": "Chỉnh sửa lịch",
+    "boundary": "Chỉ có thể sửa lịch quét và khung giờ bảo trì tại đây. Kết nối, thông tin xác thực, TLS và cấu hình tác nhân vẫn chỉ đọc.",
+    "reload": "Bỏ bản nháp và tải lại",
+    "reset": "Xóa giá trị trong tệp / dùng mặc định",
+    "pendingRemoval": "Giá trị này sẽ bị xóa khỏi tệp khi lưu.",
+    "current": "Giá trị có hiệu lực: {value}",
+    "none": "Chưa đặt",
+    "install": "Chỉ cài đặt tự động",
+    "scan": "Quét và cài đặt",
+    "sources": {
+      "file": "Nguồn: tệp cấu hình",
+      "env": "Nguồn: môi trường",
+      "default": "Nguồn: mặc định",
+      "reference": "Nguồn: tham chiếu (ẩn giá trị)"
+    },
+    "readOnly": {
+      "environment": "Được đặt bằng môi trường. Hãy sửa bên ngoài trình chỉnh sửa này.",
+      "reference": "Giá trị tham chiếu được giữ trên máy chủ và không thể sửa ở đây.",
+      "agent": "Cấu hình tác nhân ở đây chỉ đọc.",
+      "other": "Trường này không cho phép chỉnh sửa."
+    },
+    "fileUnavailable": "Không có tệp cấu hình. Hãy gắn tệp trước khi chỉnh sửa.",
+    "watcherUnavailable": "Không có đúng trình theo dõi này trong ảnh chụp cấu hình.",
+    "accessDenied": "Phiên của bạn không có quyền dùng trình chỉnh sửa này.",
+    "apiUnavailable": "Máy chủ này không cung cấp API chỉnh sửa trình theo dõi.",
+    "rateLimited": "Quá nhiều yêu cầu. Chờ một phút rồi tải lại.",
+    "loadFailed": "Không tải được trình chỉnh sửa. Chưa gửi thay đổi nào.",
+    "saveUncertain": "Không xác nhận được kết quả lưu. Hãy tải lại trước khi sửa tiếp.",
+    "conflict": "Cấu hình đã đổi hoặc trường đã chuyển sang chỉ đọc. Bản nháp vẫn được giữ. Hãy bỏ bản nháp và tải lại trước khi sửa.",
+    "saved": "Đã lưu và áp dụng ngay.",
+    "notApplied": "Đã lưu nhưng có vấn đề được báo cáo. Xem chi tiết trước khi tiếp tục.",
+    "notSaved": "Cấu hình chưa được lưu.",
+    "reconciled": "Tải lại: thêm {added}, đổi {changed}, xóa {removed}, giữ nguyên {unchanged}, lỗi {errors}.",
+    "restart": "Cần khởi động lại cho: {fields}",
+    "orphaned": "Quy tắc {ruleId} vẫn tham chiếu đến trình kích hoạt bị thiếu {triggerId}.",
+    "fields": {
+      "cron": "Lịch quét (cron)",
+      "maintenancewindow": "Khung giờ bảo trì (cron)",
+      "maintenancewindowtz": "Múi giờ bảo trì",
+      "maintenancewindowscope": "Phạm vi bảo trì"
+    }
+  }
+}

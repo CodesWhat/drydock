@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Überwachungszeitplan",
+    "edit": "Zeitplan bearbeiten",
+    "boundary": "Hier lassen sich nur Prüfplan und Wartungsfenster ändern. Verbindung, Zugangsdaten, TLS und Agentenkonfiguration bleiben schreibgeschützt.",
+    "reload": "Entwurf verwerfen und neu laden",
+    "reset": "Dateiwert entfernen / Standard verwenden",
+    "pendingRemoval": "Dieser Dateiwert wird beim Speichern entfernt.",
+    "current": "Wirksamer Wert: {value}",
+    "none": "Nicht festgelegt",
+    "install": "Nur automatische Installation",
+    "scan": "Prüfung und Installation",
+    "sources": {
+      "file": "Quelle: Konfigurationsdatei",
+      "env": "Quelle: Umgebung",
+      "default": "Quelle: Standard",
+      "reference": "Quelle: Referenz (Wert verborgen)"
+    },
+    "readOnly": {
+      "environment": "Durch die Umgebung festgelegt. Außerhalb dieses Editors ändern.",
+      "reference": "Referenzierte Werte bleiben auf dem Server und sind hier nicht bearbeitbar.",
+      "agent": "Die Agentenkonfiguration ist hier schreibgeschützt.",
+      "other": "Dieses Feld kann nicht bearbeitet werden."
+    },
+    "fileUnavailable": "Keine Konfigurationsdatei verfügbar. Vor dem Bearbeiten eine Datei einbinden.",
+    "watcherUnavailable": "Diese genaue Überwachung ist im Editor-Snapshot nicht verfügbar.",
+    "accessDenied": "Deine Sitzung ist für diesen Editor nicht berechtigt.",
+    "apiUnavailable": "Dieser Server bietet die Editor-API nicht an.",
+    "rateLimited": "Zu viele Editor-Anfragen. Vor dem erneuten Laden eine Minute warten.",
+    "loadFailed": "Editor konnte nicht geladen werden. Es wurden keine Änderungen gesendet.",
+    "saveUncertain": "Speicherergebnis unbestätigt. Vor weiteren Änderungen neu laden.",
+    "conflict": "Konfiguration geändert oder Feld schreibgeschützt. Der Entwurf bleibt erhalten. Vor weiteren Änderungen verwerfen und neu laden.",
+    "saved": "Gespeichert und live angewendet.",
+    "notApplied": "Gespeichert, aber Probleme gemeldet. Details vor dem Fortfahren prüfen.",
+    "notSaved": "Konfiguration wurde nicht gespeichert.",
+    "reconciled": "Neuladen: {added} hinzugefügt, {changed} geändert, {removed} entfernt, {unchanged} unverändert, {errors} Fehler.",
+    "restart": "Neustart erforderlich für: {fields}",
+    "orphaned": "Regel {ruleId} verweist weiterhin auf den fehlenden Trigger {triggerId}.",
+    "fields": {
+      "cron": "Prüfplan (Cron)",
+      "maintenancewindow": "Wartungsfenster (Cron)",
+      "maintenancewindowtz": "Wartungszeitzone",
+      "maintenancewindowscope": "Wartungsumfang"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Harmonogram obserwatora",
+    "edit": "Edytuj harmonogram",
+    "boundary": "Tutaj można edytować tylko harmonogram skanowania i okno konserwacji. Połączenie, dane uwierzytelniające, TLS i agenci pozostają tylko do odczytu.",
+    "reload": "Odrzuć szkic i wczytaj ponownie",
+    "reset": "Usuń wartość z pliku / użyj domyślnej",
+    "pendingRemoval": "Ta wartość zostanie usunięta z pliku przy zapisie.",
+    "current": "Wartość efektywna: {value}",
+    "none": "Nie ustawiono",
+    "install": "Tylko automatyczna instalacja",
+    "scan": "Skanowanie i instalacja",
+    "sources": {
+      "file": "Źródło: plik konfiguracji",
+      "env": "Źródło: środowisko",
+      "default": "Źródło: wartość domyślna",
+      "reference": "Źródło: odwołanie (wartość ukryta)"
+    },
+    "readOnly": {
+      "environment": "Ustawione przez środowisko. Zmień poza tym edytorem.",
+      "reference": "Wartości z odwołań pozostają na serwerze i nie można ich tutaj edytować.",
+      "agent": "Konfiguracja agentów jest tutaj tylko do odczytu.",
+      "other": "To pole nie jest dostępne do edycji."
+    },
+    "fileUnavailable": "Brak pliku konfiguracji. Zamontuj plik przed edycją.",
+    "watcherUnavailable": "Tego konkretnego obserwatora nie ma w migawce edytora.",
+    "accessDenied": "Sesja nie ma uprawnień do tego edytora.",
+    "apiUnavailable": "Ten serwer nie udostępnia API edytora.",
+    "rateLimited": "Zbyt wiele żądań. Poczekaj minutę przed ponownym wczytaniem.",
+    "loadFailed": "Nie udało się wczytać edytora. Nie wysłano zmian.",
+    "saveUncertain": "Nie potwierdzono zapisu. Wczytaj ponownie przed dalszymi zmianami.",
+    "conflict": "Konfiguracja się zmieniła lub pole jest tylko do odczytu. Szkic zachowano. Odrzuć go i wczytaj ponownie.",
+    "saved": "Zapisano i zastosowano na żywo.",
+    "notApplied": "Zapisano, ale zgłoszono problemy. Sprawdź szczegóły.",
+    "notSaved": "Nie zapisano konfiguracji.",
+    "reconciled": "Przeładowanie: {added} dodanych, {changed} zmienionych, {removed} usuniętych, {unchanged} bez zmian, {errors} błędów.",
+    "restart": "Wymagany restart dla: {fields}",
+    "orphaned": "Reguła {ruleId} nadal wskazuje brakujący wyzwalacz {triggerId}.",
+    "fields": {
+      "cron": "Harmonogram skanowania (cron)",
+      "maintenancewindow": "Okno konserwacji (cron)",
+      "maintenancewindowtz": "Strefa czasowa konserwacji",
+      "maintenancewindowscope": "Zakres konserwacji"
+    }
+  }
+}

@@ -6,10 +6,12 @@ import AppBadge from '@/components/AppBadge.vue';
 import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import WatcherScheduleEditor from '@/components/WatcherScheduleEditor.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllWatchers, getWatcher } from '../services/watcher';
+import type { WatcherIdentity } from '../services/config-editor';
 import type { ApiComponent } from '../types/api';
 import { ROUTES } from '../router/routes';
 import { formatAbsoluteTime, timeAgo } from '../utils/audit-helpers';
@@ -172,7 +174,7 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     config: Object.fromEntries(
       Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ),
-    agent: watcher.agent,
+    agent: watcher.agent ?? undefined,
   };
 }
 
@@ -192,7 +194,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(watcher: Record<string, unknown>) {
+async function openDetail(watcher: Record<string, unknown>, refreshRow = false) {
   selectedWatcher.value = watcher;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -207,6 +209,14 @@ async function openDetail(watcher: Record<string, unknown>) {
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedWatcher.value = mapWatcher(detail, String(watcher.status));
+    if (refreshRow) {
+      const refreshed = selectedWatcher.value;
+      watchersData.value = watchersData.value.map((row) =>
+        row.id === watcher.id && row.name === watcher.name && row.agent === watcher.agent
+          ? refreshed
+          : row,
+      );
+    }
   } catch {
     if (requestId !== detailRequestId) return;
     detailError.value = t('watchersView.detail.loadError');
@@ -215,6 +225,19 @@ async function openDetail(watcher: Record<string, unknown>) {
       detailLoading.value = false;
     }
   }
+}
+
+function refreshSavedWatcher(identity: WatcherIdentity) {
+  const current = selectedWatcher.value;
+  if (
+    !detailOpen.value ||
+    !current ||
+    current.id !== identity.id ||
+    current.name !== identity.name ||
+    current.agent !== identity.agent
+  )
+    return;
+  void openDetail(current, true);
 }
 
 onMounted(async () => {
@@ -413,6 +436,7 @@ onMounted(async () => {
             <DetailField :label="t('watchersView.detail.schedule')" mono>{{ selectedWatcher.cron || '\u2014' }}</DetailField>
             <DetailField :label="t('watchersView.detail.nextRun')" v-tooltip.top="selectedWatcher.nextRunAt ? formatAbsoluteTime(String(selectedWatcher.nextRunAt)) : ''">{{ selectedWatcher.nextRun }}</DetailField>
             <DetailField :label="t('watchersView.detail.lastRun')">{{ selectedWatcher.lastRun }}</DetailField>
+            <WatcherScheduleEditor v-if="detailOpen" :watcher="{ id: String(selectedWatcher.id), name: String(selectedWatcher.name), agent: selectedWatcher.agent as string | undefined }" @saved="refreshSavedWatcher" />
             <DetailField v-for="(val, key) in selectedWatcher.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
           </div>
         </template>

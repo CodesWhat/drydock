@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Planification du surveillant",
+    "edit": "Modifier la planification",
+    "boundary": "Seuls la planification des analyses et le créneau de maintenance sont modifiables ici. Connexion, identifiants, TLS et agents restent en lecture seule.",
+    "reload": "Abandonner le brouillon et recharger",
+    "reset": "Supprimer la valeur du fichier / utiliser la valeur par défaut",
+    "pendingRemoval": "Cette valeur sera supprimée du fichier à l’enregistrement.",
+    "current": "Valeur effective : {value}",
+    "none": "Non défini",
+    "install": "Installation automatique uniquement",
+    "scan": "Analyse et installation",
+    "sources": {
+      "file": "Source : fichier de configuration",
+      "env": "Source : environnement",
+      "default": "Source : valeur par défaut",
+      "reference": "Source : référence (valeur masquée)"
+    },
+    "readOnly": {
+      "environment": "Défini par l’environnement. À modifier hors de cet éditeur.",
+      "reference": "Les valeurs référencées restent sur le serveur et ne sont pas modifiables ici.",
+      "agent": "La configuration des agents est en lecture seule ici.",
+      "other": "Ce champ n’est pas modifiable."
+    },
+    "fileUnavailable": "Aucun fichier de configuration disponible. Montez-en un avant de modifier.",
+    "watcherUnavailable": "Ce surveillant précis est absent de l’instantané de l’éditeur.",
+    "accessDenied": "Votre session n’est pas autorisée à utiliser cet éditeur.",
+    "apiUnavailable": "Ce serveur ne fournit pas l’API de l’éditeur.",
+    "rateLimited": "Trop de requêtes. Attendez une minute avant de recharger.",
+    "loadFailed": "Chargement impossible. Aucune modification envoyée.",
+    "saveUncertain": "Résultat de l’enregistrement non confirmé. Rechargez avant toute autre modification.",
+    "conflict": "La configuration a changé ou un champ est devenu non modifiable. Le brouillon est conservé. Abandonnez-le et rechargez.",
+    "saved": "Enregistré et appliqué à chaud.",
+    "notApplied": "Enregistré, mais des problèmes ont été signalés. Consultez les détails.",
+    "notSaved": "La configuration n’a pas été enregistrée.",
+    "reconciled": "Rechargement : {added} ajouts, {changed} modifications, {removed} suppressions, {unchanged} inchangés, {errors} erreurs.",
+    "restart": "Redémarrage requis pour : {fields}",
+    "orphaned": "La règle {ruleId} référence toujours le déclencheur manquant {triggerId}.",
+    "fields": {
+      "cron": "Planification des analyses (cron)",
+      "maintenancewindow": "Créneau de maintenance (cron)",
+      "maintenancewindowtz": "Fuseau horaire de maintenance",
+      "maintenancewindowscope": "Portée de la maintenance"
+    }
+  }
+}

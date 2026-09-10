@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Watcher schedule",
+    "edit": "Edit schedule",
+    "boundary": "Only the scan schedule and maintenance window can be edited here. Connection, credentials, TLS and agent configuration remain read-only.",
+    "reload": "Discard draft and reload",
+    "reset": "Remove file value / use default",
+    "pendingRemoval": "This file value will be removed when you save.",
+    "current": "Effective value: {value}",
+    "none": "Not set",
+    "install": "Automatic installation only",
+    "scan": "Scanning and installation",
+    "sources": {
+      "file": "Source: configuration file",
+      "env": "Source: environment",
+      "default": "Source: default",
+      "reference": "Source: reference (value hidden)"
+    },
+    "readOnly": {
+      "environment": "Set by the environment. Change it outside this editor.",
+      "reference": "Referenced values stay on the server and cannot be edited here.",
+      "agent": "Agent configuration is read-only here.",
+      "other": "This field is not available for editing."
+    },
+    "fileUnavailable": "No configuration file is available. Mount a file before editing.",
+    "watcherUnavailable": "This exact watcher is not available in the editor snapshot.",
+    "accessDenied": "Your session is not authorized to use this editor.",
+    "apiUnavailable": "This server does not provide the watcher editor API.",
+    "rateLimited": "Too many editor requests. Wait a minute before loading again.",
+    "loadFailed": "Could not load the editor. No changes were sent.",
+    "saveUncertain": "The save outcome could not be confirmed. Reload before making another change.",
+    "conflict": "Configuration changed or a field became read-only. Your draft is retained. Discard it and reload before editing again.",
+    "saved": "Saved and applied live.",
+    "notApplied": "Saved, but the operation reported problems. Review the details before continuing.",
+    "notSaved": "The configuration was not saved.",
+    "reconciled": "Reload: {added} added, {changed} changed, {removed} removed, {unchanged} unchanged, {errors} errors.",
+    "restart": "Restart required for: {fields}",
+    "orphaned": "Rule {ruleId} still references missing trigger {triggerId}.",
+    "fields": {
+      "cron": "Scan schedule (cron)",
+      "maintenancewindow": "Maintenance window (cron)",
+      "maintenancewindowtz": "Maintenance time zone",
+      "maintenancewindowscope": "Maintenance scope"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "監視器排程",
+    "edit": "編輯排程",
+    "boundary": "此處僅能編輯掃描排程和維護時段。連線、憑證、TLS 和代理程式設定維持唯讀。",
+    "reload": "捨棄草稿並重新載入",
+    "reset": "移除檔案值 / 使用預設值",
+    "pendingRemoval": "儲存時將移除此檔案值。",
+    "current": "生效值：{value}",
+    "none": "未設定",
+    "install": "僅自動安裝",
+    "scan": "掃描及安裝",
+    "sources": {
+      "file": "來源：設定檔",
+      "env": "來源：環境變數",
+      "default": "來源：預設值",
+      "reference": "來源：參照（值已隱藏）"
+    },
+    "readOnly": {
+      "environment": "由環境變數設定。請在此編輯器之外修改。",
+      "reference": "參照值保留在伺服器上，無法在此編輯。",
+      "agent": "代理程式設定在此為唯讀。",
+      "other": "此欄位無法編輯。"
+    },
+    "fileUnavailable": "沒有可用的設定檔。編輯前請掛載檔案。",
+    "watcherUnavailable": "編輯器快照中沒有這個確切的監視器。",
+    "accessDenied": "目前工作階段無權使用此編輯器。",
+    "apiUnavailable": "此伺服器未提供監視器編輯器 API。",
+    "rateLimited": "編輯器要求過多。請等待一分鐘後再載入。",
+    "loadFailed": "無法載入編輯器。未傳送任何變更。",
+    "saveUncertain": "無法確認儲存結果。再次變更前請重新載入。",
+    "conflict": "設定已變更或欄位已變為唯讀。草稿已保留。再次編輯前請捨棄草稿並重新載入。",
+    "saved": "已儲存並即時套用。",
+    "notApplied": "已儲存，但操作回報問題。繼續前請查看詳細資訊。",
+    "notSaved": "設定未儲存。",
+    "reconciled": "重新載入：新增 {added}，變更 {changed}，移除 {removed}，未變 {unchanged}，錯誤 {errors}。",
+    "restart": "以下設定需要重新啟動：{fields}",
+    "orphaned": "規則 {ruleId} 仍參照缺少的觸發器 {triggerId}。",
+    "fields": {
+      "cron": "掃描排程（cron）",
+      "maintenancewindow": "維護時段（cron）",
+      "maintenancewindowtz": "維護時區",
+      "maintenancewindowscope": "維護範圍"
+    }
+  }
+}
