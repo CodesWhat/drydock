@@ -330,6 +330,7 @@ describe('watcher editor state', () => {
 
   it.each([
     { saved: false, applied: false, errors: [] },
+    { saved: true, applied: true, errors: [], reload: { applied: false, errors: [] } },
     {
       saved: true,
       applied: true,

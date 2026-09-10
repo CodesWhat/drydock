@@ -104,7 +104,8 @@ export async function saveWatcherEdits(request: WatcherEditRequest): Promise<Wat
     typeof body.applied !== 'boolean' ||
     !Array.isArray(body.errors) ||
     !Array.isArray(body.restartRequired) ||
-    (body.reload !== undefined && !Array.isArray(body.reload?.errors))
+    (body.reload !== undefined &&
+      (typeof body.reload?.applied !== 'boolean' || !Array.isArray(body.reload.errors)))
   )
     throw new WatcherEditorHttpError(response.status);
   return { ...body, status: response.status } as WatcherEditOutcome;
