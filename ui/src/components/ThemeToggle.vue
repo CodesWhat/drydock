@@ -89,7 +89,7 @@ function iconColor(id: string) {
         :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
         v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: t(`appShell.themeToggle.variant.${v.id}`) })"
         :aria-label="t('appShell.themeToggle.switchTo', { id: v.id })"
-        :aria-pressed="String(v.id === themeVariant)"
+        :aria-pressed="v.id === themeVariant"
         @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"
       >
         <AppIcon :name="v.icon" :size="iconSize" />
