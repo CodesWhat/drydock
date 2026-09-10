@@ -331,6 +331,31 @@ describe('DashboardView', () => {
       expect(dashboardViewSource).not.toContain('grid-layout-plus');
     });
 
+    it('shows customization size badges from the actual widget resize bounds', async () => {
+      const wrapper = await mountDashboard();
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      if (!(editToggle instanceof HTMLButtonElement)) throw new Error('Missing edit toggle');
+      editToggle.click();
+      await flushPromises();
+      const labels = wrapper
+        .findAll('label')
+        .filter((label) => label.find('input[type="checkbox"]').exists());
+      expect(
+        labels.map((label) => label.findAll('.text-4xs').map((badge) => badge.text())),
+      ).toEqual([
+        ['S'],
+        ['S'],
+        ['S'],
+        ['S'],
+        ['S'],
+        ['M', 'L'],
+        ['S', 'M'],
+        ['M', 'L'],
+        ['S', 'M', 'L'],
+        ['S', 'M', 'L'],
+      ]);
+    });
+
     it('keeps editable widgets vertically pannable while customizing', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
 
