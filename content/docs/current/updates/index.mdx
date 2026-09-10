@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.13 Highlights — September 10, 2026
+
+Disconnected edge agents can no longer publish an in-flight component over
+their reconnected replacement. Retired registrations clean up only their own
+components, and disconnected proxy, log, delete, and exec requests fail
+immediately without allocating request state or sending frames. These runtime
+changes require a fresh seven-day soak for this candidate. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc13--2026-09-10)
+for the full release notes.
+
 ## v1.6.1-rc.12 Highlights — September 8, 2026
 
 Joi is updated to 18.2.8 for its template rename and custom-message prototype fixes. The website
