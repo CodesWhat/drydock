@@ -53,7 +53,7 @@
     "form-data": "4.0.6",
     "protobufjs": "7.6.6",
     "@opentelemetry/core": "2.11.0",
-    "undici": "7.29.0",
+    "undici": "8.10.2",
     "nanoid": "6.0.1"
   }
 }
