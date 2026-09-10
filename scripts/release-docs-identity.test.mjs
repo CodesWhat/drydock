@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.14';
-const PREV_RC_VERSION = '1.7.0-rc.13';
-const RC_DATE = '2026-09-08';
-const RC_DISPLAY_DATE = 'September 8, 2026';
+const RC_VERSION = '1.7.0-rc.15';
+const PREV_RC_VERSION = '1.7.0-rc.14';
+const RC_DATE = '2026-09-10';
+const RC_DISPLAY_DATE = 'September 10, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -135,11 +135,11 @@ test('release-note redirect contracts reject broad, missing, and unlisted status
   assert.throws(() => assertReleaseRedirectAllowlist('missing status notes', '301, 302, 303, 307'));
 });
 
-test('release candidate notes cover the post-promotion fixes', () => {
-  const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
+test('rc.14 release notes retain the post-promotion fixes', () => {
+  const changelog = extractMarkdownSection(read('CHANGELOG.md'), '## [1.7.0-rc.14] — 2026-09-08');
   const updates = extractMarkdownSection(
     read('content/docs/current/updates/index.mdx'),
-    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
+    '## v1.7.0-rc.14 Highlights — September 8, 2026',
   );
 
   for (const issue of []) {
@@ -164,6 +164,49 @@ test('release candidate notes cover the post-promotion fixes', () => {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }
+});
+
+test('rc.15 notes identify the ownership fix and immutable changelog', () => {
+  const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
+  const updates = extractMarkdownSection(
+    read('content/docs/current/updates/index.mdx'),
+    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
+  );
+  assert.match(changelog, /Retired registrations clean up only their own components/u);
+  assert.match(changelog, /Disconnected Docker proxy, log, delete, and exec requests/u);
+  assert.equal(changelog.split('\n').filter((line) => line.startsWith('- ')).length, 1);
+  assert.match(updates, /reconnected replacement/u);
+  assert.match(updates, /fresh seven-day soak/u);
+  assert.ok(
+    updates.includes(
+      `https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`,
+    ),
+  );
+  const readmeHighlights = read('README.md')
+    .split(`<summary><strong>v${RC_VERSION} highlights</strong></summary>`)[1]
+    ?.split('</details>')[0];
+  assert.ok(
+    readmeHighlights?.includes(
+      `[Full changelog](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE})`,
+    ),
+  );
+});
+
+test('security policy names active v1.7 and maintained v1.6 without supporting old candidates', () => {
+  const security = read('SECURITY.md');
+  assert.ok(
+    security.includes(
+      '| Latest release candidate on the active train (1.7.x) | :white_check_mark: |',
+    ),
+  );
+  assert.ok(
+    security.includes(
+      '| Latest release candidate on the maintained 1.6.x line | :white_check_mark: |',
+    ),
+  );
+  assert.ok(security.includes('| Latest stable release | :white_check_mark: |'));
+  assert.ok(security.includes('| Older stable or prerelease versions | :x: |'));
+  assert.match(security, /Older release candidates are not patched/u);
 });
 
 test('v1.6.0 is released and public release routing advances to v1.7', () => {

@@ -219,6 +219,20 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.15</strong></summary>
+
+Agentes de borda desconectados não podem mais registrar um componente cuja
+inicialização ainda estava em andamento e sobrescrever os componentes da nova
+conexão. Registros encerrados limpam apenas seus próprios componentes. Após a
+desconexão, solicitações de proxy, logs, exclusão e exec falham imediatamente,
+sem criar estado de solicitação nem enviar quadros. Essas mudanças exigem um
+novo período de teste de sete dias para esta versão candidata.
+
+Notas completas em [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10).
+
+</details>
+
+<details>
 <summary><strong>Destaques da v1.7.0-rc.14</strong></summary>
 
 A reversão agora remove pontos de entrada e comandos herdados que a imagem de backup não pode executar. A comparação de tags mantém variantes como `alpine` e `alpine-perl` separadas. Os rótulos das imagens de manutenção identificam o commit de origem correto.

@@ -219,6 +219,20 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.15</strong></summary>
+
+Odłączony agent brzegowy nie może już zarejestrować komponentu, którego
+inicjalizacja nadal trwała, i nadpisać komponentów nowego połączenia.
+Nieaktywne rejestracje czyszczą tylko własne komponenty. Żądania proxy,
+logów, usuwania i exec po rozłączeniu kończą się natychmiast błędem, bez
+tworzenia stanu żądania ani wysyłania ramek. Te zmiany wymagają nowego
+siedmiodniowego okresu testowego dla tego kandydata do wydania.
+
+Pełne informacje o wydaniu w [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10).
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.14</strong></summary>
 
 Przywracanie usuwa teraz odziedziczone punkty wejścia i polecenia, których zapisany obraz nie może uruchomić. Dopasowanie tagów rozróżnia warianty takie jak `alpine` i `alpine-perl`. Etykiety obrazów wydań serwisowych wskazują właściwy commit źródłowy.
