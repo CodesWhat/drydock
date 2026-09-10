@@ -777,6 +777,125 @@ describe('useContainerActions', () => {
   });
 
   describe('stack update confirmation', () => {
+    it.each(['blocked', 'hard-blocked'] as const)(
+      'requires renewed consent and current warnings when an included parent becomes %s',
+      async (state) => {
+        const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+        const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+        const group = { key: 'stack', containers: [web, db] };
+        const { composable, containers, loadContainers } = await mountActionsHarness({
+          containers: [web, db],
+        });
+        loadContainers.mockClear();
+        useDependencyGraph().graph.value = {
+          nodes: [web, db].map(({ id, name }) => ({ id, name, displayName: name })),
+          edges: [{ from: 'web', to: 'db', action: 'update', source: 'label' }],
+          cycles: [],
+          unresolved: [],
+          crossHostIgnored: [],
+        };
+        composable.updateAllInGroup(group);
+        const initial = mocks.confirmRequire.mock.calls[0][0];
+        expect(initial.message).not.toContain('depends on');
+        if (state === 'blocked') containers.value[1]!.bouncer = 'blocked';
+        else
+          containers.value[1]!.updateEligibility = {
+            eligible: false,
+            evaluatedAt: '2026-09-08T00:00:00Z',
+            blockers: [
+              {
+                reason: 'last-update-rolled-back',
+                severity: 'hard',
+                message: 'Rolled back',
+                actionable: true,
+              },
+            ],
+          };
+        group.key = 'changed-stack';
+        await initial.accept();
+
+        expect(mocks.updateContainers).not.toHaveBeenCalled();
+        expect(loadContainers).not.toHaveBeenCalled();
+        expect(composable.actionInProgress.value.size).toBe(0);
+        expect(composable.actionPending.value.size).toBe(0);
+        expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+        expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+        const renewed = mocks.confirmRequire.mock.calls[1][0];
+        expect(renewed.header).toBe('Update 1 container');
+        expect(renewed.message).toContain('Will update\n• web');
+        expect(renewed.message).not.toContain('\n• db');
+        expect(renewed.message).toContain('web depends on db');
+        expect(renewed.acceptLabel).toBe('Update anyway');
+        expect(containers.value[1]!.newTag).toBe('2.0.0');
+
+        await renewed.accept();
+        expect(mocks.updateContainers).toHaveBeenCalledExactlyOnceWith(['web']);
+        expect(loadContainers).toHaveBeenCalledTimes(1);
+        expect(mocks.toastSuccess).toHaveBeenCalledWith('Queued update for 1 container in stack');
+      },
+    );
+
+    it('cancelling a reduced confirmation never allocates progress or dispatches', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const { composable, containers, loadContainers } = await mountActionsHarness({
+        containers: [web, db],
+      });
+      loadContainers.mockClear();
+      composable.updateAllInGroup({ key: 'stack', containers: [web, db] });
+      containers.value[1]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[0][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      mocks.confirmRequire.mock.calls[1][0].reject?.();
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(loadContainers).not.toHaveBeenCalled();
+      expect(composable.actionInProgress.value.size).toBe(0);
+      expect(composable.actionPending.value.size).toBe(0);
+      expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+    });
+
+    it('revalidates each reduced confirmation and never reintroduces recovered or new targets', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const api = makeContainer({ id: 'api', name: 'api', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const { composable, containers } = await mountActionsHarness({ containers: [web, api, db] });
+      composable.updateAllInGroup({ key: 'stack', containers: [web, api, db] });
+      containers.value[2]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[0][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      containers.value[2]!.bouncer = 'safe';
+      containers.value[1]!.bouncer = 'blocked';
+      containers.value.push(makeContainer({ id: 'new', name: 'new', newTag: '2.0.0' }));
+      await mocks.confirmRequire.mock.calls[1][0].accept();
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(3);
+      expect(mocks.confirmRequire.mock.calls[2][0].message).toBe('Will update\n• web');
+      containers.value[1]!.bouncer = 'safe';
+      await mocks.confirmRequire.mock.calls[2][0].accept();
+      expect(mocks.updateContainers).toHaveBeenCalledExactlyOnceWith(['web']);
+    });
+
+    it('does nothing when the remaining target becomes blocked during renewed confirmation', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const { composable, containers, loadContainers } = await mountActionsHarness({
+        containers: [web, db],
+      });
+      loadContainers.mockClear();
+      composable.updateAllInGroup({ key: 'stack', containers: [web, db] });
+      containers.value[1]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[0][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      containers.value[0]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[1][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(loadContainers).not.toHaveBeenCalled();
+      expect(composable.actionInProgress.value.size).toBe(0);
+      expect(composable.actionPending.value.size).toBe(0);
+      expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+    });
+
     it('cancelling leaves requests and progress untouched', async () => {
       const web = makeContainer({ newTag: '2.0.0' });
       const { composable, loadContainers } = await mountActionsHarness({ containers: [web] });

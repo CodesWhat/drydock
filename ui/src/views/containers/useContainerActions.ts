@@ -338,16 +338,13 @@ async function updateAllInGroupState(
     clearBatch: (groupKey: string) => void;
     t: TranslateFn;
   },
+  updatableContainers: Container[],
 ) {
-  const updatableContainers = getGroupUpdateTargets(args);
   const frozenUpdateTargets = updatableContainers.map((container) => ({
     id: container.id,
     identityKey: container.identityKey,
     name: container.name,
   }));
-  if (frozenUpdateTargets.length === 0) {
-    return;
-  }
   const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
   const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
   const headActionInProgress = new Map(args.actionInProgress.value);
@@ -1837,9 +1834,14 @@ export function useContainerActions(input: UseContainerActionsInput) {
           const container = liveById.get(id);
           return container ? [container] : [];
         });
-        await updateAllInGroupState(
-          groupUpdateArgs({ key: groupKey, containers: confirmedContainers }),
-        );
+        const currentArgs = groupUpdateArgs({ key: groupKey, containers: confirmedContainers });
+        const currentTargets = getGroupUpdateTargets(currentArgs);
+        if (currentTargets.length === 0) return;
+        if (currentTargets.length < dispatchIds.size) {
+          updateAllInGroup({ key: groupKey, containers: currentTargets });
+          return;
+        }
+        await updateAllInGroupState(currentArgs, currentTargets);
       },
     });
   }
