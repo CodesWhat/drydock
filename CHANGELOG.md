@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop an edge agent's in-flight component initialization from publishing after disconnect and replacing its reconnected owner. Retired registrations clean up only their own components. Disconnected Docker proxy, log, delete, and exec requests now fail immediately without creating new request state or sending frames.
+
 ## [1.7.0-rc.14] — 2026-09-08
 
 ### Fixed
