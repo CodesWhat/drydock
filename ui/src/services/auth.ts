@@ -4,7 +4,11 @@
 
 import { errorMessage } from '../utils/error';
 
-let pendingUserRequest: Promise<unknown> | undefined;
+interface CurrentUser {
+  username: string;
+}
+
+let pendingUserRequest: Promise<CurrentUser | undefined> | undefined;
 
 function clearCachedUser() {
   pendingUserRequest = undefined;

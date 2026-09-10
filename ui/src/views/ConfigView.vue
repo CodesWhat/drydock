@@ -219,25 +219,6 @@ const showSyncToggle = computed(
     profileData.value.username !== 'anonymous',
 );
 
-function formatProfileLastLogin(rawValue: unknown): string {
-  if (rawValue === undefined || rawValue === null || rawValue === '') {
-    return '';
-  }
-  const date = new Date(rawValue as string | number | Date);
-  if (Number.isNaN(date.getTime())) {
-    return String(rawValue);
-  }
-  return date.toLocaleString();
-}
-
-function normalizeSessionCount(rawValue: unknown): number {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return 0;
-  }
-  return Math.floor(parsed);
-}
-
 async function loadGeneralSettingsData() {
   loading.value = true;
   serverError.value = '';
@@ -317,13 +298,8 @@ async function loadProfileData() {
     const user = await getUser();
     if (user) {
       profileData.value = {
+        ...emptyProfileData(),
         username: user.username ?? '',
-        displayName: user.displayName ?? '',
-        email: user.email ?? '',
-        role: user.role ?? '',
-        provider: user.provider ?? user.authentication ?? '',
-        lastLogin: formatProfileLastLogin(user.lastLogin),
-        sessions: normalizeSessionCount(user.sessions),
       };
     }
   } catch (e: unknown) {

@@ -312,10 +312,6 @@ describe('ConfigView', () => {
     mockLoadUpdateMode.mockResolvedValue(undefined);
     mockGetUser.mockResolvedValue({
       username: 'admin',
-      email: 'admin@test.com',
-      role: 'admin',
-      lastLogin: '2026-01-01',
-      sessions: 2,
     });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetStore.mockResolvedValue({ configuration: { path: '/store', file: 'dd.json' } });
@@ -934,7 +930,38 @@ describe('ConfigView', () => {
 
       const text = w.text();
       expect(text).toContain('admin');
-      expect(text).toContain('admin@test.com');
+      expect(text).toContain('Active Sessions');
+      expect(text).not.toContain('admin@test.com');
+    });
+
+    it('keeps empty profile fields when the response includes unsupported metadata', async () => {
+      mockGetUser.mockResolvedValue({
+        username: 'admin',
+        displayName: 'Legacy Display Name',
+        email: 'legacy@example.com',
+        role: 'legacy-role',
+        provider: 'legacy-provider',
+        lastLogin: '2026-01-01',
+        sessions: 7,
+      });
+
+      const w = await mountProfileTab();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.text()).toContain('admin');
+      expect(w.text()).not.toContain('Legacy Display Name');
+      expect(w.text()).not.toContain('legacy@example.com');
+      expect(w.text()).not.toContain('legacy-role');
+      expect(w.text()).not.toContain('legacy-provider');
+      const sessions = w
+        .findAll('div')
+        .find(
+          (element) =>
+            element.element.children.length === 2 &&
+            element.element.children[0].textContent === 'Active Sessions',
+        );
+      expect(sessions?.element.children[1].textContent).toBe('0');
     });
 
     it('shows profile error state when user fetch fails', async () => {

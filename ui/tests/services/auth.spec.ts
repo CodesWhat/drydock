@@ -19,7 +19,7 @@ describe('Auth Service', () => {
   describe('getUser', () => {
     it('returns user data when authenticated', async () => {
       const { getUser } = await loadAuthService();
-      const mockUser = { username: 'testuser', roles: ['admin'] };
+      const mockUser = { username: 'testuser' };
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockUser,
@@ -93,7 +93,7 @@ describe('Auth Service', () => {
 
     it('revalidates a settled authenticated user on the next call', async () => {
       const { getUser } = await loadAuthService();
-      const mockUser = { username: 'cached-user', roles: ['admin'] };
+      const mockUser = { username: 'cached-user' };
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockUser,
@@ -110,7 +110,7 @@ describe('Auth Service', () => {
 
     it('reuses the in-flight request for concurrent callers', async () => {
       const { getUser } = await loadAuthService();
-      const mockUser = { username: 'shared-user', roles: ['admin'] };
+      const mockUser = { username: 'shared-user' };
       let resolveResponse: ((value: unknown) => void) | undefined;
       fetchMock.mockReturnValueOnce(
         new Promise((resolve) => {
@@ -133,7 +133,7 @@ describe('Auth Service', () => {
 
     it('does not keep an unauthenticated result cached after the request settles', async () => {
       const { getUser } = await loadAuthService();
-      const mockUser = { username: 'fresh-user', roles: ['admin'] };
+      const mockUser = { username: 'fresh-user' };
       fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
