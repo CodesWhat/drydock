@@ -3,6 +3,7 @@
  */
 import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import * as registry from '../registry/index.js';
+import * as ids from '../util/uuid.js';
 import { AgentClient } from './AgentClient.js';
 import {
   buildEdgeSentinelConfig,
@@ -166,6 +167,97 @@ function sendFrame(ws: ReturnType<typeof createMockWs>, type: string, data: unkn
 }
 
 describe('EdgeAgentAdapter — retired proxy admission', () => {
+  test.each(['requestContainerLogs', 'deleteContainer', 'startExec'] as const)(
+    '%s rejects after disconnect without allocating request state',
+    async (method) => {
+      vi.useFakeTimers();
+      const { adapter, ws } = createAdapter();
+      const allocateId = vi.spyOn(ids, 'uuidv7');
+      const state = adapter as unknown as {
+        pendingRequests: Map<string, unknown>;
+        containerRequestQueues: Map<string, unknown>;
+        execSessions: Map<string, unknown>;
+      };
+      try {
+        adapter.activate();
+        await adapter.onDisconnect();
+        vi.mocked(ws.send).mockClear();
+        allocateId.mockClear();
+        const timersBefore = vi.getTimerCount();
+        const request =
+          method === 'startExec' ? adapter.startExec('c1', ['true']) : adapter[method]('c1');
+        const result = request.catch((error: Error) => error);
+        expect(ws.send).not.toHaveBeenCalled();
+        expect(allocateId).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(timersBefore);
+        expect(state.pendingRequests.size).toBe(0);
+        expect(state.containerRequestQueues.size).toBe(0);
+        expect(state.execSessions.size).toBe(0);
+        await expect(result).resolves.toMatchObject({ message: 'connection closed' });
+
+        // Retirement takes precedence over the live connection's capacity errors.
+        for (let index = 0; index < 100; index++) {
+          state.pendingRequests.set(String(index), {});
+          state.execSessions.set(String(index), {});
+        }
+        const fullRequest =
+          method === 'startExec' ? adapter.startExec('c1', ['true']) : adapter[method]('c1');
+        await expect(fullRequest).rejects.toThrow('connection closed');
+        expect(allocateId).not.toHaveBeenCalled();
+      } finally {
+        state.pendingRequests.clear();
+        state.containerRequestQueues.clear();
+        state.execSessions.clear();
+        allocateId.mockRestore();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test('retired log streams synchronously report one error and return an inert cancel handle', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    const allocateId = vi.spyOn(ids, 'uuidv7');
+    const state = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+      liveContainerLogStreams: Map<string, unknown>;
+    };
+    const handlers = { onChunk: vi.fn(), onEnd: vi.fn(), onError: vi.fn() };
+    try {
+      adapter.activate();
+      await adapter.onDisconnect();
+      vi.mocked(ws.send).mockClear();
+      allocateId.mockClear();
+      const timersBefore = vi.getTimerCount();
+      const handle = adapter.streamContainerLogs('c1', {}, handlers);
+      expect(handlers.onError).toHaveBeenCalledExactlyOnceWith(new Error('connection closed'));
+      handle.cancel();
+      handle.cancel();
+      await adapter.onDisconnect();
+      expect(handlers.onError).toHaveBeenCalledTimes(1);
+      expect(handlers.onChunk).not.toHaveBeenCalled();
+      expect(handlers.onEnd).not.toHaveBeenCalled();
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(allocateId).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(timersBefore);
+      expect(state.pendingRequests.size).toBe(0);
+      expect(state.liveContainerLogStreams.size).toBe(0);
+
+      for (let index = 0; index < 100; index++) state.pendingRequests.set(String(index), {});
+      const fullHandlers = { onChunk: vi.fn(), onEnd: vi.fn(), onError: vi.fn() };
+      adapter.streamContainerLogs('c1', {}, fullHandlers).cancel();
+      expect(fullHandlers.onError).toHaveBeenCalledExactlyOnceWith(new Error('connection closed'));
+      expect(allocateId).not.toHaveBeenCalled();
+    } finally {
+      state.pendingRequests.clear();
+      state.liveContainerLogStreams.clear();
+      allocateId.mockRestore();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   test.each(['sendRequest', 'sendStreamRequest'] as const)(
     '%s rejects after disconnect without creating a timer or sending a frame',
     async (method) => {

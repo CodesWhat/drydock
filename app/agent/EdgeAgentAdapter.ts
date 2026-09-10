@@ -938,6 +938,7 @@ export class EdgeAgentAdapter {
       timestamps?: boolean;
     } = {},
   ): Promise<string> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
@@ -996,6 +997,10 @@ export class EdgeAgentAdapter {
     },
     handlers: ContainerLogStreamHandlers,
   ): ContainerLogStreamHandle {
+    if (this.disconnected) {
+      handlers.onError(new Error('connection closed'));
+      return { cancel: () => {} };
+    }
     if (this.pendingRequests.size + this.liveContainerLogStreams.size >= MAX_PENDING_REQUESTS) {
       handlers.onError(new Error('concurrent request limit reached'));
       return { cancel: () => {} };
@@ -1057,6 +1062,7 @@ export class EdgeAgentAdapter {
    * the legacy fallback. See that doc comment for the full explanation.
    */
   deleteContainer(containerId: string): Promise<void> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
@@ -1212,6 +1218,7 @@ export class EdgeAgentAdapter {
       outputCallback?: (data: Buffer) => void;
     },
   ): Promise<string> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.execSessions.size >= MAX_EXEC_SESSIONS) {
       return Promise.reject(new Error('session limit reached'));
     }
