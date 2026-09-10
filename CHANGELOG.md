@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.13] — 2026-09-10
+
 ### Fixed
 
 - Stop an edge agent's in-flight component initialization from publishing after disconnect and replacing its reconnected owner. Retired registrations clean up only their own components. Disconnected Docker proxy, log, delete, and exec requests now fail immediately without creating new request state or sending frames.
@@ -2516,7 +2518,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.12...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.13...HEAD
+[1.6.1-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.12...v1.6.1-rc.13
 [1.6.1-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.11...v1.6.1-rc.12
 [1.6.1-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.10...v1.6.1-rc.11
 [1.6.1-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.9...v1.6.1-rc.10

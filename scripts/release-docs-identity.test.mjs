@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.1-rc.12';
-const PREV_RC_VERSION = '1.6.1-rc.11';
-const RC_DATE = '2026-09-08';
-const RC_DISPLAY_DATE = 'September 8, 2026';
+const RC_VERSION = '1.6.1-rc.13';
+const PREV_RC_VERSION = '1.6.1-rc.12';
+const RC_DATE = '2026-09-10';
+const RC_DISPLAY_DATE = 'September 10, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
@@ -17,6 +17,42 @@ function read(path) {
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
+
+test('security policy names maintained v1.6 and active v1.7 without supporting old candidates', () => {
+  const security = read('SECURITY.md');
+  assert.ok(
+    security.includes(
+      '| Latest release candidate on the maintained 1.6.x line | :white_check_mark: |',
+    ),
+  );
+  assert.ok(
+    security.includes(
+      '| Latest release candidate on the active train (1.7.x) | :white_check_mark: |',
+    ),
+  );
+  assert.ok(security.includes('| Latest stable release | :white_check_mark: |'));
+  assert.ok(security.includes('| Older stable or prerelease versions | :x: |'));
+  assert.match(security, /Older release candidates are not patched/u);
+});
+
+test('maintenance candidate highlights link to their immutable release changelog', () => {
+  const updates = read('content/docs/current/updates/index.mdx');
+  const highlights = updates.split(`## v${RC_VERSION} Highlights`)[1]?.split('\n## ')[0];
+  const anchor = `${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`;
+  assert.ok(
+    highlights?.includes(
+      `[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${anchor})`,
+    ),
+  );
+  const readmeHighlights = read('README.md')
+    .split(`<summary><strong>v${RC_VERSION} highlights</strong></summary>`)[1]
+    ?.split('</details>')[0];
+  assert.ok(
+    readmeHighlights?.includes(
+      `[Full changelog](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${anchor})`,
+    ),
+  );
+});
 
 test('public release surfaces identify the v1.6 release candidate', () => {
   const readme = read('README.md');
