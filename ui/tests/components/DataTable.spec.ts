@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { h, nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useColumnVisibility } from '@/composables/useColumnVisibility';
+import DataTableContract from './fixtures/DataTableContract.vue';
 
 const columns = [
   { key: 'name', label: 'Name', sortable: true },
@@ -32,6 +33,21 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
 }
 
 describe('DataTable', () => {
+  it('preserves typed row, header, cell and mixed-row action contracts', async () => {
+    const wrapper = mount(DataTableContract, {
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    expect(wrapper.find('th').text()).toBe('SCORE');
+    expect(wrapper.find('tbody tr').text()).toBe('Alpha: 2.5');
+    expect(wrapper.findAll('table')[1].find('tbody tr').text()).toBe('0: Scores');
+    await wrapper.find('tbody tr').trigger('click');
+    expect(wrapper.find('output').text()).toBe('Alpha: 2.5');
+    await wrapper.find('button').trigger('click');
+    expect(wrapper.find('output').text()).toBe('Beta: 3.0');
+    wrapper.unmount();
+  });
+
   describe('column headers', () => {
     it('renders a <th> for each column', () => {
       const w = factory();

@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
-import DataTable from '@/components/DataTable.vue';
+import DataTable, { type DataTableColumn } from '@/components/DataTable.vue';
 import type { UpdateMode } from '@/services/settings';
 
 const { t } = useI18n();
@@ -43,7 +43,7 @@ const emit = defineEmits<{
   (e: 'download-debug-dump'): void;
 }>();
 
-const webhookColumns = computed(() => [
+const webhookColumns = computed<DataTableColumn[]>(() => [
   {
     key: 'endpoint',
     label: t('configView.general.webhookApi.table.endpoint'),
