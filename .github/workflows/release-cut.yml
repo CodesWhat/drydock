@@ -1442,8 +1442,8 @@ jobs:
           # predecessor is the newest published release on this major.minor
           # line; exclude the current tag to support partial-release re-runs.
           prev_tag="$(gh release list --repo "${REPO}" --limit 100 \
-            --json tagName,createdAt,isDraft \
-            --jq 'sort_by(.createdAt) | reverse
+            --json tagName,publishedAt,isDraft \
+            --jq 'sort_by(.publishedAt) | reverse
                   | map(select(.isDraft == false) | .tagName)
                   | map(select(. != env.RELEASE_TAG
                       and startswith(env.RELEASE_TAG | split(".")[0:2] | join(".") + ".")))

@@ -16,9 +16,13 @@ set -euo pipefail
 printf '%s\\n' "$@" > "\${GH_ARGS_PATH}"
 if [ "$1" != release ] || [ "$2" != list ]; then exit 97; fi
 if [ "\${LOOKUP_FAIL}" = true ]; then exit 1; fi
+fields=""
 while [ "$#" -gt 0 ]; do
+  if [ "$1" = --json ]; then fields="$2"; shift; fi
   if [ "$1" = --jq ]; then
-    jq -r "$2" "\${RELEASES_PATH}"
+    jq --arg fields "$fields" \\
+      'map(with_entries(select(.key as $key | $fields | split(",") | index($key))))' \\
+      "\${RELEASES_PATH}" | jq -r "$2"
     exit 0
   fi
   shift
@@ -26,8 +30,13 @@ done
 exit 98
 `;
 
-function release(tagName: string, createdAt: string, isDraft = false) {
-  return { tagName, createdAt, isDraft };
+function release(
+  tagName: string,
+  createdAt: string,
+  isDraft = false,
+  publishedAt: string | null = isDraft ? null : createdAt,
+) {
+  return { tagName, createdAt, publishedAt, isDraft };
 }
 
 function runNotes(releaseTag: string, releases: ReturnType<typeof release>[], lookupFail = false) {
@@ -82,7 +91,7 @@ function runNotes(releaseTag: string, releases: ReturnType<typeof release>[], lo
     ]);
     expect(args[args.indexOf('--json') + 1].split(',')).toEqual([
       'tagName',
-      'createdAt',
+      'publishedAt',
       'isDraft',
     ]);
     const notes = readFileSync(notesPath, 'utf8');
@@ -133,6 +142,17 @@ test('excludes drafts and the current tag on a partial-release rerun', () => {
     release('v1.7.0-rc.13', '2026-09-08T00:00:00Z'),
   ]);
   expect(notes).toContain('/compare/v1.7.0-rc.13...v1.7.0-rc.14');
+});
+
+test('selects the latest publication even when its draft was created earlier', () => {
+  const notes = runNotes('v1.7.0-rc.15', [
+    release('v1.7.0-rc.14', '2026-09-07T00:00:00Z', false, '2026-09-09T00:00:00Z'),
+    release('v1.7.0-rc.13', '2026-09-08T00:00:00Z', false, '2026-09-08T00:00:00Z'),
+    release('v1.7.0-rc.16', '2026-09-10T00:00:00Z', true, null),
+  ]);
+  expect(notes).toContain('/compare/v1.7.0-rc.14...v1.7.0-rc.15');
+  expect(notes).not.toContain('/compare/v1.7.0-rc.13...');
+  expect(notes).not.toContain('/compare/v1.7.0-rc.16...');
 });
 
 test('matches both major and minor exactly rather than a partial prefix', () => {
