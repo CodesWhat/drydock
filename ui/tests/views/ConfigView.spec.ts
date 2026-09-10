@@ -8,6 +8,7 @@ const mockClearIconCache = vi.fn();
 const mockDownloadDebugDump = vi.fn();
 const mockGetUser = vi.fn();
 const mockPushInitialSync = vi.fn();
+const mockTransitionTheme = vi.fn((change: () => void, _event?: MouseEvent) => change());
 
 vi.mock('@/services/app', () => ({
   getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
@@ -178,7 +179,7 @@ vi.mock('@/theme/useTheme', () => ({
     themeVariant: { value: 'dark', __v_isRef: true },
     isDark: { value: true, __v_isRef: true },
     setThemeFamily: vi.fn(),
-    transitionTheme: vi.fn((cb: () => void) => cb()),
+    transitionTheme: mockTransitionTheme,
   }),
 }));
 
@@ -813,6 +814,27 @@ describe('ConfigView', () => {
       const w = await mountAppearanceTab();
       expect(w.text()).toContain('One Dark');
       expect(w.text()).toContain('GitHub');
+    });
+
+    it('keeps pointer coordinates when selecting a theme family', async () => {
+      const wrapper = await mountAppearanceTab();
+      const button = wrapper
+        .findAll('button')
+        .find((candidate) => candidate.text().includes('GitHub'));
+      if (!button) throw new Error('Missing theme family button');
+      const event = new MouseEvent('click', { bubbles: true, clientX: 40, clientY: 80 });
+      button.element.dispatchEvent(event);
+      expect(mockTransitionTheme).toHaveBeenLastCalledWith(expect.any(Function), event);
+    });
+
+    it('uses the centered transition fallback for theme clicks without pointer coordinates', async () => {
+      const wrapper = await mountAppearanceTab();
+      const button = wrapper
+        .findAll('button')
+        .find((candidate) => candidate.text().includes('GitHub'));
+      if (!button) throw new Error('Missing theme family button');
+      button.element.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(mockTransitionTheme).toHaveBeenLastCalledWith(expect.any(Function), undefined);
     });
 
     it('renders font options', async () => {

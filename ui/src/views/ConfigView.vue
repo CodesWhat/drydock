@@ -408,7 +408,10 @@ async function handleDownloadDebugDump() {
 }
 
 function handleSelectThemeFamily(familyId: string, event: Event) {
-  transitionTheme(() => setThemeFamily(familyId as ThemeFamily), event);
+  transitionTheme(
+    () => setThemeFamily(familyId as ThemeFamily),
+    event instanceof MouseEvent ? event : undefined,
+  );
 }
 
 function handleSelectFont(fontId: string) {
