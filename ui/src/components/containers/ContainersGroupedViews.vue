@@ -2,6 +2,7 @@
 import { computed, onScopeDispose, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
+import DataTable from '../DataTable.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { useContainerSelection } from '../../composables/useContainerSelection';
@@ -265,19 +266,19 @@ function toggleSelectAllVisible() {
   }
 }
 
-function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
+function isContainerUpdating(container: DisplayContainer) {
   return isContainerUpdateInProgress(container);
 }
 
-function isContainerQueued(container: { id?: unknown; name?: unknown }) {
+function isContainerQueued(container: DisplayContainer) {
   return isContainerUpdateQueued(container);
 }
 
-function isContainerScanning(container: { id?: unknown; name?: unknown }) {
+function isContainerScanning(container: DisplayContainer) {
   return isContainerScanInProgress(container);
 }
 
-function isRowLocked(container: { id?: unknown; name?: unknown }) {
+function isRowLocked(container: DisplayContainer) {
   return isContainerRowLocked(container);
 }
 
@@ -341,13 +342,7 @@ function getInProgressBadgeLabel(c: { updateOperation?: { phase?: string } }): s
   return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
 }
 
-function updateBtnState(c: {
-  newTag?: string | null;
-  newDigest?: string | null;
-  updateEligibility?: Container['updateEligibility'];
-  id?: unknown;
-  name?: unknown;
-}): UpdateButtonState {
+function updateBtnState(c: DisplayContainer): UpdateButtonState {
   return updateButtonState(
     c.updateEligibility,
     hasRawUpdateCandidate(c),
@@ -356,14 +351,7 @@ function updateBtnState(c: {
   );
 }
 
-function updateBtnTooltip(c: {
-  newTag?: string | null;
-  updateEligibility?: Container['updateEligibility'];
-  updateBouncer?: string;
-  updateSecuritySummary?: { critical?: number; high?: number };
-  id?: unknown;
-  name?: unknown;
-}): string {
+function updateBtnTooltip(c: DisplayContainer): string {
   const state = updateBtnState(c);
   if (state === 'hard') return blockedUpdateTooltip(c);
   if (state === 'soft') {
@@ -404,12 +392,7 @@ function localizeStatus(status: string | undefined): string {
   return te(key) ? t(key) : status;
 }
 
-function getContainerStatusLabel(container: {
-  id?: unknown;
-  name?: unknown;
-  status?: string;
-  updateOperation?: { phase?: string };
-}) {
+function getContainerStatusLabel(container: DisplayContainer) {
   if (isContainerScanning(container)) {
     return t('containerComponents.groupedViews.statusScanning');
   }
@@ -422,7 +405,7 @@ function getContainerStatusLabel(container: {
   return localizeStatus(container.status);
 }
 
-function getContainerStatusIcon(container: { id?: unknown; name?: unknown; status?: string }) {
+function getContainerStatusIcon(container: DisplayContainer) {
   if (isContainerScanning(container)) {
     return 'spinner';
   }
@@ -435,7 +418,7 @@ function getContainerStatusIcon(container: { id?: unknown; name?: unknown; statu
   return container.status === 'running' ? 'play' : 'stop';
 }
 
-function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; status?: string }) {
+function getContainerStatusIconStyle(container: DisplayContainer) {
   if (isContainerScanning(container)) {
     return { color: 'var(--dd-text-muted)' };
   }
@@ -450,7 +433,7 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
   };
 }
 
-function getContainerStatusColor(container: { id?: unknown; name?: unknown; status?: string }) {
+function getContainerStatusColor(container: DisplayContainer) {
   return getContainerStatusIconStyle(container).color;
 }
 
@@ -463,9 +446,7 @@ function updateInsightTooltip(insight: Container['updateInsight']): string {
   return t('containerComponents.updateInsight.tooltip', { tag: insight.tag });
 }
 
-function getContainerUpdateStateLabel(
-  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
-) {
+function getContainerUpdateStateLabel(container: DisplayContainer) {
   if (container.updateKind) {
     return getUpdateKindLabel(container.updateKind);
   }
@@ -478,9 +459,7 @@ function getContainerUpdateStateLabel(
   return t('containerComponents.groupedViews.currentLabel');
 }
 
-function getContainerUpdateStateColor(
-  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
-) {
+function getContainerUpdateStateColor(container: DisplayContainer) {
   if (container.updateKind) {
     return updateKindColor(container.updateKind).text;
   }
@@ -493,14 +472,7 @@ function getContainerUpdateStateColor(
   return 'var(--dd-success)';
 }
 
-function getContainerUpdateStateTooltip(
-  container: Pick<
-    Container,
-    'currentTag' | 'updateKind' | 'updateInsight' | 'updateMaturityTooltip'
-  > & {
-    name?: string;
-  },
-) {
+function getContainerUpdateStateTooltip(container: DisplayContainer) {
   if (container.updateKind) {
     if (container.updateKind === 'digest') {
       return t('containerComponents.groupedViews.imageUpdateTooltip', {
@@ -516,39 +488,36 @@ function getContainerUpdateStateTooltip(
   return t('containerComponents.groupedViews.upToDateTooltip');
 }
 
-function isTableRowFullWidth(row: Record<string, unknown>) {
-  const typedRow = row as GroupedTableRow;
-  return isGroupHeaderTableRow(typedRow) || isDependencyTableRow(typedRow);
+function isTableRowFullWidth(row: GroupedTableRow) {
+  return isGroupHeaderTableRow(row) || isDependencyTableRow(row);
 }
 
-function isTableRowInteractive(row: Record<string, unknown>) {
-  return isContainerTableRow(row as GroupedTableRow);
+function isTableRowInteractive(row: GroupedTableRow) {
+  return isContainerTableRow(row);
 }
 
-function tableRowClass(row: Record<string, unknown>) {
-  const typedRow = row as GroupedTableRow;
-  if (!isContainerTableRow(typedRow)) {
+function tableRowClass(row: GroupedTableRow) {
+  if (!isContainerTableRow(row)) {
     return '';
   }
-  if (isRowLocked(typedRow)) {
+  if (isRowLocked(row)) {
     return 'dd-row-updating pointer-events-none';
   }
-  if (isContainerScanning(typedRow.__source)) {
+  if (isContainerScanning(row.__source)) {
     return 'dd-row-scanning';
   }
   return '';
 }
 
-function getTableRowKey(row: Record<string, unknown>) {
-  return (row as GroupedTableRow).__rowKey;
+function getTableRowKey(row: GroupedTableRow) {
+  return row.__rowKey;
 }
 
-function selectTableRow(row: Record<string, unknown>) {
-  const typedRow = row as GroupedTableRow;
-  if (!isContainerTableRow(typedRow)) {
+function selectTableRow(row: GroupedTableRow) {
+  if (!isContainerTableRow(row)) {
     return;
   }
-  selectContainer(typedRow.__source);
+  selectContainer(row.__source);
 }
 
 // Timers for the display-hold window: keyed by groupKey, hold for ~1500ms
@@ -625,6 +594,7 @@ onScopeDispose(() => {
   <div data-test="containers-grouped-views">
     <!-- GROUPED / FLAT CONTAINER VIEWS -->
     <template v-if="filteredContainers.length > 0">
+      <!-- @vue-generic {GroupedTableRow} -->
       <DataTable
         :columns="tableColumns"
         :hidden-column-keys="hiddenColumnKeys"
@@ -688,6 +658,7 @@ onScopeDispose(() => {
         </template>
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div
             v-if="isContainerScanning(c) || isContainerUpdating(c) || isContainerQueued(c)"
             class="dd-row-overlay absolute inset-0 flex items-center justify-center pointer-events-none z-10"
@@ -719,10 +690,12 @@ onScopeDispose(() => {
             @keydown.stop
           />
           <ContainerIcon :icon="c.icon" :size="32" />
+          </template>
         </template>
 
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <AppIconButton
@@ -740,9 +713,11 @@ onScopeDispose(() => {
               </div>
               <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ c.image }}</div>
           </div>
+          </template>
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div>
           <div v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
@@ -903,9 +878,11 @@ onScopeDispose(() => {
             </div>
           </div>
           </div>
+          </template>
         </template>
         <!-- Software version (OCI org.opencontainers.image.version or dd.inspect.tag.path value; falls back to image tag) -->
         <template #cell-softwareVersion="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div class="text-center">
             <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]"
                   v-tooltip.top="c.softwareVersion ?? c.currentTag"
@@ -913,9 +890,11 @@ onScopeDispose(() => {
               {{ c.softwareVersion ?? c.currentTag }}
             </span>
           </div>
+          </template>
         </template>
         <!-- Update state -->
         <template #cell-kind="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div
             data-test="container-update-state"
             class="flex min-w-0 flex-col items-center justify-center gap-0.5 text-2xs-plus"
@@ -938,9 +917,11 @@ onScopeDispose(() => {
             </span>
             <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
           </div>
+          </template>
         </template>
         <!-- Status -->
         <template #cell-status="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div class="flex items-center justify-center">
             <span
               data-test="container-runtime-status"
@@ -958,10 +939,12 @@ onScopeDispose(() => {
               <span class="dd-cell-show-80">{{ getContainerStatusLabel(c) }}</span>
             </span>
           </div>
+          </template>
         </template>
         <!-- Bouncer column removed — blocked state integrated into update button -->
         <!-- Server -->
         <template #cell-server="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <span
             data-test="container-server-text"
             class="block max-w-[140px] truncate text-2xs-plus dd-text-secondary"
@@ -969,9 +952,11 @@ onScopeDispose(() => {
           >
             {{ parseServer(c.server).name }}
           </span>
+          </template>
         </template>
         <!-- Registry -->
         <template #cell-registry="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div class="inline-flex items-center justify-center gap-1.5">
             <span
               data-test="container-registry-text"
@@ -988,11 +973,13 @@ onScopeDispose(() => {
               <AppIcon name="warning" :size="12" />
             </span>
           </div>
+          </template>
         </template>
         <!-- When the Resources column is visible, links stay separate from lifecycle actions
              in a stable Source → Release notes → Registry order. If the user hides the column,
              the same component is rendered in More below (#498). -->
         <template #cell-links="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div class="flex items-center justify-center">
             <ContainerLinkActions
               :source-repo="c.sourceRepo"
@@ -1008,15 +995,19 @@ onScopeDispose(() => {
               icon-size="sm"
             />
           </div>
+          </template>
         </template>
         <!-- Uptime -->
         <template #cell-uptime="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <span class="text-2xs-plus dd-text-secondary font-mono" v-tooltip.top="tt(c.details?.startedAt ?? '')">
             {{ formatUptimeFromIso(c.details?.startedAt, nowMs) }}
           </span>
+          </template>
         </template>
         <!-- Ports -->
         <template #cell-ports="{ row: c }">
+          <template v-if="isContainerTableRow(c)">
           <div v-if="(c.details?.ports?.length ?? 0) > 0" class="flex items-center gap-1.5 flex-wrap text-2xs-plus font-mono">
             <ContainerPortEntry
               v-for="entry in getEnrichedPorts(c).slice(0, 2)"
@@ -1031,9 +1022,11 @@ onScopeDispose(() => {
             >+{{ getEnrichedPorts(c).length - 2 }}</span>
           </div>
           <span v-else class="text-2xs-plus dd-text-muted">—</span>
+          </template>
         </template>
         <!-- Actions -->
         <template #actions="{ row: c, cardMode }">
+          <template v-if="isContainerTableRow(c)">
           <template v-if="!containerActionsEnabled">
             <div class="flex items-center justify-end gap-2">
               <span class="text-2xs dd-text-muted">{{ t('containerComponents.groupedViews.actionsDisabled') }}</span>
@@ -1175,10 +1168,12 @@ onScopeDispose(() => {
             </div>
             </div>
           </template>
+          </template>
         </template>
 
         <!-- Card view -->
         <template #card="{ row: c, selected }">
+          <template v-if="isContainerTableRow(c)">
           <!-- `selected` (the outer DataTable wrapper already draws the selection border/ring
                via its own scoped `.dd-data-table-card-selected` class) is intentionally unused
                here — this slot's content only owns the interior, never the card's own chrome. -->
@@ -1495,6 +1490,7 @@ onScopeDispose(() => {
             </div>
           </div>
           </div>
+          </template>
         </template>
       </DataTable>
 

@@ -16,6 +16,11 @@ import {
 } from '@/views/containers/useContainerTriggers';
 
 describe('formatTimestamp (standalone, no t)', () => {
+  it('formats a valid backup timestamp using the current locale', () => {
+    const timestamp = '2026-09-10T12:00:00Z';
+    expect(formatTimestamp(timestamp)).toBe(new Date(timestamp).toLocaleString());
+  });
+
   it('returns "Unknown" when timestamp is undefined and t is not provided', () => {
     expect(formatTimestamp(undefined)).toBe('Unknown');
   });

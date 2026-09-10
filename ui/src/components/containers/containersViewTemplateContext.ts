@@ -75,7 +75,7 @@ type ContainerSecurityContext = ReturnType<typeof useContainerSecurity>;
 
 type ContainerActionsContext = Omit<
   ReturnType<typeof useContainerActions>,
-  'actionPending' | 'executeAction' | 'skippedUpdates' | 'backupsLoading'
+  'actionPending' | 'executeAction' | 'skippedUpdates' | 'dependencyGroupPreviewLoading'
 >;
 
 interface ContainersViewDisplayContainer extends Container {

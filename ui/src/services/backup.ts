@@ -1,5 +1,17 @@
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
+export interface ContainerBackup {
+  id: string;
+  containerId: string;
+  containerName: string;
+  containerIdentityKey?: string;
+  imageName: string;
+  imageTag: string;
+  imageDigest?: string;
+  timestamp: string;
+  triggerName: string;
+}
+
 async function getBackups(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/backups`, {
     credentials: 'include',
@@ -8,7 +20,7 @@ async function getBackups(containerId: string) {
     throw new Error(`Failed to get backups for container ${containerId}: ${response.statusText}`);
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ContainerBackup>(payload);
 }
 
 async function rollback(containerId: string, backupId?: string) {

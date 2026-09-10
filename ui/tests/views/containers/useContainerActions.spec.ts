@@ -2477,7 +2477,17 @@ describe('useContainerActions', () => {
       selectedContainerId: container.id,
     });
 
-    composable.detailBackups.value = [{ id: 'stale-backup' }];
+    composable.detailBackups.value = [
+      {
+        id: 'stale-backup',
+        containerId: container.id,
+        containerName: container.name,
+        imageName: 'nginx',
+        imageTag: '1.0',
+        timestamp: '2026-03-01T00:00:00Z',
+        triggerName: 'docker.local',
+      },
+    ];
     composable.detailUpdateOperations.value = [
       {
         id: 'stale-operation',
