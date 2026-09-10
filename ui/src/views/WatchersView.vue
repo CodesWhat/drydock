@@ -10,7 +10,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllWatchers, getWatcher } from '../services/watcher';
-import type { ApiComponent } from '../types/api';
+import type { ApiComponentResponse } from '../types/api';
 import { ROUTES } from '../router/routes';
 import { formatAbsoluteTime, timeAgo } from '../utils/audit-helpers';
 
@@ -24,13 +24,15 @@ const { t } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
-const selectedWatcher = ref<Record<string, unknown> | null>(null);
+type WatcherRow = ReturnType<typeof mapWatcher>;
+
+const selectedWatcher = ref<WatcherRow | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
 let detailRequestId = 0;
 
-const watchersData = ref<Record<string, unknown>[]>([]);
+const watchersData = ref<WatcherRow[]>([]);
 const loading = ref(true);
 const error = ref('');
 
@@ -158,19 +160,23 @@ function readWatcherContainerTotal(metadata: unknown): number {
   return typeof total === 'number' ? total : 0;
 }
 
-function mapWatcher(watcher: ApiComponent, status = 'watching') {
+function mapWatcher(watcher: ApiComponentResponse, status = 'watching') {
+  const configuration = watcher.configuration ?? {};
   return {
     id: watcher.id,
     name: watcher.name,
     type: watcher.type,
     status,
     containers: readWatcherContainerTotal(watcher.metadata),
-    cron: watcher.configuration?.cron ?? '',
+    cron:
+      typeof configuration === 'object' && 'cron' in configuration
+        ? (configuration.cron ?? '')
+        : '',
     nextRunAt: watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined,
     nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
     lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
     config: Object.fromEntries(
-      Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+      Object.entries(configuration).sort(([a], [b]) => a.localeCompare(b)),
     ),
     agent: watcher.agent,
   };
@@ -192,7 +198,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(watcher: Record<string, unknown>) {
+async function openDetail(watcher: WatcherRow) {
   selectedWatcher.value = watcher;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -203,7 +209,7 @@ async function openDetail(watcher: Record<string, unknown>) {
     const detail = await getWatcher({
       type: String(watcher.type),
       name: String(watcher.name),
-      agent: watcher.agent as string | undefined,
+      agent: watcher.agent,
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedWatcher.value = mapWatcher(detail, String(watcher.status));
@@ -220,7 +226,7 @@ async function openDetail(watcher: Record<string, unknown>) {
 onMounted(async () => {
   try {
     const watcherData = await getAllWatchers();
-    watchersData.value = watcherData.map((watcher: ApiComponent) => mapWatcher(watcher));
+    watchersData.value = watcherData.map((watcher) => mapWatcher(watcher));
   } catch {
     error.value = t('watchersView.loadError');
   } finally {

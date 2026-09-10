@@ -1,3 +1,4 @@
+import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface WatcherDetailPathOptions {
@@ -26,7 +27,7 @@ async function getAllWatchers() {
     throw new Error(`Failed to get watchers: ${response.statusText}`);
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiComponentResponse>(payload);
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
@@ -45,7 +46,7 @@ async function getWatcher({ type, name, agent }: WatcherDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get watcher: ${response.statusText}`);
   }
-  return readJsonResponse(response);
+  return readJsonResponse<ApiComponentResponse>(response);
 }
 
 export { getAllWatchers, getWatcher, getWatcherProviderColor, getWatcherProviderIcon };

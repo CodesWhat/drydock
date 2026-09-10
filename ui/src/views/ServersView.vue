@@ -146,13 +146,15 @@ function readImageCount(metadata: unknown): number {
   return typeof images === 'number' ? images : 0;
 }
 
-function deriveWatcherHost(config: Record<string, unknown>): string {
-  if (typeof config.socket === 'string' && config.socket) {
+function deriveWatcherHost(config: unknown): string {
+  if (typeof config !== 'object' || config === null) return 'unknown';
+  if ('socket' in config && typeof config.socket === 'string' && config.socket) {
     return `unix://${config.socket}`;
   }
-  const host = typeof config.host === 'string' ? config.host : '';
-  const port = typeof config.port === 'number' ? config.port : undefined;
-  const protocol = typeof config.protocol === 'string' ? config.protocol : '';
+  const host = 'host' in config && typeof config.host === 'string' ? config.host : '';
+  const port = 'port' in config && typeof config.port === 'number' ? config.port : undefined;
+  const protocol =
+    'protocol' in config && typeof config.protocol === 'string' ? config.protocol : '';
   if (host) {
     return port ? `${protocol || 'http'}://${host}:${port}` : host;
   }
@@ -179,11 +181,11 @@ async function fetchServers() {
     ]);
     const entries: ServerEntry[] = [];
 
-    const localWatchers = (watchersData ?? []).filter((w: Record<string, unknown>) => !w.agent);
+    const localWatchers = (watchersData ?? []).filter((w) => !w.agent);
 
     for (const watcher of localWatchers) {
       const name = String(watcher.name ?? 'unknown');
-      const config = (watcher.configuration ?? {}) as Record<string, unknown>;
+      const config = watcher.configuration ?? {};
 
       entries.push({
         id: String(watcher.id ?? name),

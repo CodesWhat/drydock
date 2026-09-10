@@ -504,6 +504,24 @@ describe('WatchersView', () => {
     expect(cron?.classes()).toContain('truncate');
   });
 
+  it('preserves array configuration entries when mapping watcher details', async () => {
+    const watcher = {
+      id: 'docker.local',
+      name: 'local',
+      type: 'docker',
+      configuration: ['first entry', 'second entry'],
+    };
+    mockGetAllWatchers.mockResolvedValue([watcher]);
+    mockGetWatcher.mockResolvedValue(watcher);
+
+    const wrapper = await mountWatchersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('first entry');
+    expect(wrapper.text()).toContain('second entry');
+  });
+
   it('clicking a row fetches watcher details from per-component endpoint', async () => {
     mockGetAllWatchers.mockResolvedValue([
       {
