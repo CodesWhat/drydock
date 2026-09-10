@@ -172,6 +172,7 @@ export function useWatcherEditor(identity: () => WatcherIdentity) {
     () =>
       !!result.value &&
       (!result.value.applied ||
+        result.value.reload?.applied === false ||
         result.value.errors.length > 0 ||
         (result.value.reload?.errors.length ?? 0) > 0 ||
         (result.value.reload?.reconcile?.errors ?? 0) > 0),

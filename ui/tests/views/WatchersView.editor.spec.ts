@@ -162,7 +162,7 @@ describe('watcher detail editor API identity boundary', () => {
     }
   });
 
-  it.each(['complete', 'audit-warning', 'partial'] as const)(
+  it.each(['complete', 'audit-warning', 'partial', 'contradictory-reload'] as const)(
     'refreshes outer detail and matching table row after a %s save without losing editor outcome',
     async (mode) => {
       let saved = false;
@@ -182,7 +182,7 @@ describe('watcher detail editor API identity boundary', () => {
             changedKeys: [],
             restartRequired: [],
             errors:
-              mode === 'complete'
+              mode === 'complete' || mode === 'contradictory-reload'
                 ? []
                 : [
                     {
@@ -191,6 +191,7 @@ describe('watcher detail editor API identity boundary', () => {
                       message: mode === 'partial' ? 'Reload incomplete' : 'Audit failed',
                     },
                   ],
+            ...(mode === 'contradictory-reload' ? { reload: { applied: false, errors: [] } } : {}),
           });
         }
         if (saved && path === '/api/v1/watchers/docker/local')
@@ -230,7 +231,12 @@ describe('watcher detail editor API identity boundary', () => {
             ? 'Saved and applied'
             : mode === 'partial'
               ? 'Reload incomplete'
-              : 'Audit failed',
+              : mode === 'contradictory-reload'
+                ? 'Saved, but the operation reported problems'
+                : 'Audit failed',
+        );
+        expect(wrapper.findComponent(WatcherScheduleEditor).find('[role="status"]').exists()).toBe(
+          mode === 'complete',
         );
         expect(
           requests.filter(
@@ -308,7 +314,13 @@ describe('watcher detail editor API identity boundary', () => {
       contentType: 'application/json',
       message: 'The save outcome could not be confirmed',
     },
-    ...[{ reload: {} }, { reload: { errors: null } }, { restartRequired: null }].map((invalid) => ({
+    ...[
+      { reload: {} },
+      { reload: { errors: null } },
+      { reload: { errors: [] } },
+      { reload: { applied: 'false', errors: [] } },
+      { restartRequired: null },
+    ].map((invalid) => ({
       status: 200,
       body: JSON.stringify({
         saved: true,
