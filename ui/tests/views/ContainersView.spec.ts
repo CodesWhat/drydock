@@ -78,7 +78,8 @@ vi.mock('@/services/backup', () => ({
   rollback: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@/services/preview', () => ({
+vi.mock('@/services/preview', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/preview')>()),
   previewContainer: vi.fn().mockResolvedValue({}),
 }));
 
@@ -443,6 +444,67 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  it.each([false, true])(
+    'renders and clears the real preview API recovery link in full-page=%s',
+    async (fullPage) => {
+      const previewService = await import('@/services/preview');
+      const actualPreviewService =
+        await vi.importActual<typeof import('@/services/preview')>('@/services/preview');
+      const container = makeContainer({ newTag: '1.1.0' });
+      const wrapper = await mountContainersView([container]);
+      mockSelectedContainer.value = container;
+      mockDetailPanelOpen.value = true;
+      mockContainerFullPage.value = fullPage;
+      mockActiveDetailTab.value = 'actions';
+      await flushPromises();
+
+      const fetchSpy = vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: 'registry-auth-failed',
+            message: 'Registry credentials expired',
+            action: { code: 'open-registry-settings', href: '/registries' },
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      const previousFetch = globalThis.fetch;
+      globalThis.fetch = fetchSpy;
+      onTestFinished(() => {
+        globalThis.fetch = previousFetch;
+      });
+      vi.mocked(previewService.previewContainer).mockImplementationOnce(
+        actualPreviewService.previewContainer,
+      );
+      const previewButton = wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Preview Update');
+      expect(previewButton).toBeDefined();
+      await previewButton!.trigger('click');
+      await flushPromises();
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/containers/c1/preview', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      expect(wrapper.text()).toContain('Registry credentials expired');
+      const recovery = wrapper.get('[data-test="preview-error-action"]');
+      expect(recovery.attributes('href')).toBe('/registries');
+      expect(recovery.text()).toBe('Open registry settings');
+
+      vi.mocked(previewService.previewContainer).mockResolvedValueOnce({
+        currentImage: 'nginx:1.0.0',
+        newImage: 'nginx:1.1.0',
+        updateKind: { kind: 'tag' },
+      });
+      await previewButton!.trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-test="preview-error-action"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Registry credentials expired');
+      expect(wrapper.text()).toContain('nginx:1.1.0');
+    },
+  );
+
   it('plans fleet Update all from live filtered rows without changing selection', async () => {
     const { useContainerSelection } = await import('@/composables/useContainerSelection');
     const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
