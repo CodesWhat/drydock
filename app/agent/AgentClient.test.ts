@@ -8765,6 +8765,80 @@ describe('AgentClient', () => {
   });
 
   describe('handleComponentSync (edge agent public shim)', () => {
+    const ownedWatcher = {
+      type: 'docker',
+      name: 'owned',
+      configuration: { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+    };
+
+    test('an already retired sync never deregisters the replacement', async () => {
+      await client.handleComponentSync([ownedWatcher], [], () => false);
+      expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+      expect(registry.registerComponent).not.toHaveBeenCalled();
+      expect(client.isRegisteringComponents).toBe(false);
+    });
+
+    test('retirement during deregistration skips new registrations and cache publication', async () => {
+      let valid = true;
+      vi.mocked(registry.deregisterAgentComponents).mockImplementationOnce(async () => {
+        valid = false;
+      });
+      await client.handleComponentSync([ownedWatcher], [], () => valid);
+      expect(registry.registerComponent).not.toHaveBeenCalled();
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+      expect(client.isRegisteringComponents).toBe(false);
+    });
+
+    test('retirement after watcher registration skips its synthetic trigger and cache', async () => {
+      let valid = true;
+      vi.mocked(registry.registerComponent).mockImplementationOnce(async () => {
+        valid = false;
+      });
+      await client.handleComponentSync([ownedWatcher], [], () => valid);
+      expect(registry.registerComponent).toHaveBeenCalledTimes(1);
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(1);
+    });
+
+    test('retirement after a synthetic trigger skips the next watcher and cache', async () => {
+      let valid = true;
+      vi.mocked(registry.registerComponent)
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(async () => {
+          valid = false;
+        });
+      await client.handleComponentSync(
+        [ownedWatcher, { ...ownedWatcher, name: 'second' }],
+        [],
+        () => valid,
+      );
+      expect(registry.registerComponent).toHaveBeenCalledTimes(2);
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+    });
+
+    test('a current owner preserves the original registration failure and transactional rollback', async () => {
+      const failure = new Error('registration failed');
+      vi.mocked(registry.registerComponent).mockRejectedValueOnce(failure);
+      await expect(client.handleComponentSync([ownedWatcher], [], () => true)).rejects.toBe(
+        failure,
+      );
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(2);
+    });
+
+    test('a retired registration failure never rolls back the new owner by name', async () => {
+      let valid = true;
+      vi.mocked(registry.registerComponent).mockImplementationOnce(async () => {
+        valid = false;
+        throw new Error('abandoned cleanup failed');
+      });
+      await client.handleComponentSync([ownedWatcher], [], () => valid);
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(1);
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+      expect(client.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('abandoned cleanup failed'),
+      );
+    });
+
     test('keeps isRegisteringComponents true through edge component replacement and resets it after success (#605)', async () => {
       const watchers = [{ type: 'docker', name: 'local', configuration: {} }];
       const triggers = [{ type: 'mock', name: 'update', configuration: {} }];
