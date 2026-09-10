@@ -219,6 +219,20 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.15</strong></summary>
+
+Eine noch laufende Komponenteninitialisierung einer getrennten Edge-Verbindung
+kann die Komponenten der neu verbundenen Instanz nicht mehr überschreiben.
+Alte Registrierungen räumen nur ihre eigenen Komponenten auf. Proxy-, Log-,
+Lösch- und Exec-Anfragen über getrennte Verbindungen schlagen sofort fehl, ohne
+neuen Anfragestatus anzulegen oder Frames zu senden. Diese Laufzeitänderungen
+erfordern eine neue siebentägige Testphase für diesen Release-Kandidaten.
+
+Vollständige Versionshinweise in [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10).
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.14</strong></summary>
 
 Rollbacks entfernen jetzt geerbte Entrypoints und Befehle, die das gesicherte Image nicht ausführen kann. Der Tag-Abgleich hält Varianten wie `alpine` und `alpine-perl` getrennt. Image-Labels von Wartungsreleases nennen den tatsächlichen Quell-Commit.

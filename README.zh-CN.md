@@ -219,6 +219,17 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.15 亮点</strong></summary>
+
+已断开连接的边缘代理不再能注册尚在初始化的组件，覆盖重新连接后的替代实例。
+失效的注册过程只清理自己的组件。连接断开后的代理、日志、删除和 exec 请求会立即失败，
+不再创建新的请求状态或发送协议帧。这些运行时变更要求此候选版本重新进行七天观察测试。
+
+完整发布说明见 [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10)。
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.14 亮点</strong></summary>
 
 回滚现在会移除备份镜像无法运行的继承入口点和命令。标签匹配会区分 `alpine` 和 `alpine-perl` 等变体。维护版本的镜像标签现在会标明实际的源代码提交。
