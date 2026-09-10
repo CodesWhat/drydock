@@ -23,6 +23,11 @@ interface ContainerGroup {
   updatesAvailable: number;
 }
 
+interface ContainerSbomResult extends Record<string, unknown> {
+  generatedAt?: string;
+  document?: unknown;
+}
+
 interface ContainerSummary {
   containers: {
     total: number;
@@ -318,7 +323,7 @@ async function getContainerSbom(containerId: string, format: string = 'spdx-json
   if (!response.ok) {
     throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
   }
-  return readJsonResponse<Record<string, unknown>>(response, 'Container SBOM API');
+  return readJsonResponse<ContainerSbomResult>(response, 'Container SBOM API');
 }
 
 async function updateContainerPolicy(

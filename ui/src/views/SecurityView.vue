@@ -8,6 +8,7 @@ import AppStatusIndicator from '../components/AppStatusIndicator.vue';
 import ContainerLinkActions from '../components/containers/ContainerLinkActions.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
 import DataSortControl from '../components/DataSortControl.vue';
+import type { DataTableColumn } from '../components/DataTable.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
@@ -440,7 +441,7 @@ async function scanAllContainers() {
   await fetchVulnerabilities();
 }
 
-const tableColumns = computed(() => [
+const tableColumns = computed<(DataTableColumn & PickerColumn)[]>(() => [
   {
     key: 'image',
     label: t('securityView.columns.image'),
