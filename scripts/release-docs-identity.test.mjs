@@ -44,6 +44,14 @@ test('maintenance candidate highlights link to their immutable release changelog
       `[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${anchor})`,
     ),
   );
+  const readmeHighlights = read('README.md')
+    .split(`<summary><strong>v${RC_VERSION} highlights</strong></summary>`)[1]
+    ?.split('</details>')[0];
+  assert.ok(
+    readmeHighlights?.includes(
+      `[Full changelog](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${anchor})`,
+    ),
+  );
 });
 
 test('public release surfaces identify the v1.6 release candidate', () => {

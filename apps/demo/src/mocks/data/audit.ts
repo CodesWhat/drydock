@@ -1,7 +1,14 @@
 export const auditEntries = [
   {
+    id: 'aud-030',
+    timestamp: '2026-09-10T00:00:05.000Z',
+    action: 'container:watch',
+    container: 'drydock',
+    details: 'Started watching ghcr.io/codeswhat/drydock:1.6.1-rc.13',
+  },
+  {
     id: 'aud-001',
-    timestamp: '2026-03-10T08:00:00.000Z',
+    timestamp: '2026-09-10T00:00:00.000Z',
     action: 'system:start',
     details: 'Drydock v1.6.1-rc.13 started',
   },
@@ -201,12 +208,5 @@ export const auditEntries = [
     action: 'auth:login',
     user: 'admin',
     details: 'Login from 192.168.1.10',
-  },
-  {
-    id: 'aud-030',
-    timestamp: '2026-03-03T18:00:00.000Z',
-    action: 'container:watch',
-    container: 'drydock',
-    details: 'Started watching ghcr.io/codeswhat/drydock:1.6.1-rc.13',
   },
 ];

@@ -187,7 +187,7 @@ components, and disconnected proxy, log, delete, and exec requests fail
 immediately without allocating request state or sending frames. These runtime
 changes require a fresh seven-day soak for this candidate.
 
-[Full changelog](CHANGELOG.md#161-rc13--2026-09-10)
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.13/CHANGELOG.md#161-rc13--2026-09-10)
 
 </details>
 
