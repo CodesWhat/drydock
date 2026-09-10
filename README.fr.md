@@ -219,6 +219,21 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.15</strong></summary>
+
+Un agent edge déconnecté ne peut plus enregistrer un composant dont
+l’initialisation était encore en cours et écraser les composants de la nouvelle
+connexion. Les enregistrements abandonnés ne nettoient que leurs propres
+composants. Après déconnexion, les requêtes de proxy, de journaux, de suppression
+et d’exécution échouent immédiatement, sans créer d’état de requête ni envoyer
+de trames. Ces changements nécessitent une nouvelle période de test de sept
+jours pour cette version candidate.
+
+Notes de version complètes dans [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10).
+
+</details>
+
+<details>
 <summary><strong>Points forts de la v1.7.0-rc.14</strong></summary>
 
 Les restaurations suppriment les points d’entrée et commandes hérités que l’image sauvegardée ne peut pas exécuter. La comparaison des tags distingue les variantes comme `alpine` et `alpine-perl`. Les labels des images de maintenance indiquent le véritable commit source.

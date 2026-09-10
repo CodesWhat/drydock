@@ -222,6 +222,19 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.15 highlights</strong></summary>
+
+Disconnected edge agents can no longer publish an in-flight component over
+their reconnected replacement. Retired registrations clean up only their own
+components, and disconnected proxy, log, delete, and exec requests fail
+immediately without allocating request state or sending frames. These runtime
+changes require a fresh seven-day soak for this candidate.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10)
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.14 highlights</strong></summary>
 
 Rollback now removes inherited entrypoints and commands that the backup image cannot run. Tag matching keeps variants such as `alpine` and `alpine-perl` separate, and maintenance image labels identify the actual source commit.

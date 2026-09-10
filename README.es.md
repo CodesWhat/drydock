@@ -219,6 +219,20 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.15</strong></summary>
+
+Los agentes edge desconectados ya no pueden registrar un componente cuya
+inicialización seguía en curso y sobrescribir los componentes de la nueva
+conexión. Los registros retirados solo limpian sus propios componentes. Las
+solicitudes de proxy, registros, eliminación y exec tras la desconexión fallan
+de inmediato, sin crear estado de solicitud ni enviar tramas. Estos cambios
+requieren un nuevo período de prueba de siete días para esta versión candidata.
+
+Notas completas en [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10).
+
+</details>
+
+<details>
 <summary><strong>Aspectos destacados de v1.7.0-rc.14</strong></summary>
 
 Las reversiones eliminan los puntos de entrada y comandos heredados que la imagen de respaldo no puede ejecutar. La comparación de etiquetas mantiene separadas variantes como `alpine` y `alpine-perl`. Las etiquetas de las imágenes de mantenimiento identifican el commit de origen real.

@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.15 Highlights — September 10, 2026
+
+Disconnected edge agents can no longer publish an in-flight component over
+their reconnected replacement. Retired registrations clean up only their own
+components, and disconnected proxy, log, delete, and exec requests fail
+immediately without allocating request state or sending frames. These runtime
+changes require a fresh seven-day soak for this candidate. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.15/CHANGELOG.md#170-rc15--2026-09-10)
+for the full release notes.
+
 ## v1.7.0-rc.14 Highlights — September 8, 2026
 
 - Rollback now applies the same runtime-config sanitization as an update, so an entrypoint or command introduced by the newer image is not copied onto an older image that cannot run it. Tag family matching requires an exact variant suffix, with a digit-only precision exception; a trailing dot no longer qualifies ([#1134](https://github.com/CodesWhat/drydock/pull/1134)).
