@@ -26,6 +26,12 @@ describe('App Service', () => {
     expect(result).toEqual(mockResponse);
   });
 
+  it('preserves an absent app info response', async () => {
+    fetchMock.mockResolvedValue(Response.json(null));
+
+    expect(await getAppInfos()).toBeNull();
+  });
+
   it('should throw when fetching app infos fails', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
