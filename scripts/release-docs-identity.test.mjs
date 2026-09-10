@@ -35,6 +35,17 @@ test('security policy names maintained v1.6 and active v1.7 without supporting o
   assert.match(security, /Older release candidates are not patched/u);
 });
 
+test('maintenance candidate highlights link to their immutable release changelog', () => {
+  const updates = read('content/docs/current/updates/index.mdx');
+  const highlights = updates.split(`## v${RC_VERSION} Highlights`)[1]?.split('\n## ')[0];
+  const anchor = `${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`;
+  assert.ok(
+    highlights?.includes(
+      `[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${anchor})`,
+    ),
+  );
+});
+
 test('public release surfaces identify the v1.6 release candidate', () => {
   const readme = read('README.md');
   const siteConfig = read('apps/web/src/lib/site-config.ts');
