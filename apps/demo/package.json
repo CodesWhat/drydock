@@ -33,7 +33,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "25.9.5",
     "@vitejs/plugin-vue": "6.0.8",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vite": "7.3.6",
     "vitest": "4.1.11"
   },
