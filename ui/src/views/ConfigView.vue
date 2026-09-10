@@ -399,7 +399,7 @@ async function handleClearIconCache() {
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const createObjectUrl = globalThis.URL?.createObjectURL;
   if (typeof createObjectUrl !== 'function') {
-    throw new Error('Browser does not support file downloads');
+    throw new Error(t('configView.general.errors.downloadDebugDump'));
   }
 
   const objectUrl = createObjectUrl(blob);

@@ -740,6 +740,7 @@ describe('ConfigView', () => {
     });
 
     afterEach(() => {
+      setI18nLocale('en');
       Object.defineProperty(URL, 'createObjectURL', {
         configurable: true,
         writable: true,
@@ -770,7 +771,40 @@ describe('ConfigView', () => {
       expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:debug-dump');
     });
 
-    it('shows debug dump download error', async () => {
+    it('translates unsupported downloads and clears the error on a successful retry', async () => {
+      preferences.locale.language = 'fr';
+      setI18nLocale('fr');
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      Object.defineProperty(URL, 'createObjectURL', { value: undefined });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
+      await nextTick();
+
+      const downloadButton = w.get('[data-test="download-debug-dump"]');
+      await downloadButton.trigger('click');
+
+      await vi.waitFor(() => {
+        expect(w.text()).toContain('Impossible de télécharger le dump debug');
+      });
+      expect(w.text()).not.toContain('Browser does not support file downloads');
+      expect(downloadButton.classes()).not.toContain('pointer-events-none');
+      expect(mockDownloadDebugDump).toHaveBeenCalledOnce();
+      expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
+
+      Object.defineProperty(URL, 'createObjectURL', { value: createObjectUrlSpy });
+      await downloadButton.trigger('click');
+
+      await vi.waitFor(() => expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:debug-dump'));
+      expect(mockDownloadDebugDump).toHaveBeenCalledTimes(2);
+      expect(w.text()).not.toContain('Impossible de télécharger le dump debug');
+      expect(downloadButton.classes()).not.toContain('pointer-events-none');
+      expect(document.body.querySelector('a[download="drydock-debug-dump.json"]')).toBeNull();
+    });
+
+    it('preserves API download errors in a non-English locale', async () => {
+      preferences.locale.language = 'fr';
+      setI18nLocale('fr');
       mockGetServer.mockResolvedValue({ configuration: {} });
       mockDownloadDebugDump.mockRejectedValue(new Error('debug dump unavailable'));
 
@@ -784,6 +818,9 @@ describe('ConfigView', () => {
       await vi.waitFor(() => {
         expect(w.text()).toContain('debug dump unavailable');
       });
+      expect(downloadButton.classes()).not.toContain('pointer-events-none');
+      expect(createObjectUrlSpy).not.toHaveBeenCalled();
+      expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
     });
   });
 
