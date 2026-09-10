@@ -1,4 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import { i18n } from '@/boot/i18n';
 import DetailField from '@/components/DetailField.vue';
 import WatcherScheduleEditor from '@/components/WatcherScheduleEditor.vue';
 import { resetPreferences } from '@/preferences/store';
@@ -79,6 +81,86 @@ describe('watcher detail editor API identity boundary', () => {
     await flushPromises();
     return { wrapper, requests };
   }
+
+  it('keeps refreshed last-run times reactive without resetting the saved editor', async () => {
+    const originalLocale = i18n.global.locale.value;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-10T18:00:00Z'));
+    i18n.global.locale.value = 'en';
+    try {
+      let saved = false;
+      const { wrapper, requests } = await openEditor(null, undefined, (path, options) => {
+        if (options?.method === 'PATCH') {
+          saved = true;
+          return Response.json({
+            saved: true,
+            applied: true,
+            revision: 'new',
+            changedKeys: ['DD_WATCHER_LOCAL_CRON'],
+            restartRequired: [],
+            errors: [],
+          });
+        }
+        if (saved && path === '/api/v1/watchers/docker/local') {
+          return Response.json({
+            id: 'docker.local',
+            name: 'local',
+            type: 'docker',
+            agent: null,
+            configuration: { cron: '0 7 * * *' },
+            metadata: { lastRunAt: '2026-09-10T17:58:00Z' },
+          });
+        }
+      });
+      try {
+        const editor = wrapper.getComponent(WatcherScheduleEditor);
+        await editor.get('[data-field="cron"]').setValue('0 7 * * *');
+        await editor.get('form').trigger('submit');
+        await flushPromises();
+
+        const table = wrapper.findComponent(dataViewStubs.DataTable);
+        const refreshedRow = table.props('rows')[0];
+        expect(refreshedRow.lastRun).toBe('2 min. ago');
+        expect(refreshedRow.cron).toBe('0 7 * * *');
+        expect(wrapper.find('.detail-content').text()).toContain('2 min. ago');
+        expect(editor.get('[role="status"]').text()).toContain('Saved and applied');
+        expect(requests).toHaveLength(5);
+        const requestsAfterSave = [...requests];
+
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+
+        const expected = new Intl.RelativeTimeFormat('fr', {
+          numeric: 'always',
+          style: 'short',
+        }).format(-2, 'minute');
+        expect(table.props('rows')[0]).toBe(refreshedRow);
+        expect(refreshedRow.lastRun).toBe(expected);
+        const lastRunDetail = wrapper
+          .findAllComponents(DetailField)
+          .find((field) => field.props('label') === i18n.global.t('watchersView.detail.lastRun'));
+        expect(lastRunDetail?.text()).toContain(expected);
+        expect(table.props('selectedKey')).toBe('docker.local');
+        expect(wrapper.getComponent(WatcherScheduleEditor).element).toBe(editor.element);
+        expect(editor.props('watcher')).toEqual({
+          id: 'docker.local',
+          name: 'local',
+          agent: undefined,
+        });
+        expect(editor.get('[role="status"]').text()).toContain(
+          i18n.global.t('watcherEditor.saved'),
+        );
+        expect(editor.get<HTMLInputElement>('[data-field="cron"]').element.value).toBe('0 7 * * *');
+        expect(editor.get('[data-testid="save-schedule"]').attributes('disabled')).toBeDefined();
+        expect(requests).toEqual(requestsAfterSave);
+      } finally {
+        wrapper.unmount();
+      }
+    } finally {
+      i18n.global.locale.value = originalLocale;
+      vi.useRealTimers();
+    }
+  });
 
   it.each(['complete', 'audit-warning', 'partial'] as const)(
     'refreshes outer detail and matching table row after a %s save without losing editor outcome',
