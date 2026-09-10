@@ -74,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Watcher last-run times follow the selected language in tables, cards and open details without refetching watcher data.
 - **Vue contract cleanup removes dead agent uptime handling and repairs UI bindings.** Agent uptime uses the API's `uptimeSeconds` field, without the unsupported string-uptime branch. Container preview recovery links and dashboard widget size options are restored, and release-link and theme-toggle event handling now match their actual contracts.
 
 - **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.

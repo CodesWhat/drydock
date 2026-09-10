@@ -20,7 +20,7 @@ function watcherServerName(name: unknown): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
@@ -162,6 +162,7 @@ function readWatcherContainerTotal(metadata: unknown): number {
 
 function mapWatcher(watcher: ApiComponentResponse, status = 'watching') {
   const configuration = watcher.configuration ?? {};
+  const lastRunAt = watcher.metadata?.lastRunAt ? String(watcher.metadata.lastRunAt) : undefined;
   return {
     id: watcher.id,
     name: watcher.name,
@@ -174,7 +175,9 @@ function mapWatcher(watcher: ApiComponentResponse, status = 'watching') {
         : '',
     nextRunAt: watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined,
     nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
-    lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
+    get lastRun() {
+      return lastRunAt ? timeAgo(lastRunAt, locale.value, t) : '\u2014';
+    },
     config: Object.fromEntries(
       Object.entries(configuration).sort(([a], [b]) => a.localeCompare(b)),
     ),

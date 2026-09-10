@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
+import { i18n } from '@/boot/i18n';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllWatchers, getWatcher } from '@/services/watcher';
@@ -168,6 +169,136 @@ describe('WatchersView', () => {
       type: 'docker',
       configuration: { cron: '*/1 * * * *', grace: '30s' },
     });
+  });
+
+  describe('localized last-run times', () => {
+    afterEach(() => {
+      i18n.global.locale.value = 'en';
+      vi.useRealTimers();
+    });
+
+    it.each(['table', 'cards'] as const)(
+      'keeps missing last-run timestamps as a dash in %s and details',
+      async (mode) => {
+        i18n.global.locale.value = 'fr';
+        const watcher = {
+          id: 'docker.local',
+          name: 'local',
+          type: 'docker',
+          agent: null,
+          configuration: {},
+        };
+        mockGetAllWatchers.mockResolvedValue([watcher]);
+        mockGetWatcher.mockResolvedValue(watcher);
+        const wrapper = await (mode === 'cards' ? mountWatchersCardView() : mountWatchersView());
+        const table = wrapper.findComponent(
+          mode === 'cards' ? watcherCardDataTableStub : richDataTableStub,
+        );
+        expect(table.props('rows')[0].lastRun).toBe('\u2014');
+        table.vm.$emit('row-click', table.props('rows')[0]);
+        await flushPromises();
+        const detail = wrapper
+          .findAllComponents({ name: 'DetailField' })
+          .find((field) => field.props('label') === i18n.global.t('watchersView.detail.lastRun'));
+        expect(detail?.text()).toContain('\u2014');
+        expect(mockGetWatcher).toHaveBeenCalledWith({ type: 'docker', name: 'local', agent: null });
+        wrapper.unmount();
+      },
+    );
+
+    it.each([
+      ['table', 30],
+      ['table', 120],
+      ['cards', 30],
+      ['cards', 120],
+    ] as const)('renders French last-run text in %s at %s seconds', async (mode, seconds) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-10T18:00:00Z'));
+      i18n.global.locale.value = 'fr';
+      const watcher = {
+        id: 'docker.local',
+        name: 'local',
+        type: 'docker',
+        agent: 'edge',
+        configuration: {},
+        metadata: { lastRunAt: new Date(Date.now() - seconds * 1000).toISOString() },
+      };
+      mockGetAllWatchers.mockResolvedValue([watcher]);
+      mockGetWatcher.mockResolvedValue(watcher);
+      const wrapper = await (mode === 'cards' ? mountWatchersCardView() : mountWatchersView());
+      const expected =
+        seconds < 60
+          ? i18n.global.t('common.timeAgo.justNow')
+          : new Intl.RelativeTimeFormat('fr', { numeric: 'always', style: 'short' }).format(
+              -2,
+              'minute',
+            );
+
+      expect(wrapper.find(mode === 'cards' ? '.watcher-card' : '.data-table-row').text()).toContain(
+        expected,
+      );
+      const table = wrapper.findComponent(
+        mode === 'cards' ? watcherCardDataTableStub : richDataTableStub,
+      );
+      table.vm.$emit('row-click', table.props('rows')[0]);
+      await flushPromises();
+      expect(wrapper.find('.detail-panel').text()).toContain(expected);
+      expect(mockGetWatcher).toHaveBeenCalledWith({ type: 'docker', name: 'local', agent: 'edge' });
+      wrapper.unmount();
+    });
+
+    it.each(['table', 'cards'] as const)(
+      'updates %s and an open detail on locale change without refetching',
+      async (mode) => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-09-10T18:00:00Z'));
+        i18n.global.locale.value = 'en';
+        const watcher = {
+          id: 'docker.local',
+          name: 'local',
+          type: 'docker',
+          agent: 'Local',
+          configuration: {},
+          metadata: { lastRunAt: '2026-09-10T17:59:30Z' },
+        };
+        mockGetAllWatchers.mockResolvedValue([watcher]);
+        mockGetWatcher.mockResolvedValue({
+          ...watcher,
+          metadata: { lastRunAt: '2026-09-10T17:58:00Z' },
+        });
+        const wrapper = await (mode === 'cards' ? mountWatchersCardView() : mountWatchersView());
+        const table = wrapper.findComponent(
+          mode === 'cards' ? watcherCardDataTableStub : richDataTableStub,
+        );
+        const originalRow = table.props('rows')[0];
+        table.vm.$emit('row-click', originalRow);
+        await flushPromises();
+        expect(wrapper.find('.detail-panel').text()).toContain('2 min. ago');
+
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+
+        expect(
+          wrapper.find(mode === 'cards' ? '.watcher-card' : '.data-table-row').text(),
+        ).toContain(i18n.global.t('common.timeAgo.justNow'));
+        expect(wrapper.find('.detail-panel').text()).toContain(
+          new Intl.RelativeTimeFormat('fr', { numeric: 'always', style: 'short' }).format(
+            -2,
+            'minute',
+          ),
+        );
+        expect(table.props('rows')[0]).toBe(originalRow);
+        expect(table.props('selectedKey')).toBe('docker.local');
+        expect(mockGetAllWatchers).toHaveBeenCalledTimes(1);
+        expect(mockGetWatcher).toHaveBeenCalledTimes(1);
+        expect(mockGetWatcher).toHaveBeenCalledWith({
+          type: 'docker',
+          name: 'local',
+          agent: 'Local',
+        });
+        wrapper.unmount();
+      },
+    );
   });
 
   describe('tableColumns (card-mode annotations)', () => {
