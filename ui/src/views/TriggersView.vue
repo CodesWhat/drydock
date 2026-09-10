@@ -8,19 +8,21 @@ import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
-import type { ApiComponent } from '../types/api';
+import type { ApiComponentResponse } from '../types/api';
 import { isDryRunActionTrigger } from './containers/useContainerTriggers';
 
 const { t } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
-const selectedTrigger = ref<Record<string, unknown> | null>(null);
+type TriggerRow = ReturnType<typeof mapTrigger>;
+
+const selectedTrigger = ref<TriggerRow | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
 let detailRequestId = 0;
 
-const triggersData = ref<Record<string, unknown>[]>([]);
+const triggersData = ref<TriggerRow[]>([]);
 const loading = ref(true);
 const error = ref('');
 const testingTrigger = ref<string | null>(null);
@@ -47,16 +49,16 @@ function parseTriggerTestErrorMessage(errorValue: unknown): string {
   return nestedMessage?.[1]?.trim() || message.trim();
 }
 
-async function testTrigger(trigger: Record<string, unknown>) {
+async function testTrigger(trigger: TriggerRow) {
   if (testingTrigger.value) return;
-  testingTrigger.value = trigger.id as string;
+  testingTrigger.value = trigger.id;
   testResult.value = null;
   testError.value = null;
   try {
     await runTrigger({
-      triggerType: trigger.type as string,
-      triggerName: trigger.name as string,
-      triggerAgent: (trigger.agent as string | undefined) || undefined,
+      triggerType: trigger.type,
+      triggerName: trigger.name,
+      triggerAgent: trigger.agent || undefined,
       container: {
         id: 'test',
         name: t('triggersView.testContainerName'),
@@ -151,15 +153,16 @@ function clearFilters() {
   searchQuery.value = '';
 }
 
-function mapTrigger(trigger: ApiComponent, status = 'active') {
+function mapTrigger(trigger: ApiComponentResponse, status = 'active') {
   const config = trigger.configuration ?? {};
+  const dryrun = typeof config === 'object' && 'dryrun' in config && config.dryrun === true;
   return {
     id: trigger.id,
     name: trigger.name,
     type: trigger.type,
     status,
     config,
-    dryRun: isDryRunActionTrigger(trigger),
+    dryRun: isDryRunActionTrigger({ ...trigger, configuration: { dryrun } }),
     agent: trigger.agent,
   };
 }
@@ -180,7 +183,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(trigger: Record<string, unknown>) {
+async function openDetail(trigger: TriggerRow) {
   selectedTrigger.value = trigger;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -191,7 +194,7 @@ async function openDetail(trigger: Record<string, unknown>) {
     const detail = await getTrigger({
       type: String(trigger.type),
       name: String(trigger.name),
-      agent: trigger.agent as string | undefined,
+      agent: trigger.agent,
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedTrigger.value = mapTrigger(detail, String(trigger.status));
@@ -208,7 +211,7 @@ async function openDetail(trigger: Record<string, unknown>) {
 onMounted(async () => {
   try {
     const data = await getAllTriggers();
-    triggersData.value = data.map((trigger: ApiComponent) => mapTrigger(trigger));
+    triggersData.value = data.map((trigger) => mapTrigger(trigger));
   } catch {
     error.value = t('triggersView.loadError');
   } finally {
