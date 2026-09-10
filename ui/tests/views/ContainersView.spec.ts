@@ -1,6 +1,8 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -2799,6 +2801,55 @@ describe('ContainersView', () => {
       await useConfirmDialog().accept();
       expect(mockApiUpdateBulk).toHaveBeenCalledWith(['c1', 'c3']);
       expect(mockApiUpdate).not.toHaveBeenCalled();
+    });
+
+    it('keeps renewed stack consent visible after a parent becomes blocked', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const wrapper = await mountContainersView([web, db]);
+      const vm = wrapper.vm as any;
+      const dialog = useConfirmDialog();
+      dialog.dismiss();
+      const renderedDialog = mountWithPlugins(ConfirmDialog, {
+        global: { stubs: { ConfirmDialog: false, teleport: true } },
+      });
+      mountedWrappers.push(renderedDialog);
+      try {
+        useDependencyGraph().graph.value = {
+          nodes: [web, db].map(({ id, name }) => ({ id, name, displayName: name })),
+          edges: [{ from: 'web', to: 'db', action: 'update', source: 'label' }],
+          cycles: [],
+          unresolved: [],
+          crossHostIgnored: [],
+        };
+        vm.updateAllInGroup({ key: 'web-stack', containers: [web, db] });
+        await flushPromises();
+        expect(renderedDialog.get('[role="dialog"]').text()).not.toContain('depends on');
+        vm.containers.find((container: Container) => container.id === 'db').bouncer = 'blocked';
+        mockGetAllContainers.mockClear();
+
+        await renderedDialog.get('button[aria-label="Update 2 containers"]').trigger('click');
+        await flushPromises();
+
+        expect(dialog.visible.value).toBe(true);
+        expect(dialog.current.value?.header).toBe('Update 1 container');
+        expect(renderedDialog.get('[role="dialog"]').text()).toContain('web depends on db');
+        expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        expect(vm.isContainerUpdateInProgress(web)).toBe(false);
+        expect(vm.isContainerUpdateInProgress(db)).toBe(false);
+        expect(vm.actionPending.size).toBe(0);
+
+        await renderedDialog.get('button[aria-label="Update anyway"]').trigger('click');
+        await flushPromises();
+        expect(mockApiUpdateBulk).toHaveBeenCalledExactlyOnceWith(['web']);
+        expect(dialog.visible.value).toBe(false);
+        expect(dialog.current.value).toBeNull();
+        expect(renderedDialog.find('[role="dialog"]').exists()).toBe(false);
+      } finally {
+        dialog.dismiss();
+        resetDependencyGraphState();
+      }
     });
 
     it.each(['reject', 'dismiss'] as const)(
