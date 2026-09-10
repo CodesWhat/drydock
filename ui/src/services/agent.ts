@@ -1,14 +1,7 @@
+import type { ApiAgent } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 const BASE_URL = '/api/v1/agents';
-
-interface ApiAgent {
-  name: string;
-  connected: boolean;
-  host?: string;
-  port?: string | number;
-  [key: string]: unknown;
-}
 
 export async function getAgents(): Promise<ApiAgent[]> {
   const response = await fetch(BASE_URL, { credentials: 'include' });

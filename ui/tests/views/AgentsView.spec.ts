@@ -6,6 +6,7 @@ import { getAgents } from '@/services/agent';
 import { getLogEntries } from '@/services/log';
 import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
+import type { ApiAgent } from '@/types/api';
 import AgentsView from '@/views/AgentsView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
@@ -54,13 +55,12 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
 const mountedWrappers: Array<{ unmount: () => void }> = [];
 
-function makeAgent(overrides: Record<string, any> = {}) {
+function makeAgent(overrides: Partial<ApiAgent> = {}): ApiAgent {
   return {
     name: 'edge-1',
     host: '10.0.0.31',
     port: 2376,
     connected: true,
-    dockerVersion: '27.0.0',
     os: 'linux',
     arch: 'amd64',
     cpus: 8,
@@ -69,7 +69,7 @@ function makeAgent(overrides: Record<string, any> = {}) {
     images: 45,
     lastSeen: 'Just now',
     version: '1.4.0',
-    uptime: '4d 3h',
+    uptimeSeconds: 356400,
     logLevel: 'info',
     pollInterval: '30s',
     ...overrides,
@@ -574,6 +574,30 @@ describe('AgentsView', () => {
     expect(detailContent).not.toContain('Docker');
   });
 
+  it('formats uptimeSeconds instead of unsupported uptime strings', async () => {
+    mockGetAgents.mockResolvedValue([{ ...makeAgent(), uptime: 'legacy uptime' }]);
+
+    const wrapper = await mountAgentsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailContent = wrapper.find('.detail-content').text();
+    expect(detailContent).toContain('4d 3h');
+    expect(detailContent).not.toContain('legacy uptime');
+  });
+
+  it('does not project unsupported Docker metadata into agent details', async () => {
+    mockGetAgents.mockResolvedValue([{ ...makeAgent(), dockerVersion: '27.0.0' }]);
+
+    const wrapper = await mountAgentsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailContent = wrapper.find('.detail-content').text();
+    expect(detailContent).not.toContain('Docker');
+    expect(detailContent).not.toContain('27.0.0');
+  });
+
   it('renders agent cards and wires card-mode sort controls', async () => {
     preferences.views.agents.mode = 'cards';
     mockGetAgents.mockResolvedValue([
@@ -583,7 +607,6 @@ describe('AgentsView', () => {
         host: 'unix:///var/run/docker.sock',
         port: undefined,
         connected: false,
-        dockerVersion: undefined,
         os: undefined,
         version: undefined,
         containers: { total: 3, running: 0, stopped: 3 },
@@ -613,7 +636,6 @@ describe('AgentsView', () => {
     expect(connectedCard.text()).toContain('Connected');
     expect(connectedCard.text()).toContain('10/12');
     expect(connectedCard.text()).toContain('v1.4.0');
-    expect(connectedCard.text()).toContain('27.0.0');
     expect(connectedCard.text()).toContain('linux');
     expect(connectedCard.text()).toContain('Just now');
 

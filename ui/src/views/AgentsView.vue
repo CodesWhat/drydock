@@ -144,7 +144,6 @@ async function fetchAgents() {
       name: a.name,
       host: `${a.host}${a.port ? `:${a.port}` : ''}`,
       status: a.connected ? 'connected' : 'disconnected',
-      dockerVersion: typeof a.dockerVersion === 'string' ? a.dockerVersion : undefined,
       os: typeof a.os === 'string' ? a.os : undefined,
       arch: typeof a.arch === 'string' ? a.arch : undefined,
       cpus: Number.isFinite(a.cpus) ? Number(a.cpus) : undefined,
@@ -168,12 +167,7 @@ async function fetchAgents() {
             ? undefined
             : t('agentsView.detail.fields.never'),
       version: typeof a.version === 'string' ? a.version : undefined,
-      uptime:
-        typeof a.uptime === 'string'
-          ? a.uptime
-          : Number.isFinite(a.uptimeSeconds)
-            ? formatUptime(Number(a.uptimeSeconds))
-            : undefined,
+      uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
       watchers: watchersByAgent[normalizeAgentKey(a.name)] ?? [],
