@@ -48,18 +48,18 @@ const {
   updateMode,
 } = useContainersViewTemplateContext();
 
-function isActionQueued(container: { id?: unknown; name?: unknown }) {
+function isActionQueued(container: Container) {
   return isContainerUpdateQueued(container);
 }
 
-function isActionInProgress(container: { id?: unknown; name?: unknown }) {
+function isActionInProgress(container: Container) {
   return (
     hasTrackedContainerAction(actionInProgress.value, container) ||
     isContainerUpdateInProgress(container)
   );
 }
 
-function isActionBlocked(container: { id?: unknown; name?: unknown }) {
+function isActionBlocked(container: Container) {
   return isActionInProgress(container) || isActionQueued(container);
 }
 
@@ -75,12 +75,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
   return resolveUpdateKindLabel(kind, t);
 }
 
-function getStatusLabel(container: {
-  id?: unknown;
-  name?: unknown;
-  status?: string;
-  updateOperation?: { phase?: string };
-}) {
+function getStatusLabel(container: Container) {
   if (isActionInProgress(container)) {
     const labelKey = getUpdateInProgressPhaseLabelKey(container.updateOperation?.phase);
     return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
@@ -91,7 +86,7 @@ function getStatusLabel(container: {
   return localizeStatus(container.status);
 }
 
-function getStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {
+function getStatusTone(container: Container) {
   if (isActionInProgress(container)) {
     return 'warning';
   }

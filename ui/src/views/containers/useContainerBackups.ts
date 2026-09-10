@@ -1,7 +1,7 @@
 import { type Ref, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
-import { getBackups, rollback } from '../../services/backup';
+import { type ContainerBackup, getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import type { ApiContainerUpdateOperation } from '../../types/api';
 import { errorMessage } from '../../utils/error';
@@ -152,7 +152,7 @@ async function rollbackToBackupState(args: {
 
 export function useContainerBackups(input: UseContainerBackupsInput) {
   const { t } = useI18n();
-  const detailBackups = ref<Record<string, unknown>[]>([]);
+  const detailBackups = ref<ContainerBackup[]>([]);
   const backupsLoading = ref(false);
   const rollbackInProgress = ref<string | null>(null);
   const rollbackMessage = ref<string | null>(null);

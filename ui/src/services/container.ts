@@ -565,6 +565,10 @@ async function getUpdateOperationById(
   return readJsonResponse<ApiContainerUpdateOperation>(response, 'Container update operation API');
 }
 
+interface RevealedContainerEnv {
+  env: { key: string; value: string; sensitive: boolean }[];
+}
+
 async function revealContainerEnv(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/env/reveal`, {
     method: 'POST',
@@ -573,7 +577,7 @@ async function revealContainerEnv(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to reveal env vars: ${response.statusText}`);
   }
-  return readJsonResponse(response, 'Container env API');
+  return readJsonResponse<RevealedContainerEnv>(response, 'Container env API');
 }
 
 export type { ContainerGroup };

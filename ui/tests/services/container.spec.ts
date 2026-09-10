@@ -1,7 +1,9 @@
 import {
+  type ContainerGroup,
   deleteContainer,
   getAllContainers,
   getContainerDependencies,
+  getContainerGroups,
   getContainerIntermediateReleaseNotes,
   getContainerLogs,
   getContainerRecentStatus,
@@ -24,6 +26,38 @@ import {
   updateContainerPolicy,
   updateDependencyGroup,
 } from '@/services/container';
+
+describe('getContainerGroups', () => {
+  beforeEach(() => {
+    vi.mocked(fetch).mockClear();
+  });
+
+  it('unwraps the real groups envelope without changing container identities', async () => {
+    const groups: ContainerGroup[] = [
+      {
+        name: 'stack',
+        containers: [
+          { id: 'local-web', name: 'web', displayName: 'web', updateAvailable: true },
+          { id: 'edge-web', name: 'web', displayName: 'web', updateAvailable: false },
+        ],
+        containerCount: 2,
+        updatesAvailable: 1,
+      },
+    ];
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: groups, total: 1 }),
+    } as Response);
+    await expect(getContainerGroups()).resolves.toEqual(groups);
+    expect(fetch).toHaveBeenCalledWith('/api/v1/containers/groups', { credentials: 'include' });
+  });
+
+  it('preserves a group-list API failure', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, statusText: 'Forbidden' } as Response);
+    await expect(getContainerGroups()).rejects.toThrow('Failed to get container groups: Forbidden');
+  });
+});
+
 import { ApiError } from '@/utils/error';
 
 // Mock fetch globally

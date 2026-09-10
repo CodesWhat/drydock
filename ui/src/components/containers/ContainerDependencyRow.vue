@@ -11,7 +11,7 @@ import { getDirectChildren, getDirectParents } from '../../utils/dependency-grap
 const { t } = useI18n();
 
 const props = defineProps<{
-  container: Pick<Container, 'id' | 'name'>;
+  container: Pick<Container, 'id' | 'name' | 'identityKey'>;
   adjacency: DependencyAdjacency;
   cycle: boolean;
   groupSize: number;
@@ -19,7 +19,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'update-group': [container: Pick<Container, 'id' | 'name'>];
+  'update-group': [container: Pick<Container, 'id' | 'name' | 'identityKey'>];
 }>();
 
 const parents = computed(() => getDirectParents(props.adjacency, props.container.id));

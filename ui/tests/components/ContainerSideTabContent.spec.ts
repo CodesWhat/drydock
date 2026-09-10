@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import type AppButton from '@/components/AppButton.vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
@@ -1011,6 +1012,32 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(mockClearSkipsSelected).toHaveBeenCalledTimes(1);
     expect(mockClearPolicySelected).toHaveBeenCalledTimes(1);
     expect(mockConfirmRollback).toHaveBeenCalledWith();
+  });
+
+  it('uses plain policy reset buttons and prevents resets while a policy action is pending', async () => {
+    activeDetailTab.value = 'actions';
+    const fields = ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'];
+    selectedPolicyOverrideFields.value = new Set(fields);
+    const wrapper = mountComponent();
+
+    for (const field of fields) {
+      const button = wrapper.findComponent<typeof AppButton>(
+        `[data-test="policy-revert-${field}"]`,
+      );
+      expect(button.props('variant')).toBe('plain');
+      await button.trigger('click');
+    }
+    expect(mockRevertPolicySelected.mock.calls).toEqual(fields.map((field) => [field]));
+
+    policyInProgress.value = 'saving';
+    await nextTick();
+    for (const field of fields) {
+      const button = wrapper.find(`[data-test="policy-revert-${field}"]`);
+      expect(button.attributes('disabled')).toBeDefined();
+      await button.trigger('click');
+    }
+    expect(mockRevertPolicySelected).toHaveBeenCalledTimes(fields.length);
+    wrapper.unmount();
   });
 
   it('shows material override badges and wires field and whole-policy reverts', async () => {

@@ -26,7 +26,7 @@ function mountRow(overrides: Partial<InstanceType<typeof ContainerDependencyRow>
 
   return mountWithPlugins(ContainerDependencyRow, {
     props: {
-      container: { id: 'web', name: 'web' },
+      container: { id: 'web', name: 'web', identityKey: 'agent-a/docker.local/web' },
       adjacency,
       cycle: false,
       groupSize: 1,
@@ -52,7 +52,7 @@ describe('ContainerDependencyRow', () => {
       edges: [{ from: 'web', to: 'db', action: 'update', source: 'label' }],
     });
     const adjacency = buildDependencyAdjacency(graph);
-    const wrapper = mountRow({ container: { id: 'db', name: 'db' }, adjacency });
+    const wrapper = mountRow({ container: { id: 'db', name: 'db', identityKey: 'db' }, adjacency });
 
     const children = wrapper.find('[data-test="container-dependency-children"]');
     expect(children.exists()).toBe(true);
@@ -73,7 +73,10 @@ describe('ContainerDependencyRow', () => {
 
   it('does not render a parents or children list when there are none', () => {
     const adjacency = buildDependencyAdjacency(makeGraph());
-    const wrapper = mountRow({ container: { id: 'lonely', name: 'lonely' }, adjacency });
+    const wrapper = mountRow({
+      container: { id: 'lonely', name: 'lonely', identityKey: 'lonely' },
+      adjacency,
+    });
 
     expect(wrapper.find('[data-test="container-dependency-parents"]').exists()).toBe(false);
     expect(wrapper.find('[data-test="container-dependency-children"]').exists()).toBe(false);
@@ -119,6 +122,8 @@ describe('ContainerDependencyRow', () => {
     await wrapper.find('[data-test="container-dependency-update-group"]').trigger('click');
 
     expect(wrapper.emitted('update-group')).toBeTruthy();
-    expect(wrapper.emitted('update-group')?.[0]).toEqual([{ id: 'web', name: 'web' }]);
+    expect(wrapper.emitted('update-group')?.[0]).toEqual([
+      { id: 'web', name: 'web', identityKey: 'agent-a/docker.local/web' },
+    ]);
   });
 });
