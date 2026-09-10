@@ -201,7 +201,11 @@ describe('WatchersView', () => {
           .findAllComponents({ name: 'DetailField' })
           .find((field) => field.props('label') === i18n.global.t('watchersView.detail.lastRun'));
         expect(detail?.text()).toContain('\u2014');
-        expect(mockGetWatcher).toHaveBeenCalledWith({ type: 'docker', name: 'local', agent: null });
+        expect(mockGetWatcher).toHaveBeenCalledWith({
+          type: 'docker',
+          name: 'local',
+          agent: undefined,
+        });
         wrapper.unmount();
       },
     );

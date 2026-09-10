@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "监视器计划",
+    "edit": "编辑计划",
+    "boundary": "此处仅可编辑扫描计划和维护窗口。连接、凭据、TLS 和代理配置保持只读。",
+    "reload": "放弃草稿并重新加载",
+    "reset": "移除文件值 / 使用默认值",
+    "pendingRemoval": "保存时将移除此文件值。",
+    "current": "生效值：{value}",
+    "none": "未设置",
+    "install": "仅自动安装",
+    "scan": "扫描和安装",
+    "sources": {
+      "file": "来源：配置文件",
+      "env": "来源：环境变量",
+      "default": "来源：默认值",
+      "reference": "来源：引用（值已隐藏）"
+    },
+    "readOnly": {
+      "environment": "由环境变量设置。请在此编辑器之外修改。",
+      "reference": "引用值保留在服务器上，无法在此编辑。",
+      "agent": "代理配置在此为只读。",
+      "other": "此字段无法编辑。"
+    },
+    "fileUnavailable": "没有可用的配置文件。编辑前请挂载文件。",
+    "watcherUnavailable": "编辑器快照中没有这个确切的监视器。",
+    "accessDenied": "当前会话无权使用此编辑器。",
+    "apiUnavailable": "此服务器未提供监视器编辑器 API。",
+    "rateLimited": "编辑器请求过多。请等待一分钟后再加载。",
+    "loadFailed": "无法加载编辑器。未发送任何更改。",
+    "saveUncertain": "无法确认保存结果。再次更改前请重新加载。",
+    "conflict": "配置已更改或字段已变为只读。草稿已保留。再次编辑前请放弃草稿并重新加载。",
+    "saved": "已保存并实时应用。",
+    "notApplied": "已保存，但操作报告了问题。继续前请查看详细信息。",
+    "notSaved": "配置未保存。",
+    "reconciled": "重新加载：新增 {added}，更改 {changed}，移除 {removed}，未变 {unchanged}，错误 {errors}。",
+    "restart": "以下配置需要重启：{fields}",
+    "orphaned": "规则 {ruleId} 仍引用缺失的触发器 {triggerId}。",
+    "fields": {
+      "cron": "扫描计划（cron）",
+      "maintenancewindow": "维护窗口（cron）",
+      "maintenancewindowtz": "维护时区",
+      "maintenancewindowscope": "维护范围"
+    }
+  }
+}
