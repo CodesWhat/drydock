@@ -95,4 +95,38 @@ describe('useToast', () => {
     ]);
     vi.useRealTimers();
   });
+
+  test('replacement cancels the old queue and preserves imported FIFO records', () => {
+    vi.useFakeTimers();
+    const { toasts, addToast, dismissToast } = useToast();
+    try {
+      for (let index = 0; index < 5; index += 1) addToast(`old ${index}`);
+      expect(toasts.value).toHaveLength(3);
+      toasts.value = Array.from({ length: 4 }, (_, index) => ({
+        id: 40 + index,
+        title: `imported ${index}`,
+        body: 'details',
+        tone: 'warning' as const,
+      }));
+      expect(toasts.value.map((toast) => toast.title)).toEqual([
+        'imported 0',
+        'imported 1',
+        'imported 2',
+      ]);
+      expect(vi.getTimerCount()).toBe(0);
+      dismissToast(toasts.value[0].id);
+      expect(toasts.value[2]).toMatchObject({
+        title: 'imported 3',
+        body: 'details',
+        tone: 'warning',
+      });
+      vi.advanceTimersByTime(60_000);
+      expect(toasts.value).toHaveLength(3);
+      toasts.value = [];
+      expect(toasts.value).toEqual([]);
+    } finally {
+      toasts.value = [];
+      vi.useRealTimers();
+    }
+  });
 });
