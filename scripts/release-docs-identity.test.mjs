@@ -182,6 +182,14 @@ test('rc.15 notes identify the ownership fix and immutable changelog', () => {
       `https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`,
     ),
   );
+  const readmeHighlights = read('README.md')
+    .split(`<summary><strong>v${RC_VERSION} highlights</strong></summary>`)[1]
+    ?.split('</details>')[0];
+  assert.ok(
+    readmeHighlights?.includes(
+      `[Full changelog](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE})`,
+    ),
+  );
 });
 
 test('security policy names active v1.7 and maintained v1.6 without supporting old candidates', () => {

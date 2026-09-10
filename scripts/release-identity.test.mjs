@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { auditEntries } from '../apps/demo/src/mocks/data/audit.ts';
 
 const BASE_VERSION = '1.7.0';
 const RC_VERSION = '1.7.0-rc.15';
@@ -57,6 +58,31 @@ test(`demo runtime fixtures identify the exact v${RC_VERSION} candidate`, () => 
     const contents = readFileSync(path, 'utf8');
     assert.deepEqual(extractVersionValues(contents, valuePattern), [RC_VERSION], path);
   }
+});
+
+test('candidate audit events use the exact changelog release day', () => {
+  const headingPrefix = `## [${RC_VERSION}] — `;
+  const releaseHeading = readFileSync('CHANGELOG.md', 'utf8')
+    .split('\n')
+    .find((line) => line.startsWith(headingPrefix));
+  assert.ok(releaseHeading, 'the exact candidate changelog heading must exist');
+  const releaseDay = releaseHeading.slice(headingPrefix.length);
+  assert.match(releaseDay, /^\d{4}-\d{2}-\d{2}$/u);
+  const candidateEntries = auditEntries.filter((entry) =>
+    versionPattern(RC_VERSION).test(entry.details),
+  );
+  assert.equal(candidateEntries.length, 2);
+  for (const entry of candidateEntries) {
+    assert.equal(entry.timestamp.slice(0, 10), releaseDay, entry.id);
+    assert.ok(Number.isFinite(Date.parse(entry.timestamp)), entry.id);
+  }
+});
+
+test('candidate startup and watch events lead the audit fixture newest first', () => {
+  const [watch, startup] = auditEntries;
+  assert.equal(watch.id, 'aud-030');
+  assert.equal(startup.id, 'aud-001');
+  assert.ok(Date.parse(watch.timestamp) > Date.parse(startup.timestamp));
 });
 
 test('release version patterns match exact optionally v-prefixed tokens', () => {
