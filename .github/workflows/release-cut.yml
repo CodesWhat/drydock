@@ -1435,14 +1435,14 @@ jobs:
           # Resolve the previous release for a Full Changelog compare link. The
           # predecessor is the newest published release on this major.minor
           # line; exclude the current tag to support partial-release re-runs.
-          prev_tag="$(gh release list --repo "${REPO}" --limit 100 \
-            --json tagName,publishedAt,isDraft \
-            --jq 'sort_by(.publishedAt) | reverse
-                  | map(select(.isDraft == false) | .tagName)
+          # Combine every page before filtering, including older release lines.
+          prev_tag="$(gh api --paginate "repos/${REPO}/releases?per_page=100" 2>/dev/null \
+            | jq -sr 'add | sort_by(.published_at) | reverse
+                  | map(select(.draft == false) | .tag_name)
                   | map(select(. != env.RELEASE_TAG
                       and startswith(env.RELEASE_TAG | split(".")[0:2] | join(".") + ".")))
                   | .[0] // empty' \
-            2>/dev/null || true)"
+            2>/dev/null)" || prev_tag=""
 
           {
             echo "# ${RELEASE_TAG}"

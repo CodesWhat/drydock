@@ -9,25 +9,28 @@ import { loadWorkflow } from './workflow-test-utils';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const workflowPath = join(repoRoot, '.github/workflows/release-cut.yml');
 
-// Keep the selector in the real workflow: the boundary stub executes its
-// --jq expression against fixture API data, rather than supplying a chosen tag.
+// Keep the selector in the real workflow. The boundary stub models API pages,
+// rather than supplying a chosen tag.
 const stubGh = `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "$@" > "\${GH_ARGS_PATH}"
-if [ "$1" != release ] || [ "$2" != list ]; then exit 97; fi
+if [ "$1" != api ]; then exit 97; fi
 if [ "\${LOOKUP_FAIL}" = true ]; then exit 1; fi
-fields=""
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = --json ]; then fields="$2"; shift; fi
-  if [ "$1" = --jq ]; then
-    jq --arg fields "$fields" \\
-      'map(with_entries(select(.key as $key | $fields | split(",") | index($key))))' \\
-      "\${RELEASES_PATH}" | jq -r "$2"
-    exit 0
-  fi
-  shift
+paginate=false
+for arg in "$@"; do
+  if [ "$arg" = --paginate ]; then paginate=true; fi
 done
-exit 98
+jq -c --argjson paginate "$paginate" \\
+  'if $paginate and length > 0 then
+     range(0; length; 100) as $start | .[$start:$start + 100]
+   else .[0:100] end' "\${RELEASES_PATH}" | {
+  if [ "\${LOOKUP_FAIL}" = after-first-page ]; then
+    IFS= read -r page
+    printf '%s\\n' "$page"
+    exit 1
+  fi
+  cat
+}
 `;
 
 function release(
@@ -36,10 +39,14 @@ function release(
   isDraft = false,
   publishedAt: string | null = isDraft ? null : createdAt,
 ) {
-  return { tagName, createdAt, publishedAt, isDraft };
+  return { tag_name: tagName, created_at: createdAt, published_at: publishedAt, draft: isDraft };
 }
 
-function runNotes(releaseTag: string, releases: ReturnType<typeof release>[], lookupFail = false) {
+function runNotes(
+  releaseTag: string,
+  releases: ReturnType<typeof release>[],
+  lookupFail: boolean | 'after-first-page' = false,
+) {
   const step = loadWorkflow(workflowPath).jobs?.release?.steps?.find(
     (candidate) => candidate.id === 'release_notes',
   );
@@ -81,19 +88,7 @@ function runNotes(releaseTag: string, releases: ReturnType<typeof release>[], lo
     const notesPath = join(workdir, 'dist', `release-notes-${releaseTag}.md`);
     expect(readFileSync(outputPath, 'utf8')).toBe(`path=dist/release-notes-${releaseTag}.md\n`);
     const args = readFileSync(argsPath, 'utf8').trim().split('\n');
-    expect(args.slice(0, 6)).toEqual([
-      'release',
-      'list',
-      '--repo',
-      'CodesWhat/drydock',
-      '--limit',
-      '100',
-    ]);
-    expect(args[args.indexOf('--json') + 1].split(',')).toEqual([
-      'tagName',
-      'publishedAt',
-      'isDraft',
-    ]);
+    expect(args).toEqual(['api', '--paginate', 'repos/CodesWhat/drydock/releases?per_page=100']);
     const notes = readFileSync(notesPath, 'utf8');
     expect(notes).toContain('- Preserved release entry.');
     return notes;
@@ -153,6 +148,45 @@ test('selects the latest publication even when its draft was created earlier', (
   expect(notes).toContain('/compare/v1.7.0-rc.14...v1.7.0-rc.15');
   expect(notes).not.toContain('/compare/v1.7.0-rc.13...');
   expect(notes).not.toContain('/compare/v1.7.0-rc.16...');
+});
+
+test('finds a same-line predecessor beyond 100 newer releases on other lines', () => {
+  const notes = runNotes('v1.6.1-rc.14', [
+    ...Array.from({ length: 100 }, (_, index) =>
+      release(`v1.8.0-rc.${100 - index}`, '2026-09-10T00:00:00Z'),
+    ),
+    release('v1.6.1-rc.13', '2026-09-08T00:00:00Z'),
+  ]);
+  expect(notes).toContain('/compare/v1.6.1-rc.13...v1.6.1-rc.14');
+});
+
+test('sorts publications across all pages before choosing a same-line predecessor', () => {
+  const notes = runNotes('v1.7.0-rc.15', [
+    release('v1.7.0-rc.13', '2026-09-09T00:00:00Z'),
+    ...Array.from({ length: 199 }, (_, index) =>
+      release(`v1.8.0-rc.${199 - index}`, '2026-09-08T00:00:00Z'),
+    ),
+    release('v1.7.0-rc.16', '2026-09-07T00:00:00Z', true),
+    release('v1.7.0-rc.15', '2026-09-06T00:00:00Z', false, '2026-09-11T00:00:00Z'),
+    release('v1.7.0-rc.14', '2026-09-05T00:00:00Z', false, '2026-09-10T00:00:00Z'),
+  ]);
+  expect(notes).toContain('/compare/v1.7.0-rc.14...v1.7.0-rc.15');
+  expect(notes).not.toContain('/compare/v1.7.0-rc.13...');
+});
+
+test('omits comparison instead of selecting from incomplete pages when pagination fails', () => {
+  const notes = runNotes(
+    'v1.7.0-rc.15',
+    [
+      release('v1.7.0-rc.13', '2026-09-09T00:00:00Z'),
+      ...Array.from({ length: 99 }, (_, index) =>
+        release(`v1.8.0-rc.${99 - index}`, '2026-09-08T00:00:00Z'),
+      ),
+      release('v1.7.0-rc.14', '2026-09-05T00:00:00Z', false, '2026-09-10T00:00:00Z'),
+    ],
+    'after-first-page',
+  );
+  expect(notes).not.toContain('Full Changelog');
 });
 
 test('matches both major and minor exactly rather than a partial prefix', () => {
