@@ -56,6 +56,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
 | `/api/v1/dependency-groups/:rootId/update` | `POST` | `X-DD-Confirm-Action: dependency-group-update` |
 | `/api/v1/api-keys/:keyId` | `DELETE` | `X-DD-Confirm-Action: api-key-revoke` |
+| `/api/v1/images/prune` | `POST` | `X-DD-Confirm-Action: image-prune` |
 
 ## Endpoint overview
 
@@ -72,6 +73,7 @@ If the header is missing or does not match the expected token, the API responds 
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
 | [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
 | [Watchers](/docs/api/watcher) | `GET /api/v1/watchers` | Watcher configurations |
+| Images | `GET /api/v1/images`, `GET /api/v1/images/prune-preview`, `POST /api/v1/images/prune` | Image inventory across hosts, prune preview, and prune (admin; requires `X-DD-Confirm-Action: image-prune`) |
 
 ### Additional endpoints
 

@@ -950,6 +950,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     imageCreated: deriveImageCreated(apiContainer),
     server: deriveServer(apiContainer),
     agent: asNonEmptyString(apiContainer.agent),
+    labels: { ...apiContainer.labels },
     portLabel: asNonEmptyString(apiContainer.portLabel),
     includeTags: asNonEmptyString(apiContainer.includeTags),
     excludeTags: asNonEmptyString(apiContainer.excludeTags),

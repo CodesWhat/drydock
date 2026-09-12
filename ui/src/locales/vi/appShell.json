@@ -65,6 +65,7 @@
         "hosts": "Máy chủ",
         "registries": "Registry",
         "watchers": "Watcher",
+        "images": "Image",
         "settingsGroup": "Cài đặt",
         "general": "Tổng quan",
         "notifications": "Thông báo",

@@ -71,7 +71,8 @@
       "agent-disconnect": "Ajan Bağlantı Kesimi",
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
       "security-alert": "Güvenlik Uyarısı",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "İmaj Temizleme"
     },
     "target": {
       "container": "Kapsayıcı",

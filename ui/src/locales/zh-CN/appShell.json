@@ -65,6 +65,7 @@
         "hosts": "主机",
         "registries": "仓库",
         "watchers": "监视器",
+        "images": "镜像",
         "settingsGroup": "设置",
         "general": "通用",
         "notifications": "通知",

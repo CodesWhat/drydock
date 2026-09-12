@@ -3,6 +3,12 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
+import {
+  getNotificationTriggerEditSnapshot,
+  getWatcherEditSnapshot,
+  writeNotificationTriggerEdits,
+  writeWatcherEdits,
+} from '../configuration/file/editor.js';
 import { getConfigFileInfo } from '../configuration/file/layer.js';
 import { reloadConfiguration } from '../configuration/file/reload.js';
 import {
@@ -101,7 +107,7 @@ function ddEnvKeyToSegments(envKey: string): string[] {
 function buildSections(): Record<string, Record<string, unknown>> {
   const sections: Record<string, Record<string, unknown>> = {};
 
-  for (const [envKey, value] of Object.entries(ddEnvVars)) {
+  for (const [envKey, value] of Object.entries(redactConfigurationTree(ddEnvVars))) {
     if (value === undefined || !envKey.toUpperCase().startsWith(DD_ENV_KEY_PREFIX)) {
       continue;
     }
@@ -401,6 +407,10 @@ export function init() {
   });
 
   router.use(nocache());
+  router.get('/editor/watchers', configReadRateLimit, scoped(SESSION_ONLY, readWatcherEditor));
+  router.patch('/editor/watchers', configWriteRateLimit, scoped('admin', patchWatcherEditor));
+  router.get('/editor/triggers', configReadRateLimit, scoped(SESSION_ONLY, readTriggerEditor));
+  router.patch('/editor/triggers', configWriteRateLimit, scoped('admin', patchTriggerEditor));
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
   router.get('/:section', configReadRateLimit, scoped(SESSION_ONLY, getConfigurationSection));
   // `admin`, not SESSION_ONLY: this route never returns a configuration
@@ -421,4 +431,79 @@ export function init() {
   // never widens past what `/validate` and `/reload` already allow.
   router.put('/:section', configWriteRateLimit, scoped('admin', writeConfigurationSection));
   return router;
+}
+
+async function readWatcherEditor(_req: Request, res: Response): Promise<void> {
+  return readConfigurationEditor(res, 'watchers');
+}
+
+async function readTriggerEditor(_req: Request, res: Response): Promise<void> {
+  return readConfigurationEditor(res, 'triggers');
+}
+
+async function readConfigurationEditor(
+  res: Response,
+  editor: 'watchers' | 'triggers',
+): Promise<void> {
+  const label =
+    editor === 'watchers' ? 'watcher configuration editor' : 'notification policy editor';
+  try {
+    const snapshot =
+      editor === 'watchers'
+        ? await getWatcherEditSnapshot()
+        : await getNotificationTriggerEditSnapshot();
+    recordAuditEvent({
+      action: 'config-read',
+      containerName: 'diagnostics',
+      status: 'info',
+      details: `Read the ${label}`,
+    });
+    res.status(200).json(snapshot);
+  } catch {
+    sendErrorResponse(res, 500, `Unable to read the ${label}`);
+  }
+}
+
+async function patchWatcherEditor(req: Request, res: Response): Promise<void> {
+  return patchConfigurationEditor(req, res, 'watchers');
+}
+
+async function patchTriggerEditor(req: Request, res: Response): Promise<void> {
+  return patchConfigurationEditor(req, res, 'triggers');
+}
+
+async function patchConfigurationEditor(
+  req: Request,
+  res: Response,
+  editor: 'watchers' | 'triggers',
+): Promise<void> {
+  try {
+    const { status, ...outcome } =
+      editor === 'watchers'
+        ? await writeWatcherEdits(req.body)
+        : await writeNotificationTriggerEdits(req.body);
+    try {
+      recordAuditEvent({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: outcome.applied ? 'info' : 'error',
+        details: `${editor === 'watchers' ? 'Watcher configuration' : 'Notification policy'} edit: saved=${outcome.saved}, applied=${outcome.applied}; changed keys: ${outcome.changedKeys.join(', ')}`,
+      });
+    } catch {
+      outcome.errors.push({
+        path: 'document',
+        envKey: 'DD_CONFIG_FILE',
+        message: 'Configuration outcome could not be audited',
+      });
+    }
+    res.status(status).json(outcome);
+  } catch {
+    sendErrorResponse(
+      res,
+      500,
+      editor === 'watchers'
+        ? 'Unable to save watcher configuration'
+        : 'Unable to save notification policy configuration',
+    );
+  }
 }

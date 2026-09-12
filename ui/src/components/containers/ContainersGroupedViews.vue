@@ -41,6 +41,7 @@ const {
   filteredContainers,
   renderGroups,
   groupByStack,
+  fleet,
   containerViewMode,
   containerCardReflowForced,
   toggleGroupCollapse,
@@ -215,7 +216,7 @@ function pushContainerRow(rows: GroupedTableRow[], container: DisplayContainer, 
 }
 
 const tableRows = computed<GroupedTableRow[]>(() => {
-  if (!groupByStack.value) {
+  if (!groupByStack.value && (!fleet || fleet.groupBy.value === 'none')) {
     const flat = renderGroups.value[0]?.containers ?? displayContainers.value;
     const rows: GroupedTableRow[] = [];
     flat.forEach((container) => pushContainerRow(rows, container, '__flat__'));
@@ -660,6 +661,7 @@ onScopeDispose(() => {
             :done-count="getGroupDoneCount(row.group)"
             :tt="tt"
             :show-update-controls="updateMode !== 'notify'"
+            :show-update-all="!fleet || fleet.groupBy.value === 'none'"
             @toggle="toggleGroupCollapse"
             @update-all="updateAllInGroup($event)"
           />

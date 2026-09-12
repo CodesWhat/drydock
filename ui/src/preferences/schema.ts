@@ -5,6 +5,35 @@ import type { RadiusPresetId } from './radius';
 /** Table/cards view-mode switch. `'list'` (the old 3-way `DataListAccordion` mode) is gone for good. */
 export type ViewMode = 'table' | 'cards';
 
+export const FLEET_GROUP_DIMENSIONS = [
+  'none',
+  'agent',
+  'registry',
+  'status',
+  'tagType',
+  'label',
+] as const;
+export type FleetGroupDimension = (typeof FLEET_GROUP_DIMENSIONS)[number];
+export const FLEET_TAG_TYPES = [
+  'all',
+  'specific',
+  'floating',
+  'digest',
+  'semver',
+  'tag',
+  'unknown',
+] as const;
+export interface FleetPreferences {
+  agent: string;
+  registry: string;
+  tagType: (typeof FLEET_TAG_TYPES)[number];
+  labelKey: string;
+  labelValue: string;
+  labelMatch: 'exists' | 'equals' | 'missing';
+  groupBy: FleetGroupDimension;
+  groupLabel: string;
+}
+
 export const DASHBOARD_LAYOUT_BREAKPOINTS = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
 export type DashboardLayoutBreakpoint = (typeof DASHBOARD_LAYOUT_BREAKPOINTS)[number];
 
@@ -32,6 +61,7 @@ export interface PreferencesSchema {
     viewMode: ViewMode;
     tableActions: 'icons' | 'buttons';
     groupByStack: boolean;
+    fleet: FleetPreferences;
     /** UI-managed container identity key → group name overrides. */
     manualGroups: Record<string, string>;
     sort: { key: string; asc: boolean };
@@ -65,6 +95,7 @@ export interface PreferencesSchema {
     registries: { mode: ViewMode };
     notifications: { mode: ViewMode };
     auth: { mode: ViewMode };
+    images: { mode: ViewMode; hiddenColumns: string[] };
   };
   sync: { enabled: boolean };
 }
@@ -83,6 +114,7 @@ export const VIEW_TABLE_COLUMN_KEYS = {
   servers: ['name', 'host', 'status', 'containers', 'lastSeen'],
   audit: ['timestamp', 'action', 'containerName', 'status', 'details'],
   agents: ['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen'],
+  images: ['repository', 'tag', 'imageId', 'size', 'containers', 'created', 'lastSeen', 'host'],
 } as const;
 
 export type ViewTableColumnKey = keyof typeof VIEW_TABLE_COLUMN_KEYS;
@@ -93,6 +125,7 @@ export const VIEW_TABLE_REQUIRED_COLUMN_KEYS = {
   servers: ['name'],
   audit: ['containerName'],
   agents: ['name'],
+  images: ['repository'],
 } as const;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
@@ -123,6 +156,16 @@ export const DEFAULTS: PreferencesSchema = {
     viewMode: 'table',
     tableActions: 'icons',
     groupByStack: false,
+    fleet: {
+      agent: 'all',
+      registry: 'all',
+      tagType: 'all',
+      labelKey: '',
+      labelValue: '',
+      labelMatch: 'exists',
+      groupBy: 'none',
+      groupLabel: '',
+    },
     manualGroups: {},
     sort: { key: 'name', asc: true },
     filters: {
@@ -171,6 +214,7 @@ export const DEFAULTS: PreferencesSchema = {
     registries: { mode: 'table' },
     notifications: { mode: 'table' },
     auth: { mode: 'table' },
+    images: { mode: 'table', hiddenColumns: ['imageId', 'created'] },
   },
   sync: { enabled: false },
 };

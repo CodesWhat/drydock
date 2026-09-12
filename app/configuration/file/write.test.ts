@@ -3,9 +3,12 @@ import * as fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import yaml from 'yaml';
-import { configFileSources, ddEnvVars } from '../index.js';
+import { configFileSources, ddEnvVars, replaceSecrets } from '../index.js';
 import { resetConfigFileLayer, setConfigFileLayer } from './layer.js';
+import { loadConfigFile } from './loader.js';
 import type { ConfigurationReloadResult } from './reload.js';
+import { mergeConfigLayers } from './sources.js';
+import { validateConfiguration } from './validate.js';
 
 const mockRename = vi.hoisted(() => vi.fn());
 const mockUnlink = vi.hoisted(() => vi.fn());
@@ -97,6 +100,29 @@ describe('writeConfigurationSection', () => {
     expect(parsed.notification.discord.myhook.url).toBe('https://new.example/hook');
   });
 
+  test('validates untouched interpolation and secret-file references like startup', async () => {
+    const credentialPath = path.join(tempDir, 'credential');
+    fs.writeFileSync(credentialPath, 'private-sentinel\n', { mode: 0o600 });
+    writeFixture(
+      'watcher:\n  local:\n    cron: "0 */6 * * *"\n' +
+        'notification:\n  discord:\n    private:\n      url: ${WEBHOOK_URL:-https://discord.example/hook}\n' +
+        `registry:\n  hub:\n    private:\n      login: reader\n      password:\n        _file: ${credentialPath}\n`,
+    );
+    const before = readRaw();
+    const startupEnv = { ...ddEnvVars };
+    mergeConfigLayers(startupEnv, await loadConfigFile({ DD_CONFIG_FILE: configPath }));
+    await replaceSecrets(startupEnv);
+    expect(await validateConfiguration(startupEnv)).toEqual({ errors: [] });
+    const outcome = await writeConfigurationSection('watcher', {
+      local: { cron: '0 */8 * * *' },
+    });
+    expect(outcome.kind).toBe('written');
+    expect(readRaw().slice(readRaw().indexOf('notification:'))).toBe(
+      before.slice(before.indexOf('notification:')),
+    );
+    expect(readRaw()).not.toContain('private-sentinel');
+  });
+
   test('comments and key order survive a write to one section', async () => {
     writeFixture(FIXTURE_WITH_COMMENTS);
 
@@ -109,6 +135,19 @@ describe('writeConfigurationSection', () => {
     expect(raw).toContain('# port comment');
     expect(raw).toContain('# notification section comment');
     expect(raw.indexOf('server:')).toBeLessThan(raw.indexOf('notification:'));
+  });
+
+  test('refuses an unresolved secret before saving and does not expose the private path', async () => {
+    writeFixture(
+      `watcher:\n  local:\n    cron: "0 */6 * * *"\nregistry:\n  hub:\n    private:\n      password:\n        _file: ${path.join(tempDir, 'private-secret-path')}\n`,
+    );
+    const before = readRaw();
+    await expect(
+      writeConfigurationSection('watcher', { local: { cron: '0 */8 * * *' } }),
+    ).rejects.toThrow(/^Unable to resolve configuration secret files$/);
+    expect(readRaw()).toBe(before);
+    expect(mockRename).not.toHaveBeenCalled();
+    expect(mockReloadConfiguration).not.toHaveBeenCalled();
   });
 
   test('preserves the existing top-level key casing when replacing a section', async () => {

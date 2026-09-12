@@ -224,6 +224,16 @@ async function mountActionsHarness(
   return state;
 }
 
+function confirmGroupUpdate(
+  composable: ActionsHarnessState['composable'],
+  group: Parameters<ActionsHarnessState['composable']['updateAllInGroup']>[0],
+) {
+  const previousDialogs = mocks.confirmRequire.mock.calls.length;
+  composable.updateAllInGroup(group);
+  if (mocks.confirmRequire.mock.calls.length === previousDialogs) return Promise.resolve();
+  return mocks.confirmRequire.mock.calls.at(-1)![0].accept();
+}
+
 async function mountPreviewHarness(initialContainerId?: string) {
   let state:
     | {
@@ -260,7 +270,7 @@ describe('useContainerActions', () => {
     useOperationDisplayHold().clearAllOperationDisplayHolds();
     useUpdateBatches().batches.value = new Map();
     resetDependencyGraphState();
-    mocks.containerActionsEnabled.value = true;
+    mocks.containerActionsEnabled = ref(true);
     mocks.getBackups.mockResolvedValue([]);
     mocks.rollback.mockResolvedValue({});
     mocks.deleteContainer.mockResolvedValue({});
@@ -744,6 +754,265 @@ describe('useContainerActions', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Deleted: web');
   });
 
+  it('waits for confirmation before submitting a stack update', async () => {
+    const web = makeContainer({ id: 'web-1', name: 'web', newTag: '2.0.0' });
+    const { composable, loadContainers } = await mountActionsHarness({ containers: [web] });
+    loadContainers.mockClear();
+
+    await composable.updateAllInGroup({ key: 'web-stack', containers: [web] });
+
+    expect(mocks.updateContainers).not.toHaveBeenCalled();
+    expect(loadContainers).not.toHaveBeenCalled();
+    expect(mocks.confirmRequire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        header: 'Update 1 container',
+        message: 'Will update\n• web',
+        acceptLabel: 'Update 1 container',
+        rejectLabel: 'Cancel',
+        accept: expect.any(Function),
+      }),
+    );
+    await mocks.confirmRequire.mock.calls[0][0].accept();
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['web-1']);
+  });
+
+  describe('stack update confirmation', () => {
+    it.each(['blocked', 'hard-blocked'] as const)(
+      'requires renewed consent and current warnings when an included parent becomes %s',
+      async (state) => {
+        const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+        const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+        const group = { key: 'stack', containers: [web, db] };
+        const { composable, containers, loadContainers } = await mountActionsHarness({
+          containers: [web, db],
+        });
+        loadContainers.mockClear();
+        useDependencyGraph().graph.value = {
+          nodes: [web, db].map(({ id, name }) => ({ id, name, displayName: name })),
+          edges: [{ from: 'web', to: 'db', action: 'update', source: 'label' }],
+          cycles: [],
+          unresolved: [],
+          crossHostIgnored: [],
+        };
+        composable.updateAllInGroup(group);
+        const initial = mocks.confirmRequire.mock.calls[0][0];
+        expect(initial.message).not.toContain('depends on');
+        if (state === 'blocked') containers.value[1]!.bouncer = 'blocked';
+        else
+          containers.value[1]!.updateEligibility = {
+            eligible: false,
+            evaluatedAt: '2026-09-08T00:00:00Z',
+            blockers: [
+              {
+                reason: 'last-update-rolled-back',
+                severity: 'hard',
+                message: 'Rolled back',
+                actionable: true,
+              },
+            ],
+          };
+        group.key = 'changed-stack';
+        await initial.accept();
+
+        expect(mocks.updateContainers).not.toHaveBeenCalled();
+        expect(loadContainers).not.toHaveBeenCalled();
+        expect(composable.actionInProgress.value.size).toBe(0);
+        expect(composable.actionPending.value.size).toBe(0);
+        expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+        expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+        const renewed = mocks.confirmRequire.mock.calls[1][0];
+        expect(renewed.header).toBe('Update 1 container');
+        expect(renewed.message).toContain('Will update\n• web');
+        expect(renewed.message).not.toContain('\n• db');
+        expect(renewed.message).toContain('web depends on db');
+        expect(renewed.acceptLabel).toBe('Update anyway');
+        expect(containers.value[1]!.newTag).toBe('2.0.0');
+
+        await renewed.accept();
+        expect(mocks.updateContainers).toHaveBeenCalledExactlyOnceWith(['web']);
+        expect(loadContainers).toHaveBeenCalledTimes(1);
+        expect(mocks.toastSuccess).toHaveBeenCalledWith('Queued update for 1 container in stack');
+      },
+    );
+
+    it('cancelling a reduced confirmation never allocates progress or dispatches', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const { composable, containers, loadContainers } = await mountActionsHarness({
+        containers: [web, db],
+      });
+      loadContainers.mockClear();
+      composable.updateAllInGroup({ key: 'stack', containers: [web, db] });
+      containers.value[1]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[0][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      mocks.confirmRequire.mock.calls[1][0].reject?.();
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(loadContainers).not.toHaveBeenCalled();
+      expect(composable.actionInProgress.value.size).toBe(0);
+      expect(composable.actionPending.value.size).toBe(0);
+      expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+    });
+
+    it('revalidates each reduced confirmation and never reintroduces recovered or new targets', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const api = makeContainer({ id: 'api', name: 'api', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const { composable, containers } = await mountActionsHarness({ containers: [web, api, db] });
+      composable.updateAllInGroup({ key: 'stack', containers: [web, api, db] });
+      containers.value[2]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[0][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      containers.value[2]!.bouncer = 'safe';
+      containers.value[1]!.bouncer = 'blocked';
+      containers.value.push(makeContainer({ id: 'new', name: 'new', newTag: '2.0.0' }));
+      await mocks.confirmRequire.mock.calls[1][0].accept();
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(3);
+      expect(mocks.confirmRequire.mock.calls[2][0].message).toBe('Will update\n• web');
+      containers.value[1]!.bouncer = 'safe';
+      await mocks.confirmRequire.mock.calls[2][0].accept();
+      expect(mocks.updateContainers).toHaveBeenCalledExactlyOnceWith(['web']);
+    });
+
+    it('does nothing when the remaining target becomes blocked during renewed confirmation', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const { composable, containers, loadContainers } = await mountActionsHarness({
+        containers: [web, db],
+      });
+      loadContainers.mockClear();
+      composable.updateAllInGroup({ key: 'stack', containers: [web, db] });
+      containers.value[1]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[0][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      containers.value[0]!.bouncer = 'blocked';
+      await mocks.confirmRequire.mock.calls[1][0].accept();
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(2);
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(loadContainers).not.toHaveBeenCalled();
+      expect(composable.actionInProgress.value.size).toBe(0);
+      expect(composable.actionPending.value.size).toBe(0);
+      expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+    });
+
+    it('cancelling leaves requests and progress untouched', async () => {
+      const web = makeContainer({ newTag: '2.0.0' });
+      const { composable, loadContainers } = await mountActionsHarness({ containers: [web] });
+      loadContainers.mockClear();
+      await composable.updateAllInGroup({ key: 'stack', containers: [web] });
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+      mocks.confirmRequire.mock.calls[0][0].reject?.();
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      expect(loadContainers).not.toHaveBeenCalled();
+      expect(composable.actionInProgress.value.size).toBe(0);
+      expect(composable.actionPending.value.size).toBe(0);
+      expect(useUpdateBatches().getBatch('stack')).toBeUndefined();
+    });
+
+    it.each(['outside', 'blocked', 'included'] as const)(
+      'warns about transitive pending parents only outside the eligible dispatch: %s',
+      async (parentState) => {
+        const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+        const api = makeContainer({ id: 'api', name: 'api', newTag: '2.0.0' });
+        const db = makeContainer({
+          id: 'db',
+          name: 'db',
+          newTag: '2.0.0',
+          bouncer: parentState === 'blocked' ? 'blocked' : 'safe',
+        });
+        const { composable } = await mountActionsHarness({ containers: [web, api, db] });
+        useDependencyGraph().graph.value = {
+          nodes: [web, api, db].map(({ id, name }) => ({ id, name, displayName: name })),
+          edges: [
+            { from: 'web', to: 'api', action: 'update', source: 'label' },
+            { from: 'api', to: 'db', action: 'update', source: 'label' },
+          ],
+          cycles: [],
+          unresolved: [],
+          crossHostIgnored: [],
+        };
+        await composable.updateAllInGroup({
+          key: 'stack',
+          containers: parentState === 'outside' ? [web, api] : [web, api, db],
+        });
+        const dialog = mocks.confirmRequire.mock.calls[0][0];
+        expect(mocks.updateContainers).not.toHaveBeenCalled();
+        if (parentState === 'included') {
+          expect(dialog.message).not.toContain('depends on');
+          expect(dialog.acceptLabel).toBe('Update 3 containers');
+        } else {
+          expect(dialog.message).toContain('web depends on db');
+          expect(dialog.message).toContain('api depends on db');
+          expect(dialog.message).not.toContain('depends on api');
+          expect(dialog.acceptLabel).toBe('Update anyway');
+        }
+        await dialog.accept();
+        expect(mocks.updateContainers).toHaveBeenCalledWith(
+          parentState === 'included' ? ['web', 'api', 'db'] : ['web', 'api'],
+        );
+      },
+    );
+
+    it('cannot expand a confirmed target set when the group or live rows change', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const api = makeContainer({ id: 'api', name: 'api' });
+      const group = { key: 'stack', containers: [web, api] };
+      const { composable, containers } = await mountActionsHarness({ containers: [web, api] });
+      await composable.updateAllInGroup(group);
+      const dialog = mocks.confirmRequire.mock.calls[0][0];
+      api.newTag = '2.0.0';
+      group.containers.push(makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' }));
+      group.key = 'different-stack';
+      containers.value = group.containers;
+      await dialog.accept();
+      expect(mocks.updateContainers).toHaveBeenCalledWith(['web']);
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Queued update for 1 container in stack');
+    });
+
+    it.each([
+      'missing',
+      'unchanged',
+      'blocked',
+      'hard-blocked',
+      'queued',
+      'in-progress',
+      'disabled',
+    ])('rechecks confirmed targets before dispatch: %s', async (state) => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const { composable, containers } = await mountActionsHarness({ containers: [web] });
+      await composable.updateAllInGroup({ key: 'stack', containers: [web] });
+      const dialog = mocks.confirmRequire.mock.calls[0][0];
+      if (state === 'missing')
+        containers.value = [makeContainer({ id: 'replacement', name: 'web', newTag: '2.0.0' })];
+      if (state === 'unchanged') containers.value[0]!.newTag = null;
+      if (state === 'blocked') containers.value[0]!.bouncer = 'blocked';
+      if (state === 'hard-blocked')
+        containers.value[0]!.updateEligibility = {
+          eligible: false,
+          evaluatedAt: '2026-09-08T00:00:00Z',
+          blockers: [
+            {
+              reason: 'last-update-rolled-back',
+              severity: 'hard',
+              message: 'Rolled back',
+              actionable: true,
+            },
+          ],
+        };
+      if (state === 'queued' || state === 'in-progress')
+        containers.value[0]!.updateOperation = {
+          id: 'op',
+          status: state,
+          phase: 'queued',
+          updatedAt: '2026-09-08T00:00:00Z',
+        };
+      if (state === 'disabled') mocks.containerActionsEnabled.value = false;
+      await dialog.accept();
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+    });
+  });
+
   it('updates all eligible containers in a group and reloads once after the batch', async () => {
     const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
     const c2 = makeContainer({
@@ -771,7 +1040,7 @@ describe('useContainerActions', () => {
     });
     loadContainers.mockClear();
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [c1, c2, c3, c4],
     });
@@ -808,7 +1077,7 @@ describe('useContainerActions', () => {
       },
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [c1, c2],
     });
@@ -870,7 +1139,7 @@ describe('useContainerActions', () => {
       },
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [ready, rollbackBlocked, softBlocked],
     });
@@ -919,7 +1188,7 @@ describe('useContainerActions', () => {
       };
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [web, api],
     });
@@ -946,7 +1215,7 @@ describe('useContainerActions', () => {
     mocks.updateContainers.mockRejectedValue(new Error('update failed'));
     loadContainers.mockClear();
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [c1, c2],
     });
@@ -992,7 +1261,7 @@ describe('useContainerActions', () => {
     });
     loadContainers.mockClear();
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [stale, fresh],
     });
@@ -1037,7 +1306,7 @@ describe('useContainerActions', () => {
       ],
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [web, api],
     });
@@ -1069,7 +1338,7 @@ describe('useContainerActions', () => {
       ],
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [web],
     });
@@ -1407,7 +1676,7 @@ describe('useContainerActions', () => {
           : [makeContainer({ id: 'container-1', name: 'web', status: 'running' })];
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [web],
     });
@@ -3146,7 +3415,8 @@ describe('useContainerActions', () => {
     });
 
     // Group-1: updatable container has a queued operation — guard fires, warning toast shown
-    await composable.updateAllInGroup({ key: 'group-1', containers: [updatable] });
+    await confirmGroupUpdate(composable, { key: 'group-1', containers: [updatable] });
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
     expect(mocks.updateContainers).not.toHaveBeenCalled();
     expect(mocks.toastWarning).toHaveBeenCalledWith(
       'Update already in progress for some containers in this group',
@@ -3154,7 +3424,8 @@ describe('useContainerActions', () => {
 
     // Group-2: no updatable containers (all blocked/unchanged) — no API call, no extra warning
     mocks.toastWarning.mockClear();
-    await composable.updateAllInGroup({ key: 'group-2', containers: [blocked, unchanged] });
+    await confirmGroupUpdate(composable, { key: 'group-2', containers: [blocked, unchanged] });
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
     expect(mocks.updateContainers).not.toHaveBeenCalled();
     expect(mocks.toastWarning).not.toHaveBeenCalled();
   });
@@ -3321,7 +3592,7 @@ describe('useContainerActions', () => {
       containerIdMap: { tdarr_node: 'container-2' },
     });
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'tdarr-stack',
       containers: [localNode, remoteNode],
     });
@@ -3506,7 +3777,7 @@ describe('useContainerActions', () => {
         }),
     );
 
-    const updatePromise = composable.updateAllInGroup({
+    const updatePromise = confirmGroupUpdate(composable, {
       key: 'proxy-stack',
       containers: [proxyA, proxyB, proxyC],
     });
@@ -3577,7 +3848,7 @@ describe('useContainerActions', () => {
       rejected: [],
     });
 
-    const updatePromise = composable.updateAllInGroup({
+    const updatePromise = confirmGroupUpdate(composable, {
       key: 'proxy-stack',
       containers: [proxyA, proxyB, proxyC],
     });
@@ -3612,7 +3883,7 @@ describe('useContainerActions', () => {
 
     vi.stubGlobal('crypto', { randomUUID: undefined });
     try {
-      await composable.updateAllInGroup({
+      await confirmGroupUpdate(composable, {
         key: 'proxy-stack',
         containers: [proxyA, proxyB],
       });
@@ -3645,7 +3916,7 @@ describe('useContainerActions', () => {
 
     mocks.updateContainers.mockRejectedValue(new Error('update failed'));
 
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'proxy-stack',
       containers: [proxyA, proxyB],
     });
@@ -3924,13 +4195,13 @@ describe('useContainerActions', () => {
         }),
     );
 
-    const proxyUpdatePromise = composable.updateAllInGroup({
+    const proxyUpdatePromise = confirmGroupUpdate(composable, {
       key: 'proxy-stack',
       containers: [proxyA, proxyB],
     });
     await nextTick();
 
-    const workerUpdatePromise = composable.updateAllInGroup({
+    const workerUpdatePromise = confirmGroupUpdate(composable, {
       key: 'worker-stack',
       containers: [worker],
     });
@@ -3982,7 +4253,7 @@ describe('useContainerActions', () => {
         }),
     );
 
-    const proxyUpdatePromise = composable.updateAllInGroup({
+    const proxyUpdatePromise = confirmGroupUpdate(composable, {
       key: 'proxy-stack',
       containers: [proxyA, proxyB],
     });
@@ -4314,10 +4585,12 @@ describe('useContainerActions', () => {
     expect(composable.policyError.value).toBe('Container actions disabled by server configuration');
 
     error.value = null;
-    await composable.updateAllInGroup({
+    await confirmGroupUpdate(composable, {
       key: 'group-1',
       containers: [makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0' })],
     });
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    expect(mocks.updateContainers).not.toHaveBeenCalled();
     expect(mocks.updateContainer).not.toHaveBeenCalled();
     expect(error.value).toBe('Container actions disabled by server configuration');
 

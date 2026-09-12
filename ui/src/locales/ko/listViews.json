@@ -71,7 +71,8 @@
       "agent-disconnect": "에이전트 연결 해제",
       "notification-delivery-failed": "알림 전송 실패",
       "security-alert": "보안 경고",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "이미지 정리"
     },
     "target": {
       "container": "컨테이너",
