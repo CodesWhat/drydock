@@ -100,7 +100,7 @@ describe('POST /api/v1/config/validate — global body gates', () => {
     expect(payload.valid).toBe(true);
   });
 
-  test.each(['watchers', 'triggers'])(
+  test.each(['watchers', 'triggers', 'actions'])(
     'the %s editor inherits the JSON content-type and body-size gates',
     async (editor) => {
       const url = `http://127.0.0.1:${port}/api/v1/config/editor/${editor}`;
@@ -119,7 +119,7 @@ describe('POST /api/v1/config/validate — global body gates', () => {
     },
   );
 
-  test('watcher and notification editors share the five-write limit', async () => {
+  test('watcher, notification and action editors share the five-write limit', async () => {
     const url = `http://127.0.0.1:${port}/api/v1/config/editor/watchers`;
     for (let index = 0; index < 5; index++) {
       const response = await fetch(url, {
@@ -135,9 +135,15 @@ describe('POST /api/v1/config/validate — global body gates', () => {
       body: '{}',
     });
     expect(limited.status).toBe(429);
+    const actionLimited = await fetch(`http://127.0.0.1:${port}/api/v1/config/editor/actions`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(actionLimited.status).toBe(429);
   });
 
-  test('watcher and notification editors share the five-read limit', async () => {
+  test('watcher, notification and action editors share the five-read limit', async () => {
     for (let index = 0; index < 5; index++) {
       const response = await fetch(
         `http://127.0.0.1:${port}/api/v1/config/editor/${index % 2 === 0 ? 'watchers' : 'triggers'}`,
@@ -146,5 +152,6 @@ describe('POST /api/v1/config/validate — global body gates', () => {
     }
     const limited = await fetch(`http://127.0.0.1:${port}/api/v1/config/editor/triggers`);
     expect(limited.status).toBe(429);
+    expect((await fetch(`http://127.0.0.1:${port}/api/v1/config/editor/actions`)).status).toBe(429);
   });
 });

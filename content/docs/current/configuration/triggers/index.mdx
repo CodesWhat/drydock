@@ -32,6 +32,24 @@ A stale revision produces a conflict: your draft stays visible, Save is blocked,
 
 This editor does not change database-backed notification rules or the notification bell. Other configuration fields and per-container label overrides are not included in this slice.
 
+## Action policy editing API
+
+`GET /api/v1/config/editor/actions` provides a session-only editing snapshot for existing Docker, Docker Compose, Portainer, and Command action instances. It exposes only `auto`, `order`, and `concurrency`, together with exact identity, source, editable paths, and an opaque revision. This endpoint is an API foundation; action-policy forms are not yet included in the UI.
+
+The fields use the providers' existing validation and runtime defaults:
+
+- `auto`: boolean or case-insensitive `all`, `oninclude`, `onauto`, or `none`. Booleans normalize to `all`/`none`; an absent action value defaults to `oninclude`. Changing it does not bypass global manual mode or container eligibility.
+- `order`: a number, including negative and fractional values, with the existing default of `100`. Existing provider/group defaults and same-name sharing still apply. Saving or removing an order can also change the effective order of other same-name triggers, including notification providers that inherit it; the editor does not change that precedence.
+- `concurrency`: a positive integer override. Removing it inherits `DD_UPDATE_CONCURRENCY`, then `1` when the global value is absent. Compose concurrency remains across independent projects, not within one compose file.
+
+An administrator can send `PATCH /api/v1/config/editor/actions` with the snapshot `revision` and a `changes` array. Each change uses the exact original-case `path` returned by the snapshot, `operation: "set"` with a scalar `value`, or `operation: "remove"` without a value. Send only changed fields. Removal is distinct from an empty string, which still goes through normal provider validation. No arbitrary paths or instance creation/deletion are supported.
+
+Environment-owned values, references, agent-owned actions, ambiguous YAML identities, and unavailable files are read-only. Credentials, command text, destinations, sockets, TLS, templates, provider execution options, global settings, labels, and database-backed policy are excluded. Reference-derived values are omitted, including inherited order or concurrency; a local override can remain editable without revealing the inherited value. Untouched YAML nodes, comments, interpolation, and secret-file references stay on the server.
+
+The revision protects against stale saves, including an external edit during validation. A `409` requires an explicit fresh snapshot and a new user decision, not an automatic retry. Invalid requests or provider validation return `400` without writing. A successful atomic save returns `saved: true`; inspect `applied`, `errors`, `restartRequired`, and `reload` separately. A saved file whose reload failed is not rolled back or reported as applied. Audit errors can be present even when the live change was applied.
+
+Saving uses the same serialized write queue as watcher, notification, and whole-section configuration writes. Live reload waits for active update lifecycles before replacing changed action instances, so later dispatch uses the new settings. Validation, saving, and reloading do not dispatch an update, execute a command, or send a test notification.
+
 ## Environment variable prefixes
 
 Two prefixes are supported for trigger configuration (the legacy third was removed in v1.7.0):
