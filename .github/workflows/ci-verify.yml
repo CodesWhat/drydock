@@ -664,7 +664,7 @@ jobs:
         # secrets anyway); secrets.CODECOV_TOKEN is optional and covers
         # private-context uploads. Advisory (continue-on-error plus
         # fail_ci_if_error: false): an upload hiccup never blocks CI — the
-        # vitest 100% coverage thresholds enforced in the app/ui test steps
+        # Vitest's configured coverage thresholds enforced in app/ui tests
         # above are the real gate.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v6.0.2

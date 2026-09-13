@@ -184,8 +184,8 @@ function printGaps(workspace, gaps) {
   }
 
   console.error('');
-  console.error(`┌──────────────── ${workspace.toUpperCase()} COVERAGE GAPS ────────────────┐`);
-  console.error('│  Fix these files before rerunning this shard.           │');
+  console.error(`┌──────────────── ${workspace.toUpperCase()} UNCOVERED SOURCE ──────────────┐`);
+  console.error("│  Vitest's configured thresholds determine failure.      │");
   console.error('└─────────────────────────────────────────────────────────┘');
   console.error('');
 
