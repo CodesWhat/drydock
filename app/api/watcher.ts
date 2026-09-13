@@ -15,6 +15,7 @@ import { type ApiComponent, mapComponentToItem } from './component.js';
 import { normalizeLimitOffsetPagination } from './container/request-helpers.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
+import { refreshWatcherInventory } from './watcher-inventory.js';
 
 const WATCHER_LIST_MAX_LIMIT = 200;
 
@@ -167,6 +168,8 @@ export function getWatcher(req: Request<WatcherRouteParams>, res: Response): voi
 export function init() {
   const router = express.Router();
   router.use(nocache());
+  router.post('/:type/:name/inventory', scoped('containers:watch', refreshWatcherInventory));
+  router.post('/:type/:name/:agent/inventory', scoped('containers:watch', refreshWatcherInventory));
   router.get(
     '/',
     scoped('read', (req: Request, res: Response) => {

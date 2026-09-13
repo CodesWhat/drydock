@@ -14,6 +14,9 @@ const controllerMocks = vi.hoisted(() => {
     }),
     watch: vi.fn().mockResolvedValue([{ container: { id: 'c1' }, changed: true }]),
     watchContainer: vi.fn().mockResolvedValue({ container: { id: 'c1' }, changed: true }),
+    refreshInventory: vi
+      .fn()
+      .mockResolvedValue({ containers: [], removedIds: [], errors: [], authoritative: true }),
     deregister: vi.fn().mockResolvedValue(undefined),
   };
   return {
@@ -114,6 +117,123 @@ describe('AgentWatcher', () => {
       const result = await watcher.watch();
       expect(mockClient.watch).toHaveBeenCalledWith('docker', 'local');
       expect(result).toEqual([{ container: {} }]);
+    });
+  });
+
+  describe('inventory refresh', () => {
+    test('delegates Portwing inventory to its existing controller Docker watcher', async () => {
+      const client = { isConnected: true, requestDockerApi: vi.fn(), refreshInventory: vi.fn() };
+      manager.getAgent.mockReturnValue(client);
+      await watcher.register(
+        'watcher',
+        'docker',
+        'docker',
+        { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+        'remote-agent',
+      );
+      const options = { operationId: 'controller-operation', signal: new AbortController().signal };
+      expect(watcher.getMetadata().inventoryRefreshSupported).toBe(true);
+      await watcher.refreshInventory(options);
+      expect(controllerMocks.dockerDelegate.refreshInventory).toHaveBeenCalledWith(
+        expect.objectContaining(options),
+      );
+      expect(controllerMocks.dockerDelegate.watch).not.toHaveBeenCalled();
+      expect(client.refreshInventory).not.toHaveBeenCalled();
+      await watcher.deregisterComponent();
+      expect(watcher.getMetadata().inventoryRefreshSupported).toBe(false);
+    });
+
+    test('delegates supported native inventory with exact identity and cancellation', async () => {
+      watcher.agent = 'remote-agent';
+      const client = {
+        isConnected: true,
+        isInventoryRefreshSupported: vi.fn().mockReturnValue(true),
+        refreshInventory: vi.fn().mockResolvedValue({ authoritative: true }),
+      };
+      manager.getAgent.mockReturnValue(client);
+      const options = { operationId: 'controller-operation' };
+      expect(watcher.getMetadata().inventoryRefreshSupported).toBe(true);
+      expect(await watcher.refreshInventory(options)).toEqual({ authoritative: true });
+      expect(client.refreshInventory).toHaveBeenCalledWith(
+        'docker',
+        'local',
+        expect.objectContaining(options),
+      );
+      expect(client.isInventoryRefreshSupported).toHaveBeenCalledWith('docker', 'local');
+    });
+
+    test.each([undefined, false, 'true'])(
+      'does not probe older native agents with capability %j',
+      async (capability) => {
+        watcher.agent = 'remote-agent';
+        const client = {
+          isConnected: true,
+          isInventoryRefreshSupported:
+            capability === undefined ? undefined : vi.fn().mockReturnValue(capability),
+          refreshInventory: vi.fn(),
+          watch: vi.fn(),
+        };
+        manager.getAgent.mockReturnValue(client);
+        expect(watcher.getMetadata().inventoryRefreshSupported).toBe(false);
+        await expect(watcher.refreshInventory()).rejects.toMatchObject({ status: 501 });
+        expect(client.refreshInventory).not.toHaveBeenCalled();
+        expect(client.watch).not.toHaveBeenCalled();
+      },
+    );
+
+    test('requires a connected current agent for inventory', async () => {
+      watcher.agent = 'remote-agent';
+      manager.getAgent.mockReturnValue({
+        isConnected: false,
+        isInventoryRefreshSupported: () => true,
+      });
+      expect(watcher.getMetadata().inventoryRefreshSupported).toBe(false);
+      await expect(watcher.refreshInventory()).rejects.toMatchObject({ status: 503 });
+      manager.getAgent.mockReturnValue(undefined);
+      expect(watcher.getMetadata().inventoryRefreshSupported).toBe(false);
+      await expect(watcher.refreshInventory()).rejects.toMatchObject({ status: 503 });
+      watcher.agent = undefined;
+      expect(watcher.getMetadata().inventoryRefreshSupported).toBe(false);
+      await expect(watcher.refreshInventory()).rejects.toMatchObject({ status: 503 });
+    });
+
+    test('fences a Portwing delegate when its client or watcher is replaced', async () => {
+      const client = { isConnected: true, requestDockerApi: vi.fn() };
+      manager.getAgent.mockReturnValue(client);
+      await watcher.register(
+        'watcher',
+        'docker',
+        'docker',
+        { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+        'remote-agent',
+      );
+      controllerMocks.dockerDelegate.refreshInventory.mockImplementationOnce(async (options) => {
+        expect(options.isCurrent()).toBe(true);
+        manager.getAgent.mockReturnValue({ ...client });
+        expect(options.isCurrent()).toBe(false);
+        manager.getAgent.mockReturnValue(client);
+        client.isConnected = false;
+        expect(options.isCurrent()).toBe(false);
+        client.isConnected = true;
+        await watcher.deregisterComponent();
+        expect(options.isCurrent()).toBe(false);
+        return { authoritative: false };
+      });
+      await watcher.refreshInventory();
+    });
+
+    test('retains caller invalidation when delegating native inventory', async () => {
+      watcher.agent = 'remote-agent';
+      const client = {
+        isConnected: true,
+        isInventoryRefreshSupported: () => true,
+        refreshInventory: vi.fn(async (_type, _name, options) => {
+          expect(options.isCurrent()).toBe(false);
+          return { authoritative: false };
+        }),
+      };
+      manager.getAgent.mockReturnValue(client);
+      await watcher.refreshInventory({ isCurrent: () => false });
     });
   });
 

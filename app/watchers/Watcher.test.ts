@@ -75,14 +75,22 @@ test('maskConfiguration should return passed configuration when provided', () =>
 
 test('getMetadata should return lastRunAt as undefined when no watch has occurred', () => {
   const watcher = new ConcreteWatcher();
-  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: undefined, nextRunAt: undefined });
+  expect(watcher.getMetadata()).toStrictEqual({
+    lastRunAt: undefined,
+    nextRunAt: undefined,
+    inventoryRefreshSupported: false,
+  });
 });
 
 test('getMetadata should return lastRunAt when set', () => {
   const watcher = new ConcreteWatcher();
   const now = '2026-03-20T12:00:00.000Z';
   watcher.lastRunAt = now;
-  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: now, nextRunAt: undefined });
+  expect(watcher.getMetadata()).toStrictEqual({
+    lastRunAt: now,
+    nextRunAt: undefined,
+    inventoryRefreshSupported: false,
+  });
 });
 
 test('getMetadata should include nextRunAt when provided by the watcher', () => {
@@ -97,5 +105,21 @@ test('getMetadata should include nextRunAt when provided by the watcher', () => 
   expect(watcher.getMetadata()).toStrictEqual({
     lastRunAt: undefined,
     nextRunAt: '2026-03-20T13:00:00.000Z',
+    inventoryRefreshSupported: false,
   });
+});
+
+test('inventory support requires a concrete refresh implementation', () => {
+  const watcher = new ConcreteWatcher();
+  Object.assign(watcher, { refreshInventory: async () => ({}) });
+  expect(watcher.getMetadata().inventoryRefreshSupported).toBe(true);
+});
+
+test('inventory support honors a concrete provider capability check', () => {
+  const watcher = new ConcreteWatcher();
+  Object.assign(watcher, {
+    refreshInventory: async () => ({}),
+    isInventoryRefreshSupported: () => false,
+  });
+  expect(watcher.getMetadata().inventoryRefreshSupported).toBe(false);
 });

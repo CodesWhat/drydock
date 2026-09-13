@@ -43,10 +43,13 @@ test('Vitest and its mocker include the redirect path validation fix', () => {
     const manifest = readJson(`${workspace}/package.json`);
     assert.ok(compareSemver(manifest.devDependencies.vitest, '4.1.11') >= 0, workspace);
     const lockfile = readJson(`${workspace}/package-lock.json`);
+    const found = new Set();
     for (const [path, entry] of Object.entries(lockfile.packages)) {
       if (!/node_modules\/(?:vitest|@vitest\/mocker)$/.test(path)) continue;
+      found.add(path.endsWith('node_modules/vitest') ? 'vitest' : '@vitest/mocker');
       assert.ok(compareSemver(entry.version, '4.1.11') >= 0, `${workspace}/${path}`);
     }
+    assert.deepEqual([...found].sort(), ['@vitest/mocker', 'vitest'], `${workspace} resolutions`);
   }
 });
 

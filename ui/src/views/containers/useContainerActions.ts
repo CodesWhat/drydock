@@ -285,28 +285,19 @@ async function executeContainerActionState(args: {
   }
 }
 
-async function updateAllInGroupState(args: {
+function getGroupUpdateTargets(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
   projectContainerDisplayState: (container: Container) => Container;
   inputError: Ref<string | null>;
   actionInProgress: Ref<Map<string, ContainerActionKind>>;
-  actionPending: Ref<Map<string, Container>>;
-  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
-  actionPendingLifecycleObserved: Ref<Set<string>>;
-  groupUpdateQueue: Ref<Set<string>>;
-  startPolling: (pendingKey: string) => void;
   group: ContainerActionGroup;
-  loadContainers: () => Promise<void>;
-  captureBatch: (groupKey: string, frozenTotal: number) => void;
-  clearBatch: (groupKey: string) => void;
   alreadyInProgressMessage: string;
-  t: TranslateFn;
-}) {
+}): Container[] {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
-    return;
+    return [];
   }
   const updatableContainers = args.group.containers.filter((container) => {
     return (
@@ -330,16 +321,30 @@ async function updateAllInGroupState(args: {
     })
   ) {
     useToast().warning(args.alreadyInProgressMessage);
-    return;
+    return [];
   }
+  return updatableContainers;
+}
+
+async function updateAllInGroupState(
+  args: Parameters<typeof getGroupUpdateTargets>[0] & {
+    actionPending: Ref<Map<string, Container>>;
+    actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+    actionPendingLifecycleObserved: Ref<Set<string>>;
+    groupUpdateQueue: Ref<Set<string>>;
+    startPolling: (pendingKey: string) => void;
+    loadContainers: () => Promise<void>;
+    captureBatch: (groupKey: string, frozenTotal: number) => void;
+    clearBatch: (groupKey: string) => void;
+    t: TranslateFn;
+  },
+  updatableContainers: Container[],
+) {
   const frozenUpdateTargets = updatableContainers.map((container) => ({
     id: container.id,
     identityKey: container.identityKey,
     name: container.name,
   }));
-  if (frozenUpdateTargets.length === 0) {
-    return;
-  }
   const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
   const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
   const headActionInProgress = new Map(args.actionInProgress.value);
@@ -1003,18 +1008,17 @@ function schedulePendingActionsPoll(args: {
 
 /**
  * Builds the child-before-parent warning suffix + acceptLabel override for
- * a single-container update confirmation (#219, roadmap 6.1). Only the
- * per-row update/force-update path calls this — the stack "Update All"
- * button has no confirm dialog today and stays as-is.
+ * per-row and stack update confirmations (#219).
  *
  * A transitive parent is "stale" when it is not part of this dispatch (a
- * one-container dispatch, so only `containerId` itself) AND already has a
+ * one-container dispatch by default) AND already has a
  * pending update of its own — updating the child now would leave it running
  * against a parent that is about to change underneath it.
  */
 function buildStaleParentsWarning(args: {
   adjacency: DependencyAdjacency;
   containerId: string | undefined;
+  dispatchIds?: ReadonlySet<string>;
   name: string;
   containers: Container[];
   t: TranslateFn;
@@ -1025,7 +1029,7 @@ function buildStaleParentsWarning(args: {
   const staleParents = findStaleParents({
     adjacency: args.adjacency,
     containerId: args.containerId,
-    dispatchIds: new Set([args.containerId]),
+    dispatchIds: args.dispatchIds ?? new Set([args.containerId]),
     hasPendingUpdate: (id) => {
       const container = args.containers.find((c) => c.id === id);
       return container ? Boolean(container.newTag) : undefined;
@@ -1771,8 +1775,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
-  async function updateAllInGroup(group: ContainerActionGroup) {
-    await updateAllInGroupState({
+  function groupUpdateArgs(group: ContainerActionGroup) {
+    return {
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containers: input.containers,
@@ -1790,6 +1794,55 @@ export function useContainerActions(input: UseContainerActionsInput) {
       clearBatch,
       alreadyInProgressMessage: t('containersView.toast.updateAlreadyInProgress'),
       t: t as TranslateFn,
+    };
+  }
+
+  function updateAllInGroup(group: ContainerActionGroup) {
+    const targets = getGroupUpdateTargets(groupUpdateArgs(group));
+    if (targets.length === 0) return;
+    const groupKey = group.key;
+    const dispatchIds = new Set(targets.map((container) => container.id));
+    const { adjacency } = useDependencyGraph();
+    const warnings = targets.map((container) =>
+      buildStaleParentsWarning({
+        adjacency: adjacency.value,
+        containerId: container.id,
+        name: container.name,
+        dispatchIds,
+        containers: input.containers.value,
+        t: t as TranslateFn,
+      }),
+    );
+    const count = targets.length;
+    confirm.require({
+      header: t('containerComponents.confirmDialogs.bulkUpdate.header', { count }),
+      message:
+        [
+          t('containerComponents.confirmDialogs.bulkUpdate.dispatchHeading'),
+          ...targets.map((container) => `• ${container.name}`),
+        ].join('\n') + warnings.map((warning) => warning.suffix).join(''),
+      acceptLabel:
+        warnings.find((warning) => warning.acceptLabel)?.acceptLabel ??
+        t('containerComponents.confirmDialogs.bulkUpdate.accept', { count }),
+      rejectLabel: t('containerComponents.confirmDialogs.cancel'),
+      severity: 'warn',
+      accept: async () => {
+        const liveById = new Map(
+          input.containers.value.map((container) => [container.id, container]),
+        );
+        const confirmedContainers = [...dispatchIds].flatMap((id) => {
+          const container = liveById.get(id);
+          return container ? [container] : [];
+        });
+        const currentArgs = groupUpdateArgs({ key: groupKey, containers: confirmedContainers });
+        const currentTargets = getGroupUpdateTargets(currentArgs);
+        if (currentTargets.length === 0) return;
+        if (currentTargets.length < dispatchIds.size) {
+          updateAllInGroup({ key: groupKey, containers: currentTargets });
+          return;
+        }
+        await updateAllInGroupState(currentArgs, currentTargets);
+      },
     });
   }
 
