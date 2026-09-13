@@ -185,3 +185,40 @@ test('countdown reserves time for readiness, overview, and assertions without wi
   const config = readFileSync(join(__dirname, '../playwright.config.ts'), 'utf8');
   assert.match(config, /timeout: 60_000/);
 });
+
+test('container interception selects the validated ID instead of an earlier same-name fixture', async () => {
+  const { findContainerFixture } = await import('../playwright/helpers/container-fixture.mjs');
+  assert.equal(typeof findContainerFixture, 'function');
+  const wrong = { ...target, id: 'other-id', agent: 'edge' };
+  assert.equal(findContainerFixture([wrong, target], target.displayName, target.id), target);
+  assert.equal(findContainerFixture([wrong], target.displayName, target.id), undefined);
+});
+
+test('container interception retains name selection for callers without a validated ID', async () => {
+  const { findContainerFixture } = await import('../playwright/helpers/container-fixture.mjs');
+  assert.equal(typeof findContainerFixture, 'function');
+  const other = { ...target, displayName: 'Another fixture' };
+  assert.equal(findContainerFixture([other, target], target.displayName), target);
+});
+
+test('countdown carries its validated ID into interception and the exact-ID overview deep-link', () => {
+  const source = readFileSync(join(__dirname, '../playwright/v16-modes-pins.spec.ts'), 'utf8');
+  const countdown = source.slice(source.indexOf("test('#406"), source.indexOf("test('#498"));
+  assert.match(
+    countdown,
+    /const fixture = await waitForCountdownFixture\(page.context\(\).request\)/,
+  );
+  const interception = countdown.slice(
+    countdown.indexOf('await interceptContainer('),
+    countdown.indexOf('await openContainerOverview('),
+  );
+  assert.match(interception, /fixture\.id,?\s*\);/);
+  assert.match(countdown, /openContainerOverview\(page, TARGET_CONTAINER, fixture.id\)/);
+  assert.match(source, /findContainerFixture\(payload.data, displayName, containerId\)/);
+  const overview = source.slice(
+    source.indexOf('async function openContainerOverview'),
+    source.indexOf('async function selectUpdateMode'),
+  );
+  assert.match(overview, /containerIds=\$\{encodeURIComponent\(containerId\)\}/);
+  assert.match(overview, /await page.goto\(/);
+});

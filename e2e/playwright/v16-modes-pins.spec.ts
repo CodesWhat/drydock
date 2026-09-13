@@ -1,5 +1,5 @@
 import { expect, type Page, type Route, test } from '@playwright/test';
-import { waitForCountdownFixture } from './helpers/container-fixture.mjs';
+import { findContainerFixture, waitForCountdownFixture } from './helpers/container-fixture.mjs';
 import {
   dismissAnnouncementBanners,
   escapeRegExp,
@@ -54,8 +54,16 @@ async function interceptSettings(page: Page, initialMode: UpdateMode): Promise<(
   return () => updateMode;
 }
 
-async function openContainerOverview(page: Page, name = TARGET_CONTAINER): Promise<void> {
-  await page.goto('/containers');
+async function openContainerOverview(
+  page: Page,
+  name = TARGET_CONTAINER,
+  containerId?: string,
+): Promise<void> {
+  await page.goto(
+    containerId === undefined
+      ? '/containers'
+      : `/containers?containerIds=${encodeURIComponent(containerId)}`,
+  );
   await dismissAnnouncementBanners(page);
   const row = page.getByRole('row', { name: new RegExp(escapeRegExp(name), 'i') });
   await expect(row).toBeVisible({ timeout: 30_000 });
@@ -83,6 +91,7 @@ async function interceptContainer(
   page: Page,
   displayName: string,
   mutate: (container: ContainerFixture) => void,
+  containerId?: string,
 ): Promise<void> {
   await page.route('**/api/v1/containers', async (route: Route) => {
     if (route.request().method() !== 'GET') {
@@ -92,7 +101,7 @@ async function interceptContainer(
 
     const response = await route.fetch();
     const payload = (await response.json()) as ContainersPayload;
-    const container = payload.data.find((candidate) => candidate.displayName === displayName);
+    const container = findContainerFixture(payload.data, displayName, containerId);
     expect(container, `QA fixture ${displayName} must exist`).toBeTruthy();
     mutate(container!);
     await route.fulfill({ response, json: payload });
@@ -173,28 +182,33 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
 
   test('#406 shows a live stabilization countdown, ETA, and manual override', async ({ page }) => {
     test.setTimeout(90_000);
-    await waitForCountdownFixture(page.context().request);
+    const fixture = await waitForCountdownFixture(page.context().request);
     const now = new Date('2026-07-13T16:00:00.000Z');
     const liftableAt = new Date(now.getTime() + 6 * 60_000).toISOString();
     await interceptSettings(page, 'manual');
     await page.clock.install({ time: now });
-    await interceptContainer(page, TARGET_CONTAINER, (container) => {
-      container.updateEligibility = {
-        eligible: false,
-        evaluatedAt: now.toISOString(),
-        blockers: [
-          {
-            reason: 'maturity-not-reached',
-            severity: 'soft',
-            actionable: true,
-            message: 'The candidate must remain unchanged until the stabilization period ends.',
-            liftableAt,
-          },
-        ],
-      };
-    });
+    await interceptContainer(
+      page,
+      TARGET_CONTAINER,
+      (container) => {
+        container.updateEligibility = {
+          eligible: false,
+          evaluatedAt: now.toISOString(),
+          blockers: [
+            {
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              actionable: true,
+              message: 'The candidate must remain unchanged until the stabilization period ends.',
+              liftableAt,
+            },
+          ],
+        };
+      },
+      fixture.id,
+    );
 
-    await openContainerOverview(page);
+    await openContainerOverview(page, TARGET_CONTAINER, fixture.id);
     const panel = page.locator('[data-test="update-status-panel"]');
     await expect(panel).toHaveAttribute('data-state', 'soft-blocked');
     const condition = panel.locator('[data-reason="maturity-not-reached"]');

@@ -69,4 +69,19 @@ async function waitForCountdownFixture(request, timing = { now: () => performanc
   }
 }
 
-export { waitForCountdownFixture };
+/**
+ * @template {{id?: string, displayName?: string}} T
+ * @param {T[]} containers
+ * @param {string} displayName
+ * @param {string} [containerId]
+ * @returns {T | undefined}
+ */
+function findContainerFixture(containers, displayName, containerId) {
+  return containers.find((container) =>
+    containerId === undefined
+      ? container.displayName === displayName
+      : container.id === containerId,
+  );
+}
+
+export { findContainerFixture, waitForCountdownFixture };
