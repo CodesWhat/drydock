@@ -13,7 +13,9 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  mergeConfigWithImgset,
   resolveContainerDependsOn,
+  resolveLabelsFromContainer,
   warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
@@ -29,6 +31,7 @@ import {
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
+import { normalizeContainer } from './image-comparison.js';
 import {
   areRuntimeDetailsEqual,
   getRuntimeDetailsFromContainerSummary,
@@ -62,7 +65,7 @@ export interface ContainerLabelOverrides {
   registryLookupUrl?: string;
 }
 
-interface DockerContainerSummary {
+export type DockerContainerSummary = {
   Id: string;
   Image: string;
   Labels?: Record<string, string>;
@@ -70,9 +73,9 @@ interface DockerContainerSummary {
   Names?: string[];
   Ports?: unknown;
   Mounts?: unknown;
-}
+};
 
-interface DockerContainerInspectPayload {
+export interface DockerContainerInspectPayload {
   Config?: {
     Image?: string;
     [key: string]: unknown;
@@ -231,6 +234,22 @@ interface DockerImageDetailsHelpers {
   getMatchingImgsetConfiguration: (
     parsedImage: ParsedDockerImageReference,
   ) => ResolvedImgset | undefined;
+}
+
+export function createDockerImageDetailsHelpers(
+  watcher: Pick<
+    DockerImageDetailsHelpers,
+    'resolveImageName' | 'resolveTagName' | 'getMatchingImgsetConfiguration'
+  >,
+): DockerImageDetailsHelpers {
+  return {
+    resolveLabelsFromContainer,
+    mergeConfigWithImgset,
+    normalizeContainer,
+    resolveImageName: (...args) => watcher.resolveImageName(...args),
+    resolveTagName: (...args) => watcher.resolveTagName(...args),
+    getMatchingImgsetConfiguration: (...args) => watcher.getMatchingImgsetConfiguration(...args),
+  };
 }
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
@@ -886,7 +905,6 @@ export async function addImageDetailsToContainerOrchestration(
   helpers: DockerImageDetailsHelpers,
 ): Promise<Container | undefined> {
   const containerId = container.Id;
-  const containerLabels: Record<string, string> = container.Labels || {};
   const dockerContainerName = getContainerName(container);
 
   // Podman pod infra containers have an empty Image field — skip them
@@ -918,6 +936,30 @@ export async function addImageDetailsToContainerOrchestration(
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
   const containerInspect = await inspectDiscoveredContainer(watcher, containerId);
+  const discovered = await buildDiscoveredContainer(
+    watcher,
+    container,
+    labelOverrides,
+    helpers,
+    image,
+    containerInspect,
+  );
+  if (discovered) removeStaleContainerEntriesWithSameName(watcher, discovered);
+  return discovered;
+}
+
+export async function buildDiscoveredContainer(
+  watcher: DockerImageDetailsWatcher,
+  container: DockerContainerSummary,
+  labelOverrides: ContainerLabelOverrides,
+  helpers: DockerImageDetailsHelpers,
+  image: DockerImageInspectPayload,
+  containerInspect: DockerContainerInspectPayload | undefined,
+): Promise<Container | undefined> {
+  const containerId = container.Id;
+  const containerLabels = container.Labels || {};
+  const dockerContainerName = getContainerName(container);
+  const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
   const resolvedImageState = resolveContainerImageState({
     watcher,
     container,
@@ -1036,8 +1078,6 @@ export async function addImageDetailsToContainerOrchestration(
     containerName: dockerContainerName,
   });
   await applyContainerDependsOn(containerToReturn, containerLabels, watcher, dockerContainerName);
-  removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
-
   return containerToReturn;
 }
 

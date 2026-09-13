@@ -94,16 +94,86 @@ beforeEach(async () => {
   mockGetContainersRaw.mockReturnValue([]);
 });
 
-afterEach(async () => {
-  try {
-    await registry.testable_deregisterRegistries();
-    await registry.testable_deregisterTriggers();
-    await registry.testable_deregisterWatchers();
-    await registry.testable_deregisterAuthentications();
-  } catch {
-    // ignore error
-  }
-});
+async function cleanupRegistry() {
+  const kinds = ['registry', 'trigger', 'watcher', 'authentication', 'agent'] as const;
+  await Promise.allSettled(
+    kinds.flatMap((kind) =>
+      Object.values(registry.getState()[kind]).map((component) =>
+        registry.testable_deregisterComponent(component, kind),
+      ),
+    ),
+  );
+}
+
+afterEach(cleanupRegistry);
+
+test.each(['registry', 'trigger'] as const)(
+  'test cleanup settles every component after a %s rejection and cancels real watcher startup',
+  async (failingKind) => {
+    const { default: Docker } = await import('../watchers/providers/docker/Docker.js');
+    const { default: Dockerode } = await import('dockerode');
+    const info = vi.spyOn(Dockerode.prototype, 'info').mockResolvedValue({});
+    const version = vi.spyOn(Dockerode.prototype, 'version').mockResolvedValue({});
+    const listContainers = vi.spyOn(Dockerode.prototype, 'listContainers').mockResolvedValue([]);
+    const watcher = new Docker();
+    const throwing = new Component();
+    throwing.deregister = async () => {
+      throw new Error('Expected fixture rejection');
+    };
+    const settled: string[] = [];
+    const kinds = ['registry', 'trigger', 'watcher', 'authentication', 'agent'] as const;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'));
+    try {
+      await watcher.register('watcher', 'docker', 'cleanup', {
+        host: 'example.invalid',
+        protocol: 'http',
+        port: 2375,
+        cron: '0 23 * * *',
+        watchevents: false,
+        jitter: 0,
+      });
+      registry.getState().watcher[watcher.getId()] = watcher;
+      expect(watcher.watchCronTimeout).toBeDefined();
+      expect(listContainers).toHaveBeenCalledTimes(1);
+      for (const kind of kinds) {
+        const peer = new Component();
+        peer.name = `cleanup-${kind}`;
+        peer.deregisterComponent = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          settled.push(kind);
+        };
+        registry.getState()[kind][peer.getId()] = peer;
+      }
+      registry.getState()[failingKind][throwing.getId()] = throwing;
+      let cleanupFinished = false;
+      const cleanup = cleanupRegistry().then(() => {
+        cleanupFinished = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect.soft(cleanupFinished).toBe(false);
+      await vi.advanceTimersByTimeAsync(10);
+      await cleanup;
+      expect.soft(settled.sort()).toEqual([...kinds].sort());
+      expect
+        .soft(kinds.map((kind) => Object.keys(registry.getState()[kind])))
+        .toEqual(kinds.map(() => []));
+      expect.soft(watcher.watchCronTimeout).toBeUndefined();
+      expect.soft(watcher.watchCron).toBeUndefined();
+      mockGetContainersRaw.mockClear();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect.soft(listContainers).toHaveBeenCalledTimes(1);
+      expect.soft(mockGetContainersRaw).not.toHaveBeenCalled();
+    } finally {
+      await watcher.deregister();
+      await vi.advanceTimersByTimeAsync(10);
+      vi.useRealTimers();
+      info.mockRestore();
+      version.mockRestore();
+      listContainers.mockRestore();
+    }
+  },
+);
 
 test('registerComponent should warn when component does not exist', async () => {
   const registerComponent = registry.testable_registerComponent;
@@ -1349,7 +1419,7 @@ test('shutdown should exit 1 when deregisterAll throws', async () => {
   component.deregister = () => {
     throw new Error('Fail!!!');
   };
-  registry.getState().trigger = { trigger1: component };
+  registry.getState().trigger = { [component.getId()]: component };
   await registry.testable_shutdown();
   expect(store.save).not.toHaveBeenCalled();
   expect(exitSpy).toHaveBeenCalledWith(1);
@@ -1375,7 +1445,7 @@ test('deregisterAll should throw an error when any component fails to deregister
     throw new Error('Fail!!!');
   };
   registry.getState().trigger = {
-    trigger1: component,
+    [component.getId()]: component,
   };
   await expect(registry.testable_deregisterAll()).rejects.toThrowError(
     'Error when deregistering component .',
@@ -1388,7 +1458,7 @@ test('deregisterRegistries should throw when errors occurred', async () => {
     throw new Error('Fail!!!');
   };
   registry.getState().registry = {
-    registry1: component,
+    [component.getId()]: component,
   };
   await expect(registry.testable_deregisterRegistries()).rejects.toThrowError(
     'Error when deregistering component .',
@@ -1401,7 +1471,7 @@ test('deregisterTriggers should throw when errors occurred', async () => {
     throw new Error('Fail!!!');
   };
   registry.getState().trigger = {
-    trigger1: component,
+    [component.getId()]: component,
   };
   await expect(registry.testable_deregisterTriggers()).rejects.toThrowError(
     'Error when deregistering component .',
@@ -1414,7 +1484,7 @@ test('deregisterWatchers should throw when errors occurred', async () => {
     throw new Error('Fail!!!');
   };
   registry.getState().watcher = {
-    watcher1: component,
+    [component.getId()]: component,
   };
   await expect(registry.testable_deregisterWatchers()).rejects.toThrowError(
     'Error when deregistering component .',
@@ -1904,25 +1974,6 @@ test('init should log and continue when pruneOrphanedAgentContainers throws', as
 });
 
 describe('reconcileComponentsWithConfiguration', () => {
-  // A handful of earlier tests in this file ('deregisterTriggers should
-  // throw when errors occurred' and its siblings around line 1350) register
-  // a fixture component under a key that doesn't match its own getId(), with
-  // a deregister() that always throws. That component's individual
-  // finally-block cleanup (registry/index.ts's deregisterComponent) never
-  // fires for it, because it keys on getId() rather than the map key it was
-  // inserted under, so it survives every subsequent global afterEach for the
-  // rest of the file. This block's diff-based assertions are the first ones
-  // sensitive to that leftover, so — matching the direct-reset pattern
-  // other tests in this file already use to force a clean slate (e.g. lines
-  // ~1282, ~1337) — reset every component map before each test here rather
-  // than relying on the global afterEach alone.
-  beforeEach(() => {
-    registry.getState().trigger = {};
-    registry.getState().watcher = {};
-    registry.getState().registry = {};
-    registry.getState().authentication = {};
-  });
-
   async function registerBaseline() {
     await registry.testable_registerWatchers();
     await registry.testable_registerRegistries();

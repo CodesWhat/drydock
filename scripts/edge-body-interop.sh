@@ -2,8 +2,8 @@
 # Exercise the Drydock sender against a locally built Portwing receiver.
 set -euo pipefail
 if [ "$#" -ne 1 ]; then
-  echo "Usage: bash scripts/edge-body-interop.sh /path/to/portwing" >&2
-  exit 2
+	echo "Usage: bash scripts/edge-body-interop.sh /path/to/portwing" >&2
+	exit 2
 fi
 portwing_repo=$(cd "$1" && pwd)
 drydock_repo=$(cd "$(dirname "$0")/.." && pwd)
