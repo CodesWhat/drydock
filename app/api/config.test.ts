@@ -190,6 +190,46 @@ describe('Config Router', () => {
     await handler({ body: {} }, res);
     expect(res.status).toHaveBeenCalledWith(500);
     expect(JSON.stringify(res.json.mock.calls)).not.toContain('private-sentinel');
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/api/v1/config/editor/actions',
+        method: method === 'get' ? 'get' : 'patch',
+        statusCode: '500',
+        payload: res.json.mock.calls[0][0],
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+  test('action editor returns a structured writer refusal at 500 without replacing it', async () => {
+    const outcome = {
+      saved: false,
+      applied: false,
+      changedKeys: [],
+      restartRequired: [],
+      errors: [
+        {
+          path: 'document',
+          envKey: 'DD_CONFIG_FILE',
+          message: 'Unable to save action policy configuration',
+        },
+      ],
+    };
+    mockActionEdits.mockResolvedValueOnce({ status: 500, ...outcome });
+    configRouter.init();
+    const res = createResponse();
+    await mockRouter.patch.mock.calls.find(([path]) => path === '/editor/actions')?.at(-1)(
+      { body: {} },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(outcome);
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/api/v1/config/editor/actions',
+        method: 'patch',
+        statusCode: '500',
+        payload: res.json.mock.calls[0][0],
+      }),
+    ).toEqual({ valid: true, errors: [] });
   });
   test('notification editor shares limiters and keeps session-only reads and admin writes', async () => {
     configRouter.init();

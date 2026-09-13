@@ -13,8 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Action details offer a three-field policy editor for automatic dispatch, order and concurrency, with explicit Save/Cancel, source-aware read-only fields, inherited-setting removal and separate saved/live-reload feedback. Saving does not execute actions or notifications.
+- **Audit log loading placeholders** match the selected table/card view and switch to cards in narrow content areas. They use the active theme, stay static for reduced-motion comfort, and retain the localized loading announcement without adding requests or placeholder actions.
+
 - Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.
 
+- Images show noninteractive loading placeholders during inventory requests, matching table and card layouts with localized loading status.
 - Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
 - Notification details now offer a six-field delivery policy editor with explicit Save/Cancel, typed boolean choices, source-aware read-only fields, and conflict-safe drafts. Saving never tests the trigger or sends a notification.
 - A source-aware action policy API can edit `auto`, `order`, and `concurrency` for existing local Docker, Docker Compose, Portainer, and Command actions. Revision-checked saves preserve untouched credentials and YAML references, report live reload separately, and never execute an action. Action-policy UI forms are not included yet.
@@ -88,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The agents page's paired Gitea registry example had the controller talking HTTPS to an agent serving plain HTTP.** The controller block set `DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem`, but the agent block above it had no `DD_SERVER_TLS_*` variables or certificate mounts, so the example copied as written could never connect. The agent block now mounts `agent.pem`/`agent-key.pem` and sets `DD_SERVER_TLS_ENABLED`, `DD_SERVER_TLS_CERT`, and `DD_SERVER_TLS_KEY`, with a comment noting the certificate must be signed by the `agent-ca.pem` the controller mounts and be valid for the host the controller dials.
 
 ### Fixed
+
+- Logs now use the selected language for HTTP load failures without a usable server diagnostic, while preserving server and network error details.
 
 - Starchart refreshes now open a chart-only PR through the existing GitHub App instead of pushing directly to protected dev branches. Unchanged charts remove the temporary branch without opening a PR.
 

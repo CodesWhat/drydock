@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
+import { i18n } from '@/boot/i18n';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { getAuditLog } from '@/services/audit';
@@ -213,6 +214,100 @@ describe('AuditView', () => {
     resetPreferences();
     mockRoute.query = {};
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
+  });
+
+  describe('loading skeleton', () => {
+    it('shows noninteractive placeholders and a localized status until the service settles', async () => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getAuditLog>>>();
+      vi.mocked(getAuditLog).mockReturnValueOnce(pending.promise);
+      const previousLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'fr';
+      const wrapper = await mountAuditView();
+      try {
+        const loading = wrapper.get('[data-test="audit-loading"]');
+        expect(loading.attributes('aria-busy')).toBe('true');
+        expect(wrapper.get('[role="status"]').text()).toBe("Chargement du log d'audit...");
+        expect(loading.get('[aria-hidden="true"]').attributes('aria-hidden')).toBe('true');
+        expect(loading.get('[data-layout]').attributes('data-layout')).toBe('table');
+        expect(loading.findAll('[data-test="audit-loading-entry"]')).toHaveLength(6);
+        expect(loading.findAll('.dd-bg-elevated')).toHaveLength(30);
+        expect(
+          loading.findAll('button, a, input, select, [tabindex], [role="button"]'),
+        ).toHaveLength(0);
+        expect(loading.findAll('[class*="animate-"], [class*="transition-"]')).toHaveLength(0);
+        expect(wrapper.find('.empty-state').exists()).toBe(false);
+        expect(wrapper.find('.data-table').exists()).toBe(false);
+        expect(getAuditLog).toHaveBeenCalledExactlyOnceWith({ page: 1, limit: 50 });
+        pending.resolve({ entries: [makeEntry()], total: 1, page: 1, limit: 50 });
+        await flushPromises();
+        expect(wrapper.find('[data-test="audit-loading"]').exists()).toBe(false);
+        expect(wrapper.find('[role="status"]').exists()).toBe(false);
+        expect(wrapper.get('.data-table').text()).toContain('nginx');
+        expect(getAuditLog).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+        wrapper.unmount();
+        i18n.global.locale.value = previousLocale;
+      }
+    });
+
+    it.each(['empty', 'error'] as const)(
+      'removes the busy placeholders on %s settlement',
+      async (outcome) => {
+        const pending = Promise.withResolvers<Awaited<ReturnType<typeof getAuditLog>>>();
+        vi.mocked(getAuditLog).mockReturnValueOnce(pending.promise);
+        const wrapper = await mountAuditView();
+        try {
+          expect(wrapper.get('[data-test="audit-loading"]').attributes('aria-busy')).toBe('true');
+          if (outcome === 'error') pending.reject(new Error('Service unavailable'));
+          else pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+          await flushPromises();
+          expect(wrapper.find('[data-test="audit-loading"]').exists()).toBe(false);
+          expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false);
+          expect(wrapper.find('[role="status"]').exists()).toBe(false);
+          expect(wrapper.find('.empty-state').exists()).toBe(true);
+          expect(wrapper.text().includes(i18n.global.t('auditView.loadError'))).toBe(
+            outcome === 'error',
+          );
+          expect(getAuditLog).toHaveBeenCalledOnce();
+        } finally {
+          pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+          wrapper.unmount();
+        }
+      },
+    );
+
+    it('follows the saved mode and available content width without fetching again', async () => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getAuditLog>>>();
+      vi.mocked(getAuditLog).mockReturnValueOnce(pending.promise);
+      preferences.views.audit.mode = 'cards';
+      const wrapper = await mountAuditCardView();
+      try {
+        const placeholders = () => wrapper.get('[data-test="audit-loading"] > div');
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        expect(placeholders().classes()).toContain(
+          'grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]',
+        );
+        expect(preferences.views.audit.mode).toBe('cards');
+        await wrapper.get('.mode-table').trigger('click');
+        expect(placeholders().attributes('data-layout')).toBe('table');
+        const layout = wrapper.findComponent(dataViewStubs.DataViewLayout);
+        layout.vm.$emit('content-width', 360);
+        await nextTick();
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        layout.vm.$emit('content-width', 639);
+        await nextTick();
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        layout.vm.$emit('content-width', 640);
+        await nextTick();
+        expect(placeholders().attributes('data-layout')).toBe('table');
+        expect(preferences.views.audit.mode).toBe('table');
+        expect(getAuditLog).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+        wrapper.unmount();
+      }
+    });
   });
 
   describe('tableColumns (card-mode annotations)', () => {

@@ -109,7 +109,7 @@ async function refreshAppLogs() {
         )
       : [];
   } catch (e: unknown) {
-    appLogsError.value = errorMessage(e, t('logsView.loadFailed'));
+    appLogsError.value = errorMessage(e, '') || t('logsView.loadFailed');
     appLogEntries.value = [];
   } finally {
     appLogsLoading.value = false;

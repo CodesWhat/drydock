@@ -43,6 +43,10 @@ const selectedHostId = ref('');
 const unusedOnly = ref(false);
 const showFilters = ref(false);
 const imagesViewMode = useViewMode('images');
+const contentWidth = ref(0);
+const loadingCards = computed(
+  () => imagesViewMode.value === 'cards' || (contentWidth.value > 0 && contentWidth.value < 640),
+);
 const cardReflowForced = ref(false);
 const pruning = ref(false);
 const pruningHostText = ref('');
@@ -281,7 +285,7 @@ async function handlePrune(mode: PruneMode) {
 </script>
 
 <template>
-  <DataViewLayout>
+  <DataViewLayout @content-width="contentWidth = $event">
     <div v-if="error"
          class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
@@ -297,7 +301,7 @@ async function handlePrune(mode: PruneMode) {
       {{ t('imagesView.hostUnsupported') }} {{ unsupportedHostNames.join(', ') }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('imagesView.loading') }}</div>
+    <div v-if="loading" role="status" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('imagesView.loading') }}</div>
 
     <DataFilterBar
       v-model="imagesViewMode"
@@ -345,6 +349,27 @@ async function handlePrune(mode: PruneMode) {
           @reset="resetColumns" />
       </template>
     </DataFilterBar>
+
+    <div v-if="loading" data-test="images-loading" aria-busy="true">
+      <div
+        aria-hidden="true"
+        class="grid min-w-0"
+        :data-layout="loadingCards ? 'cards' : 'table'"
+        :class="loadingCards ? 'grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-3' : ''"
+      >
+        <div
+          v-for="row in 6" :key="row"
+          data-test="images-loading-entry"
+          class="grid min-w-0 gap-3 dd-border"
+          :class="loadingCards ? 'grid-cols-2 border dd-rounded dd-bg-card p-4' : 'grid-cols-8 border-b px-4 py-3'"
+        >
+          <span
+            v-for="column in 8" :key="column"
+            class="block h-3 min-w-0 dd-rounded dd-bg-elevated"
+          />
+        </div>
+      </div>
+    </div>
 
     <DataTable
       v-if="tableRows.length > 0 && !loading"

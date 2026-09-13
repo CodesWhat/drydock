@@ -483,6 +483,16 @@ export const configPaths = {
       ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch,
       summary: 'Edit allowlisted action policy leaves',
       operationId: 'writeActionEdits',
+      responses: {
+        ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch.responses,
+        500: jsonResponse('Unable to save action policy configuration', {
+          oneOf: [
+            watcherEditOutcomeSchema,
+            errorResponse('Unable to save action policy configuration').content['application/json']
+              .schema,
+          ],
+        }),
+      },
       description:
         'Admin-only exact [action, provider, instance, field] set/remove edits for auto, order and concurrency. Shares the watcher, notification and legacy write queue, revision checks, startup Joi validation, atomic writer and saved/applied outcomes. Validation and saving do not execute actions. Reload installs changed instances for future dispatch without bypassing global update mode or container eligibility.',
     },

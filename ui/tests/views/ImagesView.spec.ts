@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
-import { computed, defineComponent } from 'vue';
+import { computed, defineComponent, nextTick } from 'vue';
+import { i18n } from '@/boot/i18n';
 import { preferences, resetPreferences } from '@/preferences/store';
 import type { ImageHostSummary, ImageInventoryItem } from '@/services/images';
 import { ApiError } from '@/utils/error';
@@ -159,6 +160,130 @@ describe('ImagesView', () => {
       imagesDeleted: 0,
       spaceReclaimed: 0,
     });
+  });
+
+  describe('loading placeholders', () => {
+    it('shows localized, noninteractive placeholders until inventory arrives', async () => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getImages>>>();
+      vi.mocked(getImages).mockReturnValueOnce(pending.promise);
+      const previousLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'fr';
+      const wrapper = await mountImagesView();
+      try {
+        const loading = wrapper.get('[data-test="images-loading"]');
+        expect(loading.attributes('aria-busy')).toBe('true');
+        expect(wrapper.get('[role="status"]').text()).toBe(i18n.global.t('imagesView.loading'));
+        expect(wrapper.get('[role="status"]').text()).not.toBe('Loading images...');
+        expect(loading.get('[aria-hidden="true"]').attributes('data-layout')).toBe('table');
+        expect(loading.findAll('[data-test="images-loading-entry"]')).toHaveLength(6);
+        expect(loading.findAll('.dd-bg-elevated')).toHaveLength(48);
+        expect(
+          loading.findAll('button, a, input, select, [tabindex], [role="button"]'),
+        ).toHaveLength(0);
+        expect(loading.findAll('[class*="animate-"], [class*="transition-"]')).toHaveLength(0);
+        expect(wrapper.find('.data-table').exists()).toBe(false);
+        expect(wrapper.find('.empty-state').exists()).toBe(false);
+        expect(getImages).toHaveBeenCalledExactlyOnceWith();
+        expect(getPrunePreview).not.toHaveBeenCalled();
+        expect(pruneImages).not.toHaveBeenCalled();
+        pending.resolve({ images: [makeImage()], hosts: [makeHost()] });
+        await flushPromises();
+        expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false);
+        expect(wrapper.find('[role="status"]').exists()).toBe(false);
+        expect(wrapper.get('.data-table').text()).toContain('nginx');
+        expect(getImages).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ images: [], hosts: [] });
+        wrapper.unmount();
+        i18n.global.locale.value = previousLocale;
+      }
+    });
+
+    it.each(['empty', 'error'] as const)('clears loading on %s settlement', async (outcome) => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getImages>>>();
+      vi.mocked(getImages).mockReturnValueOnce(pending.promise);
+      const wrapper = await mountImagesView();
+      try {
+        expect(wrapper.get('[data-test="images-loading"]').attributes('aria-busy')).toBe('true');
+        if (outcome === 'error') pending.reject(new Error('Inventory unavailable'));
+        else pending.resolve({ images: [], hosts: [makeHost()] });
+        await flushPromises();
+        expect(wrapper.find('[data-test="images-loading"]').exists()).toBe(false);
+        expect(wrapper.find('[role="status"]').exists()).toBe(false);
+        expect(wrapper.find('.empty-state').exists()).toBe(true);
+        expect(wrapper.text().includes('Inventory unavailable')).toBe(outcome === 'error');
+        expect(getImages).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ images: [], hosts: [] });
+        wrapper.unmount();
+      }
+    });
+
+    it('follows card preference and content width without another request', async () => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getImages>>>();
+      vi.mocked(getImages).mockReturnValueOnce(pending.promise);
+      preferences.views.images.mode = 'cards';
+      const wrapper = await mountImagesCardView();
+      try {
+        const placeholders = () => wrapper.get('[data-test="images-loading"] > div');
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        expect(placeholders().classes()).toContain(
+          'grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]',
+        );
+        await wrapper.get('.mode-table').trigger('click');
+        expect(placeholders().attributes('data-layout')).toBe('table');
+        const layout = wrapper.findComponent(dataViewStubs.DataViewLayout);
+        for (const width of [360, 639, 640]) {
+          layout.vm.$emit('content-width', width);
+          await nextTick();
+          expect(placeholders().attributes('data-layout')).toBe(width < 640 ? 'cards' : 'table');
+        }
+        expect(preferences.views.images.mode).toBe('table');
+        expect(getImages).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ images: [], hosts: [] });
+        wrapper.unmount();
+      }
+    });
+
+    it.each(['success', 'empty', 'error'] as const)(
+      'clears placeholders after refresh %s',
+      async (outcome) => {
+        mockGetImages.mockResolvedValueOnce({ images: [makeImage()], hosts: [makeHost()] });
+        const wrapper = await mountImagesView();
+        const pending = Promise.withResolvers<Awaited<ReturnType<typeof getImages>>>();
+        vi.mocked(getImages).mockReturnValueOnce(pending.promise);
+        try {
+          const refresh = wrapper
+            .findAll('button')
+            .find((button) => button.text().includes(i18n.global.t('imagesView.refresh')));
+          expect(refresh).toBeDefined();
+          await refresh?.trigger('click');
+          expect(wrapper.get('[data-test="images-loading"]').attributes('aria-busy')).toBe('true');
+          expect(wrapper.find('.data-table').exists()).toBe(false);
+          expect(wrapper.find('.empty-state').exists()).toBe(false);
+          expect(refresh?.attributes('disabled')).toBeDefined();
+          if (outcome === 'error') pending.reject(new Error('Refresh unavailable'));
+          else
+            pending.resolve({
+              images: outcome === 'success' ? [makeImage()] : [],
+              hosts: [makeHost()],
+            });
+          await flushPromises();
+          expect(wrapper.find('[data-test="images-loading"]').exists()).toBe(false);
+          expect(wrapper.find('[role="status"]').exists()).toBe(false);
+          expect(wrapper.find('.data-table').exists()).toBe(outcome !== 'empty');
+          expect(wrapper.find('.empty-state').exists()).toBe(outcome === 'empty');
+          expect(wrapper.text().includes('Refresh unavailable')).toBe(outcome === 'error');
+          expect(getImages).toHaveBeenCalledTimes(2);
+          expect(getPrunePreview).not.toHaveBeenCalled();
+          expect(pruneImages).not.toHaveBeenCalled();
+        } finally {
+          pending.resolve({ images: [], hosts: [] });
+          wrapper.unmount();
+        }
+      },
+    );
   });
 
   it('renders rows with repository, tag, and size', async () => {
