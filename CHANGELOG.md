@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Container update split buttons now share one component**, keeping the existing blocked, warning and ready styles, dimensions and independent action/menu disabled states. Enter and Space on either half no longer activate the surrounding table row; native button activation and arrow-key behavior are unchanged.
+
 - **Vue SFC runtime coverage now has a measured gate.** All source SFCs, including unimported components, contribute to aggregate floors of 87.54% statements, 81.57% branches, 84.39% functions and 87.89% lines. TypeScript stays at 100%; script and generated-template coverage remain separate from type checking and mutation quality.
 
 - **The UI typecheck gate now checks Vue SFC scripts and templates.** `npm run typecheck` uses pinned `vue-tsc` instead of plain `tsc`, with regression tests proving nonexistent properties fail in both scripts and templates. Existing compiler settings are unchanged; type checking and runtime coverage remain separate gates.
