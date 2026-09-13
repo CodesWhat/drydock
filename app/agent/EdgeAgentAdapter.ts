@@ -1226,7 +1226,6 @@ export class EdgeAgentAdapter {
     if (!this.supportsRequestBodyStream) {
       return Promise.reject(new Error('Edge agent does not support streamed request bodies'));
     }
-    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (body.length > MAX_REQUEST_BODY_BYTES) {
       return Promise.reject(new Error('request body exceeds 512 MiB limit'));
     }
