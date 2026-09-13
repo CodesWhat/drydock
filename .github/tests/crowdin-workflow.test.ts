@@ -18,7 +18,7 @@ interface CrowdinConfig {
 
 const workflowPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
 const crowdinConfigPath = fileURLToPath(new URL('../../crowdin.yml', import.meta.url));
-const crowdinActionRef = 'crowdin/github-action@8f01d54f70f1713ee3f09d82c2bbb2daeac28689';
+const crowdinActionRef = 'crowdin/github-action@e4a6c1338b4063c77d46a81875265f9e8bd76f95';
 const integrationBranchCheckoutStepName =
   'Check out the integration branch so l10n_crowdin forks from it';
 
