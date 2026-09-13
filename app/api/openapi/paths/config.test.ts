@@ -31,6 +31,19 @@ const effectiveConfigurationSchema = {
 };
 
 describe('configPaths', () => {
+  test('documents the three-field action projection and shared write contract', () => {
+    const route = configPaths['/api/v1/config/editor/actions'];
+    expect(route.get.operationId).toBe('getActionEditSnapshot');
+    expect(route.patch.operationId).toBe('writeActionEdits');
+    expect(route.patch.requestBody).toEqual(
+      configPaths['/api/v1/config/editor/watchers'].patch.requestBody,
+    );
+    const row =
+      route.get.responses[200].content['application/json'].schema.properties.actions.items;
+    expect(row.properties.category.enum).toEqual(['action']);
+    expect(Object.keys(row.properties.fields.properties)).toEqual(['auto', 'order', 'concurrency']);
+    expect(row.properties.fields.additionalProperties).toBe(false);
+  });
   test('documents the six-field notification editor with the shared write contract', () => {
     const route = configPaths['/api/v1/config/editor/triggers'];
     expect(route?.get.operationId).toBe('getNotificationTriggerEditSnapshot');
@@ -381,6 +394,7 @@ describe('configPaths', () => {
   test('configPaths exports the existing routes and bounded watcher editor', () => {
     expect(Object.keys(configPaths)).toStrictEqual([
       '/api/v1/config/editor/watchers',
+      '/api/v1/config/editor/actions',
       '/api/v1/config/editor/triggers',
       '/api/v1/config',
       '/api/v1/config/{section}',

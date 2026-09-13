@@ -437,6 +437,56 @@ const notificationTriggerSnapshotSchema = {
 
 export const configPaths = {
   ...watcherEditorPaths,
+  '/api/v1/config/editor/actions': {
+    get: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].get,
+      summary: 'Get a safe action policy edit snapshot',
+      operationId: 'getActionEditSnapshot',
+      description:
+        'Session-only projection of auto, order and concurrency for existing action providers. Exact paths are editable only for controller-local file-owned fields. Referenced and remote values are omitted, including inherited referenced concurrency. No credentials, commands or provider execution options are returned.',
+      responses: {
+        ...watcherEditorPaths['/api/v1/config/editor/watchers'].get.responses,
+        200: jsonResponse('Action policy edit snapshot', {
+          type: 'object',
+          properties: {
+            available: { type: 'boolean' },
+            revision: { type: 'string' },
+            readOnlyReason: { type: 'string' },
+            actions: {
+              type: 'array',
+              items: {
+                ...notificationTriggerSnapshotSchema.properties.triggers.items,
+                properties: {
+                  ...notificationTriggerSnapshotSchema.properties.triggers.items.properties,
+                  category: { type: 'string', enum: ['action'] },
+                  fields: {
+                    type: 'object',
+                    properties: {
+                      auto: editFieldSchema,
+                      order: editFieldSchema,
+                      concurrency: editFieldSchema,
+                    },
+                    required: ['auto', 'order', 'concurrency'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+          required: ['available', 'actions'],
+          additionalProperties: false,
+        }),
+        500: errorResponse('Unable to read the action policy editor'),
+      },
+    },
+    patch: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch,
+      summary: 'Edit allowlisted action policy leaves',
+      operationId: 'writeActionEdits',
+      description:
+        'Admin-only exact [action, provider, instance, field] set/remove edits for auto, order and concurrency. Shares the watcher, notification and legacy write queue, revision checks, startup Joi validation, atomic writer and saved/applied outcomes. Validation and saving do not execute actions. Reload installs changed instances for future dispatch without bypassing global update mode or container eligibility.',
+    },
+  },
   '/api/v1/config/editor/triggers': {
     get: {
       ...watcherEditorPaths['/api/v1/config/editor/watchers'].get,

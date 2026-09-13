@@ -4,8 +4,10 @@ import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
 import {
+  getActionEditSnapshot,
   getNotificationTriggerEditSnapshot,
   getWatcherEditSnapshot,
+  writeActionEdits,
   writeNotificationTriggerEdits,
   writeWatcherEdits,
 } from '../configuration/file/editor.js';
@@ -411,6 +413,8 @@ export function init() {
   router.patch('/editor/watchers', configWriteRateLimit, scoped('admin', patchWatcherEditor));
   router.get('/editor/triggers', configReadRateLimit, scoped(SESSION_ONLY, readTriggerEditor));
   router.patch('/editor/triggers', configWriteRateLimit, scoped('admin', patchTriggerEditor));
+  router.get('/editor/actions', configReadRateLimit, scoped(SESSION_ONLY, readActionEditor));
+  router.patch('/editor/actions', configWriteRateLimit, scoped('admin', patchActionEditor));
   router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
   router.get('/:section', configReadRateLimit, scoped(SESSION_ONLY, getConfigurationSection));
   // `admin`, not SESSION_ONLY: this route never returns a configuration
@@ -441,17 +445,27 @@ async function readTriggerEditor(_req: Request, res: Response): Promise<void> {
   return readConfigurationEditor(res, 'triggers');
 }
 
+async function readActionEditor(_req: Request, res: Response): Promise<void> {
+  return readConfigurationEditor(res, 'actions');
+}
+
 async function readConfigurationEditor(
   res: Response,
-  editor: 'watchers' | 'triggers',
+  editor: 'watchers' | 'triggers' | 'actions',
 ): Promise<void> {
   const label =
-    editor === 'watchers' ? 'watcher configuration editor' : 'notification policy editor';
+    editor === 'watchers'
+      ? 'watcher configuration editor'
+      : editor === 'triggers'
+        ? 'notification policy editor'
+        : 'action policy editor';
   try {
     const snapshot =
       editor === 'watchers'
         ? await getWatcherEditSnapshot()
-        : await getNotificationTriggerEditSnapshot();
+        : editor === 'triggers'
+          ? await getNotificationTriggerEditSnapshot()
+          : await getActionEditSnapshot();
     recordAuditEvent({
       action: 'config-read',
       containerName: 'diagnostics',
@@ -472,22 +486,28 @@ async function patchTriggerEditor(req: Request, res: Response): Promise<void> {
   return patchConfigurationEditor(req, res, 'triggers');
 }
 
+async function patchActionEditor(req: Request, res: Response): Promise<void> {
+  return patchConfigurationEditor(req, res, 'actions');
+}
+
 async function patchConfigurationEditor(
   req: Request,
   res: Response,
-  editor: 'watchers' | 'triggers',
+  editor: 'watchers' | 'triggers' | 'actions',
 ): Promise<void> {
   try {
     const { status, ...outcome } =
       editor === 'watchers'
         ? await writeWatcherEdits(req.body)
-        : await writeNotificationTriggerEdits(req.body);
+        : editor === 'triggers'
+          ? await writeNotificationTriggerEdits(req.body)
+          : await writeActionEdits(req.body);
     try {
       recordAuditEvent({
         action: 'config-written',
         containerName: 'diagnostics',
         status: outcome.applied ? 'info' : 'error',
-        details: `${editor === 'watchers' ? 'Watcher configuration' : 'Notification policy'} edit: saved=${outcome.saved}, applied=${outcome.applied}; changed keys: ${outcome.changedKeys.join(', ')}`,
+        details: `${editor === 'watchers' ? 'Watcher configuration' : editor === 'triggers' ? 'Notification policy' : 'Action policy'} edit: saved=${outcome.saved}, applied=${outcome.applied}; changed keys: ${outcome.changedKeys.join(', ')}`,
       });
     } catch {
       outcome.errors.push({
@@ -503,7 +523,9 @@ async function patchConfigurationEditor(
       500,
       editor === 'watchers'
         ? 'Unable to save watcher configuration'
-        : 'Unable to save notification policy configuration',
+        : editor === 'triggers'
+          ? 'Unable to save notification policy configuration'
+          : 'Unable to save action policy configuration',
     );
   }
 }
