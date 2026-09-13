@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -13,6 +13,23 @@ const scriptPath = fileURLToPath(new URL('check-image-arch.sh', import.meta.url)
 const ARM64 = 'b7 00';
 const AMD64 = '3e 00';
 const BINARIES = ['/sbin/tini', '/usr/local/bin/node', '/bin/healthcheck'];
+
+test('documents registry access, a digest example, and tag-index resolution', async () => {
+  const script = await readFile(scriptPath, 'utf8');
+  const comments = script
+    .split('\n')
+    .filter((line) => line.startsWith('#'))
+    .join('\n');
+
+  assert.match(comments, /Requires a registry-accessible image reference/u);
+  assert.match(
+    comments,
+    /scripts\/check-image-arch\.sh 'ghcr\.io\/codeswhat\/drydock@sha256:<digest>' linux\/arm64/u,
+  );
+  assert.match(comments, /docker run uses --pull always/u);
+  assert.match(comments, /Tag references can also resolve to an index/u);
+  assert.doesNotMatch(comments, /no digest, or already a single-platform manifest/u);
+});
 
 function probeLines(bytesByBinary) {
   // busybox `od -An` prefixes its output with a space, so the real probe emits
@@ -86,21 +103,28 @@ async function runGuard({
   probeOutput = allBinaries(ARM64),
   dockerExit = 0,
   dockerStderr = '',
+  inspectExit = 0,
+  inspectStderr = '',
   rawManifest = SINGLE_PLATFORM_MANIFEST,
   args = ['drydock:test', 'linux/arm64'],
 } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'drydock-image-arch-'));
-  const probeFile = join(dir, 'probe-output');
-  const manifestFile = join(dir, 'raw-manifest');
-  const argsLog = join(dir, 'docker-args.log');
-  await writeFile(probeFile, probeOutput === '' ? '' : `${probeOutput}\n`);
-  await writeFile(manifestFile, rawManifest);
+  try {
+    const probeFile = join(dir, 'probe-output');
+    const manifestFile = join(dir, 'raw-manifest');
+    const argsLog = join(dir, 'docker-args.log');
+    await writeFile(probeFile, probeOutput === '' ? '' : `${probeOutput}\n`);
+    await writeFile(manifestFile, rawManifest);
 
-  const fakeDocker = join(dir, 'docker');
-  await writeFile(
-    fakeDocker,
-    `#!/bin/sh
+    const fakeDocker = join(dir, 'docker');
+    await writeFile(
+      fakeDocker,
+      `#!/bin/sh
 if [ "$1" = "buildx" ] && [ "$2" = "imagetools" ] && [ "$3" = "inspect" ]; then
+  if [ "$INSPECT_EXIT" != "0" ]; then
+    printf '%s\\n' "$INSPECT_STDERR" >&2
+    exit "$INSPECT_EXIT"
+  fi
   cat "$RAW_MANIFEST_FILE"
   exit 0
 fi
@@ -113,38 +137,66 @@ if [ "$DOCKER_EXIT" != "0" ]; then
 fi
 cat "$PROBE_OUTPUT_FILE"
 `,
-  );
-  await chmod(fakeDocker, 0o755);
+    );
+    await chmod(fakeDocker, 0o755);
 
-  const env = {
-    ...process.env,
-    DOCKER_ARGS_LOG: argsLog,
-    DOCKER_EXIT: String(dockerExit),
-    DOCKER_STDERR: dockerStderr,
-    PROBE_OUTPUT_FILE: probeFile,
-    RAW_MANIFEST_FILE: manifestFile,
-    PATH: `${dir}:${process.env.PATH}`,
-  };
-
-  const readArgs = async () => {
-    try {
-      return await readFile(argsLog, 'utf8');
-    } catch {
-      return '';
-    }
-  };
-
-  try {
-    const { stdout, stderr } = await execFileAsync('bash', [scriptPath, ...args], { env });
-    return { code: 0, output: `${stdout}${stderr}`, dockerArgs: await readArgs() };
-  } catch (error) {
-    return {
-      code: error.code,
-      output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
-      dockerArgs: await readArgs(),
+    const env = {
+      ...process.env,
+      DOCKER_ARGS_LOG: argsLog,
+      DOCKER_EXIT: String(dockerExit),
+      DOCKER_STDERR: dockerStderr,
+      INSPECT_EXIT: String(inspectExit),
+      INSPECT_STDERR: inspectStderr,
+      PROBE_OUTPUT_FILE: probeFile,
+      RAW_MANIFEST_FILE: manifestFile,
+      PATH: `${dir}:${process.env.PATH}`,
     };
+
+    const readArgs = async () => {
+      try {
+        return await readFile(argsLog, 'utf8');
+      } catch {
+        return '';
+      }
+    };
+
+    try {
+      const { stdout, stderr } = await execFileAsync('bash', [scriptPath, ...args], { env });
+      return { code: 0, output: `${stdout}${stderr}`, dockerArgs: await readArgs() };
+    } catch (error) {
+      return {
+        code: error.code,
+        output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
+        dockerArgs: await readArgs(),
+      };
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }
+
+test('refuses an inaccessible registry reference before an otherwise successful probe', async () => {
+  const result = await runGuard({
+    inspectExit: 1,
+    inspectStderr: 'pull access denied for drydock:test',
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(result.output, /Could not inspect drydock:test: pull access denied/u);
+  assert.equal(result.dockerArgs, '');
+  assert.doesNotMatch(result.output, /All 3 binaries/u);
+});
+
+test('resolves a tag reference to its platform manifest when the tag names an index', async () => {
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock:dev', 'linux/arm64'],
+    rawManifest: twoPlatformIndex(),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.dockerArgs, new RegExp(`ghcr.io/codeswhat/drydock@${ARM64_DIGEST}`, 'u'));
+  assert.match(result.dockerArgs, /--pull always/u);
+});
 
 test('passes when every binary is aarch64 on linux/arm64', async () => {
   const result = await runGuard();
