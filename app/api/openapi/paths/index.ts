@@ -518,6 +518,34 @@ export const openApiPaths = {
       },
     },
   },
+  '/api/v1/agents/roster': {
+    get: {
+      tags: ['Agents'],
+      summary: 'List exact names of live configured agent clients without status or configuration',
+      operationId: 'getAgentRoster',
+      responses: {
+        200: jsonResponse('Agent identities', {
+          type: 'object',
+          required: ['data', 'total'],
+          additionalProperties: false,
+          properties: {
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['name'],
+                additionalProperties: false,
+                properties: { name: { type: 'string' } },
+              },
+            },
+            total: { type: 'integer', minimum: 0 },
+          },
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Missing required read scope'),
+      },
+    },
+  },
   '/api/v1/agents/{name}/log/entries': {
     get: {
       tags: ['Agents'],

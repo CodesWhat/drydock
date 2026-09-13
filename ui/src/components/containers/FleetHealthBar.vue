@@ -16,6 +16,7 @@ const { t } = useI18n();
     </div>
     <p class="text-2xs-plus dd-text-muted mt-1">{{ t('containerComponents.fleetHealth.description') }}</p>
     <p v-if="health.agentError.value" role="status" class="text-2xs-plus dd-text-warning mt-2">{{ t('containerComponents.fleetHealth.agentUnavailable') }}</p>
+    <p v-if="health.rosterError.value" role="status" class="text-2xs-plus dd-text-warning mt-2">{{ t('containerComponents.fleetHealth.rosterUnavailable') }}</p>
     <p v-if="health.watcherError.value" role="status" class="text-2xs-plus dd-text-warning mt-2">{{ t('containerComponents.fleetHealth.watcherUnavailable') }}</p>
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 mt-2">
       <article v-for="row in health.rows.value" :key="row.key" :data-source="row.key" data-test="fleet-health-row" class="min-w-0 p-2 dd-rounded dd-bg" :aria-busy="health.refreshing.value === row.key">

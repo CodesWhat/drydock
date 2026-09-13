@@ -1,13 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, ref } from 'vue';
 import FleetHealthBar from '@/components/containers/FleetHealthBar.vue';
-import { getAgents } from '@/services/agent';
+import { getAgentRoster, getAgents } from '@/services/agent';
 import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
 import type { ApiAgent, ApiComponent } from '@/types/api';
 import { mapApiContainer } from '@/utils/container-mapper';
 import { useFleetHealth } from '@/views/containers/useFleetHealth';
 
-vi.mock('@/services/agent', () => ({ getAgents: vi.fn() }));
+vi.mock('@/services/agent', () => ({ getAgents: vi.fn(), getAgentRoster: vi.fn() }));
 vi.mock('@/services/watcher', () => ({
   getAllWatchers: vi.fn(),
   refreshWatcherInventory: vi.fn(),
@@ -64,6 +64,99 @@ function harness() {
 }
 
 describe('useFleetHealth', () => {
+  it('retains known identities through both failures and removes them on fresh successful reads', async () => {
+    vi.mocked(getAgentRoster).mockResolvedValue([{ name: 'cold' }]);
+    const { health, wrapper } = harness();
+    await flushPromises();
+    expect(health.rows.value.some((row) => row.agent === 'cold')).toBe(true);
+    vi.mocked(getAgents).mockRejectedValue(new Error('offline'));
+    vi.mocked(getAgentRoster).mockRejectedValue(new Error('offline'));
+    await health.load();
+    expect(health.rows.value.filter((row) => row.agent)).toHaveLength(4);
+    expect(wrapper.text()).toContain('Agent roster unavailable');
+    expect(health.rows.value.find((row) => row.agent === 'edge')!.total).toBe(4);
+    expect(health.rows.value.find((row) => row.agent === 'edge')!.lastKnown).toBe(true);
+    vi.mocked(getAgentRoster).mockResolvedValue([{ name: 'edge' }, { name: 'new' }]);
+    await health.load();
+    expect(health.rows.value.filter((row) => row.agent).map((row) => row.agent)).toEqual([
+      'edge',
+      'new',
+    ]);
+    expect(health.rows.value.find((row) => row.agent === 'new')!.total).toBeUndefined();
+    vi.mocked(getAgents).mockResolvedValue([agent('Local')]);
+    vi.mocked(getAgentRoster).mockRejectedValue(new Error('older controller'));
+    await health.load();
+    const remote = health.rows.value.filter((row) => row.agent);
+    expect(remote).toHaveLength(1);
+    expect(remote[0]!.agent).toBe('Local');
+    expect(remote[0]!.canRefresh).toBe(true);
+    expect(health.agentError.value).toBe(false);
+    expect(health.rosterError.value).toBe(true);
+    vi.mocked(getAgents).mockResolvedValue([]);
+    vi.mocked(getAgentRoster).mockResolvedValue([]);
+    await health.load();
+    expect(health.rows.value.filter((row) => row.agent)).toEqual([]);
+  });
+
+  it('does not infer identities from watchers when both initial reads fail and recovers explicitly', async () => {
+    vi.mocked(getAgents).mockRejectedValue(new Error('offline'));
+    vi.mocked(getAgentRoster).mockRejectedValue(new Error('offline'));
+    const { health, wrapper } = harness();
+    await flushPromises();
+    expect(health.rows.value.map((row) => row.agent)).toEqual([undefined]);
+    expect(wrapper.text()).toContain('Agent roster unavailable');
+    expect(wrapper.text()).toContain('Agent status unavailable');
+    vi.mocked(getAgents).mockResolvedValue([agent('Local')]);
+    vi.mocked(getAgentRoster).mockResolvedValue([{ name: 'Local' }, { name: 'Local' }]);
+    await wrapper.get('[data-test="fleet-health-reload"]').trigger('click');
+    await flushPromises();
+    expect(health.rows.value.map((row) => row.agent)).toEqual([undefined, 'Local']);
+    expect(health.rows.value[1]!.canRefresh).toBe(true);
+    expect(wrapper.text()).not.toContain('Agent roster unavailable');
+  });
+
+  it('retains cold identities when a later real HTTP roster is malformed', async () => {
+    const actual = await vi.importActual<typeof import('@/services/agent')>('@/services/agent');
+    vi.mocked(getAgentRoster).mockImplementation(actual.getAgentRoster);
+    vi.mocked(getAgents).mockRejectedValue(new Error('offline'));
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: [{ name: 'cold' }], total: 1 }));
+    const { health } = harness();
+    await flushPromises();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: [{ name: null }] }));
+    await health.load();
+    expect(health.rosterError.value).toBe(true);
+    expect(health.rows.value.filter((row) => row.agent).map((row) => row.agent)).toEqual(['cold']);
+  });
+  it('shows exact roster identities on a cold status failure without registered watchers', async () => {
+    vi.mocked(getAgents).mockRejectedValue(new Error('status unavailable'));
+    vi.mocked(getAgentRoster).mockResolvedValue([{ name: 'Local' }, { name: 'local' }]);
+    vi.mocked(getAllWatchers).mockResolvedValue([]);
+    const { health, wrapper } = harness();
+    await flushPromises();
+    expect(health.rows.value.map((row) => row.agent).sort()).toEqual(['Local', 'local']);
+    for (const row of health.rows.value) {
+      expect(row.status).toBe('unavailable');
+      expect(row.total).toBeUndefined();
+      expect(row.lastKnown).toBe(false);
+      expect(row.canRefresh).toBe(false);
+      await health.refresh(row.key);
+    }
+    expect(wrapper.text()).toContain('Agent status unavailable');
+    expect(refreshWatcherInventory).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh roster-only identities even when their watcher advertises support', async () => {
+    vi.mocked(getAgents).mockResolvedValue([]);
+    vi.mocked(getAgentRoster).mockResolvedValue([{ name: 'Local' }]);
+    const { health } = harness();
+    await flushPromises();
+    const row = health.rows.value.find((item) => item.agent === 'Local')!;
+    expect(row.supported).toBe(true);
+    expect(row.status).toBe('unavailable');
+    expect(row.canRefresh).toBe(false);
+    await health.refresh(row.key);
+    expect(refreshWatcherInventory).not.toHaveBeenCalled();
+  });
   it('reloads idle agent-status events and keeps invalid statistics unavailable', async () => {
     vi.mocked(getAgents).mockResolvedValue([
       agent('negative', true, -1),
@@ -143,6 +236,7 @@ describe('useFleetHealth', () => {
       ),
     );
     vi.mocked(getAgents).mockReset().mockImplementation(actualAgentService.getAgents);
+    vi.mocked(getAgentRoster).mockReset().mockResolvedValue([]);
     vi.mocked(getAllWatchers)
       .mockReset()
       .mockResolvedValue([
@@ -210,6 +304,7 @@ describe('useFleetHealth', () => {
   });
 
   it('retains stale agents and watchers independently and disables actions on either fetch failure', async () => {
+    vi.mocked(getAgentRoster).mockResolvedValue([{ name: 'Local' }]);
     const { health } = harness();
     await flushPromises();
     vi.mocked(getAgents).mockRejectedValueOnce(new Error('agents down'));
@@ -352,13 +447,16 @@ describe('useFleetHealth', () => {
     ])
       globalThis.dispatchEvent(new Event(event));
     expect(getAgents).toHaveBeenCalledTimes(1);
+    expect(getAgentRoster).toHaveBeenCalledTimes(1);
     resolve([agent('Local')]);
     await first;
     await flushPromises();
     expect(getAgents).toHaveBeenCalledTimes(2);
     wrapper.unmount();
+    expect(getAgentRoster).toHaveBeenCalledTimes(2);
     globalThis.dispatchEvent(new Event('dd:sse-agent-status-changed'));
     await health.load();
     expect(getAgents).toHaveBeenCalledTimes(2);
+    expect(getAgentRoster).toHaveBeenCalledTimes(2);
   });
 });

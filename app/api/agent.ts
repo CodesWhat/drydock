@@ -227,8 +227,15 @@ async function getAgentLogEntries(
   }
 }
 
+function getAgentRoster(_req: Request, res: Response) {
+  const names = new Set(getAgents().map((agent) => agent.name));
+  const data = [...names].map((name) => ({ name }));
+  res.status(200).json({ data, total: data.length });
+}
+
 export function init() {
   router.get('/', scoped('read', getAgentsList));
+  router.get('/roster', scoped('read', getAgentRoster));
   router.get('/:name/log/entries', scoped('read', getAgentLogEntries));
   return router;
 }
