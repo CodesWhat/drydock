@@ -3,6 +3,7 @@ import { computed, defineComponent, reactive, ref } from 'vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
+import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -560,6 +561,7 @@ describe('ContainersView', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useToast().toasts.value = [];
     mockRouterReplace.mockResolvedValue(undefined);
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
@@ -613,6 +615,7 @@ describe('ContainersView', () => {
       const wrapper = mountedWrappers.pop();
       wrapper?.unmount();
     }
+    useToast().toasts.value = [];
   });
 
   describe('loading containers', () => {

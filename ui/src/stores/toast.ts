@@ -21,17 +21,33 @@ export interface AddToastInput {
 }
 
 const DEFAULT_TTL_MS = 6_000;
+const MAX_VISIBLE_TOASTS = 3;
 
 export const useToastStore = defineStore('toast', () => {
   const toasts = ref<Record<number, ToastRecord>>({});
   const nextId = ref(0);
   const timers = new Map<number, ReturnType<typeof setTimeout>>();
+  const visibleIds = ref<number[]>([]);
+  const queuedDurations = new Map<number, number>();
 
-  const visibleToasts = computed(() =>
-    Object.values(toasts.value)
-      .filter((toast) => !toast.dismissed)
-      .sort((a, b) => a.createdAt - b.createdAt),
-  );
+  const visibleToasts = computed(() => visibleIds.value.map((id) => toasts.value[id]));
+
+  function promoteQueued(): void {
+    while (visibleIds.value.length < MAX_VISIBLE_TOASTS) {
+      const next = queuedDurations.entries().next().value;
+      if (!next) return;
+      const [id, ttlMs] = next;
+      queuedDurations.delete(id);
+      visibleIds.value.push(id);
+      if (ttlMs > 0) {
+        toasts.value[id].expiresAt = Date.now() + ttlMs;
+        timers.set(
+          id,
+          setTimeout(() => dismiss(id), ttlMs),
+        );
+      }
+    }
+  }
 
   function add(input: AddToastInput): number {
     const id = nextId.value++;
@@ -46,24 +62,17 @@ export const useToastStore = defineStore('toast', () => {
         tone: input.tone ?? 'info',
         dismissed: false,
         createdAt,
-        expiresAt: ttlMs > 0 ? createdAt + ttlMs : undefined,
+        expiresAt: undefined,
       },
     };
-    if (ttlMs > 0) {
-      timers.set(
-        id,
-        setTimeout(() => {
-          dismiss(id);
-          timers.delete(id);
-        }, ttlMs),
-      );
-    }
+    queuedDurations.set(id, ttlMs);
+    promoteQueued();
     return id;
   }
 
   function dismiss(id: number): void {
     const existing = toasts.value[id];
-    if (!existing) {
+    if (!existing || existing.dismissed) {
       return;
     }
     const timer = timers.get(id);
@@ -78,6 +87,9 @@ export const useToastStore = defineStore('toast', () => {
         dismissed: true,
       },
     };
+    queuedDurations.delete(id);
+    visibleIds.value = visibleIds.value.filter((visibleId) => visibleId !== id);
+    promoteQueued();
   }
 
   function prune(now = Date.now()): void {
@@ -97,6 +109,8 @@ export const useToastStore = defineStore('toast', () => {
       clearTimeout(timer);
     }
     timers.clear();
+    queuedDurations.clear();
+    visibleIds.value = [];
     toasts.value = {};
   }
 
