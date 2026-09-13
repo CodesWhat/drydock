@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "알림 정책",
+    "edit": "알림 정책 편집",
+    "boundary": "전송 정책만 편집합니다. 저장해도 트리거를 테스트하거나 알림을 보내지 않습니다. 자격 증명, 대상, 템플릿 및 실행 설정은 읽기 전용으로 유지됩니다.",
+    "providerForced": "이 값은 공급자가 제어하므로 여기서 편집할 수 없습니다.",
+    "triggerUnavailable": "이 알림 트리거와 정확히 일치하는 항목이 편집기 스냅샷에 없습니다.",
+    "apiUnavailable": "이 서버는 알림 정책 편집기 API를 제공하지 않습니다.",
+    "fields": {
+      "threshold": "업데이트 임계값",
+      "once": "한 번만 알림",
+      "mode": "전송 모드",
+      "securitymode": "보안 알림 전송 모드",
+      "digestcron": "요약 일정(cron)",
+      "resolvenotifications": "해결 알림 보내기"
+    }
+  }
+}

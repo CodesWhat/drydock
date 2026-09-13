@@ -3,6 +3,7 @@ import { computed, defineComponent, reactive, ref } from 'vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
+import { useToast } from '@/composables/useToast';
 import { getAgents } from '@/services/agent';
 import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
 import type { ApiAgent, ApiComponent } from '@/types/api';
@@ -634,6 +635,7 @@ describe('ContainersView', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useToast().toasts.value = [];
     vi.mocked(getAgents).mockResolvedValue([]);
     vi.mocked(getAllWatchers).mockResolvedValue([]);
     mockRouterReplace.mockResolvedValue(undefined);
@@ -689,6 +691,7 @@ describe('ContainersView', () => {
       const wrapper = mountedWrappers.pop();
       wrapper?.unmount();
     }
+    useToast().toasts.value = [];
   });
 
   describe('loading containers', () => {

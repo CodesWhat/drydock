@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "通知原則",
+    "edit": "編輯通知原則",
+    "boundary": "僅編輯傳送原則。儲存不會測試觸發器或傳送通知。憑證、目的地、範本和執行設定仍為唯讀。",
+    "providerForced": "此值由提供者控制，無法在此編輯。",
+    "triggerUnavailable": "編輯器快照中沒有此確切的通知觸發器。",
+    "apiUnavailable": "此伺服器不提供通知原則編輯器 API。",
+    "fields": {
+      "threshold": "更新門檻",
+      "once": "僅通知一次",
+      "mode": "傳送模式",
+      "securitymode": "安全通知傳送模式",
+      "digestcron": "摘要排程（cron）",
+      "resolvenotifications": "傳送問題解決通知"
+    }
+  }
+}

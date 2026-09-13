@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Benachrichtigungsrichtlinie",
+    "edit": "Benachrichtigungsrichtlinie bearbeiten",
+    "boundary": "Nur die Versandrichtlinie bearbeiten. Speichern testet den Trigger nicht und sendet keine Benachrichtigung. Zugangsdaten, Ziele, Vorlagen und Ausführungseinstellungen bleiben schreibgeschützt.",
+    "providerForced": "Dieser Wert wird vom Anbieter festgelegt und kann hier nicht bearbeitet werden.",
+    "triggerUnavailable": "Dieser genaue Benachrichtigungs-Trigger ist im Editor-Snapshot nicht verfügbar.",
+    "apiUnavailable": "Dieser Server bietet die API für den Benachrichtigungsrichtlinien-Editor nicht an.",
+    "fields": {
+      "threshold": "Aktualisierungsschwelle",
+      "once": "Nur einmal benachrichtigen",
+      "mode": "Versandmodus",
+      "securitymode": "Versandmodus für Sicherheitsmeldungen",
+      "digestcron": "Zusammenfassungszeitplan (Cron)",
+      "resolvenotifications": "Behebungsbenachrichtigungen senden"
+    }
+  }
+}
