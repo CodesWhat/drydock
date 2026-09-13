@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Bewakingsschema",
+    "edit": "Schema bewerken",
+    "boundary": "Alleen het scanschema en onderhoudsvenster zijn hier bewerkbaar. Verbinding, inloggegevens, TLS en agentconfiguratie blijven alleen-lezen.",
+    "reload": "Concept verwerpen en herladen",
+    "reset": "Bestandswaarde verwijderen / standaard gebruiken",
+    "pendingRemoval": "Deze bestandswaarde wordt bij opslaan verwijderd.",
+    "current": "Effectieve waarde: {value}",
+    "none": "Niet ingesteld",
+    "install": "Alleen automatische installatie",
+    "scan": "Scannen en installeren",
+    "sources": {
+      "file": "Bron: configuratiebestand",
+      "env": "Bron: omgeving",
+      "default": "Bron: standaard",
+      "reference": "Bron: verwijzing (waarde verborgen)"
+    },
+    "readOnly": {
+      "environment": "Ingesteld door de omgeving. Wijzig dit buiten deze editor.",
+      "reference": "Verwezen waarden blijven op de server en zijn hier niet bewerkbaar.",
+      "agent": "Agentconfiguratie is hier alleen-lezen.",
+      "other": "Dit veld kan niet worden bewerkt."
+    },
+    "fileUnavailable": "Geen configuratiebestand beschikbaar. Koppel een bestand voordat je gaat bewerken.",
+    "watcherUnavailable": "Deze exacte watcher ontbreekt in de editorsnapshot.",
+    "accessDenied": "Je sessie heeft geen toegang tot deze editor.",
+    "apiUnavailable": "Deze server biedt de editor-API niet aan.",
+    "rateLimited": "Te veel aanvragen. Wacht een minuut voor je opnieuw laadt.",
+    "loadFailed": "Editor laden mislukt. Er zijn geen wijzigingen verstuurd.",
+    "saveUncertain": "Opslaan kon niet worden bevestigd. Herlaad voordat je verder wijzigt.",
+    "conflict": "De configuratie is gewijzigd of een veld is alleen-lezen geworden. Je concept blijft behouden. Verwerp het en herlaad.",
+    "saved": "Opgeslagen en direct toegepast.",
+    "notApplied": "Opgeslagen, maar er zijn problemen gemeld. Bekijk de details.",
+    "notSaved": "De configuratie is niet opgeslagen.",
+    "reconciled": "Herladen: {added} toegevoegd, {changed} gewijzigd, {removed} verwijderd, {unchanged} ongewijzigd, {errors} fouten.",
+    "restart": "Herstart vereist voor: {fields}",
+    "orphaned": "Regel {ruleId} verwijst nog naar ontbrekende trigger {triggerId}.",
+    "fields": {
+      "cron": "Scanschema (cron)",
+      "maintenancewindow": "Onderhoudsvenster (cron)",
+      "maintenancewindowtz": "Onderhoudstijdzone",
+      "maintenancewindowscope": "Onderhoudsbereik"
+    }
+  }
+}
