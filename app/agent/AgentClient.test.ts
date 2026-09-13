@@ -2446,6 +2446,26 @@ describe('AgentClient', () => {
       await Promise.resolve();
     });
 
+    test.each(['added', 'updated', 'removed'])(
+      'ignores additive inventory %s events without report or enrichment handling',
+      async (kind) => {
+        const process = vi.spyOn(client, 'processContainer');
+        const refresh = vi.spyOn(client as never, 'refreshControllerDockerTransportContainer');
+        const remove = vi.spyOn(storeContainer, 'deleteContainer');
+        await client.handleEvent(`dd:inventory-${kind}`, {
+          context: {
+            origin: 'inventory',
+            operationId: 'inventory-operation',
+            source: { type: 'docker', name: 'local' },
+          },
+          container: { id: 'c1', name: 'test', watcher: 'local' },
+        });
+        expect(process).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+      },
+    );
+
     test('should process container on dd:container-added', async () => {
       const spy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
       const container = { id: 'c1', name: 'test' };
