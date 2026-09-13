@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Action details offer a three-field policy editor for automatic dispatch, order and concurrency, with explicit Save/Cancel, source-aware read-only fields, inherited-setting removal and separate saved/live-reload feedback. Saving does not execute actions or notifications.
 - Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.
 
 - Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
