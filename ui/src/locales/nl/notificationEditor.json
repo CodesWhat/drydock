@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Meldingsbeleid",
+    "edit": "Meldingsbeleid bewerken",
+    "boundary": "Bewerk alleen het verzendbeleid. Opslaan test de trigger niet en verstuurt geen melding. Inloggegevens, bestemmingen, sjablonen en uitvoeringsinstellingen blijven alleen-lezen.",
+    "providerForced": "De provider bepaalt deze waarde. Deze kan hier niet worden bewerkt.",
+    "triggerUnavailable": "Deze exacte meldingstrigger is niet beschikbaar in de momentopname van de editor.",
+    "apiUnavailable": "Deze server biedt de API voor de meldingsbeleid-editor niet aan.",
+    "fields": {
+      "threshold": "Updatedrempel",
+      "once": "Slechts één keer melden",
+      "mode": "Verzendmodus",
+      "securitymode": "Verzendmodus voor beveiligingsmeldingen",
+      "digestcron": "Samenvattingsschema (cron)",
+      "resolvenotifications": "Oplossingsmeldingen versturen"
+    }
+  }
+}

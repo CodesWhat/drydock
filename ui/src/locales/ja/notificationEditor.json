@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "通知ポリシー",
+    "edit": "通知ポリシーを編集",
+    "boundary": "配信ポリシーのみを編集します。保存してもトリガーのテストや通知の送信は行いません。認証情報、送信先、テンプレート、実行設定は読み取り専用です。",
+    "providerForced": "この値はプロバイダーが制御しているため、ここでは編集できません。",
+    "triggerUnavailable": "この通知トリガーと完全に一致する項目がエディターのスナップショットにありません。",
+    "apiUnavailable": "このサーバーは通知ポリシー編集 API を提供していません。",
+    "fields": {
+      "threshold": "更新のしきい値",
+      "once": "一度だけ通知",
+      "mode": "配信モード",
+      "securitymode": "セキュリティ通知の配信モード",
+      "digestcron": "ダイジェストのスケジュール（cron）",
+      "resolvenotifications": "解決通知を送信"
+    }
+  }
+}

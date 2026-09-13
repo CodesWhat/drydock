@@ -5,9 +5,11 @@ import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import DetailField from '@/components/DetailField.vue';
+import NotificationPolicyEditor from '@/components/NotificationPolicyEditor.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
+import { isNotificationProvider, type NotificationIdentity } from '../services/notification-editor';
 import type { ApiComponentResponse } from '../types/api';
 import { isDryRunActionTrigger } from './containers/useContainerTriggers';
 
@@ -163,7 +165,7 @@ function mapTrigger(trigger: ApiComponentResponse, status = 'active') {
     status,
     config,
     dryRun: isDryRunActionTrigger({ ...trigger, configuration: { dryrun } }),
-    agent: trigger.agent,
+    agent: trigger.agent ?? undefined,
   };
 }
 
@@ -183,7 +185,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(trigger: TriggerRow) {
+async function openDetail(trigger: TriggerRow, refreshRow = false) {
   selectedTrigger.value = trigger;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -198,6 +200,17 @@ async function openDetail(trigger: TriggerRow) {
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedTrigger.value = mapTrigger(detail, String(trigger.status));
+    if (refreshRow) {
+      const refreshed = selectedTrigger.value;
+      triggersData.value = triggersData.value.map((row) =>
+        row.id === trigger.id &&
+        row.type === trigger.type &&
+        row.name === trigger.name &&
+        row.agent === trigger.agent
+          ? refreshed
+          : row,
+      );
+    }
   } catch {
     if (requestId !== detailRequestId) return;
     detailError.value = t('triggersView.detail.loadError');
@@ -206,6 +219,20 @@ async function openDetail(trigger: TriggerRow) {
       detailLoading.value = false;
     }
   }
+}
+
+function refreshSavedTrigger(identity: NotificationIdentity) {
+  const current = selectedTrigger.value;
+  if (
+    !detailOpen.value ||
+    !current ||
+    current.id !== identity.id ||
+    current.type !== identity.type ||
+    current.name !== identity.name ||
+    current.agent !== identity.agent
+  )
+    return;
+  void openDetail(current, true);
 }
 
 onMounted(async () => {
@@ -399,6 +426,7 @@ onMounted(async () => {
               <div class="mt-0.5">{{ t('triggersView.dryRun.tooltip') }}</div>
             </div>
 
+            <NotificationPolicyEditor v-if="detailOpen && isNotificationProvider(String(selectedTrigger.type))" :trigger="{ id: String(selectedTrigger.id), type: String(selectedTrigger.type), name: String(selectedTrigger.name), agent: selectedTrigger.agent as string | undefined }" @saved="refreshSavedTrigger" />
             <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
             <div v-if="Object.keys(selectedTrigger.config).length === 0">
               <div class="text-2xs-plus dd-text-muted">{{ t('triggersView.detail.noConfig') }}</div>

@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Zasady powiadomień",
+    "edit": "Edytuj zasady powiadomień",
+    "boundary": "Edytuj tylko zasady wysyłania. Zapis nie testuje wyzwalacza ani nie wysyła powiadomień. Dane uwierzytelniające, cele, szablony i ustawienia wykonania pozostają tylko do odczytu.",
+    "providerForced": "Ta wartość jest kontrolowana przez dostawcę i nie można jej tutaj edytować.",
+    "triggerUnavailable": "Ten konkretny wyzwalacz powiadomień jest niedostępny w migawce edytora.",
+    "apiUnavailable": "Ten serwer nie udostępnia API edytora zasad powiadomień.",
+    "fields": {
+      "threshold": "Próg aktualizacji",
+      "once": "Powiadom tylko raz",
+      "mode": "Tryb wysyłania",
+      "securitymode": "Tryb wysyłania alertów bezpieczeństwa",
+      "digestcron": "Harmonogram podsumowania (cron)",
+      "resolvenotifications": "Wysyłaj powiadomienia o rozwiązaniu"
+    }
+  }
+}

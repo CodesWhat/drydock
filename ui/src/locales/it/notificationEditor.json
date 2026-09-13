@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Criteri di notifica",
+    "edit": "Modifica criteri di notifica",
+    "boundary": "Modifica solo i criteri di invio. Salvare non testa il trigger e non invia notifiche. Credenziali, destinazioni, modelli e impostazioni di esecuzione restano di sola lettura.",
+    "providerForced": "Questo valore è controllato dal provider e non può essere modificato qui.",
+    "triggerUnavailable": "Questo specifico trigger di notifica non è disponibile nello snapshot dell’editor.",
+    "apiUnavailable": "Questo server non offre l’API dell’editor dei criteri di notifica.",
+    "fields": {
+      "threshold": "Soglia di aggiornamento",
+      "once": "Notifica una sola volta",
+      "mode": "Modalità di invio",
+      "securitymode": "Modalità di invio degli avvisi di sicurezza",
+      "digestcron": "Pianificazione del riepilogo (cron)",
+      "resolvenotifications": "Invia notifiche di risoluzione"
+    }
+  }
+}
