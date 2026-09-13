@@ -57,8 +57,12 @@ describe('configPaths', () => {
     expect(Object.keys(row.properties.fields.properties)).toEqual(['auto', 'order', 'concurrency']);
     expect(row.properties.fields.additionalProperties).toBe(false);
   });
-  test('documents the six-field notification editor with the shared write contract', () => {
+  test('documents eight notification fields with literal templates and reference omission', () => {
     const route = configPaths['/api/v1/config/editor/triggers'];
+    expect(route.get.description).toContain('eight');
+    expect(route.get.description).toContain('literal digest templates');
+    expect(route.get.description).toContain('Referenced values');
+    expect(route.get.description).not.toContain('No credentials, destinations or templates');
     expect(route?.get.operationId).toBe('getNotificationTriggerEditSnapshot');
     expect(route?.patch.operationId).toBe('writeNotificationTriggerEdits');
     expect(route?.patch.requestBody).toEqual(

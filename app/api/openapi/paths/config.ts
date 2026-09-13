@@ -505,7 +505,7 @@ export const configPaths = {
       summary: 'Get a safe notification trigger policy snapshot',
       operationId: 'getNotificationTriggerEditSnapshot',
       description:
-        'Session-only projection of six common notification policy fields. Action providers are excluded; agents, environment-owned and referenced fields remain read-only. Provider-forced settings such as MQTT mode remain read-only. No credentials, destinations or templates are returned.',
+        'Session-only projection of eight notification policy fields, including literal digest templates from the file or environment. Action providers are excluded; agents, environment-owned and referenced fields remain read-only. Referenced values, credentials, destinations and unrelated template fields are omitted. Provider-forced settings such as MQTT mode remain read-only, and MQTT digest templates are unsupported.',
       responses: {
         ...watcherEditorPaths['/api/v1/config/editor/watchers'].get.responses,
         200: jsonResponse('Notification policy edit snapshot', notificationTriggerSnapshotSchema),

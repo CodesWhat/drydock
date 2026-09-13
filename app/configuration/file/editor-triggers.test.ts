@@ -134,6 +134,47 @@ describe('notification policy editor', () => {
   });
 
   test.each(['securitydigesttitle', 'securitydigestbody'])(
+    'shows literal environment-owned %s as public text without allowing writes',
+    async (field) => {
+      const envKey = `DD_NOTIFICATION_DISCORD_PRIVATE_${field.toUpperCase()}`;
+      fixture(`notification:\n  discord:\n    private:\n      ${field}: File template\n`);
+      vi.stubEnv(envKey, 'Public environment template');
+      mockState.trigger = {
+        'discord.private': {
+          type: 'discord',
+          name: 'private',
+          configuration: { [field]: 'Public environment template' },
+        },
+      };
+      const snapshot = await getNotificationTriggerEditSnapshot();
+      expect(snapshot.triggers[0].fields[field]).toEqual({
+        present: true,
+        source: 'env',
+        readOnlyReason: 'environment-owned',
+        value: 'File template',
+        effectiveValue: 'Public environment template',
+      });
+      const raw = fs.readFileSync(configPath, 'utf8');
+      expect(
+        (
+          await writeNotificationTriggerEdits({
+            revision: snapshot.revision,
+            changes: [
+              {
+                path: ['notification', 'discord', 'private', field],
+                operation: 'set',
+                value: 'Replacement',
+              },
+            ],
+          })
+        ).status,
+      ).toBe(409);
+      expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+      expect(mockReload).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(['securitydigesttitle', 'securitydigestbody'])(
     'rejects blank %s without changing the document',
     async (field) => {
       fixture(

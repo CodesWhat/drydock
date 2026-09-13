@@ -11,7 +11,6 @@ import {
   configFileSources,
   ddEnvVars,
 } from '../configuration/index.js';
-import Component from '../registry/Component.js';
 import { getState, testable_deregisterComponent } from '../registry/index.js';
 import * as notification from '../store/notification.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
@@ -23,6 +22,9 @@ import * as triggerRouter from './trigger.js';
 vi.mock('../api/audit-events.js', () => ({ recordAuditEvent: vi.fn() }));
 vi.mock('../registry/component-resolution.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../registry/component-resolution.js')>();
+  const { default: Component } = await vi.importActual<typeof import('../registry/Component.js')>(
+    '../registry/Component.js',
+  );
   return {
     ...actual,
     constructComponent: async (...args: Parameters<typeof actual.constructComponent>) => {
@@ -119,10 +121,15 @@ test('HTTP digest edits reload real templates, restore renderer defaults and lea
     const bytes = fs.readFileSync(configPath, 'utf8');
     expect(bytes).toContain('# keep this comment');
     expect(yaml.parse(bytes).notification.discord.private.url).toEqual({ _file: credentialPath });
-    expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
     expect((await patch(snapshot.revision, changes)).status).toBe(409);
     expect((await patch(saved.revision, [{ ...changes[0], value: '' }])).status).toBe(400);
-    expect(fs.readFileSync(configPath, 'utf8')).toBe(bytes);
+    const savedFile = fs.openSync(configPath, 'r');
+    try {
+      expect(fs.fstatSync(savedFile).mode & 0o777).toBe(0o600);
+      expect(fs.readFileSync(savedFile, 'utf8')).toBe(bytes);
+    } finally {
+      fs.closeSync(savedFile);
+    }
     const renderCycle = async (cycleId: string) => {
       const trigger = getState().trigger['discord.private'];
       expect(trigger).toBeInstanceOf(Discord);
