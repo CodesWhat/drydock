@@ -13,6 +13,7 @@ import {
   type readEditorDocument,
   scalar,
 } from './editor-snapshot.js';
+import { isWholeScalarReference } from './interpolate.js';
 import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './layer.js';
 
 const NOTIFICATION_POLICY_FIELDS = [
@@ -22,9 +23,15 @@ const NOTIFICATION_POLICY_FIELDS = [
   'securitymode',
   'digestcron',
   'resolvenotifications',
+  'securitydigesttitle',
+  'securitydigestbody',
 ] as const;
 
-function referencedPath(document: Awaited<ReturnType<typeof readEditorDocument>>, path: string[]) {
+function referencedPath(
+  document: Awaited<ReturnType<typeof readEditorDocument>>,
+  path: string[],
+  exactInterpolation = false,
+) {
   const envKey = `DD_${path.join('_').toUpperCase()}`;
   if (
     process.env[`${envKey}__FILE`] !== undefined ||
@@ -43,7 +50,9 @@ function referencedPath(document: Awaited<ReturnType<typeof readEditorDocument>>
   return (
     isAlias(node) ||
     isMap(node) ||
-    (isScalar(node) && typeof node.value === 'string' && /^\$\{/.test(node.value))
+    (isScalar(node) &&
+      typeof node.value === 'string' &&
+      (exactInterpolation ? isWholeScalarReference(node.value) : /^\$\{/.test(node.value)))
   );
 }
 
@@ -98,20 +107,22 @@ function triggerPolicySnapshot(
       const node = prefix ? document?.doc.getIn(prefix, true) : undefined;
       const fields = Object.fromEntries(
         policyFields.map((field) => {
+          const digestTemplate = field === 'securitydigesttitle' || field === 'securitydigestbody';
           const keys = matchingKeys(node, field);
           const exactPath = prefix ? [...prefix, keys[0] ?? field] : undefined;
           const rawNode = exactPath ? document?.doc.getIn(exactPath, true) : undefined;
           const envKey = `DD_${category.toUpperCase()}_${trigger.type.toUpperCase()}_${trigger.name.toUpperCase()}_${field.toUpperCase()}`;
-          const reference =
-            isAlias(rawNode) ||
-            isMap(rawNode) ||
-            (isScalar(rawNode) &&
-              typeof rawNode.value === 'string' &&
-              /^\$\{/.test(rawNode.value)) ||
-            process.env[`${envKey}__FILE`] !== undefined ||
-            getConfigFileLayer()[`${envKey}__FILE`] !== undefined ||
-            (category === 'action' &&
-              referencedPath(document, [category, trigger.type, trigger.name, field]));
+          const reference = digestTemplate
+            ? referencedPath(document, [category, trigger.type, trigger.name, field], true)
+            : isAlias(rawNode) ||
+              isMap(rawNode) ||
+              (isScalar(rawNode) &&
+                typeof rawNode.value === 'string' &&
+                /^\$\{/.test(rawNode.value)) ||
+              process.env[`${envKey}__FILE`] !== undefined ||
+              getConfigFileLayer()[`${envKey}__FILE`] !== undefined ||
+              (category === 'action' &&
+                referencedPath(document, [category, trigger.type, trigger.name, field]));
           const environmentOwned =
             configFileSources[envKey] === 'env' || process.env[envKey] !== undefined;
           const readOnlyReason = !document
@@ -126,8 +137,12 @@ function triggerPolicySnapshot(
                     ? 'referenced-field'
                     : environmentOwned
                       ? 'environment-owned'
-                      : trigger.type === 'mqtt' && field === 'mode'
-                        ? 'provider-forced'
+                      : trigger.type === 'mqtt'
+                        ? digestTemplate
+                          ? 'provider-unsupported'
+                          : field === 'mode'
+                            ? 'provider-forced'
+                            : undefined
                         : undefined;
           const descriptor: ConfigurationEditFieldDescriptor = {
             present: rawNode !== undefined,

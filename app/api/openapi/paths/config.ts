@@ -414,6 +414,8 @@ const notificationTriggerSnapshotSchema = {
               securitymode: editFieldSchema,
               digestcron: editFieldSchema,
               resolvenotifications: editFieldSchema,
+              securitydigesttitle: editFieldSchema,
+              securitydigestbody: editFieldSchema,
             },
             required: [
               'threshold',
@@ -515,7 +517,7 @@ export const configPaths = {
       summary: 'Edit allowlisted notification trigger policy leaves',
       operationId: 'writeNotificationTriggerEdits',
       description:
-        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron and resolvenotifications. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
+        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron, resolvenotifications, securitydigesttitle and securitydigestbody. The two template fields preserve literal scan expressions and whitespace; removal restores renderer defaults, while empty strings are invalid. Whole-scalar environment references and file/alias-owned values are read-only. MQTT does not support security digest templates. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
     },
   },
   '/api/v1/config': {
