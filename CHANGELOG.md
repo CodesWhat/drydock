@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.
 
+- Images show noninteractive loading placeholders during inventory requests, matching table and card layouts with localized loading status.
 - Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
 - Notification details now offer a six-field delivery policy editor with explicit Save/Cancel, typed boolean choices, source-aware read-only fields, and conflict-safe drafts. Saving never tests the trigger or sends a notification.
 - **Confirmed fleet bulk actions (roadmap 7.2, slice 2).** Update all previews the filtered live list with dependency additions and eligibility warnings, without using checkbox selection or pending display rows. Snooze all patch selects current patch candidates and explicitly confirms a container-wide snooze, with duration/date controls and a single result summary for successes, failures and refresh errors.
