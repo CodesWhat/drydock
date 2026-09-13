@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { getPreviewUpdateKind } from '../../services/preview';
 import AppBadge from '../AppBadge.vue';
 import AppButton from '../AppButton.vue';
 import AppIconButton from '../AppIconButton.vue';
@@ -279,7 +280,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
               <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.currentLabel') }} <span class="dd-text font-mono">{{ detailPreview.currentImage || '-' }}</span></div>
               <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.newLabel') }} <span class="dd-text font-mono">{{ detailPreview.newImage || '-' }}</span></div>
               <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.updateKindLabel') }}
-                <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || t('common.unknown') }}</span>
+                <span class="dd-text font-mono">{{ getPreviewUpdateKind(detailPreview.updateKind) || t('common.unknown') }}</span>
               </div>
               <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
                 <span class="dd-text">{{ detailPreview.isRunning ? t('common.yes') : t('common.no') }}</span>

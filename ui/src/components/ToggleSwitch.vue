@@ -25,7 +25,7 @@ defineEmits<{
     type="button"
     role="switch"
     :disabled="props.disabled"
-    :aria-checked="String(props.modelValue)"
+    :aria-checked="props.modelValue"
     :aria-label="props.ariaLabel"
     class="relative dd-rounded-lg transition-colors"
     :class="[

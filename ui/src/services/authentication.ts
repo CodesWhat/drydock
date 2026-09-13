@@ -1,3 +1,4 @@
+import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface AuthenticationDetailPathOptions {
@@ -38,7 +39,7 @@ async function getAllAuthentications() {
     throw new Error(`Failed to get authentications: ${response.statusText}`);
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiComponentResponse>(payload);
 }
 
 function buildAuthenticationDetailPath({ type, name, agent }: AuthenticationDetailPathOptions) {
@@ -57,7 +58,7 @@ async function getAuthentication({ type, name, agent }: AuthenticationDetailPath
   if (!response.ok) {
     throw new Error(`Failed to get authentication: ${response.statusText}`);
   }
-  return readJsonResponse(response);
+  return readJsonResponse<ApiComponentResponse>(response);
 }
 
 export { getAllAuthentications, getAuthentication, getAuthProviderColor, getAuthProviderIcon };

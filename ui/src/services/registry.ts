@@ -1,3 +1,4 @@
+import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 /**
@@ -84,7 +85,7 @@ async function getAllRegistries() {
     throw new Error(`Failed to get registries: ${response.statusText}`);
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiComponentResponse>(payload);
 }
 
 function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {
@@ -103,7 +104,7 @@ async function getRegistry({ type, name, agent }: RegistryDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get registry: ${response.statusText}`);
   }
-  return readJsonResponse(response);
+  return readJsonResponse<ApiComponentResponse>(response);
 }
 
 export { getAllRegistries, getRegistry, getRegistryProviderColor, getRegistryProviderIcon };
