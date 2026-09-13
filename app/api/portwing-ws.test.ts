@@ -103,6 +103,7 @@ const {
     activate = vi.fn();
     onDisconnect = vi.fn().mockResolvedValue(undefined);
     readonly reconnected: boolean;
+    readonly capabilities: string[];
     // Mirrors the real EdgeAgentAdapter.terminate(): sends an error frame in
     // the same shape as sendErrorAndClose (`{ type: 'error', data: { message,
     // code } }`), then closes with (closeCode, errorCode) — so
@@ -120,10 +121,11 @@ const {
     constructor(
       _client: unknown,
       ws: { send: (data: string) => void; close: (code?: number, reason?: string) => void },
-      options: { reconnected?: boolean } = {},
+      options: { reconnected?: boolean; capabilities?: string[] } = {},
     ) {
       this.ws = ws;
       this.reconnected = options.reconnected ?? false;
+      this.capabilities = options.capabilities ?? [];
       lastAdapterInstance = this;
     }
   }
@@ -1124,6 +1126,37 @@ describe('hello verification — happy path', () => {
   // still complete with a welcome — no protocol-mismatch, no compat
   // regression — since this is an additive, capability-gated negotiation,
   // not a protocol version bump.
+  test.each([
+    [['edge-request-body-stream'], ['edge-request-body-stream']],
+    [['edge-request-body-stream', 1, null], ['edge-request-body-stream']],
+    [undefined, []],
+    ['edge-request-body-stream', []],
+  ])(
+    'passes only advertised capability strings to the adapter (%j)',
+    async (capabilities, expected) => {
+      const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+      const ts = Math.floor(Date.now() / 1000);
+      const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+      const sig = signHello(privateKey, ts, nonce);
+      const { gateway, getUpgradedWs } = createGateway({
+        keyId,
+        pubkey: pubkeyBase64,
+        label: 'test',
+        createdAt: new Date().toISOString(),
+        revokedAt: null,
+      });
+      gateway.handleUpgrade(
+        createRequest('/api/portwing/ws'),
+        createMockSocket() as unknown as Socket,
+        Buffer.alloc(0),
+      );
+      sendMessageToGateway(getUpgradedWs()!, buildHello(keyId, ts, nonce, sig, { capabilities }));
+      await vi.waitFor(() =>
+        expect(getLastEdgeAgentAdapterInstance()?.capabilities).toEqual(expected),
+      );
+    },
+  );
+
   test('an old-shaped hello with no capabilities field still completes the handshake', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
