@@ -792,6 +792,9 @@ watch(
 watch(groupByStack, (value) => {
   if (value) fleet.groupBy.value = 'none';
 });
+watch(fleet.groupLabel, (value, previous) => {
+  if (!value && previous && fleet.groupBy.value === 'label') fleet.groupBy.value = 'none';
+});
 
 function applyGroupByStackFromQuery(queryValue: unknown) {
   const raw = firstQueryValue(queryValue);

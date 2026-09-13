@@ -1235,6 +1235,38 @@ describe('ContainersView', () => {
           groupByStack: 'true',
         });
       });
+
+      it('clears label grouping and its saved preference when an input removal feeds back through the real router', async () => {
+        const { createRouter, createMemoryHistory } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const { preferences } = await import('@/preferences/store');
+        const router = createRouter({
+          history: createMemoryHistory(),
+          routes: [{ path: '/containers', component: defineComponent({ template: '<div />' }) }],
+        });
+        await router.push('/containers?unrelated=keep&sort=status-desc&group-by-label=team');
+        mockRoute.query = reactive({ ...router.currentRoute.value.query });
+        router.afterEach((to) => {
+          for (const key of Object.keys(mockRoute.query)) delete mockRoute.query[key];
+          Object.assign(mockRoute.query, to.query);
+        });
+        mockRouterReplace.mockImplementation((location) => router.replace(location));
+        const wrapper = await mountContainersView();
+        await wrapper.get('[data-test="fleet-group-label"]').setValue('');
+        await flushPromises();
+        expect(router.currentRoute.value.query).toEqual({ unrelated: 'keep', sort: 'status-desc' });
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        expect(preferences.containers.fleet.groupBy).toBe('none');
+        expect(preferences.containers.fleet.groupLabel).toBe('');
+        expect((wrapper.vm as any).groupByStack).toBe(false);
+        expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('label');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('label');
+        await wrapper.get('[data-test="fleet-group-label"]').setValue('environment');
+        await flushPromises();
+        expect(router.currentRoute.value.query['group-by-label']).toBe('environment');
+      });
     });
 
     it('applies search query from route query', async () => {
