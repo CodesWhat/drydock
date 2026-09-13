@@ -1922,15 +1922,37 @@ export class AgentClient {
     if (existing && isTerminalContainerUpdateOperationStatus(existing.status)) {
       return;
     }
-    updateOperationStore.markOperationTerminal(operationId, {
-      status: payload.status,
+    const patch = {
       containerName: payload.containerName,
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),
       ...(payload.lastError ? { lastError: payload.lastError } : {}),
       ...(payload.container !== undefined ? { container: payload.container as never } : {}),
-    });
+    };
+    switch (payload.status) {
+      case 'succeeded':
+        updateOperationStore.markOperationTerminal(operationId, { ...patch, status: 'succeeded' });
+        return;
+      case 'rolled-back':
+        updateOperationStore.markOperationTerminal(operationId, {
+          ...patch,
+          status: 'rolled-back',
+        });
+        return;
+      case 'failed':
+        updateOperationStore.markOperationTerminal(operationId, { ...patch, status: 'failed' });
+        return;
+      case 'expired':
+        updateOperationStore.markOperationTerminal(operationId, { ...patch, status: 'expired' });
+        return;
+      case 'skipped-dependency':
+        updateOperationStore.markOperationTerminal(operationId, {
+          ...patch,
+          status: 'skipped-dependency',
+        });
+        return;
+    }
   }
 
   private maybeMarkAgentOperationSucceededFromAppliedPayload(
