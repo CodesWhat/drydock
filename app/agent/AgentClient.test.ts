@@ -2446,6 +2446,26 @@ describe('AgentClient', () => {
       await Promise.resolve();
     });
 
+    test.each(['added', 'updated', 'removed'])(
+      'ignores additive inventory %s events without report or enrichment handling',
+      async (kind) => {
+        const process = vi.spyOn(client, 'processContainer');
+        const refresh = vi.spyOn(client as never, 'refreshControllerDockerTransportContainer');
+        const remove = vi.spyOn(storeContainer, 'deleteContainer');
+        await client.handleEvent(`dd:inventory-${kind}`, {
+          context: {
+            origin: 'inventory',
+            operationId: 'inventory-operation',
+            source: { type: 'docker', name: 'local' },
+          },
+          container: { id: 'c1', name: 'test', watcher: 'local' },
+        });
+        expect(process).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+      },
+    );
+
     test('should process container on dd:container-added', async () => {
       const spy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
       const container = { id: 'c1', name: 'test' };
@@ -10235,6 +10255,22 @@ describe('AgentClient', () => {
       await expect(
         client.requestDockerApi('POST', '/v1.44/containers/create', {}, Buffer.from('{invalid')),
       ).rejects.toThrow('must be valid JSON');
+    });
+
+    test('capable edge agents receive the original binary and JSON bytes', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      const sendStreamRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      client.edgeAdapter = {
+        supportsRequestBodyStream: true,
+        sendRequest,
+        sendStreamRequest,
+      } as never;
+      const binary = Buffer.from([0, 255, 128]);
+      const json = Buffer.from(' { "n": 1234567890123456789 } ');
+      await client.requestDockerApi('POST', '/build', {}, binary);
+      await client.requestDockerApi('POST', '/containers/create', {}, json);
+      expect(sendStreamRequest).toHaveBeenCalledWith('POST', '/build', {}, binary);
+      expect(sendRequest).toHaveBeenCalledWith('POST', '/containers/create', {}, json);
     });
 
     test('edge mode normalizes response body and header variants', async () => {

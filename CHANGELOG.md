@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.
+
+- Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
 - **Confirmed fleet bulk actions (roadmap 7.2, slice 2).** Update all previews the filtered live list with dependency additions and eligibility warnings, without using checkbox selection or pending display rows. Snooze all patch selects current patch candidates and explicitly confirms a container-wide snooze, with duration/date controls and a single result summary for successes, failures and refresh errors.
 - **Fleet container filters and grouping (roadmap 7.2, slice 1).** The existing container list can filter by agent identity, registry endpoint, tag type and exact Docker label values, and group by agent, registry, runtime status, tag type or a label key. Local watchers stay distinct from an agent named Local. Table/cards, row selection and the existing stack grouping remain available, and filter/group choices persist across reloads.
 - **The container list shows dependencies and guards child-before-parent updates (roadmap 6.1, [#219](https://github.com/CodesWhat/drydock/issues/219)).** A container with dependencies gets a chevron next to its name; expanding it lists what it depends on, what requires it, a cycle marker, and an "Update dependency group" button that dispatches the whole connected set in wave order behind the existing preview. Updating one container whose dependency also has a pending update now warns before dispatch, with the parent names, and lets you continue. The engine, labels and wave ordering shipped in v1.7; this is the UI half. The confirm dialog also renders multi-line messages as separate lines now, so the wave list that shipped in v1.7 no longer runs together.
@@ -72,7 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Debug dump downloads now show the selected language's existing error message when the browser cannot create download URLs.
+- Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
 
 - **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.
 
@@ -136,6 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A renamed or Compose-recreated container's Home Assistant entity was orphaned, leaving a duplicate "Unknown" entity behind.** The discovery `unique_id` used to be derived from the MQTT state topic, which changed with the container's name or Compose service identity; Home Assistant kept the old entity's history under the abandoned id and created a fresh, empty one alongside it on every rename. `unique_id` is now derived from the container's durable identity key instead of the topic (see the MQTT topic change above), so it survives both a rename and a Compose recreate.
 - **A replacement container recovered by identity instead of by id sat in-progress until its operation expired.** `reconcileInProgressContainerUpdateOperation`'s identity-based fallback discards a match whose `containerId` disagrees with the container it was looking up, which is the right call for a genuine same-identity-key collision, but it also fired against the executor's own replacement whenever `getContainerIdBestEffort()` failed to persist `newContainerId` — the replacement's fresh id never equals the operation's recorded pre-update `containerId` either. A mismatch here is now accepted as the replacement when the operation's `targetImage` matches the image the found container is running, the same discriminator `reconcileWithActiveContainerOnly` already applies to the equivalent ambiguity on the by-name fallback path; it stays discarded when the image disagrees or the operation has nothing to compare.
 - Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
+
+- Debug dump downloads now show the selected language's existing error message when the browser cannot create download URLs.
 
 ### Removed
 
