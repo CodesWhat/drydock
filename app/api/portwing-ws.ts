@@ -862,6 +862,9 @@ async function processHello(
 
   const adapter = new EdgeAgentAdapter(client, ws, {
     reconnected: existingBinding !== undefined,
+    capabilities: Array.isArray(hello.capabilities)
+      ? hello.capabilities.filter((value): value is string => typeof value === 'string')
+      : [],
   });
   // activate() calls addAgent() — release the in-flight reservation immediately
   // after so the slot is held by the manager instead.
