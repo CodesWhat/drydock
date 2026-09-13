@@ -172,6 +172,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
   });
 
   test('#406 shows a live stabilization countdown, ETA, and manual override', async ({ page }) => {
+    test.setTimeout(90_000);
     await waitForCountdownFixture(page.context().request);
     const now = new Date('2026-07-13T16:00:00.000Z');
     const liftableAt = new Date(now.getTime() + 6 * 60_000).toISOString();

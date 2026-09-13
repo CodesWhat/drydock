@@ -174,3 +174,14 @@ test('countdown awaits readiness before installing its browser clock', () => {
   assert.ok(readiness < countdown.indexOf('page.clock.install'));
   assert.ok(readiness < countdown.indexOf('openContainerOverview'));
 });
+
+test('countdown reserves time for readiness, overview, and assertions without widening other tests', () => {
+  const source = readFileSync(join(__dirname, '../playwright/v16-modes-pins.spec.ts'), 'utf8');
+  const countdown = source.slice(source.indexOf("test('#406"), source.indexOf("test('#498"));
+  const timeout = countdown.indexOf('test.setTimeout(90_000)');
+  assert.ok(timeout >= 0, 'countdown needs its own 90-second test budget');
+  assert.ok(timeout < countdown.indexOf('await waitForCountdownFixture'));
+  assert.equal(source.match(/test\.setTimeout\(90_000\)/g)?.length, 1);
+  const config = readFileSync(join(__dirname, '../playwright.config.ts'), 'utf8');
+  assert.match(config, /timeout: 60_000/);
+});
