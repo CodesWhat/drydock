@@ -395,3 +395,29 @@ Error codes: `parse-error`, `expected-hello`, `invalid-agent-name`, `protocol-mi
    ```
 
    and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.
+
+
+## Binary Docker request bodies
+
+When an agent advertises `edge-request-body-stream` in its hello, Drydock sends
+raw Docker request bodies as `request` with `bodyStream: true`, followed by
+base64 `stream` frames and a terminal `stream_end`, all keyed by `requestId`.
+Each chunk contains at most 32 KiB of raw bytes. The sender waits for each write
+to complete, limits bodies and all simultaneous uploads on one connection to
+512 MiB, and abandons uploads after 30 seconds without write progress.
+
+Agents without the capability keep receiving inline JSON bodies. Binary bodies
+are rejected before sending a request to those agents. There is no protocol
+version change.
+
+Interrupted uploads never send `stream_end`. Drydock sends an `error` frame with
+`code: "request-cancelled"` and `requestId` when the connection still exists.
+New agents discard the pending body immediately; older agents ignore that error
+and discard it on their existing idle timeout. This cannot dispatch a partial
+body. Cancellation applies to upload reassembly, not a Docker operation already
+started after the terminal frame. Disconnects clear pending uploads.
+
+To test the actual controller sender against a local Go agent checkout, run
+`bash scripts/edge-body-interop.sh /path/to/portwing` from the Drydock repository.
+The test builds the agent, creates temporary local sockets and an Ed25519 key,
+checks exact binary bytes at the Docker socket, then removes its resources.

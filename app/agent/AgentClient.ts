@@ -570,10 +570,14 @@ export class AgentClient {
     if (this.edgeAdapter) {
       let edgeBody: unknown;
       if (body && body.length > 0) {
-        try {
-          edgeBody = JSON.parse(body.toString('utf8'));
-        } catch {
-          throw new Error('Edge Docker API request body must be valid JSON');
+        if (this.edgeAdapter.supportsRequestBodyStream) {
+          edgeBody = body;
+        } else {
+          try {
+            edgeBody = JSON.parse(body.toString('utf8'));
+          } catch {
+            throw new Error('Edge Docker API request body must be valid JSON');
+          }
         }
       }
       const response = await (isStreamingDockerTarget(target)

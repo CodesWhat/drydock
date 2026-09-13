@@ -10237,6 +10237,22 @@ describe('AgentClient', () => {
       ).rejects.toThrow('must be valid JSON');
     });
 
+    test('capable edge agents receive the original binary and JSON bytes', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      const sendStreamRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      client.edgeAdapter = {
+        supportsRequestBodyStream: true,
+        sendRequest,
+        sendStreamRequest,
+      } as never;
+      const binary = Buffer.from([0, 255, 128]);
+      const json = Buffer.from(' { "n": 1234567890123456789 } ');
+      await client.requestDockerApi('POST', '/build', {}, binary);
+      await client.requestDockerApi('POST', '/containers/create', {}, json);
+      expect(sendStreamRequest).toHaveBeenCalledWith('POST', '/build', {}, binary);
+      expect(sendRequest).toHaveBeenCalledWith('POST', '/containers/create', {}, json);
+    });
+
     test('edge mode normalizes response body and header variants', async () => {
       const sendRequest = vi
         .fn()
