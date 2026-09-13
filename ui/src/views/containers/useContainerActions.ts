@@ -264,10 +264,9 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
-    const msg = errorMessage(
-      e,
-      args.t('containerComponents.actionToasts.actionFailedDetail', { name: args.name }),
-    );
+    const msg =
+      errorMessage(e, '') ||
+      args.t('containerComponents.actionToasts.actionFailedDetail', { name: args.name });
     args.inputError.value = msg;
     const toast = useToast();
     toast.error(
@@ -414,10 +413,8 @@ async function updateAllInGroupState(
   } catch (error: unknown) {
     args.clearBatch(args.group.key);
     useToast().error(
-      errorMessage(
-        error,
+      errorMessage(error, '') ||
         args.t('containerComponents.actionToasts.groupUpdateFailed', { name: args.group.key }),
-      ),
     );
   } finally {
     if (acceptedTargetIds.length === 0) {
@@ -559,15 +556,14 @@ async function runBulkUpdateState(args: {
     }
   } catch (error: unknown) {
     useToast().error(
-      errorMessage(
-        error,
-        args.t('containerComponents.actionToasts.groupUpdateFailed', {
-          name:
-            frozenUpdateTargets.length === 1
-              ? frozenUpdateTargets[0]!.name
-              : `${frozenUpdateTargets.length} containers`,
-        }),
-      ),
+      errorMessage(error, '') ||
+        (frozenUpdateTargets.length === 1
+          ? args.t('containerComponents.actionToasts.groupUpdateFailed', {
+              name: frozenUpdateTargets[0]!.name,
+            })
+          : args.t('containersView.toast.batchFailedNoGroup', {
+              count: frozenUpdateTargets.length,
+            })),
     );
   } finally {
     const nextActionInProgress = new Map(args.actionInProgress.value);
@@ -1892,7 +1888,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
       } else if (statusCode === 404) {
         toast.error(t('containerComponents.actionToasts.cancelOperationNotFound', { name }));
       } else {
-        toast.error(errorMessage(e, t('containerComponents.actionToasts.cancelFailed', { name })));
+        toast.error(
+          errorMessage(e, '') || t('containerComponents.actionToasts.cancelFailed', { name }),
+        );
       }
     }
   }
