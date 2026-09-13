@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Website analytics now retain validated referring hostnames without sending full referrer URLs.
 
+- Fleet health now reads a names-only agent roster independently of status data, so configured clients remain visible when the first status request fails. Unavailable rows cannot refresh inventory; successful reads reconcile identities without polling or a persistent cache.
+
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
 
 - **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.

@@ -35,9 +35,55 @@ describe('Agent Router', () => {
     vi.clearAllMocks();
   });
 
+  test('returns exact names before handshake without reading configuration, status or inventory', () => {
+    const client = (name: string) => ({
+      name,
+      get config() {
+        throw new Error('configuration must not be read');
+      },
+      get info() {
+        throw new Error('status must not be read');
+      },
+    });
+    getAgents.mockReturnValue([client('Local'), client('local'), client('Local')]);
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find((call) => call[0] === '/roster')?.[1];
+    expect(handler).toBeTypeOf('function');
+    const response = createResponse();
+    handler({}, response);
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith({
+      data: [{ name: 'Local' }, { name: 'local' }],
+      total: 2,
+    });
+    expect(getContainersForStats).not.toHaveBeenCalled();
+    getAgents.mockReturnValue([]);
+    const emptyResponse = createResponse();
+    handler({}, emptyResponse);
+    expect(emptyResponse.json).toHaveBeenCalledWith({ data: [], total: 0 });
+  });
+
   test('should register GET / route on init', () => {
     const router = agentRouter.init();
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+  });
+
+  test.each([
+    ['read', 200],
+    ['admin', 200],
+    ['containers:watch', 403],
+    ['api-keys:manage', 403],
+  ])('enforces existing %s scope on roster reads', (scope, status) => {
+    getAgents.mockReturnValue([]);
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find((call) => call[0] === '/roster')![1];
+    const response = createResponse();
+    handler(
+      { principal: { kind: 'api-key', username: 'reader', keyId: 'key', scopes: [scope] } },
+      response,
+    );
+    expect(response.status).toHaveBeenCalledWith(status);
+    expect(getAgents).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
   });
 
   test('should register GET /:name/log/entries route on init', () => {

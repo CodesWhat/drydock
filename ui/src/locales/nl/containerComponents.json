@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "Agentlijst niet beschikbaar. Sommige geconfigureerde agents kunnen ontbreken.",
       "title": "Vlootstatus",
       "description": "Status van de hele vloot. Inventarisatie ontdekt containers zonder registers te controleren of updates uit te voeren.",
       "reload": "Status herladen",

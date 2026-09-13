@@ -30,6 +30,37 @@ const webhookWatcherQueryParam = {
 };
 
 describe('openApiPaths', () => {
+  test('publishes the names-only roster envelope and access failures', () => {
+    expect(openApiPaths['/api/v1/agents/roster']).toStrictEqual({
+      get: {
+        tags: ['Agents'],
+        summary:
+          'List exact names of live configured agent clients without status or configuration',
+        operationId: 'getAgentRoster',
+        responses: {
+          200: jsonResponse('Agent identities', {
+            type: 'object',
+            required: ['data', 'total'],
+            additionalProperties: false,
+            properties: {
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['name'],
+                  additionalProperties: false,
+                  properties: { name: { type: 'string' } },
+                },
+              },
+              total: { type: 'integer', minimum: 0 },
+            },
+          }),
+          401: errorResponse('Authentication required'),
+          403: errorResponse('Missing required read scope'),
+        },
+      },
+    });
+  });
   describe('createWebhookContainerActionPost', () => {
     test('webhook watch-container path has exact full structure', () => {
       // Kills: L30:42 ({} errorResponses body), L31:24 ('Missing or invalid...'),
