@@ -633,6 +633,7 @@ const QUERY_SYNC_KEYS = new Set([
   'filterBouncer',
   'filterServer',
   'groupByStack',
+  'group-by-label',
   'sort',
 ] as const);
 const VALID_CONTAINER_SORT_KEYS = [
@@ -800,6 +801,23 @@ function applyGroupByStackFromQuery(queryValue: unknown) {
   groupByStack.value = raw === 'true' || raw === '1';
 }
 
+let hadGroupLabelQuery = false;
+function applyGroupLabelFromQuery(queryValue: unknown, stackQueryValue: unknown) {
+  const previouslyPresent = hadGroupLabelQuery;
+  hadGroupLabelQuery = Object.hasOwn(route.query, 'group-by-label');
+  if (isSyncingRouteFromState.value || (!hadGroupLabelQuery && !previouslyPresent)) return;
+  const stack = firstQueryValue(stackQueryValue);
+  if (stack === 'true' || stack === '1') return;
+  const label = firstQueryValue(queryValue) ?? '';
+  fleet.groupLabel.value = label;
+  if (label) {
+    groupByStack.value = false;
+    fleet.groupBy.value = 'label';
+  } else if (fleet.groupBy.value === 'label') {
+    fleet.groupBy.value = 'none';
+  }
+}
+
 watch(
   () => [
     route.query.q,
@@ -809,6 +827,7 @@ watch(
     route.query.filterBouncer,
     route.query.filterServer,
     route.query.groupByStack,
+    route.query['group-by-label'],
     route.query.sort,
   ],
   ([
@@ -819,6 +838,7 @@ watch(
     queryFilterBouncer,
     queryFilterServer,
     queryGroupByStack,
+    queryGroupLabel,
     querySort,
   ]) => {
     applyFilterSearchFromQuery(querySearch, {
@@ -854,6 +874,7 @@ watch(
       DEFAULT_FILTER_VALUE,
     );
     applyGroupByStackFromQuery(queryGroupByStack);
+    applyGroupLabelFromQuery(queryGroupLabel, queryGroupByStack);
     applySortFromQuery(querySort);
   },
   { immediate: true },
@@ -903,6 +924,8 @@ function buildSyncedRouteQuery(): Record<string, string> {
   }
   if (groupByStack.value) {
     nextQuery.groupByStack = 'true';
+  } else if (fleet.groupBy.value === 'label' && fleet.groupLabel.value) {
+    nextQuery['group-by-label'] = fleet.groupLabel.value;
   }
   const sortQuery = encodeSortQueryValue(containerSortKey.value, containerSortAsc.value);
   if (sortQuery) {
@@ -943,6 +966,8 @@ watch(
     filterBouncer,
     filterServer,
     groupByStack,
+    fleet.groupBy,
+    fleet.groupLabel,
     containerSortKey,
     containerSortAsc,
   ],
