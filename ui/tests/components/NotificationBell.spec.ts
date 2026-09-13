@@ -90,7 +90,8 @@ describe('NotificationBell', () => {
   }
 
   async function openBell(wrapper: ReturnType<typeof mount>) {
-    await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+    const label = i18n.global.t('appShell.notificationBell.buttonLabel');
+    await wrapper.find(`button[aria-label="${label}"]`).trigger('click');
     await flushPromises();
   }
 
@@ -100,21 +101,25 @@ describe('NotificationBell', () => {
   });
 
   it.each([
-    { age: 30_000, expected: "à l'instant" },
-    { age: 120_000, expected: 'il y a 2\u00a0min' },
-  ])('renders a $age ms old notification in French', async ({ age, expected }) => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'));
-    i18n.global.locale.value = 'fr';
-    mockGetAuditLog.mockResolvedValue({
-      entries: [{ ...mockEntries[0], timestamp: new Date(Date.now() - age).toISOString() }],
-    });
+    { locale: 'fr', age: 30_000, expected: "à l'instant" },
+    { locale: 'fr', age: 120_000, expected: 'il y a 2\u00a0min' },
+    { locale: 'de', age: 30_000, expected: 'Gerade eben' },
+  ] as const)(
+    'renders a $age ms old notification in $locale',
+    async ({ locale, age, expected }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-10T12:00:00Z'));
+      i18n.global.locale.value = locale;
+      mockGetAuditLog.mockResolvedValue({
+        entries: [{ ...mockEntries[0], timestamp: new Date(Date.now() - age).toISOString() }],
+      });
 
-    const wrapper = factory();
-    await openBell(wrapper);
+      const wrapper = factory();
+      await openBell(wrapper);
 
-    expect(findEntryRows(wrapper)[0].text()).toContain(expected);
-  });
+      expect(findEntryRows(wrapper)[0].text()).toContain(expected);
+    },
+  );
 
   it('updates relative times when the locale changes while the bell stays open', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
