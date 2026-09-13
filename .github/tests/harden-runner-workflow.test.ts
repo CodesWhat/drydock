@@ -16,6 +16,8 @@ type EgressPolicy = 'audit' | 'block';
 // §2). Any job not listed here defaults to 'audit'. This map is the migration
 // checklist — each stage's PR adds exactly the jobs it flips to 'block'.
 const expectedPolicy: Record<string, EgressPolicy> = {
+  'starchart.yml/prepare': 'block',
+  'starchart.yml/publish': 'block',
   'ci-verify.yml/changes': 'block',
   'ci-verify.yml/dependency-review': 'block',
   'ci-verify.yml/secrets': 'block',
