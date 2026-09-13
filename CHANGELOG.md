@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Toast queue.** The UI now shows at most three toast notifications, with overflow waiting in first-in, first-out order. Each notification's dismissal timer starts when it becomes visible; persistent messages remain until dismissed.
 
+- **Shareable label grouping.** Container URLs accept `group-by-label=<exact Docker label key>`, and the existing label grouping controls keep that parameter up to date. Explicit stack grouping takes precedence when a link requests both.
+
 ### Changed
 
 - **Vue SFC runtime coverage now has a measured gate.** All source SFCs, including unimported components, contribute to aggregate floors of 87.54% statements, 81.57% branches, 84.39% functions and 87.89% lines. TypeScript stays at 100%; script and generated-template coverage remain separate from type checking and mutation quality.
@@ -157,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
 
 - Debug dump downloads now show the selected language's existing error message when the browser cannot create download URLs.
+- Outbox load, retry, and discard failures now use the selected language when the server returns no usable diagnostic, while preserving server-provided error messages.
 
 ### Removed
 
