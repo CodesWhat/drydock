@@ -2,6 +2,7 @@
 import { computed, onScopeDispose, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
+import AppSplitButton from '../AppSplitButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { useContainerSelection } from '../../composables/useContainerSelection';
@@ -1102,63 +1103,34 @@ onScopeDispose(() => {
               </AppButton>
             <div v-if="hasRawUpdateCandidate(c) && updateBtnState(c) !== 'none'" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
-              <div v-if="updateBtnState(c) === 'hard'" class="inline-flex min-w-[110px] dd-rounded overflow-hidden border dd-border-strong"
-                   v-tooltip.top="tt(updateBtnTooltip(c))">
-                <AppButton
-                        size="md"
-                        variant="muted-subtle"
-                        weight="bold"
-                        class="inline-flex items-center justify-center flex-1 whitespace-nowrap cursor-not-allowed"
-                        disabled>
-                  <AppIcon name="lock" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.blockedButton') }}
-                </AppButton>
-                <AppIconButton icon="chevron-down" size="toolbar" variant="muted-subtle"
-                        class="transition-colors border-l dd-border-strong"
-                        :class="openActionsMenu === c.id ? 'dd-bg-elevated dd-text' : ''"
-                        :aria-label="t('containerComponents.groupedViews.openActionsMenu')"
-                        @click.stop="toggleActionsMenu(c.id, $event)" />
-              </div>
+              <AppSplitButton v-if="updateBtnState(c) === 'hard'"
+                   variant="muted" class="min-w-[110px]" primary-class="flex-1"
+                   primary-disabled
+                   :menu-open="openActionsMenu === c.id"
+                   :menu-label="t('containerComponents.groupedViews.openActionsMenu')"
+                   v-tooltip.top="tt(updateBtnTooltip(c))"
+                   @menu="toggleActionsMenu(c.id, $event)">
+                <AppIcon name="lock" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.blockedButton') }}
+              </AppSplitButton>
               <!-- Soft-blocked: amber split button (manual update still works, warn-and-confirm on click) -->
-              <div v-else-if="updateBtnState(c) === 'soft'" class="inline-flex dd-rounded overflow-hidden border dd-border-warning"
+              <AppSplitButton v-else-if="updateBtnState(c) === 'soft'" variant="warning"
                    :class="isRowLocked(c) ? 'opacity-50' : ''"
-                   v-tooltip.top="tt(updateBtnTooltip(c))">
-                <AppButton
-                        size="md"
-                        variant="warning-subtle"
-                        weight="bold"
-                        class="inline-flex items-center justify-center whitespace-nowrap transition-colors"
-                        :class="isRowLocked(c) ? 'cursor-not-allowed' : ''"
-                        :disabled="isRowLocked(c)"
-                        @click.stop="confirmUpdate(c)">
-                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.updateButton') }}
-                </AppButton>
-                <AppIconButton icon="chevron-down" size="toolbar" variant="warning-subtle"
-                        class="transition-colors border-l dd-border-warning"
-                        :class="isRowLocked(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
-                        :disabled="isRowLocked(c)"
-                        :aria-label="t('containerComponents.groupedViews.openUpdateActionsMenu')"
-                        @click.stop="toggleActionsMenu(c.id, $event)" />
-              </div>
+                   :primary-disabled="isRowLocked(c)" :menu-disabled="isRowLocked(c)"
+                   :menu-open="openActionsMenu === c.id"
+                   :menu-label="t('containerComponents.groupedViews.openUpdateActionsMenu')"
+                   v-tooltip.top="tt(updateBtnTooltip(c))"
+                   @primary="confirmUpdate(c)" @menu="toggleActionsMenu(c.id, $event)">
+                <AppIcon name="cloud-download" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.updateButton') }}
+              </AppSplitButton>
               <!-- Ready: green split button -->
-              <div v-else class="inline-flex dd-rounded overflow-hidden border dd-border-success"
-                   :class="isRowLocked(c) ? 'opacity-50' : ''">
-                <AppButton
-                        size="md"
-                        variant="success-subtle"
-                        weight="bold"
-                        class="inline-flex items-center justify-center whitespace-nowrap transition-colors"
-                        :class="isRowLocked(c) ? 'cursor-not-allowed' : ''"
-                        :disabled="isRowLocked(c)"
-                        @click.stop="confirmUpdate(c)">
-                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.updateButton') }}
-                </AppButton>
-                <AppIconButton icon="chevron-down" size="toolbar" variant="success-subtle"
-                        class="transition-colors border-l dd-border-success"
-                        :class="isRowLocked(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
-                        :disabled="isRowLocked(c)"
-                        :aria-label="t('containerComponents.groupedViews.openUpdateActionsMenu')"
-                        @click.stop="toggleActionsMenu(c.id, $event)" />
-              </div>
+              <AppSplitButton v-else variant="success"
+                   :class="isRowLocked(c) ? 'opacity-50' : ''"
+                   :primary-disabled="isRowLocked(c)" :menu-disabled="isRowLocked(c)"
+                   :menu-open="openActionsMenu === c.id"
+                   :menu-label="t('containerComponents.groupedViews.openUpdateActionsMenu')"
+                   @primary="confirmUpdate(c)" @menu="toggleActionsMenu(c.id, $event)">
+                <AppIcon name="cloud-download" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.updateButton') }}
+              </AppSplitButton>
             </div>
             <div v-else class="flex items-center justify-end gap-1">
               <AppIconButton v-if="c.status === 'running'"
