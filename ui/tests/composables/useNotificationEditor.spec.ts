@@ -262,6 +262,7 @@ describe('notification editor state', () => {
   });
   it.each([
     notificationOutcome({ applied: false }),
+    notificationOutcome({ reload: { applied: false, errors: [] } }),
     notificationOutcome({
       errors: [{ path: 'document', envKey: 'DD_CONFIG_FILE', message: 'Audit failed' }],
     }),

@@ -239,7 +239,7 @@ describe('notification policy editor integration', () => {
       contentType: 'application/json',
       message: 'The save outcome could not be confirmed',
     },
-    ...[{}, { errors: null }].map((reload) => ({
+    ...[{}, { errors: null }, { errors: [] }, { applied: 'false', errors: [] }].map((reload) => ({
       status: 200,
       body: JSON.stringify({ ...notificationOutcome(), reload }),
       contentType: 'application/json',
@@ -376,7 +376,7 @@ describe('notification policy editor integration', () => {
     }
   });
 
-  it.each(['partial', 'audit'] as const)(
+  it.each(['partial', 'audit', 'contradictory-reload'] as const)(
     'refreshes only the matching outer row after a saved %s outcome and preserves feedback',
     async (kind) => {
       let saved = false;
@@ -385,14 +385,17 @@ describe('notification policy editor integration', () => {
           saved = true;
           return Response.json(
             notificationOutcome({
-              applied: kind === 'audit',
-              errors: [
-                {
-                  path: 'document',
-                  envKey: 'DD_CONFIG_FILE',
-                  message: kind === 'audit' ? 'Audit failed' : 'Reload incomplete',
-                },
-              ],
+              applied: kind !== 'partial',
+              errors:
+                kind === 'contradictory-reload'
+                  ? []
+                  : [
+                      {
+                        path: 'document',
+                        envKey: 'DD_CONFIG_FILE',
+                        message: kind === 'audit' ? 'Audit failed' : 'Reload incomplete',
+                      },
+                    ],
               restartRequired: ['DD_EXAMPLE'],
               reload: {
                 applied: kind === 'audit',
@@ -417,7 +420,12 @@ describe('notification policy editor integration', () => {
         await wrapper.get('form').trigger('submit');
         await flushPromises();
         expect(calls).toHaveLength(5);
-        expect(wrapper.text()).toContain(kind === 'audit' ? 'Audit failed' : 'Reload incomplete');
+        if (kind === 'contradictory-reload') {
+          expect(wrapper.get('[role="alert"]').text()).toContain('operation reported problems');
+          expect(wrapper.text()).not.toContain('Saved and applied');
+        } else {
+          expect(wrapper.text()).toContain(kind === 'audit' ? 'Audit failed' : 'Reload incomplete');
+        }
         expect(wrapper.text()).toContain('DD_EXAMPLE');
         expect(wrapper.text()).toContain('rule-1');
         expect(wrapper.get<HTMLSelectElement>('[data-field="mode"]').element.value).toBe('digest');

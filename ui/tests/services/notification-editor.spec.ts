@@ -111,18 +111,24 @@ describe('notification editor HTTP boundary', () => {
     );
   });
 
-  it.each([{}, null, { errors: null }, { errors: 'invalid' }])(
-    'rejects malformed present reload %j',
-    async (reload) => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockResolvedValue(Response.json({ ...notificationOutcome(), reload })),
-      );
-      await expect(
-        saveNotificationEdits({ revision: 'initial', changes: [] }),
-      ).rejects.toMatchObject({ status: 200 });
-    },
-  );
+  it.each([
+    {},
+    null,
+    { errors: null },
+    { errors: 'invalid' },
+    { errors: [] },
+    { applied: null, errors: [] },
+    { applied: 'false', errors: [] },
+    { applied: 0, errors: [] },
+  ])('rejects malformed present reload %j', async (reload) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ ...notificationOutcome(), reload })),
+    );
+    await expect(saveNotificationEdits({ revision: 'initial', changes: [] })).rejects.toMatchObject(
+      { status: 200 },
+    );
+  });
 
   it('preserves valid nested reload errors', async () => {
     const errors = [{ path: 'document', envKey: 'DD_CONFIG_FILE', message: 'Reload incomplete' }];

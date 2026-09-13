@@ -82,7 +82,8 @@ export async function saveNotificationEdits(
     !Array.isArray(body.errors) ||
     !Array.isArray(body.changedKeys) ||
     !Array.isArray(body.restartRequired) ||
-    (body.reload !== undefined && !Array.isArray(body.reload?.errors))
+    (body.reload !== undefined &&
+      (typeof body.reload?.applied !== 'boolean' || !Array.isArray(body.reload?.errors)))
   )
     throw new NotificationEditorHttpError(response.status);
   return { ...body, status: response.status } as WatcherEditOutcome;
