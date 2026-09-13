@@ -75,6 +75,7 @@ interface RegisterComponentOptions {
   configuration: ComponentConfiguration;
   componentPath: string;
   agent?: string;
+  isOwnerValid?: () => boolean;
 }
 
 interface ProviderConfiguration {
@@ -202,6 +203,10 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
       agent,
     );
 
+    if (options.isOwnerValid && !options.isOwnerValid()) {
+      await component.deregister();
+      throw new Error('Agent component registration owner retired');
+    }
     addComponentToState(kind, component);
     // Only tracked for controller-owned (non-agent) components: an
     // agent-owned watcher/trigger is already reconciled by

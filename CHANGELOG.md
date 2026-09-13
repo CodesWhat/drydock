@@ -84,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
 
 - **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.
+- Disconnected edge agents can no longer publish in-flight components over their reconnected replacements. Retired registrations clean up only their own components, and disconnected proxy, log, delete and exec requests fail before allocating request state or sending frames.
 
 - Watcher last-run times follow the selected language in tables, cards and open details without refetching watcher data.
 - **Vue contract cleanup removes dead agent uptime handling and repairs UI bindings.** Agent uptime uses the API's `uptimeSeconds` field, without the unsupported string-uptime branch. Container preview recovery links and dashboard widget size options are restored, and release-link and theme-toggle event handling now match their actual contracts.
@@ -148,6 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A renamed or Compose-recreated container's Home Assistant entity was orphaned, leaving a duplicate "Unknown" entity behind.** The discovery `unique_id` used to be derived from the MQTT state topic, which changed with the container's name or Compose service identity; Home Assistant kept the old entity's history under the abandoned id and created a fresh, empty one alongside it on every rename. `unique_id` is now derived from the container's durable identity key instead of the topic (see the MQTT topic change above), so it survives both a rename and a Compose recreate.
 - **A replacement container recovered by identity instead of by id sat in-progress until its operation expired.** `reconcileInProgressContainerUpdateOperation`'s identity-based fallback discards a match whose `containerId` disagrees with the container it was looking up, which is the right call for a genuine same-identity-key collision, but it also fired against the executor's own replacement whenever `getContainerIdBestEffort()` failed to persist `newContainerId` — the replacement's fresh id never equals the operation's recorded pre-update `containerId` either. A mismatch here is now accepted as the replacement when the operation's `targetImage` matches the image the found container is running, the same discriminator `reconcileWithActiveContainerOnly` already applies to the equivalent ambiguity on the by-name fallback path; it stays discarded when the image disagrees or the operation has nothing to compare.
 - Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
+
+- Debug dump downloads now show the selected language's existing error message when the browser cannot create download URLs.
 
 ### Removed
 

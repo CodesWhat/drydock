@@ -1160,8 +1160,10 @@ export class AgentClient {
   private async registerAgentComponents(
     kind: 'watcher' | 'trigger',
     remoteComponents: AgentComponentDescriptor[],
+    isOwnerValid?: () => boolean,
   ) {
     for (const remoteComponent of remoteComponents) {
+      if (isOwnerValid && !isOwnerValid()) return;
       this.log.debug(`Registering agent ${kind} ${remoteComponent.type}.${remoteComponent.name}`);
       await registry.registerComponent({
         kind,
@@ -1170,8 +1172,10 @@ export class AgentClient {
         configuration: remoteComponent.configuration,
         componentPath: 'agent/components',
         agent: this.name,
+        isOwnerValid,
       });
 
+      if (isOwnerValid && !isOwnerValid()) return;
       if (kind === 'watcher' && isControllerDockerTransportWatcher(remoteComponent)) {
         await registry.registerComponent({
           kind: 'trigger',
@@ -1185,6 +1189,7 @@ export class AgentClient {
           },
           componentPath: 'agent/components',
           agent: this.name,
+          isOwnerValid,
         });
       }
     }
@@ -1192,10 +1197,12 @@ export class AgentClient {
 
   private async registerAgentWatchersTransactional(
     watchers: AgentComponentDescriptor[],
+    isOwnerValid?: () => boolean,
   ): Promise<void> {
     try {
-      await this.registerAgentComponents('watcher', watchers);
+      await this.registerAgentComponents('watcher', watchers, isOwnerValid);
     } catch (registrationError: unknown) {
+      if (isOwnerValid && !isOwnerValid()) throw registrationError;
       try {
         // A controller-transport watcher starts a cron and loopback bridge
         // before its synthetic Docker trigger is registered. Tear down every
@@ -2654,17 +2661,24 @@ export class AgentClient {
   async handleComponentSync(
     watchers: AgentComponentDescriptor[],
     triggers: AgentComponentDescriptor[],
+    isOwnerValid?: () => boolean,
   ): Promise<void> {
+    if (isOwnerValid && !isOwnerValid()) return;
     // Same deregister → re-register window as _doHandshake(): keep transient
     // eligibility blockers soft while components are being replaced.
     this.isRegisteringComponents = true;
     try {
       this.setControllerDockerTransportWatchers([]);
       await registry.deregisterAgentComponents(this.name);
-      await this.registerAgentWatchersTransactional(watchers);
+      if (isOwnerValid && !isOwnerValid()) return;
+      await this.registerAgentWatchersTransactional(watchers, isOwnerValid);
+      if (isOwnerValid && !isOwnerValid()) return;
       this.setControllerDockerTransportWatchers(watchers);
       this.seedWatcherSnapshotCacheFromHandshake(watchers);
-      await this.registerAgentComponents('trigger', triggers);
+      await this.registerAgentComponents('trigger', triggers, isOwnerValid);
+    } catch (error: unknown) {
+      if (!isOwnerValid || isOwnerValid()) throw error;
+      this.log.warn(`Retired edge component sync stopped (${getErrorMessage(error)})`);
     } finally {
       this.isRegisteringComponents = false;
     }

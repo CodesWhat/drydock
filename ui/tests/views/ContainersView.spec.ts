@@ -697,9 +697,9 @@ describe('ContainersView', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useToast().toasts.value = [];
     vi.mocked(getAgents).mockResolvedValue([]);
     vi.mocked(getAllWatchers).mockResolvedValue([]);
-    useToast().toasts.value = [];
     mockRouterReplace.mockResolvedValue(undefined);
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
