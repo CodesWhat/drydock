@@ -1433,13 +1433,16 @@ jobs:
           fi
 
           # Resolve the previous release for a Full Changelog compare link. The
-          # current tag is not pushed yet, so the newest existing release is the
-          # predecessor; the select() guards re-runs after a partial release.
-          prev_tag="$(gh release list --repo "${REPO}" --limit 100 \
-            --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | map(.tagName)
-                  | map(select(. != env.RELEASE_TAG)) | .[0] // empty' \
-            2>/dev/null || true)"
+          # predecessor is the newest published release on this major.minor
+          # line; exclude the current tag to support partial-release re-runs.
+          # Combine every page before filtering, including older release lines.
+          prev_tag="$(gh api --paginate "repos/${REPO}/releases?per_page=100" 2>/dev/null \
+            | jq -sr 'add | sort_by(.published_at) | reverse
+                  | map(select(.draft == false) | .tag_name)
+                  | map(select(. != env.RELEASE_TAG
+                      and startswith(env.RELEASE_TAG | split(".")[0:2] | join(".") + ".")))
+                  | .[0] // empty' \
+            2>/dev/null)" || prev_tag=""
 
           {
             echo "# ${RELEASE_TAG}"

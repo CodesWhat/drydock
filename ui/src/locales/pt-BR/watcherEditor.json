@@ -1,0 +1,46 @@
+{
+  "watcherEditor": {
+    "title": "Agendamento do monitor",
+    "edit": "Editar agendamento",
+    "boundary": "Aqui você pode editar apenas o agendamento das verificações e a janela de manutenção. Conexão, credenciais, TLS e agentes permanecem somente leitura.",
+    "reload": "Descartar rascunho e recarregar",
+    "reset": "Remover valor do arquivo / usar padrão",
+    "pendingRemoval": "Este valor será removido do arquivo ao salvar.",
+    "current": "Valor efetivo: {value}",
+    "none": "Não definido",
+    "install": "Somente instalação automática",
+    "scan": "Verificação e instalação",
+    "sources": {
+      "file": "Origem: arquivo de configuração",
+      "env": "Origem: ambiente",
+      "default": "Origem: padrão",
+      "reference": "Origem: referência (valor oculto)"
+    },
+    "readOnly": {
+      "environment": "Definido pelo ambiente. Altere fora deste editor.",
+      "reference": "Valores referenciados permanecem no servidor e não podem ser editados aqui.",
+      "agent": "A configuração dos agentes é somente leitura aqui.",
+      "other": "Este campo não está disponível para edição."
+    },
+    "fileUnavailable": "Nenhum arquivo de configuração disponível. Monte um antes de editar.",
+    "watcherUnavailable": "Este monitor exato não está disponível no snapshot do editor.",
+    "accessDenied": "Sua sessão não tem autorização para usar este editor.",
+    "apiUnavailable": "Este servidor não fornece a API do editor.",
+    "rateLimited": "Muitas solicitações. Aguarde um minuto antes de recarregar.",
+    "loadFailed": "Não foi possível carregar o editor. Nenhuma alteração foi enviada.",
+    "saveUncertain": "Não foi possível confirmar o salvamento. Recarregue antes de alterar novamente.",
+    "conflict": "A configuração mudou ou um campo tornou-se somente leitura. O rascunho foi mantido. Descarte-o e recarregue.",
+    "saved": "Salvo e aplicado imediatamente.",
+    "notApplied": "Salvo, mas houve problemas. Confira os detalhes antes de continuar.",
+    "notSaved": "A configuração não foi salva.",
+    "reconciled": "Recarga: {added} adicionados, {changed} alterados, {removed} removidos, {unchanged} inalterados, {errors} erros.",
+    "restart": "Reinicialização necessária para: {fields}",
+    "orphaned": "A regra {ruleId} ainda referencia o acionador ausente {triggerId}.",
+    "fields": {
+      "cron": "Agendamento de verificações (cron)",
+      "maintenancewindow": "Janela de manutenção (cron)",
+      "maintenancewindowtz": "Fuso horário de manutenção",
+      "maintenancewindowscope": "Escopo da manutenção"
+    }
+  }
+}
