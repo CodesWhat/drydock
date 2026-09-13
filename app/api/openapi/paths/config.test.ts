@@ -31,6 +31,26 @@ const effectiveConfigurationSchema = {
 };
 
 describe('configPaths', () => {
+  test('documents the six-field notification editor with the shared write contract', () => {
+    const route = configPaths['/api/v1/config/editor/triggers'];
+    expect(route?.get.operationId).toBe('getNotificationTriggerEditSnapshot');
+    expect(route?.patch.operationId).toBe('writeNotificationTriggerEdits');
+    expect(route?.patch.requestBody).toEqual(
+      configPaths['/api/v1/config/editor/watchers'].patch.requestBody,
+    );
+  });
+  test('documents the bounded watcher editor snapshot and conditional write contract', () => {
+    const route = configPaths['/api/v1/config/editor/watchers'];
+    expect(route?.get.operationId).toBe('getWatcherEditSnapshot');
+    expect(route?.patch.operationId).toBe('writeWatcherEdits');
+    expect(
+      route?.patch.requestBody.content['application/json'].schema.properties.changes.maxItems,
+    ).toBe(32);
+    expect(route?.patch.responses[409]).toBeDefined();
+    expect(route?.patch.responses[200].content['application/json'].schema.required).toEqual(
+      expect.arrayContaining(['saved', 'applied']),
+    );
+  });
   test('/api/v1/config GET path is fully specified', () => {
     expect(configPaths['/api/v1/config']).toStrictEqual({
       get: {
@@ -358,8 +378,10 @@ describe('configPaths', () => {
     });
   });
 
-  test('configPaths exports exactly four path entries', () => {
+  test('configPaths exports the existing routes and bounded watcher editor', () => {
     expect(Object.keys(configPaths)).toStrictEqual([
+      '/api/v1/config/editor/watchers',
+      '/api/v1/config/editor/triggers',
       '/api/v1/config',
       '/api/v1/config/{section}',
       '/api/v1/config/validate',

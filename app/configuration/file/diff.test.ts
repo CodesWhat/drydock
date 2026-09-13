@@ -52,6 +52,13 @@ describe('buildCandidateEnvAndDiff', () => {
     expect(candidateSources.DD_WATCHER_LOCAL_SOCKET).toEqual('file');
   });
 
+  test('does not retain a resolved file secret as if it were owned by the environment', () => {
+    ddEnvVars.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'old-private-value';
+    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE = 'file';
+    const { candidateEnv } = buildCandidateEnvAndDiff({});
+    expect(candidateEnv.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBeUndefined();
+  });
+
   test('classifies a changed key outside the reloadable set as restart-required', () => {
     const { diff } = buildCandidateEnvAndDiff({ DD_SERVER_PORT: '4000' });
 

@@ -13,8 +13,8 @@ import { getNotificationRules } from '../../store/notification.js';
 import { withContainerUpdateLocks } from '../../updates/update-locks.js';
 import { getErrorMessage } from '../../util/error.js';
 import { applyConfigurationReload } from '../index.js';
+import { resolveCandidateEnvAndDiff } from './candidate.js';
 import {
-  buildCandidateEnvAndDiff,
   type ConfigurationValidationDiff,
   ddEnvKeyToSection,
   emptyDiff,
@@ -128,23 +128,28 @@ async function runReload(): Promise<ConfigurationReloadResult> {
   const fileInfo: { current?: ConfigFileInfo } = {};
 
   let newFileLayer: Record<string, string>;
+  let candidate: Awaited<ReturnType<typeof resolveCandidateEnvAndDiff>>;
   try {
     newFileLayer = await loadConfigFile(process.env, { interpolatedKeys, fileInfo });
+    candidate = await resolveCandidateEnvAndDiff(newFileLayer, interpolatedKeys);
   } catch (error) {
     return { applied: false, errors: loadFailureError(getErrorMessage(error)), diff: emptyDiff() };
   }
 
-  const { candidateEnv, candidateSources, diff } = buildCandidateEnvAndDiff(
-    newFileLayer,
-    interpolatedKeys,
-  );
+  const {
+    candidateEnv,
+    candidateSources,
+    diff,
+    applyKeys,
+    interpolatedKeys: resolvedInterpolatedKeys,
+  } = candidate;
   const validationResult = await validateConfiguration(candidateEnv);
   if (validationResult.errors.length > 0) {
     return { applied: false, errors: validationResult.errors, diff };
   }
 
-  const { envDelta, sourcesDelta } = buildApplyDeltas(diff.changed, candidateEnv, candidateSources);
-  applyConfigurationReload(envDelta, sourcesDelta, interpolatedKeys);
+  const { envDelta, sourcesDelta } = buildApplyDeltas(applyKeys, candidateEnv, candidateSources);
+  applyConfigurationReload(envDelta, sourcesDelta, resolvedInterpolatedKeys);
   // Published only now that validation passed and the delta is applied —
   // GET /api/v1/config's `file` field reflects "when was this file last
   // successfully read", independent of whether every key in it reached
