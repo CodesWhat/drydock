@@ -5,6 +5,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import { getAgents } from '@/services/agent';
 import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
+import type { ApiAgent, ApiComponent } from '@/types/api';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -459,8 +460,9 @@ describe('ContainersView', () => {
         id: 'docker.one',
         type: 'docker',
         name: 'one',
+        configuration: {},
         metadata: { inventoryRefreshSupported: true },
-      },
+      } satisfies ApiComponent,
     ]);
     const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
     const vm = wrapper.vm as any;
@@ -475,7 +477,12 @@ describe('ContainersView', () => {
   });
   it('mounts fleet-wide health above filters and reports an inventory list reload failure separately', async () => {
     vi.mocked(getAgents).mockResolvedValue([
-      { name: 'empty', connected: true, containers: { total: 0 } },
+      {
+        name: 'empty',
+        host: '127.0.0.1',
+        connected: true,
+        containers: { total: 0, running: 0, stopped: 0 },
+      } satisfies ApiAgent,
     ]);
     vi.mocked(getAllWatchers).mockResolvedValue([
       {
@@ -483,8 +490,9 @@ describe('ContainersView', () => {
         type: 'docker',
         name: 'one',
         agent: 'empty',
+        configuration: {},
         metadata: { inventoryRefreshSupported: true },
-      },
+      } satisfies ApiComponent,
     ]);
     vi.mocked(refreshWatcherInventory).mockResolvedValueOnce({
       context: {

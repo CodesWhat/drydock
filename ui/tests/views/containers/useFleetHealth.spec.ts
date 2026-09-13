@@ -3,6 +3,7 @@ import { defineComponent, h, ref } from 'vue';
 import FleetHealthBar from '@/components/containers/FleetHealthBar.vue';
 import { getAgents } from '@/services/agent';
 import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
+import type { ApiAgent, ApiComponent } from '@/types/api';
 import { mapApiContainer } from '@/utils/container-mapper';
 import { useFleetHealth } from '@/views/containers/useFleetHealth';
 
@@ -12,19 +13,23 @@ vi.mock('@/services/watcher', () => ({
   refreshWatcherInventory: vi.fn(),
 }));
 
-const watcher = (id: string, agent?: string, supported = true) => ({
-  id,
-  name: id,
-  type: 'docker',
-  agent,
-  metadata: { inventoryRefreshSupported: supported },
-});
-const agent = (name: string, connected = true, total = 0) => ({
-  name,
-  connected,
-  containers: { total, running: total, stopped: 0 },
-  lastSeen: '2026-09-08T20:00:00Z',
-});
+const watcher = (id: string, agent?: string, supported = true) =>
+  ({
+    id,
+    name: id,
+    type: 'docker',
+    agent,
+    configuration: {},
+    metadata: { inventoryRefreshSupported: supported },
+  }) satisfies ApiComponent;
+const agent = (name: string, connected = true, total = 0) =>
+  ({
+    name,
+    host: '127.0.0.1',
+    connected,
+    containers: { total, running: total, stopped: 0 },
+    lastSeen: '2026-09-08T20:00:00Z',
+  }) satisfies ApiAgent;
 const result = (overrides = {}) => ({
   context: { origin: 'inventory', operationId: 'op', source: { type: 'docker', name: 'one' } },
   authoritative: true,
@@ -121,14 +126,23 @@ describe('useFleetHealth', () => {
     expect(wrapper.text()).toContain('Agent status unavailable');
     expect(wrapper.text()).toContain('Watcher metadata unavailable');
   });
-  beforeEach(() => {
-    vi.mocked(getAgents)
-      .mockReset()
-      .mockResolvedValue([
-        agent('Local'),
-        agent('edge', false, 4),
-        { name: 'local', connected: true },
-      ]);
+  beforeEach(async () => {
+    const actualAgentService =
+      await vi.importActual<typeof import('@/services/agent')>('@/services/agent');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () =>
+        Response.json({
+          data: [
+            agent('Local'),
+            agent('edge', false, 4),
+            { name: 'local', host: '127.0.0.1', connected: true },
+          ],
+          total: 3,
+        }),
+      ),
+    );
+    vi.mocked(getAgents).mockReset().mockImplementation(actualAgentService.getAgents);
     vi.mocked(getAllWatchers)
       .mockReset()
       .mockResolvedValue([
@@ -144,6 +158,22 @@ describe('useFleetHealth', () => {
   });
   afterEach(() => {
     for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps missing HTTP container statistics unavailable until a complete response arrives', async () => {
+    const { health, wrapper } = harness();
+    await flushPromises();
+    expect(fetch).toHaveBeenCalledWith('/api/v1/agents', { credentials: 'include' });
+    const tile = () => wrapper.get(`[data-source='${key('local')}']`);
+    expect(health.rows.value.find((row) => row.agent === 'local')!.total).toBeUndefined();
+    expect(tile().text()).toContain('Unavailable');
+    expect(tile().text()).not.toContain('0 containers');
+
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: [agent('local')], total: 1 }));
+    await health.load();
+    expect(health.rows.value.find((row) => row.agent === 'local')!.total).toBe(0);
+    expect(tile().text()).toContain('0 containers');
   });
 
   it('keeps exact configured identities, zero/offline/missing counts and separate watcher children', async () => {
