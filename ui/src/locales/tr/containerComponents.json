@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Filo durumu",
+      "description": "Tüm filonun durumu. Envanter yenileme, kayıt depolarını denetlemeden veya güncelleme yapmadan kapsayıcıları keşfeder.",
+      "reload": "Durumu yeniden yükle",
+      "refresh": "Envanteri yenile",
+      "configured": "Yapılandırıldı",
+      "connected": "Bağlı",
+      "disconnected": "Bağlantı kesildi",
+      "unavailable": "Kullanılamıyor",
+      "agentUnavailable": "Aracı durumu kullanılamıyor. Saklanan veriler eski olabilir.",
+      "watcherUnavailable": "İzleyici meta verileri kullanılamıyor. Saklanan veriler eski olabilir.",
+      "total": "{count} kapsayıcı",
+      "lastKnown": "Son bilinen",
+      "lastSeen": "Son görülme: {value}",
+      "unsupported": "Tüm hedefler envanter yenilemeyi destekleyen Docker izleyicileri gerektirir.",
+      "complete": "Envanter tamamlandı",
+      "partial": "Envanter eksik",
+      "reloadFailed": "Kapsayıcı listesi yeniden yüklenemedi. Envanter sonuçları görünür durumda."
+    },
     "fleetBulk": {
       "label": "Filtrelenmiş filo işlemleri",
       "updateAll": "Tümünü güncelle ({count})",
