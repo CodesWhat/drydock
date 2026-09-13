@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import yaml from 'yaml';
+import { validateOpenApiJsonResponse } from '../../api/openapi-contract.js';
 import type Component from '../../registry/Component.js';
 import {
   applySharedTriggerConfigurationByName,
@@ -500,18 +501,23 @@ describe('action policy editor', () => {
 
   test('sanitizes failures before the write', async () => {
     fixture('private-sentinel: [');
-    expect(
-      await writeActionEdits({
-        revision: 'a'.repeat(43),
-        changes: [
-          { path: ['action', 'docker', 'private', 'auto'], operation: 'set', value: false },
-        ],
-      }),
-    ).toMatchObject({
+    const { status, ...outcome } = await writeActionEdits({
+      revision: 'a'.repeat(43),
+      changes: [{ path: ['action', 'docker', 'private', 'auto'], operation: 'set', value: false }],
+    });
+    expect({ status, ...outcome }).toMatchObject({
       status: 500,
       saved: false,
       errors: [{ message: 'Unable to save action policy configuration' }],
     });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/api/v1/config/editor/actions',
+        method: 'patch',
+        statusCode: String(status),
+        payload: outcome,
+      }),
+    ).toEqual({ valid: true, errors: [] });
   });
 
   test.each(['watchers', 'triggers', 'legacy'] as const)(

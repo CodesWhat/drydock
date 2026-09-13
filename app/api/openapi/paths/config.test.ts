@@ -31,6 +31,19 @@ const effectiveConfigurationSchema = {
 };
 
 describe('configPaths', () => {
+  test('action PATCH documents structured write failures and outer handler errors at 500', () => {
+    expect(configPaths['/api/v1/config/editor/actions'].patch.responses[500]).toEqual(
+      jsonResponse('Unable to save action policy configuration', {
+        oneOf: [
+          configPaths['/api/v1/config/editor/watchers'].patch.responses[500].content[
+            'application/json'
+          ].schema,
+          errorResponse('Unable to save action policy configuration').content['application/json']
+            .schema,
+        ],
+      }),
+    );
+  });
   test('documents the three-field action projection and shared write contract', () => {
     const route = configPaths['/api/v1/config/editor/actions'];
     expect(route.get.operationId).toBe('getActionEditSnapshot');
