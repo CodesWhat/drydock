@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "フリートの状態",
+      "description": "フリート全体の状態です。インベントリの更新は、レジストリの確認や更新操作を行わずにコンテナを検出します。",
+      "reload": "状態を再読み込み",
+      "refresh": "インベントリを更新",
+      "configured": "設定済み",
+      "connected": "接続済み",
+      "disconnected": "切断",
+      "unavailable": "利用不可",
+      "agentUnavailable": "エージェントの状態を取得できません。保持されたデータは古い可能性があります。",
+      "watcherUnavailable": "ウォッチャーのメタデータを取得できません。保持されたデータは古い可能性があります。",
+      "total": "コンテナ {count} 個",
+      "lastKnown": "最後に確認された値",
+      "lastSeen": "最終確認: {value}",
+      "unsupported": "すべての対象にインベントリ更新対応の Docker ウォッチャーが必要です。",
+      "complete": "インベントリは完全です",
+      "partial": "インベントリは不完全です",
+      "reloadFailed": "コンテナ一覧を再読み込みできませんでした。インベントリの結果は引き続き表示されます。"
+    },
     "fleetBulk": {
       "label": "絞り込み済みフリートの操作",
       "updateAll": "すべて更新 ({count})",

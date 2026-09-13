@@ -10,6 +10,31 @@ The **Agent Mode** allows running drydock in a distributed manner.
 - **Agent Node**: Runs near the Docker socket (or other container sources). It performs discovery and update checks.
 - **Controller Node**: The central instance. It manages its own local watchers AND connects to remote Agents. It aggregates containers from Agents, and handles persistence, UI, and Notifications.
 
+## Fleet health and inventory-only refresh
+
+The Containers page shows every configured agent, including agents with no
+containers and disconnected agents. Counts cover the whole fleet, regardless of
+the current container filters. Disconnected counts are marked as last known;
+missing statistics and failed status reads are shown as unavailable, not zero.
+Controller-local watchers have a separate neutral **Configured** tile. That label
+does not claim Docker connectivity, and an agent named `Local` remains distinct.
+
+**Refresh inventory** targets all Docker watchers belonging to that exact agent
+or local tile. It discovers and reconciles container inventory without registry
+checks, update actions, or notifications. The control requires every target to
+advertise inventory-refresh support and is disabled for disconnected agents.
+Older agents without that capability remain visible but cannot use this action.
+There is no fallback to a registry scan. **Reload status** only reloads agent and
+watcher metadata.
+
+Each refresh snapshots its target watchers. Results distinguish complete inventory
+from partial or non-authoritative inventory, with watcher names and error details.
+An authoritative empty inventory is a valid success. Returned containers describe
+the final source inventory, not the number of containers changed. After all watcher
+requests finish, the page reloads the container list once; failure of that read is
+shown separately from the inventory results. Connection status and the last
+inventory result are separate signals.
+
 ## Architecture
 
 The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE).
