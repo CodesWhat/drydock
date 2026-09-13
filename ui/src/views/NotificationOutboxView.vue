@@ -117,7 +117,7 @@ async function loadEntries() {
     counts.value = response.counts;
   } catch (e: unknown) {
     if (requestId !== loadRequestId) return;
-    error.value = errorMessage(e, t('notificationOutboxView.loadError'));
+    error.value = errorMessage(e, '') || t('notificationOutboxView.loadError');
   } finally {
     if (requestId === loadRequestId) {
       loading.value = false;
@@ -150,7 +150,8 @@ async function retryEntry(entry: NotificationOutboxEntry) {
     await loadEntries();
   } catch (e: unknown) {
     toast.error(
-      errorMessage(e, t('notificationOutboxView.toast.retryFailed', { name: entry.eventName })),
+      errorMessage(e, '') ||
+        t('notificationOutboxView.toast.retryFailed', { name: entry.eventName }),
     );
   } finally {
     actingId.value = null;
@@ -166,7 +167,8 @@ async function discardEntry(entry: NotificationOutboxEntry) {
     await loadEntries();
   } catch (e: unknown) {
     toast.error(
-      errorMessage(e, t('notificationOutboxView.toast.discardFailed', { name: entry.eventName })),
+      errorMessage(e, '') ||
+        t('notificationOutboxView.toast.discardFailed', { name: entry.eventName }),
     );
   } finally {
     actingId.value = null;
