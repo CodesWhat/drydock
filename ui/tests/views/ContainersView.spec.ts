@@ -1,9 +1,12 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import AppSplitButton from '@/components/AppSplitButton.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import DataTable from '@/components/DataTable.vue';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import { useToast } from '@/composables/useToast';
+import { preferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
 import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
 import type { ApiAgent, ApiComponent } from '@/types/api';
@@ -421,7 +424,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 async function mountContainersView(
   containers: Container[] = [],
   apiContainersInput?: any[],
-  options: { initialFilterKind?: string } = {},
+  options: { initialFilterKind?: string; realTable?: boolean } = {},
 ) {
   // The API returns raw objects; mapApiContainers transforms them
   const apiContainers =
@@ -451,7 +454,9 @@ async function mountContainersView(
   mockActiveDetailTab.value = 'overview';
 
   const wrapper = mountWithPlugins(ContainersView, {
-    global: { stubs: childStubs },
+    global: {
+      stubs: { ...childStubs, ...(options.realTable ? { DataTable } : {}) },
+    },
   });
   mountedWrappers.push(wrapper);
   await flushPromises();
@@ -459,6 +464,113 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  it.each(['Enter', ' '])('isolates split-button %s from the real table row', async (key) => {
+    const previous = preferences.containers.tableActions;
+    preferences.containers.tableActions = 'buttons';
+    try {
+      const wrapper = await mountContainersView(
+        [makeContainer({ newTag: '2.0.0', updateKind: 'major' })],
+        undefined,
+        { realTable: true },
+      );
+      for (const button of wrapper.getComponent(AppSplitButton).findAll('button')) {
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        button.element.dispatchEvent(event);
+        await flushPromises();
+        expect(mockSelectContainer).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(false);
+      }
+    } finally {
+      preferences.containers.tableActions = previous;
+    }
+  });
+
+  it.each([
+    ['hard', false, 'muted', true, false],
+    ['hard', true, 'muted', true, false],
+    ['soft', false, 'warning', false, false],
+    ['soft', true, 'success', true, true],
+    ['ready', false, 'success', false, false],
+    ['ready', true, 'success', true, true],
+  ] as const)(
+    'preserves %s split actions with row locked=%s',
+    async (state, locked, variant, primaryDisabled, menuDisabled) => {
+      preferences.containers.tableActions = 'buttons';
+      const dialog = useConfirmDialog();
+      dialog.dismiss();
+      const container = makeContainer({
+        newTag: '2.0.0',
+        updateKind: 'major',
+        updateEligibility: {
+          eligible: state === 'ready',
+          evaluatedAt: '2026-09-13T12:00:00Z',
+          blockers:
+            state === 'ready'
+              ? []
+              : [
+                  {
+                    reason: state === 'hard' ? 'security-scan-blocked' : 'snoozed',
+                    severity: state === 'hard' ? 'hard' : 'soft',
+                    actionable: false,
+                    message: 'Existing policy warning',
+                  },
+                ],
+        },
+        ...(locked
+          ? {
+              updateOperation: {
+                id: 'operation-c1',
+                status: 'in-progress' as const,
+                phase: 'pulling' as const,
+                updatedAt: '2026-09-13T12:00:00Z',
+              },
+            }
+          : {}),
+      });
+      const wrapper = await mountContainersView([container], undefined, { realTable: true });
+      const split = wrapper.getComponent(AppSplitButton);
+      expect(split.props('variant')).toBe(variant);
+      expect(split.classes().includes('opacity-50')).toBe(locked && state !== 'hard');
+      expect(split.classes().includes('min-w-[110px]')).toBe(state === 'hard');
+      const [primary, menu] = split.findAll('button');
+      expect(primary.element.disabled).toBe(primaryDisabled);
+      expect(menu.element.disabled).toBe(menuDisabled);
+      expect(primary.text()).toBe(state === 'hard' ? 'Blocked' : 'Update');
+      expect(primary.get('[data-icon]').attributes('data-icon')).toBe(
+        state === 'hard' ? 'lock' : 'cloud-download',
+      );
+      expect(primary.get('[data-icon]').attributes('data-size')).toBe('14');
+      vi.spyOn(menu.element, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(80, 680, 320, 20),
+      );
+      menu.element.click();
+      await flushPromises();
+      const dropdown = document.querySelector<HTMLElement>('.z-modal.min-w-\\[160px\\]');
+      if (menuDisabled) {
+        expect(dropdown).toBeNull();
+      } else {
+        expect(dropdown?.style.bottom).toBe(`${window.innerHeight - 680 + 4}px`);
+        expect(menu.classes()).toContain(state === 'hard' ? 'dd-bg-elevated' : 'brightness-125');
+        menu.element.click();
+        await flushPromises();
+        expect(document.querySelector('.z-modal.min-w-\\[160px\\]')).toBeNull();
+      }
+      expect(dialog.visible.value).toBe(false);
+      primary.element.click();
+      await flushPromises();
+      expect(dialog.visible.value).toBe(!primaryDisabled);
+      if (!primaryDisabled) {
+        expect(dialog.current.value?.message).toContain('nginx');
+        expect(dialog.current.value?.message.includes('Existing policy warning')).toBe(
+          state === 'soft',
+        );
+      }
+      expect(mockSelectContainer).not.toHaveBeenCalled();
+      expect(mockApiUpdate).not.toHaveBeenCalled();
+      dialog.dismiss();
+    },
+  );
+
   it.each([false, true])(
     'renders and clears the real preview API recovery link in full-page=%s',
     async (fullPage) => {
