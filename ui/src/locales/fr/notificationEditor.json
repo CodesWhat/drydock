@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Politique de notification",
+    "edit": "Modifier la politique de notification",
+    "boundary": "Modifiez uniquement la politique d’envoi. Enregistrer ne teste pas le déclencheur et n’envoie aucune notification. Les identifiants, destinations, modèles et paramètres d’exécution restent en lecture seule.",
+    "providerForced": "Cette valeur est contrôlée par le fournisseur et ne peut pas être modifiée ici.",
+    "triggerUnavailable": "Ce déclencheur de notification précis est absent de l’instantané de l’éditeur.",
+    "apiUnavailable": "Ce serveur ne fournit pas l’API de l’éditeur de politiques de notification.",
+    "fields": {
+      "threshold": "Seuil de mise à jour",
+      "once": "Notifier une seule fois",
+      "mode": "Mode d’envoi",
+      "securitymode": "Mode d’envoi des alertes de sécurité",
+      "digestcron": "Planification du résumé (cron)",
+      "resolvenotifications": "Envoyer les notifications de résolution"
+    }
+  }
+}

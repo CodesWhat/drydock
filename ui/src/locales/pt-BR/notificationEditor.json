@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Política de notificações",
+    "edit": "Editar política de notificações",
+    "boundary": "Edite apenas a política de envio. Salvar não testa o gatilho nem envia notificações. Credenciais, destinos, modelos e configurações de execução continuam somente leitura.",
+    "providerForced": "Este valor é controlado pelo provedor e não pode ser editado aqui.",
+    "triggerUnavailable": "Este gatilho de notificação exato não está disponível no retrato do editor.",
+    "apiUnavailable": "Este servidor não oferece a API do editor de políticas de notificações.",
+    "fields": {
+      "threshold": "Limite de atualização",
+      "once": "Notificar apenas uma vez",
+      "mode": "Modo de envio",
+      "securitymode": "Modo de envio de segurança",
+      "digestcron": "Agendamento do resumo (cron)",
+      "resolvenotifications": "Enviar notificações de resolução"
+    }
+  }
+}

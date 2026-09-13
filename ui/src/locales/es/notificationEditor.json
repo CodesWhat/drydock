@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Política de notificaciones",
+    "edit": "Editar política de notificaciones",
+    "boundary": "Edita solo la política de envío. Guardar no prueba el disparador ni envía notificaciones. Las credenciales, destinos, plantillas y opciones de ejecución siguen siendo de solo lectura.",
+    "providerForced": "El proveedor controla este valor. No se puede editar aquí.",
+    "triggerUnavailable": "Este disparador de notificaciones exacto no está disponible en la instantánea del editor.",
+    "apiUnavailable": "Este servidor no ofrece la API del editor de políticas de notificaciones.",
+    "fields": {
+      "threshold": "Umbral de actualización",
+      "once": "Notificar solo una vez",
+      "mode": "Modo de envío",
+      "securitymode": "Modo de envío de seguridad",
+      "digestcron": "Programación del resumen (cron)",
+      "resolvenotifications": "Enviar notificaciones de resolución"
+    }
+  }
+}

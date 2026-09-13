@@ -1,0 +1,18 @@
+{
+  "notificationEditor": {
+    "title": "Bildirim ilkesi",
+    "edit": "Bildirim ilkesini düzenle",
+    "boundary": "Yalnızca gönderim ilkesini düzenleyin. Kaydetmek tetikleyiciyi test etmez veya bildirim göndermez. Kimlik bilgileri, hedefler, şablonlar ve yürütme ayarları salt okunur kalır.",
+    "providerForced": "Bu değer sağlayıcı tarafından denetlenir ve burada düzenlenemez.",
+    "triggerUnavailable": "Bu belirli bildirim tetikleyicisi düzenleyici anlık görüntüsünde mevcut değil.",
+    "apiUnavailable": "Bu sunucu bildirim ilkesi düzenleyici API’sini sağlamıyor.",
+    "fields": {
+      "threshold": "Güncelleme eşiği",
+      "once": "Yalnızca bir kez bildir",
+      "mode": "Gönderim modu",
+      "securitymode": "Güvenlik bildirimi gönderim modu",
+      "digestcron": "Özet zamanlaması (cron)",
+      "resolvenotifications": "Çözüm bildirimleri gönder"
+    }
+  }
+}
