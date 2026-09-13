@@ -19,6 +19,10 @@ export interface ApiAgentIdentity {
   name: string;
 }
 
+export type ApiComponentResponse = Omit<ApiComponent, 'configuration'> & {
+  configuration: unknown;
+};
+
 /** Agent shape returned by GET /api/agents. */
 export interface ApiAgent {
   name: string;

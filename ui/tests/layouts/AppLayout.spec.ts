@@ -455,6 +455,94 @@ describe('AppLayout', () => {
     }
   });
 
+  it('patches sidebar image and security counts through real SSE callbacks without a reload', async () => {
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    const emit = mockSseConnect.mock.calls[0][0].emit;
+    const baselineCalls = mockGetAllContainers.mock.calls.length;
+    const state = wrapper.vm as unknown as {
+      searchContainers: { id: string; image: string; hasSecurityIssues: boolean }[];
+      containerCount: string;
+      securityIssueCount: string;
+    };
+
+    emit('container-added', {
+      id: 'web',
+      name: 'web',
+      image: { name: 'library/nginx', tag: { value: '1.27' } },
+      security: { scan: { summary: { critical: '2', high: 0 } } },
+    });
+    await flushPromises();
+    expect(state.searchContainers).toEqual([
+      expect.objectContaining({ id: 'web', image: 'library/nginx:1.27', hasSecurityIssues: true }),
+    ]);
+    expect(state.containerCount).toBe('1');
+    expect(state.securityIssueCount).toBe('1');
+    expect(
+      wrapper
+        .findAll('.nav-item-wrapper')
+        .find((item) => item.text().includes('Security'))
+        ?.text(),
+    ).toContain('1');
+
+    emit('container-updated', { id: 'web' });
+    await flushPromises();
+    expect(state.searchContainers).toEqual([
+      expect.objectContaining({ id: 'web', image: 'unknown image', hasSecurityIssues: false }),
+    ]);
+    expect(state.securityIssueCount).toBe('');
+    emit('container-added', { name: 'name-only', image: { name: 'redis' } });
+    emit('container-removed', { id: 'web' });
+    await flushPromises();
+    expect(state.searchContainers).toEqual([
+      expect.objectContaining({ id: 'name-only', image: 'redis' }),
+    ]);
+    expect(state.containerCount).toBe('1');
+    expect(mockGetAllContainers).toHaveBeenCalledTimes(baselineCalls);
+  });
+
+  it.each([
+    { image: null, security: null },
+    { image: 'nginx:latest', security: false },
+    { image: [], security: [] },
+    { image: { name: 'nginx', tag: 3 }, security: { scan: 'pending' } },
+    { image: { name: 'nginx', tag: { value: '' } }, security: { scan: { summary: null } } },
+  ])('keeps malformed nested SSE fields at their existing sidebar defaults: %j', async (nested) => {
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    const emit = mockSseConnect.mock.calls[0][0].emit;
+    const baselineCalls = mockGetAllContainers.mock.calls.length;
+    expect(() => emit('container-added', { id: 'sparse', ...nested })).not.toThrow();
+    await flushPromises();
+    const state = wrapper.vm as unknown as {
+      searchContainers: { image: string; hasSecurityIssues: boolean }[];
+    };
+    expect(state.searchContainers[0]).toMatchObject({
+      image:
+        typeof nested.image === 'object' && nested.image && 'name' in nested.image
+          ? 'nginx'
+          : 'unknown image',
+      hasSecurityIssues: false,
+    });
+    expect(mockGetAllContainers).toHaveBeenCalledTimes(baselineCalls);
+  });
+
+  it('keeps identity-free SSE payloads on the debounced refresh path', async () => {
+    vi.useFakeTimers();
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    const emit = mockSseConnect.mock.calls[0][0].emit;
+    const baselineCalls = mockGetAllContainers.mock.calls.length;
+    emit('container-updated', { image: { name: 'unowned' } });
+    await flushPromises();
+    expect(mockGetAllContainers).toHaveBeenCalledTimes(baselineCalls);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(mockGetAllContainers).toHaveBeenCalledTimes(baselineCalls + 1);
+  });
+
   it('debounces burst scan/container SSE events into one sidebar refresh', async () => {
     vi.useFakeTimers();
     try {

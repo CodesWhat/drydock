@@ -6,7 +6,7 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
 
 ## How contributions work
 
-Drydock maintains strict quality gates (100% code coverage, multi-stage CI pipeline, mutation testing). **You don't need to worry about any of that.** Here's how it works:
+Drydock maintains strict quality gates (100% coverage of configured sources, multi-stage CI pipeline, mutation testing). **You don't need to worry about any of that.** Here's how it works:
 
 1. **You write the code** — focus on the feature or fix itself
 2. **Open a PR** — even if it's rough, incomplete, or has no tests
@@ -69,6 +69,7 @@ npm run lint:fix                        # Auto-fix formatting
 
 ```bash
 npm run serve                           # Dev server on port 8080
+npm run typecheck                       # TypeScript and Vue SFC scripts/templates
 npx vitest run tests/path/to/file.spec.ts   # Single test file
 npm run lint:fix                        # Auto-fix formatting
 ```
@@ -80,7 +81,7 @@ docker build -t drydock:dev .
 docker compose -f test/qa-compose.yml up -d   # Starts on port 3333
 ```
 
-You don't need to run the full test suite, coverage gates, or e2e tests locally. Just make sure your code compiles (`npm run build`) and your specific tests pass. The maintainer handles the rest.
+You don't need to run the full test suite, coverage gates, or e2e tests locally. Just make sure your code builds (`npm run build`), UI changes pass `npm run typecheck`, and your specific tests pass. The UI build bundles code without type-checking it. The maintainer handles the rest.
 
 ## Architecture overview
 
@@ -217,7 +218,7 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 5 | `qlty-smells` | Code smell advisory scan (non-blocking) | Advisory |
 | 6 | `scripts-test` | Repository maintenance script tests | Fail |
 | 7 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
-| 8 | `typecheck-ui` | Vue/TypeScript type checking | Fail |
+| 8 | `typecheck-ui` | TypeScript and Vue SFC script/template checks via `vue-tsc` | Fail |
 | 9 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
 | 10 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
 | 11 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
@@ -230,7 +231,7 @@ E2E Cucumber API/stream contracts and the dedicated Playwright browser tests are
 
 ### Coverage policy
 
-100% line/branch/function/statement coverage is enforced for both `app/` and `ui/`. This is achievable because the project uses AI-assisted development for test generation. External contributors are not expected to meet this bar.
+100% line/branch/function/statement coverage is enforced for the configured coverage sources in `app/` and `ui/`. UI instrumentation includes `src/**/*.ts`, excluding typecheck fixtures, declarations, types directories, and dependencies. Vue SFCs (`.vue`) are outside that denominator, so this is not a claim of 100% SFC runtime coverage. Component tests exercise SFC behavior; `npm run typecheck` uses `vue-tsc` to check scripts and templates under the existing compiler configuration. Type checking and runtime coverage are separate checks. External contributors are not expected to meet the coverage thresholds.
 
 ### Mutation testing
 

@@ -28,7 +28,6 @@ interface Agent {
   name: string;
   host: string;
   status: 'connected' | 'disconnected';
-  dockerVersion?: string;
   os?: string;
   arch?: string;
   cpus?: number;
@@ -144,7 +143,6 @@ async function fetchAgents() {
       name: a.name,
       host: `${a.host}${a.port ? `:${a.port}` : ''}`,
       status: a.connected ? 'connected' : 'disconnected',
-      dockerVersion: typeof a.dockerVersion === 'string' ? a.dockerVersion : undefined,
       os: typeof a.os === 'string' ? a.os : undefined,
       arch: typeof a.arch === 'string' ? a.arch : undefined,
       cpus: Number.isFinite(a.cpus) ? Number(a.cpus) : undefined,
@@ -168,12 +166,7 @@ async function fetchAgents() {
             ? undefined
             : t('agentsView.detail.fields.never'),
       version: typeof a.version === 'string' ? a.version : undefined,
-      uptime:
-        typeof a.uptime === 'string'
-          ? a.uptime
-          : Number.isFinite(a.uptimeSeconds)
-            ? formatUptime(Number(a.uptimeSeconds))
-            : undefined,
+      uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
       watchers: watchersByAgent[normalizeAgentKey(a.name)] ?? [],
@@ -350,16 +343,6 @@ const agentAllColumns = computed(() => [
     required: false,
   },
   {
-    key: 'docker',
-    label: t('agentsView.list.columns.docker'),
-    size: 140,
-    minSize: 112,
-    maxSize: 190,
-    sortable: true,
-    required: false,
-    cardPriority: -1,
-  },
-  {
     key: 'os',
     label: t('agentsView.list.columns.os'),
     size: 120,
@@ -417,7 +400,7 @@ const {
 
 /**
  * Compact mode (< 1024px) used to swap the active column set down to just the required
- * columns. Now `agentAllColumns` always returns the full 7-column set (so card mode can
+ * columns. Now `agentAllColumns` always returns the full 6-column set (so card mode can
  * surface the `status` cardPriority annotation on mobile), and the non-required columns are
  * force-hidden here instead — the union of the picker's hidden set with every non-required
  * column key. The picker itself is hidden in compact mode (see template) so a user can never
@@ -506,9 +489,6 @@ function getResourceFields(agent: Agent): AgentDetailField[] {
 
 function getSystemFields(agent: Agent): AgentDetailField[] {
   const fields: AgentDetailField[] = [];
-  if (agent.dockerVersion) {
-    fields.push({ label: t('agentsView.detail.fields.docker'), value: agent.dockerVersion });
-  }
   if (agent.os) {
     fields.push({ label: t('agentsView.detail.fields.os'), value: agent.os });
   }
@@ -640,11 +620,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <span class="font-bold" style="color: var(--dd-success);">{{ row.containers.running }}</span>
               <span class="dd-text-muted">/{{ row.containers.total }}</span>
             </template>
-            <template #cell-docker="{ row }">
-              <span class="font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">
-                {{ row.dockerVersion ?? '—' }}
-              </span>
-            </template>
             <template #cell-os="{ row }">
               <span :class="row.os ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.os ?? '—' }}</span>
             </template>
@@ -691,10 +666,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                     <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-secondary">
                       v{{ row.version }}
                     </span>
-                  </div>
-                  <div class="field flex items-baseline justify-between gap-3">
-                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.docker') }}</span>
-                    <span class="text-2xs-plus font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.dockerVersion ?? '—' }}</span>
                   </div>
                   <div class="field flex items-baseline justify-between gap-3">
                     <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.os') }}</span>

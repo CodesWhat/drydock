@@ -418,6 +418,20 @@ describe('TriggersView', () => {
     );
   });
 
+  it('renders array configurations without treating them as dry-run settings', async () => {
+    const trigger = makeTrigger({ type: 'docker', configuration: ['first entry', 'second entry'] });
+    mockGetAllTriggers.mockResolvedValue([trigger]);
+    mockGetTrigger.mockResolvedValue(trigger);
+
+    const wrapper = await mountTriggersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('first entry');
+    expect(wrapper.text()).toContain('second entry');
+    expect(wrapper.find('[data-test="trigger-detail-dry-run-warning"]').exists()).toBe(false);
+  });
+
   it('surfaces dry-run mode on action trigger cards and details', async () => {
     preferences.views.triggers.mode = 'cards';
     const dryRunTrigger = makeTrigger({

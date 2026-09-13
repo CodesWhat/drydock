@@ -119,6 +119,21 @@ describe('Authentication Service', () => {
     expect(result).toEqual(mockAuthentication);
   });
 
+  it('preserves array configurations in list and detail responses', async () => {
+    const component = {
+      id: 'basic.local',
+      type: 'basic',
+      name: 'local',
+      configuration: [{ users: '[REDACTED]' }],
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(Response.json({ data: [component], total: 1 }))
+      .mockResolvedValueOnce(Response.json(component));
+
+    expect(await getAllAuthentications()).toEqual([component]);
+    expect(await getAuthentication({ type: 'basic', name: 'local' })).toEqual(component);
+  });
+
   it('throws when fetching a specific authentication provider fails', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,

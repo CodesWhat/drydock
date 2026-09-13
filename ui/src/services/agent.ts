@@ -1,4 +1,4 @@
-import type { ApiAgentIdentity } from '../types/api';
+import type { ApiAgent, ApiAgentIdentity } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 const BASE_URL = '/api/v1/agents';
@@ -27,14 +27,6 @@ export async function getAgentRoster(): Promise<ApiAgentIdentity[]> {
     }
     return { name: item.name };
   });
-}
-
-interface ApiAgent {
-  name: string;
-  connected: boolean;
-  host?: string;
-  port?: string | number;
-  [key: string]: unknown;
 }
 
 export async function getAgents(): Promise<ApiAgent[]> {

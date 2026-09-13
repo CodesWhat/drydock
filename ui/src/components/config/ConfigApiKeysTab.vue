@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import DataTable from '../../components/DataTable.vue';
+import DataTable, { type DataTableColumn } from '../../components/DataTable.vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import {
   API_KEY_PAGE_SIZE,
@@ -61,7 +61,7 @@ const scopeOptions = computed(() =>
  * Sizes are numeric so the shared column-sizing standard can resize and persist
  * them; a string width would opt this table out of it.
  */
-const columns = computed(() => [
+const columns = computed<DataTableColumn[]>(() => [
   {
     key: 'name',
     label: t('configView.apiKeys.columns.name'),
@@ -455,28 +455,28 @@ defineExpose({ load });
             <code class="dd-text-code dd-text-muted">{{ value }}</code>
           </template>
           <template #cell-scopes="{ row }">
-            <span class="dd-text-body dd-text-muted">{{ (row as unknown as ApiKey).scopes.join(', ') }}</span>
+            <span class="dd-text-body dd-text-muted">{{ row.scopes.join(', ') }}</span>
           </template>
-          <template #cell-lastUsedAt="{ value }">
-            <span class="dd-text-body dd-text-muted">{{ formatTimestamp(value as string | null) }}</span>
+          <template #cell-lastUsedAt="{ row }">
+            <span class="dd-text-body dd-text-muted">{{ formatTimestamp(row.lastUsedAt) }}</span>
           </template>
-          <template #cell-expiresAt="{ value }">
-            <span class="dd-text-body dd-text-muted">{{ formatTimestamp(value as string | null) }}</span>
+          <template #cell-expiresAt="{ row }">
+            <span class="dd-text-body dd-text-muted">{{ formatTimestamp(row.expiresAt) }}</span>
           </template>
           <template #cell-status="{ row }">
             <span
               class="badge dd-text-badge-xs inline-flex"
-              :style="statusStyle((row as unknown as ApiKey).status)"
+              :style="statusStyle(row.status)"
             >
-              {{ statusLabel((row as unknown as ApiKey).status) }}
+              {{ statusLabel(row.status) }}
             </span>
           </template>
           <template #actions="{ row }">
             <AppButton
-              v-if="(row as unknown as ApiKey).status !== 'revoked'"
+              v-if="row.status !== 'revoked'"
               variant="text-danger"
               size="xs"
-              @click="confirmRevoke(row as unknown as ApiKey)"
+              @click="confirmRevoke(row)"
             >
               {{ t('configView.apiKeys.revokeButton') }}
             </AppButton>
