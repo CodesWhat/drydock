@@ -17,6 +17,10 @@ interface BulkContainerUpdateResponse {
   rejected: BulkContainerUpdateRejectedItem[];
 }
 
+function messageFromErrorEnvelope(body: { error?: unknown } | null): string {
+  return typeof body?.error === 'string' && body.error.trim() ? body.error : '';
+}
+
 async function startContainer(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/start`, {
     method: 'POST',
@@ -24,7 +28,7 @@ async function startContainer(containerId: string) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body?.error || `Failed to start container: ${response.statusText}`);
+    throw new Error(messageFromErrorEnvelope(body));
   }
   return response.json();
 }
@@ -36,7 +40,7 @@ async function stopContainer(containerId: string) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body?.error || `Failed to stop container: ${response.statusText}`);
+    throw new Error(messageFromErrorEnvelope(body));
   }
   return response.json();
 }
@@ -48,7 +52,7 @@ async function restartContainer(containerId: string) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body?.error || `Failed to restart container: ${response.statusText}`);
+    throw new Error(messageFromErrorEnvelope(body));
   }
   return response.json();
 }
@@ -60,7 +64,7 @@ async function updateContainer(containerId: string) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body?.error || `Failed to update container: ${response.statusText}`);
+    throw new Error(messageFromErrorEnvelope(body));
   }
   return response.json();
 }
@@ -76,7 +80,7 @@ async function updateContainers(containerIds: string[]): Promise<BulkContainerUp
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body?.error || `Failed to update containers: ${response.statusText}`);
+    throw new Error(messageFromErrorEnvelope(body));
   }
   return response.json();
 }
@@ -90,7 +94,7 @@ async function cancelUpdateOperation(operationId: string): Promise<CancelUpdateO
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    const error = new Error(body?.error || `Failed to cancel operation: ${response.statusText}`);
+    const error = new Error(messageFromErrorEnvelope(body));
     (error as Error & { statusCode?: number }).statusCode = response.status;
     throw error;
   }
