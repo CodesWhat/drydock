@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "État de la flotte",
+      "description": "État de toute la flotte. L’inventaire détecte les conteneurs sans vérifier les registres ni exécuter de mises à jour.",
+      "reload": "Recharger l’état",
+      "refresh": "Actualiser l’inventaire",
+      "configured": "Configuré",
+      "connected": "Connecté",
+      "disconnected": "Déconnecté",
+      "unavailable": "Indisponible",
+      "agentUnavailable": "État des agents indisponible. Les données conservées peuvent être obsolètes.",
+      "watcherUnavailable": "Métadonnées des observateurs indisponibles. Les données conservées peuvent être obsolètes.",
+      "total": "{count} conteneur | {count} conteneurs",
+      "lastKnown": "Dernière valeur connue",
+      "lastSeen": "Dernier contact : {value}",
+      "unsupported": "Toutes les cibles nécessitent des observateurs Docker compatibles avec l’inventaire.",
+      "complete": "Inventaire complet",
+      "partial": "Inventaire incomplet",
+      "reloadFailed": "Échec du rechargement de la liste des conteneurs. Les résultats de l’inventaire restent visibles."
+    },
     "fleetBulk": {
       "label": "Actions de la flotte filtrée",
       "updateAll": "Tout mettre à jour ({count})",

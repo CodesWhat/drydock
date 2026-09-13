@@ -1,5 +1,24 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "title": "Trạng thái cụm",
+      "description": "Trạng thái toàn cụm. Làm mới danh mục phát hiện container mà không kiểm tra kho ảnh hay thực hiện cập nhật.",
+      "reload": "Tải lại trạng thái",
+      "refresh": "Làm mới danh mục",
+      "configured": "Đã cấu hình",
+      "connected": "Đã kết nối",
+      "disconnected": "Mất kết nối",
+      "unavailable": "Không khả dụng",
+      "agentUnavailable": "Trạng thái tác nhân không khả dụng. Dữ liệu được giữ lại có thể đã cũ.",
+      "watcherUnavailable": "Siêu dữ liệu trình theo dõi không khả dụng. Dữ liệu được giữ lại có thể đã cũ.",
+      "total": "{count} container",
+      "lastKnown": "Thông tin gần nhất",
+      "lastSeen": "Lần cuối hoạt động: {value}",
+      "unsupported": "Mọi đích đều cần trình theo dõi Docker hỗ trợ làm mới danh mục.",
+      "complete": "Danh mục đầy đủ",
+      "partial": "Danh mục chưa đầy đủ",
+      "reloadFailed": "Không thể tải lại danh sách container. Kết quả danh mục vẫn được hiển thị."
+    },
     "fleetBulk": {
       "label": "Thao tác cho nhóm đã lọc",
       "updateAll": "Cập nhật tất cả ({count})",
