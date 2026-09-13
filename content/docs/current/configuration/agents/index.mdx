@@ -19,6 +19,20 @@ missing statistics and failed status reads are shown as unavailable, not zero.
 Controller-local watchers have a separate neutral **Configured** tile. That label
 does not claim Docker connectivity, and an agent named `Local` remains distinct.
 
+The page independently reads `GET /api/v1/agents/roster`, a names-only collection
+available with the existing `read` API-key scope (or normal session access).
+It can show an agent as unavailable even if the first status request fails and
+the agent has not registered any watchers. Status and roster failures have separate
+warnings; failed reads retain known identities, while a successful read can remove
+obsolete identities. Unavailable rows cannot refresh inventory. No extra polling
+or persistent browser cache is used.
+
+This roster describes live controller client registrations, not a persistent
+enrollment directory. It includes configured native clients before their handshake,
+but not invalid configurations that never created a client. Inbound edge clients
+removed on disconnect are no longer in the roster. Older controllers without the
+route still show agents returned by the status API, with a roster warning.
+
 **Refresh inventory** targets all Docker watchers belonging to that exact agent
 or local tile. It discovers and reconciles container inventory without registry
 checks, update actions, or notifications. The control requires every target to

@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Toast queue.** The UI now shows at most three toast notifications, with overflow waiting in first-in, first-out order. Each notification's dismissal timer starts when it becomes visible; persistent messages remain until dismissed.
 
+- **Shareable label grouping.** Container URLs accept `group-by-label=<exact Docker label key>`, and the existing label grouping controls keep that parameter up to date. Explicit stack grouping takes precedence when a link requests both.
+
 ### Changed
 
 - **Container update split buttons now share one component**, keeping the existing blocked, warning and ready styles, dimensions and independent action/menu disabled states. Enter and Space on either half no longer activate the surrounding table row; native button activation and arrow-key behavior are unchanged.
@@ -85,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Starchart refreshes now open a chart-only PR through the existing GitHub App instead of pushing directly to protected dev branches. Unchanged charts remove the temporary branch without opening a PR.
 
 - Website analytics now retain validated referring hostnames without sending full referrer URLs.
+
+- Fleet health now reads a names-only agent roster independently of status data, so configured clients remain visible when the first status request fails. Unavailable rows cannot refresh inventory; successful reads reconcile identities without polling or a persistent cache.
 
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
 
@@ -156,6 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
 
 - Debug dump downloads now show the selected language's existing error message when the browser cannot create download URLs.
+- Container start, stop, restart, update, bulk update, and cancellation failures now use the selected language when no usable server diagnostic is available. Dashboard bulk HTTP failures also show the existing error banner and clear their pending state so they can be retried.
+- Outbox load, retry, and discard failures now use the selected language when the server returns no usable diagnostic, while preserving server-provided error messages.
 
 ### Removed
 

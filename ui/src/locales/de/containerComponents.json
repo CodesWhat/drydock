@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "Agentenliste nicht verfügbar. Einige konfigurierte Agenten fehlen möglicherweise.",
       "title": "Flottenzustand",
       "description": "Status der gesamten Flotte. Die Inventaraktualisierung erkennt Container ohne Registry-Prüfungen oder Update-Aktionen.",
       "reload": "Status neu laden",

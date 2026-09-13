@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "Agent roster unavailable. Some configured agents may be missing.",
       "title": "Fleet health",
       "description": "Fleet-wide status. Inventory refresh discovers containers without registry checks or update actions.",
       "reload": "Reload status",

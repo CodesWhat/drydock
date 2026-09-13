@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "代理列表不可用，某些已配置的代理可能未显示。",
       "title": "集群健康状态",
       "description": "显示整个集群的状态。刷新清单仅发现容器，不检查镜像仓库或执行更新。",
       "reload": "重新加载状态",

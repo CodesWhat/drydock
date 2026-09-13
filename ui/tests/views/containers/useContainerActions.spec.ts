@@ -1,6 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
-import { setI18nLocale } from '@/boot/i18n';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import {
   OPERATION_DISPLAY_HOLD_MS,
@@ -301,6 +301,164 @@ describe('useContainerActions', () => {
       wrapper.unmount();
     }
     vi.useRealTimers();
+  });
+
+  describe('localized real-service failures', () => {
+    let previousLocale: typeof i18n.global.locale.value;
+    let previousFetch: typeof fetch;
+
+    beforeEach(async () => {
+      previousLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'fr';
+      const service = await vi.importActual<typeof import('@/services/container-actions')>(
+        '@/services/container-actions',
+      );
+      mocks.startContainer.mockImplementation(service.startContainer);
+      mocks.stopContainer.mockImplementation(service.stopContainer);
+      mocks.restartContainer.mockImplementation(service.restartContainer);
+      mocks.updateContainer.mockImplementation(service.updateContainer);
+      mocks.updateContainers.mockImplementation(service.updateContainers);
+      mocks.cancelUpdateOperation.mockImplementation(service.cancelUpdateOperation);
+      previousFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn();
+    });
+
+    afterEach(() => {
+      i18n.global.locale.value = previousLocale;
+      globalThis.fetch = previousFetch;
+    });
+
+    const invalidEnvelopes = [
+      '{}',
+      '{"error":""}',
+      '{"error":"  "}',
+      '{"error":42}',
+      'null',
+      '{broken',
+    ];
+
+    describe.each(['start', 'stop', 'restart', 'update'] as const)('%s', (action) => {
+      it.each(invalidEnvelopes)(
+        'localizes an unusable diagnostic %s and clears activity',
+        async (body) => {
+          vi.mocked(fetch).mockResolvedValueOnce(new Response(body, { status: 500 }));
+          const container = makeContainer({ newTag: '1.1.0' });
+          const { composable, error, loadContainers } = await mountActionsHarness({
+            containers: [container],
+          });
+          if (action === 'start') await composable.startContainer(container);
+          else if (action === 'update') await composable.updateContainer(container);
+          else {
+            if (action === 'stop') composable.confirmStop(container);
+            else composable.confirmRestart(container);
+            await mocks.confirmRequire.mock.calls.at(-1)![0].accept();
+          }
+          expect(error.value).toBe('Action échouée pour web');
+          expect(mocks.toastError).toHaveBeenCalledWith(
+            'Mise à jour échouée : web',
+            'Action échouée pour web',
+          );
+          expect(composable.isContainerRowLocked(container)).toBe(false);
+          expect(loadContainers).toHaveBeenCalledTimes(1);
+        },
+      );
+    });
+
+    it.each(invalidEnvelopes)(
+      'localizes a group HTTP failure %s and clears activity',
+      async (body) => {
+        vi.mocked(fetch).mockResolvedValueOnce(new Response(body, { status: 500 }));
+        const container = makeContainer({ newTag: '1.1.0' });
+        const { composable } = await mountActionsHarness({ containers: [container] });
+        await confirmGroupUpdate(composable, { key: 'core', containers: [container] });
+        expect(mocks.toastError).toHaveBeenCalledWith('Impossible de mettre à jour core');
+        expect(composable.isContainerUpdateInProgress(container)).toBe(false);
+        expect(useUpdateBatches().batches.value.size).toBe(0);
+      },
+    );
+
+    it.each(invalidEnvelopes)('localizes a cancellation HTTP failure %s', async (body) => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(body, { status: 500 }));
+      const container = makeContainer({
+        updateOperation: { id: 'op-1', status: 'queued', phase: 'queued', updatedAt: '' },
+      });
+      const { composable, loadContainers } = await mountActionsHarness({ containers: [container] });
+      await composable.cancelUpdate(container);
+      expect(mocks.toastError).toHaveBeenCalledWith("Impossible d'annuler la mise à jour pour web");
+      expect(loadContainers).not.toHaveBeenCalled();
+    });
+
+    it.each([404, 409])('keeps cancellation status %s handling', async (status) => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response('{broken', { status }));
+      const container = makeContainer({
+        updateOperation: { id: 'op-1', status: 'queued', phase: 'queued', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+      await composable.cancelUpdate(container);
+      if (status === 404)
+        expect(mocks.toastError).toHaveBeenCalledWith('Opération introuvable : web');
+      else
+        expect(mocks.toastWarning).toHaveBeenCalledWith(
+          "Mise à jour déjà terminée pour web, impossible d'annuler",
+        );
+    });
+
+    it.each([1, 2])('localizes a selective bulk failure for %s targets', async (count) => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response('{}', { status: 500 }));
+      const containers = [
+        makeContainer({ newTag: '1.1.0' }),
+        makeContainer({ id: 'container-2', name: 'api', newTag: '1.1.0' }),
+      ].slice(0, count);
+      const { composable } = await mountActionsHarness({ containers });
+      composable.confirmBulkUpdate({
+        dispatch: containers,
+        skipped: [],
+        blocked: [],
+        softOverrides: [],
+        staleParents: [],
+        agentCount: 1,
+        stackCount: 1,
+      });
+      await mocks.confirmRequire.mock.calls.at(-1)![0].accept();
+      await flushPromises();
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        count === 1
+          ? 'Impossible de mettre à jour web'
+          : 'Impossible de mettre à jour 2 conteneurs',
+      );
+      for (const container of containers)
+        expect(composable.isContainerUpdateInProgress(container)).toBe(false);
+    });
+
+    it('preserves a genuine lifecycle server diagnostic without trimming it', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        Response.json({ error: '  Docker unavailable  ' }, { status: 503 }),
+      );
+      const container = makeContainer();
+      const { composable, error } = await mountActionsHarness({ containers: [container] });
+      await composable.startContainer(container);
+      expect(error.value).toBe('  Docker unavailable  ');
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'Mise à jour échouée : web',
+        '  Docker unavailable  ',
+      );
+    });
+
+    it('preserves the real no-update diagnostic as stale rather than a failure', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        Response.json({ error: 'No update available for this container' }, { status: 400 }),
+      );
+      const container = makeContainer({ newTag: '1.1.0' });
+      const { composable, error, loadContainers } = await mountActionsHarness({
+        containers: [container],
+      });
+      await composable.updateContainer(container);
+      expect(error.value).toBeNull();
+      expect(mocks.toastError).not.toHaveBeenCalled();
+      expect(mocks.toastInfo).toHaveBeenCalled();
+      expect(loadContainers).toHaveBeenCalledTimes(1);
+      expect(composable.isContainerRowLocked(container)).toBe(false);
+    });
   });
 
   it('treats matching live containers as settled when no snapshot was recorded', () => {

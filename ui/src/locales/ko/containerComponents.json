@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "에이전트 목록을 사용할 수 없습니다. 구성된 일부 에이전트가 누락될 수 있습니다.",
       "title": "플릿 상태",
       "description": "전체 플릿의 상태입니다. 인벤토리 새로 고침은 레지스트리 확인이나 업데이트 작업 없이 컨테이너를 검색합니다.",
       "reload": "상태 다시 불러오기",

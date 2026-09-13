@@ -52,7 +52,10 @@ vi.mock('@/composables/useServerFeatures', () => ({
 }));
 
 // --- Mock all services ---
-vi.mock('@/services/agent', () => ({ getAgents: vi.fn().mockResolvedValue([]) }));
+vi.mock('@/services/agent', () => ({
+  getAgents: vi.fn().mockResolvedValue([]),
+  getAgentRoster: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('@/services/watcher', () => ({
   getAllWatchers: vi.fn().mockResolvedValue([]),
   refreshWatcherInventory: vi.fn(),
@@ -1270,6 +1273,179 @@ describe('ContainersView', () => {
   });
 
   describe('route query filters', () => {
+    describe('shareable label grouping', () => {
+      it('opens an exact label deep link ahead of a saved stack preference', async () => {
+        const { preferences } = await import('@/preferences/store');
+        preferences.containers.groupByStack = true;
+        mockRoute.query = { 'group-by-label': 'com.example.team' };
+        const wrapper = await mountContainersView([
+          makeContainer({ labels: { 'com.example.team': 'operations' } }),
+        ]);
+        const vm = wrapper.vm as any;
+        expect(vm.fleet.groupBy.value).toBe('label');
+        expect(vm.fleet.groupLabel.value).toBe('com.example.team');
+        expect(vm.groupByStack).toBe(false);
+        expect(vm.renderGroups[0].name).toBe('operations');
+      });
+
+      it('follows label navigation and clears URL-driven grouping when removed', async () => {
+        mockRoute.query = reactive<Record<string, unknown>>({ 'group-by-label': 'team' });
+        const wrapper = await mountContainersView();
+        const vm = wrapper.vm as any;
+        mockRoute.query['group-by-label'] = ['environment', 'ignored'];
+        await flushPromises();
+        expect(vm.fleet.groupBy.value).toBe('label');
+        expect(vm.fleet.groupLabel.value).toBe('environment');
+        delete mockRoute.query['group-by-label'];
+        await flushPromises();
+        expect(vm.fleet.groupBy.value).toBe('none');
+        expect(vm.fleet.groupLabel.value).toBe('');
+      });
+
+      it('preserves saved label grouping on a fresh plain URL', async () => {
+        const { preferences } = await import('@/preferences/store');
+        preferences.containers.fleet.groupBy = 'label';
+        preferences.containers.fleet.groupLabel = 'saved';
+        const wrapper = await mountContainersView();
+        expect((wrapper.vm as any).fleet.groupLabel.value).toBe('saved');
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('label');
+      });
+
+      it.each([{ value: '' }, { value: null }, { value: [] }, { value: [''] }])(
+        'clears label grouping for an empty query value $value',
+        async ({ value }) => {
+          const { preferences } = await import('@/preferences/store');
+          preferences.containers.fleet.groupBy = 'label';
+          preferences.containers.fleet.groupLabel = 'saved';
+          mockRoute.query = { 'group-by-label': value };
+          const wrapper = await mountContainersView();
+          expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+          expect((wrapper.vm as any).fleet.groupLabel.value).toBe('');
+        },
+      );
+
+      it.each(['true', '1'])(
+        'gives explicit stack grouping %s precedence over a label link',
+        async (value) => {
+          mockRoute.query = { groupByStack: value, 'group-by-label': 'team' };
+          const wrapper = await mountContainersView();
+          expect((wrapper.vm as any).groupByStack).toBe(true);
+          expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        },
+      );
+
+      it('leaves a different saved fleet dimension selected for an empty label parameter', async () => {
+        const { preferences } = await import('@/preferences/store');
+        preferences.containers.fleet.groupBy = 'agent';
+        mockRoute.query = { 'group-by-label': '' };
+        const wrapper = await mountContainersView();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('agent');
+      });
+
+      it('updates the URL from label controls, preserving unrelated fields and router encoding', async () => {
+        const { parseQuery, stringifyQuery } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const label = 'com.example/team + café&role=ops%';
+        mockRoute.query = { unrelated: 'keep', sort: 'status-desc' };
+        const wrapper = await mountContainersView();
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('label');
+        await wrapper.get('[data-test="fleet-group-label"]').setValue(label);
+        await flushPromises();
+        const query = mockRouterReplace.mock.calls.at(-1)?.[0].query;
+        expect(query).toEqual({ unrelated: 'keep', sort: 'status-desc', 'group-by-label': label });
+        expect(parseQuery(stringifyQuery(query))['group-by-label']).toBe(label);
+        mockRoute.query = query;
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('agent');
+        await flushPromises();
+        expect(mockRouterReplace.mock.calls.at(-1)?.[0].query).toEqual({
+          unrelated: 'keep',
+          sort: 'status-desc',
+        });
+      });
+
+      it('keeps control changes when router replacements feed back into the mounted view', async () => {
+        const { createRouter, createMemoryHistory } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const router = createRouter({
+          history: createMemoryHistory(),
+          routes: [{ path: '/containers', component: defineComponent({ template: '<div />' }) }],
+        });
+        await router.push('/containers?unrelated=keep&group-by-label=team');
+        mockRoute.query = reactive({ ...router.currentRoute.value.query });
+        router.afterEach((to) => {
+          for (const key of Object.keys(mockRoute.query)) delete mockRoute.query[key];
+          Object.assign(mockRoute.query, to.query);
+        });
+        mockRouterReplace.mockImplementation((location) => router.replace(location));
+        const wrapper = await mountContainersView();
+        const label = 'com.example/team + café&role=ops%';
+        await wrapper.get('[data-test="fleet-group-label"]').setValue(label);
+        await flushPromises();
+        expect(router.currentRoute.value.query['group-by-label']).toBe(label);
+        expect((wrapper.vm as any).fleet.groupLabel.value).toBe(label);
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('agent');
+        await flushPromises();
+        expect(router.currentRoute.value.query).toEqual({ unrelated: 'keep' });
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('agent');
+        await router.push('/containers?group-by-label=environment');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupLabel.value).toBe('environment');
+        await router.push('/containers');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        expect(mockRouterReplace.mock.calls.length).toBeLessThan(6);
+      });
+
+      it('removes the label URL when the label input is cleared or stack grouping is enabled', async () => {
+        mockRoute.query = { 'group-by-label': 'team', unrelated: 'keep' };
+        const wrapper = await mountContainersView();
+        const vm = wrapper.vm as any;
+        vm.fleet.groupBy.value = 'label';
+        vm.fleet.groupLabel.value = '';
+        await flushPromises();
+        expect(mockRouterReplace.mock.calls.at(-1)?.[0].query).toEqual({ unrelated: 'keep' });
+        vm.fleet.groupLabel.value = 'team';
+        vm.groupByStack = true;
+        await flushPromises();
+        expect(mockRouterReplace.mock.calls.at(-1)?.[0].query).toEqual({
+          unrelated: 'keep',
+          groupByStack: 'true',
+        });
+      });
+
+      it('clears label grouping and its saved preference when an input removal feeds back through the real router', async () => {
+        const { createRouter, createMemoryHistory } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const { preferences } = await import('@/preferences/store');
+        const router = createRouter({
+          history: createMemoryHistory(),
+          routes: [{ path: '/containers', component: defineComponent({ template: '<div />' }) }],
+        });
+        await router.push('/containers?unrelated=keep&sort=status-desc&group-by-label=team');
+        mockRoute.query = reactive({ ...router.currentRoute.value.query });
+        router.afterEach((to) => {
+          for (const key of Object.keys(mockRoute.query)) delete mockRoute.query[key];
+          Object.assign(mockRoute.query, to.query);
+        });
+        mockRouterReplace.mockImplementation((location) => router.replace(location));
+        const wrapper = await mountContainersView();
+        await wrapper.get('[data-test="fleet-group-label"]').setValue('');
+        await flushPromises();
+        expect(router.currentRoute.value.query).toEqual({ unrelated: 'keep', sort: 'status-desc' });
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        expect(preferences.containers.fleet.groupBy).toBe('none');
+        expect(preferences.containers.fleet.groupLabel).toBe('');
+        expect((wrapper.vm as any).groupByStack).toBe(false);
+        expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('label');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('label');
+        await wrapper.get('[data-test="fleet-group-label"]').setValue('environment');
+        await flushPromises();
+        expect(router.currentRoute.value.query['group-by-label']).toBe('environment');
+      });
+    });
+
     it('applies search query from route query', async () => {
       mockRoute.query = { q: 'nginx' };
       await mountContainersView([makeContainer()]);

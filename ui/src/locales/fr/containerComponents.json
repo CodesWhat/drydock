@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "Liste des agents indisponible. Certains agents configurés peuvent manquer.",
       "title": "État de la flotte",
       "description": "État de toute la flotte. L’inventaire détecte les conteneurs sans vérifier les registres ni exécuter de mises à jour.",
       "reload": "Recharger l’état",
