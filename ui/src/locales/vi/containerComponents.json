@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "Danh sách tác nhân không khả dụng. Một số tác nhân đã cấu hình có thể bị thiếu.",
       "title": "Trạng thái cụm",
       "description": "Trạng thái toàn cụm. Làm mới danh mục phát hiện container mà không kiểm tra kho ảnh hay thực hiện cập nhật.",
       "reload": "Tải lại trạng thái",

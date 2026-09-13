@@ -1,5 +1,5 @@
 import { computed, onMounted, onScopeDispose, type Ref, ref } from 'vue';
-import { getAgents } from '../../services/agent';
+import { getAgentRoster, getAgents } from '../../services/agent';
 import {
   type FleetWatcher,
   getAllWatchers,
@@ -38,8 +38,11 @@ function containerTotal(stats: unknown): number | undefined {
 
 export function useFleetHealth(input: FleetHealthInput) {
   const agents = ref<Awaited<ReturnType<typeof getAgents>>>([]);
+  const roster = ref<Awaited<ReturnType<typeof getAgentRoster>>>([]);
+  const knownNames = ref<string[]>([]);
   const watchers = ref<FleetWatcher[]>([]);
   const agentError = ref(false);
+  const rosterError = ref(false);
   const watcherError = ref(false);
   const loading = ref(false);
   const refreshing = ref<string | null>(null);
@@ -53,6 +56,14 @@ export function useFleetHealth(input: FleetHealthInput) {
     if (pending) return pending;
     loading.value = true;
     pending = Promise.all([
+      getAgentRoster()
+        .then((data) => {
+          roster.value = data;
+          rosterError.value = false;
+        })
+        .catch(() => {
+          rosterError.value = true;
+        }),
       getAgents()
         .then((data) => {
           agents.value = data;
@@ -70,7 +81,14 @@ export function useFleetHealth(input: FleetHealthInput) {
           watcherError.value = true;
         }),
     ])
-      .then(() => {})
+      .then(() => {
+        if (agentError.value && rosterError.value) return;
+        const currentAgents = agentError.value ? [] : agents.value;
+        const currentRoster = rosterError.value ? [] : roster.value;
+        knownNames.value = [
+          ...new Set([...currentAgents, ...currentRoster].map(({ name }) => name)),
+        ];
+      })
       .finally(() => {
         loading.value = false;
         pending = undefined;
@@ -83,19 +101,24 @@ export function useFleetHealth(input: FleetHealthInput) {
   }
 
   const rows = computed(() => {
-    const sources = agents.value
-      .map((agent) => ({
-        key: identity(agent.name),
-        agent: agent.name,
-        status: agentError.value
-          ? ('unavailable' as const)
-          : agent.connected
-            ? ('connected' as const)
-            : ('disconnected' as const),
-        total: containerTotal(agent.containers),
-        lastSeen: typeof agent.lastSeen === 'string' ? agent.lastSeen : undefined,
-        lastKnown: agentError.value || !agent.connected,
-      }))
+    const agentsByName = new Map(agents.value.map((agent) => [agent.name, agent]));
+    const sources = knownNames.value
+      .map((name) => {
+        const agent = agentsByName.get(name);
+        return {
+          key: identity(name),
+          agent: name,
+          status:
+            agentError.value || !agent
+              ? ('unavailable' as const)
+              : agent.connected
+                ? ('connected' as const)
+                : ('disconnected' as const),
+          total: containerTotal(agent?.containers),
+          lastSeen: typeof agent?.lastSeen === 'string' ? agent.lastSeen : undefined,
+          lastKnown: agent !== undefined && (agentError.value || !agent.connected),
+        };
+      })
       .sort((a, b) => a.key.localeCompare(b.key));
     const localWatchers = watchers.value.filter((watcher) => !watcher.agent);
     const local = localWatchers.length
@@ -129,7 +152,7 @@ export function useFleetHealth(input: FleetHealthInput) {
           !loading.value &&
           !refreshing.value &&
           !input.busy.value &&
-          source.status !== 'disconnected',
+          (source.status === 'configured' || source.status === 'connected'),
       };
     });
   });
@@ -185,5 +208,15 @@ export function useFleetHealth(input: FleetHealthInput) {
     disposed = true;
     for (const event of events) globalThis.removeEventListener(event, handleStatusChange);
   });
-  return { rows, loading, agentError, watcherError, refreshing, outcomes, load, refresh };
+  return {
+    rows,
+    loading,
+    agentError,
+    rosterError,
+    watcherError,
+    refreshing,
+    outcomes,
+    load,
+    refresh,
+  };
 }

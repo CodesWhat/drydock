@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Website analytics now retain validated referring hostnames without sending full referrer URLs.
 
+- Fleet health now reads a names-only agent roster independently of status data, so configured clients remain visible when the first status request fails. Unavailable rows cannot refresh inventory; successful reads reconcile identities without polling or a persistent cache.
+
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
 
 - **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.
@@ -159,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Precision-only suffix carve-out now requires at least one digit placeholder, so a trailing dot (`1.3.0-alpine.`) no longer counts as the same tag family as `1.3.0-alpine`.
 
 - Debug dump downloads now show the selected language's existing error message when the browser cannot create download URLs.
+- Container start, stop, restart, update, bulk update, and cancellation failures now use the selected language when no usable server diagnostic is available. Dashboard bulk HTTP failures also show the existing error banner and clear their pending state so they can be retried.
 - Outbox load, retry, and discard failures now use the selected language when the server returns no usable diagnostic, while preserving server-provided error messages.
 
 ### Removed

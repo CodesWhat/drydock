@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "代理程式清單無法使用，部分已設定的代理程式可能未顯示。",
       "title": "叢集健康狀態",
       "description": "顯示整個叢集的狀態。重新整理清單僅探索容器，不檢查映像倉庫或執行更新。",
       "reload": "重新載入狀態",
