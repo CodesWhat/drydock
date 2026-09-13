@@ -8,6 +8,7 @@ const mockClearIconCache = vi.fn();
 const mockDownloadDebugDump = vi.fn();
 const mockGetUser = vi.fn();
 const mockPushInitialSync = vi.fn();
+const mockTransitionTheme = vi.fn((change: () => void, _event?: MouseEvent) => change());
 
 vi.mock('@/services/app', () => ({
   getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
@@ -178,7 +179,7 @@ vi.mock('@/theme/useTheme', () => ({
     themeVariant: { value: 'dark', __v_isRef: true },
     isDark: { value: true, __v_isRef: true },
     setThemeFamily: vi.fn(),
-    transitionTheme: vi.fn((cb: () => void) => cb()),
+    transitionTheme: mockTransitionTheme,
   }),
 }));
 
@@ -312,10 +313,6 @@ describe('ConfigView', () => {
     mockLoadUpdateMode.mockResolvedValue(undefined);
     mockGetUser.mockResolvedValue({
       username: 'admin',
-      email: 'admin@test.com',
-      role: 'admin',
-      lastLogin: '2026-01-01',
-      sessions: 2,
     });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetStore.mockResolvedValue({ configuration: { path: '/store', file: 'dd.json' } });
@@ -856,6 +853,27 @@ describe('ConfigView', () => {
       expect(w.text()).toContain('GitHub');
     });
 
+    it('keeps pointer coordinates when selecting a theme family', async () => {
+      const wrapper = await mountAppearanceTab();
+      const button = wrapper
+        .findAll('button')
+        .find((candidate) => candidate.text().includes('GitHub'));
+      if (!button) throw new Error('Missing theme family button');
+      const event = new MouseEvent('click', { bubbles: true, clientX: 40, clientY: 80 });
+      button.element.dispatchEvent(event);
+      expect(mockTransitionTheme).toHaveBeenLastCalledWith(expect.any(Function), event);
+    });
+
+    it('uses the centered transition fallback for theme clicks without pointer coordinates', async () => {
+      const wrapper = await mountAppearanceTab();
+      const button = wrapper
+        .findAll('button')
+        .find((candidate) => candidate.text().includes('GitHub'));
+      if (!button) throw new Error('Missing theme family button');
+      button.element.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(mockTransitionTheme).toHaveBeenLastCalledWith(expect.any(Function), undefined);
+    });
+
     it('renders font options', async () => {
       const w = await mountAppearanceTab();
       expect(w.text()).toContain('IBM Plex Mono');
@@ -971,7 +989,38 @@ describe('ConfigView', () => {
 
       const text = w.text();
       expect(text).toContain('admin');
-      expect(text).toContain('admin@test.com');
+      expect(text).toContain('Active Sessions');
+      expect(text).not.toContain('admin@test.com');
+    });
+
+    it('keeps empty profile fields when the response includes unsupported metadata', async () => {
+      mockGetUser.mockResolvedValue({
+        username: 'admin',
+        displayName: 'Legacy Display Name',
+        email: 'legacy@example.com',
+        role: 'legacy-role',
+        provider: 'legacy-provider',
+        lastLogin: '2026-01-01',
+        sessions: 7,
+      });
+
+      const w = await mountProfileTab();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.text()).toContain('admin');
+      expect(w.text()).not.toContain('Legacy Display Name');
+      expect(w.text()).not.toContain('legacy@example.com');
+      expect(w.text()).not.toContain('legacy-role');
+      expect(w.text()).not.toContain('legacy-provider');
+      const sessions = w
+        .findAll('div')
+        .find(
+          (element) =>
+            element.element.children.length === 2 &&
+            element.element.children[0].textContent === 'Active Sessions',
+        );
+      expect(sessions?.element.children[1].textContent).toBe('0');
     });
 
     it('shows profile error state when user fetch fails', async () => {

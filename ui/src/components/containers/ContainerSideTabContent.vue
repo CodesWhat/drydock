@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { getPreviewUpdateKind } from '../../services/preview';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
@@ -820,7 +821,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
                     </select>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMode')" data-test="policy-overridden-maturityMode" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMode')" data-test="policy-revert-maturityMode" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMode')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMode')" data-test="policy-revert-maturityMode" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMode')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div class="flex items-center gap-1">
                     <input
@@ -832,7 +833,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       :disabled="policyInProgress !== null"
                     />
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMinAgeDays')" data-test="policy-overridden-maturityMinAgeDays" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMinAgeDays')" data-test="policy-revert-maturityMinAgeDays" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMinAgeDays')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMinAgeDays')" data-test="policy-revert-maturityMinAgeDays" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMinAgeDays')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
@@ -882,7 +883,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   <div class="flex items-center gap-1">
                     {{ t('containerComponents.fullPageActions.skippedTags') }}
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipTags')" data-test="policy-overridden-skipTags" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div v-if="selectedSkipTags.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                   <div class="mt-1 flex flex-wrap gap-1">
@@ -905,7 +906,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   <div class="flex items-center gap-1">
                     {{ t('containerComponents.fullPageActions.skippedDigests') }}
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipDigests')" data-test="policy-overridden-skipDigests" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div v-if="selectedSkipDigests.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                   <div class="mt-1 flex flex-wrap gap-1">
@@ -947,7 +948,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.currentLabel') }} <span class="dd-text font-mono">{{ detailPreview.currentImage || '-' }}</span></div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.newLabel') }} <span class="dd-text font-mono">{{ detailPreview.newImage || '-' }}</span></div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.updateKindLabel') }}
-                      <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || t('common.unknown') }}</span>
+                      <span class="dd-text font-mono">{{ getPreviewUpdateKind(detailPreview.updateKind) || t('common.unknown') }}</span>
                     </div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
                       <span class="dd-text">{{ detailPreview.isRunning ? t('common.yes') : t('common.no') }}</span>

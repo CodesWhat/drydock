@@ -1,6 +1,23 @@
-import { normalizePreviewPayload, PreviewRequestError, previewContainer } from '@/services/preview';
+import {
+  getPreviewUpdateKind,
+  normalizePreviewPayload,
+  PreviewRequestError,
+  previewContainer,
+} from '@/services/preview';
 
 describe('preview service', () => {
+  it.each([
+    [{ kind: 'tag', remoteValue: '2.0' }, 'tag'],
+    ['digest', 'digest'],
+    [undefined, undefined],
+    [null, null],
+    [{ kind: '' }, { kind: '' }],
+    [{ legacy: 'value' }, { legacy: 'value' }],
+    [[], []],
+  ])('preserves the preview update-kind display fallback for %j', (input, expected) => {
+    expect(getPreviewUpdateKind(input)).toEqual(expected);
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });

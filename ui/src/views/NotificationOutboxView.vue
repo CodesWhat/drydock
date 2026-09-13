@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import AppButton from '@/components/AppButton.vue';
 import AppIcon from '@/components/AppIcon.vue';
-import DataTable from '@/components/DataTable.vue';
+import DataTable, { type DataTableColumn } from '@/components/DataTable.vue';
 import DataViewLayout from '@/components/DataViewLayout.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import { useToast } from '../composables/useToast';
@@ -52,7 +52,7 @@ const error = ref('');
 const actingId = ref<string | null>(null);
 let loadRequestId = 0;
 
-const tableColumns = computed(() => [
+const tableColumns = computed<DataTableColumn[]>(() => [
   {
     key: 'eventName',
     label: t('notificationOutboxView.columns.event'),

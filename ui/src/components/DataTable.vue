@@ -1,18 +1,5 @@
-<script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { preferences } from '../preferences/store';
-import {
-  ACTIONS_COLUMN_KEY,
-  clampColumnSize,
-  normalizeTableColumnSizing,
-  parsePixelSize,
-  type NormalizedTableColumnSizing,
-  type TableColumnAutoSize,
-  type TableColumnOverflow,
-} from '../utils/table-sizing';
-
-const { t } = useI18n();
+<script lang="ts">
+import type { TableColumnAutoSize, TableColumnOverflow } from '../utils/table-sizing';
 
 export interface DataTableColumn {
   key: string;
@@ -51,12 +38,27 @@ export interface DataTableColumn {
    */
   cardPriority?: number;
 }
+</script>
+
+<script setup lang="ts" generic="Row extends Record<RowKey, string>, RowKey extends string = never">
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { preferences } from '../preferences/store';
+import {
+  ACTIONS_COLUMN_KEY,
+  clampColumnSize,
+  normalizeTableColumnSizing,
+  parsePixelSize,
+  type NormalizedTableColumnSizing,
+} from '../utils/table-sizing';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
     columns: DataTableColumn[];
-    rows: Record<string, unknown>[];
-    rowKey: string | ((row: Record<string, unknown>) => string);
+    rows: Row[];
+    rowKey: RowKey | ((row: Row) => string);
     sortKey?: string;
     sortAsc?: boolean;
     selectedKey?: string | null;
@@ -71,15 +73,15 @@ const props = withDefaults(
     virtualRowHeight?: number;
     virtualOverscan?: number;
     virtualMaxHeight?: string;
-    rowHeight?: (row: Record<string, unknown>) => number;
+    rowHeight?: (row: Row) => number;
     /** Optional max-height for scroll area when virtualScroll is false (e.g., '340px') */
     maxHeight?: string;
     /** Optional function returning extra CSS classes for a row (e.g. dim during actions) */
-    rowClass?: (row: Record<string, unknown>) => string;
+    rowClass?: (row: Row) => string;
     /** Optional function marking rows that should render a single full-width cell */
-    fullWidthRow?: (row: Record<string, unknown>) => boolean;
+    fullWidthRow?: (row: Row) => boolean;
     /** Optional function controlling whether a row should behave like a clickable/selectable data row */
-    rowInteractive?: (row: Record<string, unknown>) => boolean;
+    rowInteractive?: (row: Row) => boolean;
     /** When true, hides column resize handles for touch-only interaction */
     isMobile?: boolean;
     /**
@@ -131,7 +133,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:sortKey': [key: string];
   'update:sortAsc': [asc: boolean];
-  'row-click': [row: Record<string, unknown>];
+  'row-click': [row: Row];
   /**
    * Fires when the measured-width card reflow (< 640px container) toggles. Distinct from
    * `preferCards` (the desktop toggle): this is true ONLY when the width forces cards, so an
@@ -140,10 +142,16 @@ const emit = defineEmits<{
   'update:cardReflowForced': [value: boolean];
 }>();
 
-function getRowKey(
-  row: Record<string, unknown>,
-  rowKeyProp: string | ((row: Record<string, unknown>) => string),
-): string {
+defineSlots<{
+  [name: `header-${string}`]: (props: { column: ResolvedDataTableColumn }) => unknown;
+  [name: `cell-${string}`]: (props: { row: Row; value: unknown; cardMode: boolean }) => unknown;
+  actions?(props: { row: Row; cardMode: boolean }): unknown;
+  'full-row'?(props: { row: Row; index: number; cardMode: boolean }): unknown;
+  card?(props: { row: Row; index: number; selected: boolean }): unknown;
+  empty?(): unknown;
+}>();
+
+function getRowKey(row: Row, rowKeyProp: RowKey | ((row: Row) => string)): string {
   return typeof rowKeyProp === 'function' ? rowKeyProp(row) : row[rowKeyProp];
 }
 
@@ -548,7 +556,7 @@ function syncTableViewportWidth() {
 // Prefix sums over caller-estimated row heights so the visible window and spacers can be
 // resolved with binary search when rows have a few discrete heights (group headers,
 // policy-indicator rows, etc.).
-function estimateRowHeight(row: Record<string, unknown>): number {
+function estimateRowHeight(row: Row): number {
   const estimator = props.rowHeight;
   if (typeof estimator === 'function') {
     const candidate = estimator(row);
@@ -895,14 +903,14 @@ function ariaSort(col: DataTableColumn): 'ascending' | 'descending' | 'none' | u
   return props.sortAsc === false ? 'descending' : 'ascending';
 }
 
-function handleRowKeydown(event: KeyboardEvent, row: Record<string, unknown>) {
+function handleRowKeydown(event: KeyboardEvent, row: Row) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
     emit('row-click', row);
   }
 }
 
-function isFullWidthRow(row: Record<string, unknown>): boolean {
+function isFullWidthRow(row: Row): boolean {
   return props.fullWidthRow?.(row) ?? false;
 }
 
@@ -928,18 +936,18 @@ const tableHeaderBg = computed(() =>
   hasFullWidthRows.value ? 'var(--dd-bg-elevated)' : 'var(--dd-bg-inset)',
 );
 
-function isInteractiveRow(row: Record<string, unknown>): boolean {
+function isInteractiveRow(row: Row): boolean {
   if (props.rowInteractive) {
     return props.rowInteractive(row);
   }
   return !isFullWidthRow(row);
 }
 
-function isSelectedRow(row: Record<string, unknown>): boolean {
+function isSelectedRow(row: Row): boolean {
   return props.selectedKey != null && getRowKey(row, props.rowKey) === props.selectedKey;
 }
 
-function rowBackgroundColor(row: Record<string, unknown>, localIndex: number): string {
+function rowBackgroundColor(row: Row, localIndex: number): string {
   // Card mode never zebra-stripes or elevates on selection — cards are flat
   // `var(--dd-bg-card)`, selection is communicated purely via the border (see
   // `.dd-data-table-card-selected` below). Table mode keeps zebra + elevated-on-select.

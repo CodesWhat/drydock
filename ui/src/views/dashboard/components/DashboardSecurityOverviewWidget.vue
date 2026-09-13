@@ -3,19 +3,13 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import type { DashboardVulnerabilityRow } from '../dashboardTypes';
 
 interface SecuritySeverityTotals {
   critical: number;
   high: number;
   low: number;
   medium: number;
-}
-
-interface VulnerabilityRow {
-  id: string;
-  image: string;
-  package: string;
-  severity: 'CRITICAL' | 'HIGH';
 }
 
 interface Props {
@@ -30,7 +24,7 @@ interface Props {
   securitySeverityTotals: SecuritySeverityTotals;
   securityTotalCount: number;
   showSecuritySeverityBreakdown: boolean;
-  vulnerabilities: VulnerabilityRow[];
+  vulnerabilities: DashboardVulnerabilityRow[];
 }
 
 defineProps<Props>();
@@ -45,7 +39,7 @@ function handleViewAll() {
   emit('viewAll');
 }
 
-function severityTone(severity: VulnerabilityRow['severity']) {
+function severityTone(severity: DashboardVulnerabilityRow['severity']) {
   return severity === 'CRITICAL' ? 'danger' : 'warning';
 }
 
@@ -53,7 +47,7 @@ function severityTone(severity: VulnerabilityRow['severity']) {
 // translated in all 16 locales, and already the vocabulary SecurityView.vue's
 // own severityBadgeLabel uses for the same per-item severity badge) instead
 // of minting a duplicate key.
-function severityLabel(severity: VulnerabilityRow['severity']) {
+function severityLabel(severity: DashboardVulnerabilityRow['severity']) {
   return severity === 'CRITICAL' ? t('securityView.badge.critical') : t('securityView.badge.high');
 }
 

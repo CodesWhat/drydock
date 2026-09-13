@@ -44,6 +44,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+export function getPreviewUpdateKind(updateKind: unknown): unknown {
+  return asRecord(updateKind)?.kind || updateKind;
+}
+
 function normalizeStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value

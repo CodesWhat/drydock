@@ -140,6 +140,13 @@ export interface DashboardStatCard {
   detail?: string;
 }
 
+export interface DashboardVulnerabilityRow {
+  id: string;
+  image: string;
+  package: string;
+  severity: 'CRITICAL' | 'HIGH';
+}
+
 export interface RecentUpdateRow {
   id: string;
   identityKey: string;

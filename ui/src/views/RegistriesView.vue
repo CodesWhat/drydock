@@ -7,17 +7,19 @@ import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllRegistries, getRegistry } from '../services/registry';
-import type { ApiComponent } from '../types/api';
+import type { ApiComponentResponse } from '../types/api';
 
 const { t } = useI18n();
 
-const registriesData = ref<Record<string, unknown>[]>([]);
+type RegistryRow = ReturnType<typeof mapRegistry>;
+
+const registriesData = ref<RegistryRow[]>([]);
 const loading = ref(true);
 const error = ref('');
 const route = useRoute();
 
 const { isMobile } = useBreakpoints();
-const selectedRegistry = ref<Record<string, unknown> | null>(null);
+const selectedRegistry = ref<RegistryRow | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
@@ -41,9 +43,11 @@ const DEFAULT_URLS: Record<string, string> = {
   ocir: 'https://ocir.io',
 };
 
-function resolveUrl(reg: Record<string, unknown>): string {
-  const config = reg.config as Record<string, unknown> | undefined;
-  return String(config?.url || DEFAULT_URLS[String(reg.type)] || '');
+function resolveUrl(reg: RegistryRow): string {
+  const config = reg.config;
+  const url =
+    typeof config === 'object' && config !== null && 'url' in config ? config.url : undefined;
+  return String(url || DEFAULT_URLS[reg.type] || '');
 }
 
 function registryTypeBadge(type: string) {
@@ -58,9 +62,16 @@ function registryTypeBadge(type: string) {
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type.toUpperCase() };
 }
 
-function isPrivate(reg: Record<string, unknown>): boolean {
-  const cfg = (reg.config ?? {}) as Record<string, unknown>;
-  return !!(cfg.token || cfg.password || cfg.login || cfg.username);
+function isPrivate(reg: RegistryRow): boolean {
+  const cfg = reg.config;
+  return (
+    typeof cfg === 'object' &&
+    cfg !== null &&
+    (('token' in cfg && !!cfg.token) ||
+      ('password' in cfg && !!cfg.password) ||
+      ('login' in cfg && !!cfg.login) ||
+      ('username' in cfg && !!cfg.username))
+  );
 }
 
 function registryStatusLabel(status: unknown): string {
@@ -70,7 +81,7 @@ function registryStatusLabel(status: unknown): string {
   return t('registriesView.status.unknown');
 }
 
-function mapRegistry(registry: ApiComponent, status = 'connected') {
+function mapRegistry(registry: ApiComponentResponse, status = 'connected') {
   return {
     id: registry.id,
     name: registry.name,
@@ -97,7 +108,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(reg: Record<string, unknown>) {
+async function openDetail(reg: RegistryRow) {
   selectedRegistry.value = reg;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -108,7 +119,7 @@ async function openDetail(reg: Record<string, unknown>) {
     const detail = await getRegistry({
       type: String(reg.type),
       name: String(reg.name),
-      agent: reg.agent as string | undefined,
+      agent: reg.agent,
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedRegistry.value = mapRegistry(detail, String(reg.status));
@@ -195,7 +206,7 @@ const tableColumns = computed(() => [
 onMounted(async () => {
   try {
     const data = await getAllRegistries();
-    registriesData.value = data.map((registry: ApiComponent) => mapRegistry(registry));
+    registriesData.value = data.map((registry) => mapRegistry(registry));
   } catch {
     error.value = t('registriesView.loadError');
   } finally {

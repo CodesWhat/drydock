@@ -1,3 +1,4 @@
+import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface TriggerDetailPathOptions {
@@ -112,7 +113,7 @@ async function getAllTriggers() {
     throw new Error(`Failed to get triggers: ${response.statusText}`);
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiComponentResponse>(payload);
 }
 
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
@@ -131,7 +132,7 @@ async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get trigger: ${response.statusText}`);
   }
-  return readJsonResponse(response);
+  return readJsonResponse<ApiComponentResponse>(response);
 }
 
 async function runTrigger({

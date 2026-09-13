@@ -32,7 +32,7 @@ npm run lint:fix         # biome check --fix .
 # Frontend — run from ui/
 npm run build            # icons + fonts extraction, then vite build
 npm run serve             # dev server on port 8080
-npm run typecheck         # tsc --noEmit
+npm run typecheck         # vue-tsc --noEmit (TypeScript and Vue SFCs)
 npm run test:unit         # vitest run --coverage (100% threshold enforced)
 npx vitest run tests/path/to/file.spec.ts   # single test file
 npm run lint             # biome check .
@@ -91,7 +91,7 @@ Configuration is env-var only, `DD_` prefix, nested via underscores (e.g. `DD_RE
 
 ## Coverage policy
 
-**100% line/branch/function/statement coverage is enforced for both `app/` and `ui/`.** This is a hard gate, not a target — the pre-push `coverage` step and CI both fail under it. External contributors aren't expected to hit this bar; per `CONTRIBUTING.md`, the maintainer brings PRs up to 100% during merge.
+**100% line/branch/function/statement coverage is enforced for the configured coverage sources in `app/` and `ui/`.** UI coverage includes `src/**/*.ts`, excluding typecheck fixtures, declarations, types directories, and dependencies. Vue SFCs (`.vue`) are outside that instrumentation denominator; component tests exercise them, and `npm run typecheck` checks their scripts and templates under the existing TypeScript configuration. Passing typecheck does not establish runtime coverage. The coverage thresholds are a hard gate, not a target. External contributors aren't expected to hit this bar; per `CONTRIBUTING.md`, the maintainer brings PRs up to the configured thresholds during merge.
 
 When coverage fails, read `.coverage-gaps.json` (gitignored, written by `scripts/coverage-gaps.mjs`) for the exact files, uncovered lines, and branch ids, parsed from `lcov.info`.
 

@@ -478,8 +478,8 @@ onBeforeUnmount(removeIconPopoverListeners);
                 {{
                   t(
                     'containerComponents.releaseNotesLink.olderReleasesNotShown',
-                    intermediateHiddenCount,
                     { count: intermediateHiddenCount },
+                    intermediateHiddenCount,
                   )
                 }}
               </div>
@@ -543,7 +543,7 @@ onBeforeUnmount(removeIconPopoverListeners);
               rel="noopener noreferrer"
               class="w-full min-w-0 min-h-11 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
               data-test="release-link-row"
-              @click="closeIconPopover"
+              @click="closeIconPopover(true)"
             >
               <span class="min-w-0 inline-flex items-center gap-1.5">
                 <AppIcon name="file-text" :size="12" class="shrink-0" />
@@ -693,8 +693,8 @@ onBeforeUnmount(removeIconPopoverListeners);
         {{
           t(
             'containerComponents.releaseNotesLink.olderReleasesNotShown',
-            intermediateHiddenCount,
             { count: intermediateHiddenCount },
+            intermediateHiddenCount,
           )
         }}
       </div>
