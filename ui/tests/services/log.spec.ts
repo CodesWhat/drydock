@@ -98,15 +98,27 @@ describe('Log Service', () => {
       expect(calledUrl).not.toContain('component=');
     });
 
-    it('should throw on non-ok response', async () => {
-      fetchMock.mockResolvedValue({
-        ok: false,
-        statusText: 'Internal Server Error',
-      });
+    it.each([
+      '{}',
+      '{"error":""}',
+      '{"error":"  "}',
+      '{"error":42}',
+      'null',
+      '42',
+      '{broken',
+      '<html>proxy failure</html>',
+    ])('leaves an unusable HTTP diagnostic for the caller to localize: %s', async (body) => {
+      fetchMock.mockResolvedValue(new Response(body, { status: 503 }));
+      await expect(getLogEntries()).rejects.toMatchObject({ message: '' });
+    });
 
-      await expect(getLogEntries()).rejects.toThrow(
-        'Failed to fetch log entries: Internal Server Error',
+    it('preserves a nonempty server diagnostic without trimming it', async () => {
+      fetchMock.mockResolvedValue(
+        Response.json({ error: ' Invalid tail query parameter ' }, { status: 400 }),
       );
+      await expect(getLogEntries()).rejects.toMatchObject({
+        message: ' Invalid tail query parameter ',
+      });
     });
 
     it('should fetch from agent endpoint when agent param is provided', async () => {
