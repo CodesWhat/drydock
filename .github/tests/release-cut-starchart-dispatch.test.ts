@@ -72,9 +72,25 @@ test('starchart.yml only accepts workflow_dispatch, not a release event', () => 
 });
 
 test('starchart.yml derives its target branch from the dispatch ref, not a hardcoded value', () => {
-  const job = loadWorkflow(starchartPath).jobs?.starchart as
-    | { with?: Record<string, unknown> }
-    | undefined;
+  const jobs = loadWorkflow(starchartPath).jobs;
+  expect(jobs?.prepare?.env?.TARGET_BRANCH).toBe('${{ github.ref_name }}');
+  const job = jobs?.starchart as { with?: Record<string, unknown> } | undefined;
+  expect(job?.with?.branch).toBe('${{ needs.prepare.outputs.branch }}');
+});
 
-  expect(job?.with?.branch).toBe('${{ github.ref_name }}');
+test('starchart keeps rendering isolated from the App credential and PR publication', () => {
+  const jobs = loadWorkflow(starchartPath).jobs;
+  expect(jobs?.starchart?.needs).toBe('prepare');
+  expect(jobs?.publish?.needs).toEqual(['prepare', 'starchart']);
+  const app = jobs?.publish?.steps?.find((step) => step.id === 'app-auth');
+  expect(app?.with).toEqual({
+    'app-id': '${{ secrets.CROWDIN_APP_ID }}',
+    'private-key': '${{ secrets.CROWDIN_APP_PRIVATE_KEY }}',
+    repositories: '${{ github.event.repository.name }}',
+    'permission-contents': 'write',
+    'permission-pull-requests': 'write',
+  });
+  expect(jobs?.publish?.steps?.find((step) => step.name === 'Open chart PR')?.env?.GH_TOKEN).toBe(
+    '${{ steps.app-auth.outputs.token }}',
+  );
 });

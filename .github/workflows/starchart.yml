@@ -26,18 +26,86 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: starchart-pr-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      branch: ${{ steps.branch.outputs.branch }}
+      base-sha: ${{ steps.branch.outputs.base-sha }}
+      run-attempt: ${{ steps.branch.outputs.run-attempt }}
+    env:
+      TARGET_BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: block
+          disable-sudo: true
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Prepare isolated chart branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/starchart-pr.mjs prepare
+
   starchart:
+    needs: prepare
     permissions:
       contents: write
     uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@11004e42d7d19e86eb3b7777c467ec9522b784e1  # main 2026-08-21
     with:
-      # Only ever dispatched (see header) on the dev branch this cut is
-      # rotating the chart for — deriving branch from ref_name instead of a
-      # hardcoded dev/vX.Y kills a second rotate-at-branch-cut chore (renovate.json
-      # already has one). This is only safe because the release: trigger above
-      # is gone: on a release event, github.ref_name would have been the TAG
-      # name, not the dev branch, so removing that trigger and deriving the
-      # branch this way have to travel together.
-      branch: ${{ github.ref_name }}
+      # The pinned renderer commits back, so it receives only a disposable
+      # branch. Protected dev branches advance through reviewed PRs.
+      branch: ${{ needs.prepare.outputs.branch }}
       accent: "#49bcfb"
+
+  publish:
+    needs: [prepare, starchart]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: block
+          disable-sudo: true
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+      # Execute the dispatch revision, never code from the generated branch.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Mint chart PR App credential
+        id: app-auth
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.CROWDIN_APP_ID }}
+          private-key: ${{ secrets.CROWDIN_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Open chart PR
+        env:
+          GH_TOKEN: ${{ steps.app-auth.outputs.token }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+          CHART_BRANCH: ${{ needs.prepare.outputs.branch }}
+          CHART_BASE_SHA: ${{ needs.prepare.outputs.base-sha }}
+          CHART_RUN_ATTEMPT: ${{ needs.prepare.outputs.run-attempt }}
+        run: node scripts/starchart-pr.mjs publish

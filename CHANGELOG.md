@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Starchart refreshes now open a chart-only PR through the existing GitHub App instead of pushing directly to protected dev branches. Unchanged charts remove the temporary branch without opening a PR.
+
 - Website analytics now retain validated referring hostnames without sending full referrer URLs.
 
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
