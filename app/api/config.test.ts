@@ -26,19 +26,28 @@ const {
   mockWriteConfigurationSection: vi.fn(),
 }));
 
-const { mockEditSnapshot, mockWatcherEdits, mockTriggerSnapshot, mockTriggerEdits } = vi.hoisted(
-  () => ({
-    mockEditSnapshot: vi.fn(),
-    mockWatcherEdits: vi.fn(),
-    mockTriggerSnapshot: vi.fn(),
-    mockTriggerEdits: vi.fn(),
-  }),
-);
+const {
+  mockEditSnapshot,
+  mockWatcherEdits,
+  mockTriggerSnapshot,
+  mockTriggerEdits,
+  mockActionSnapshot,
+  mockActionEdits,
+} = vi.hoisted(() => ({
+  mockEditSnapshot: vi.fn(),
+  mockWatcherEdits: vi.fn(),
+  mockTriggerSnapshot: vi.fn(),
+  mockTriggerEdits: vi.fn(),
+  mockActionSnapshot: vi.fn(),
+  mockActionEdits: vi.fn(),
+}));
 vi.mock('../configuration/file/editor.js', () => ({
   getWatcherEditSnapshot: mockEditSnapshot,
   writeWatcherEdits: mockWatcherEdits,
   getNotificationTriggerEditSnapshot: mockTriggerSnapshot,
   writeNotificationTriggerEdits: mockTriggerEdits,
+  getActionEditSnapshot: mockActionSnapshot,
+  writeActionEdits: mockActionEdits,
 }));
 
 vi.mock('express', () => ({
@@ -112,6 +121,116 @@ function getPutHandler(path: string) {
 }
 
 describe('Config Router', () => {
+  test('action editor keeps shared limiters and session-only/admin boundaries', async () => {
+    configRouter.init();
+    const get = mockRouter.get.mock.calls.find(([path]) => path === '/editor/actions');
+    const patch = mockRouter.patch.mock.calls.find(([path]) => path === '/editor/actions');
+    expect(get?.[1]).toBe(
+      mockRouter.get.mock.calls.find(([path]) => path === '/editor/watchers')?.[1],
+    );
+    expect(patch?.[1]).toBe(
+      mockRouter.patch.mock.calls.find(([path]) => path === '/editor/triggers')?.[1],
+    );
+    for (const [handler, scopes] of [
+      [get?.at(-1), ['admin']],
+      [patch?.at(-1), ['read']],
+    ]) {
+      const res = createResponse();
+      await handler({ principal: { kind: 'api-key', scopes } }, res);
+      expect(res.status).toHaveBeenCalledWith(403);
+    }
+  });
+  test('action editor reads only the safe projection', async () => {
+    mockActionSnapshot.mockResolvedValueOnce({ available: false, actions: [] });
+    configRouter.init();
+    const res = createResponse();
+    await getHandler('/editor/actions')({}, res);
+    expect(res.json).toHaveBeenCalledWith({ available: false, actions: [] });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ details: 'Read the action policy editor' }),
+    );
+  });
+  test.each([true, false])(
+    'action editor preserves saved/applied=%s and audit failures',
+    async (applied) => {
+      mockActionEdits.mockResolvedValueOnce({
+        status: 200,
+        saved: true,
+        applied,
+        changedKeys: ['DD_ACTION_DOCKER_PRIVATE_AUTO'],
+        restartRequired: [],
+        errors: [],
+      });
+      configRouter.init();
+      mockRecordAuditEvent.mockImplementationOnce(() => {
+        throw new Error('private-audit');
+      });
+      const res = createResponse();
+      await mockRouter.patch.mock.calls.find(([path]) => path === '/editor/actions')?.at(-1)(
+        { body: { private: 'private-input' }, principal: { kind: 'api-key', scopes: ['admin'] } },
+        res,
+      );
+      expect(res.json.mock.calls[0][0]).toMatchObject({
+        saved: true,
+        applied,
+        errors: [{ message: 'Configuration outcome could not be audited' }],
+      });
+      expect(JSON.stringify(mockRecordAuditEvent.mock.calls)).not.toContain('private-input');
+    },
+  );
+  test.each(['get', 'patch'])('action editor sanitizes %s failures', async (method) => {
+    const mock = method === 'get' ? mockActionSnapshot : mockActionEdits;
+    mock.mockRejectedValueOnce(new Error('private-sentinel'));
+    configRouter.init();
+    const res = createResponse();
+    const handler =
+      method === 'get'
+        ? getHandler('/editor/actions')
+        : mockRouter.patch.mock.calls.find(([path]) => path === '/editor/actions')?.at(-1);
+    await handler({ body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(res.json.mock.calls)).not.toContain('private-sentinel');
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/api/v1/config/editor/actions',
+        method: method === 'get' ? 'get' : 'patch',
+        statusCode: '500',
+        payload: res.json.mock.calls[0][0],
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+  test('action editor returns a structured writer refusal at 500 without replacing it', async () => {
+    const outcome = {
+      saved: false,
+      applied: false,
+      changedKeys: [],
+      restartRequired: [],
+      errors: [
+        {
+          path: 'document',
+          envKey: 'DD_CONFIG_FILE',
+          message: 'Unable to save action policy configuration',
+        },
+      ],
+    };
+    mockActionEdits.mockResolvedValueOnce({ status: 500, ...outcome });
+    configRouter.init();
+    const res = createResponse();
+    await mockRouter.patch.mock.calls.find(([path]) => path === '/editor/actions')?.at(-1)(
+      { body: {} },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(outcome);
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/api/v1/config/editor/actions',
+        method: 'patch',
+        statusCode: '500',
+        payload: res.json.mock.calls[0][0],
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
   test('notification editor shares limiters and keeps session-only reads and admin writes', async () => {
     configRouter.init();
     const get = mockRouter.get.mock.calls.find(([path]) => path === '/editor/triggers');
