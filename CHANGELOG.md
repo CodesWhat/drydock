@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Toast queue.** The UI now shows at most three toast notifications, with overflow waiting in first-in, first-out order. Each notification's dismissal timer starts when it becomes visible; persistent messages remain until dismissed.
+- Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.
+
 - Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
 - **Confirmed fleet bulk actions (roadmap 7.2, slice 2).** Update all previews the filtered live list with dependency additions and eligibility warnings, without using checkbox selection or pending display rows. Snooze all patch selects current patch candidates and explicitly confirms a container-wide snooze, with duration/date controls and a single result summary for successes, failures and refresh errors.
 - **Fleet container filters and grouping (roadmap 7.2, slice 1).** The existing container list can filter by agent identity, registry endpoint, tag type and exact Docker label values, and group by agent, registry, runtime status, tag type or a label key. Local watchers stay distinct from an agent named Local. Table/cards, row selection and the existing stack grouping remain available, and filter/group choices persist across reloads.
@@ -38,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Plain MQTT topics can be scoped per agent.** `DD_NOTIFICATION_MQTT_{trigger_name}_AGENTTOPICSEGMENT=true` inserts an `agent/<name>` segment into container state topics for agent-owned containers, so two agents sharing a watcher name no longer publish the same container to one topic. Off by default; existing subscribers keep the unscoped layout. Turning it on also turns on `HASS_AGENTTOPICSEGMENT` so the Home Assistant state topic stays in step ([#386](https://github.com/CodesWhat/drydock/issues/386) follow-up).
 
 - **An Images page lists every image on each host and prunes what nothing uses (roadmap 6.3).** The list shows repository, tag, size, how many containers use it, when it was created, when it was last used, and which host it's on. Pruning has two modes (dangling only, or every image no container references) behind a confirm dialog that shows the estimated reclaimable space (an estimate: shared layers between images can leave the actual bytes freed lower than the number shown), and the result reports how many images were removed and how many bytes were reclaimed. It's gated behind the `admin` API scope and the container actions feature flag, and the prune endpoint requires `X-DD-Confirm-Action: image-prune`. Agent hosts work when the agent exposes controller Docker transport and are listed disabled with an explanation otherwise; a prune that outlives the 30-second agent proxy window reports "still running" instead of failing, and the list needs a manual refresh to pick up the result. New endpoints: `GET /api/v1/images`, `GET /api/v1/images/prune-preview`, `POST /api/v1/images/prune`.
+
+- **Toast queue.** The UI now shows at most three toast notifications, with overflow waiting in first-in, first-out order. Each notification's dismissal timer starts when it becomes visible; persistent messages remain until dismissed.
 
 ### Changed
 
