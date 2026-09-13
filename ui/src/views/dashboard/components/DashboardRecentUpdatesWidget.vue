@@ -225,8 +225,8 @@ function handleViewAll() {
   emit('viewAll');
 }
 
-function handleRowClick(row: Record<string, unknown>) {
-  emit('openContainer', row as RecentUpdateRow);
+function handleRowClick(row: RecentUpdateRow) {
+  emit('openContainer', row);
 }
 
 const rootEl = ref<HTMLElement | null>(null);

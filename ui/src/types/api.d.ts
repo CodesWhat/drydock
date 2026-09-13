@@ -14,6 +14,10 @@ export interface ApiComponent {
   metadata?: Record<string, unknown>;
 }
 
+export type ApiComponentResponse = Omit<ApiComponent, 'configuration'> & {
+  configuration: unknown;
+};
+
 /** Agent shape returned by GET /api/agents. */
 export interface ApiAgent {
   name: string;

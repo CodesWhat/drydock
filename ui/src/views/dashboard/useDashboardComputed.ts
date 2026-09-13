@@ -15,6 +15,7 @@ import type {
   DashboardServerInfo,
   DashboardServerRow,
   DashboardStatCard,
+  DashboardVulnerabilityRow,
   RecentAuditStatus,
   RecentUpdateRow,
   UpdateBreakdownBucket,
@@ -785,7 +786,7 @@ function compareVulnerableContainers(left: Container, right: Container): number 
   return rightCritical - leftCritical;
 }
 
-function toVulnerabilityRow(container: Container) {
+function toVulnerabilityRow(container: Container): DashboardVulnerabilityRow {
   return {
     id: container.name,
     severity: container.bouncer === 'blocked' ? 'CRITICAL' : 'HIGH',

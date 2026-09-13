@@ -6,6 +6,7 @@ import { getAgents } from '@/services/agent';
 import { getLogEntries } from '@/services/log';
 import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
+import type { ApiAgent } from '@/types/api';
 import AgentsView from '@/views/AgentsView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
@@ -54,13 +55,12 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
 const mountedWrappers: Array<{ unmount: () => void }> = [];
 
-function makeAgent(overrides: Record<string, any> = {}) {
+function makeAgent(overrides: Partial<ApiAgent> = {}): ApiAgent {
   return {
     name: 'edge-1',
     host: '10.0.0.31',
     port: 2376,
     connected: true,
-    dockerVersion: '27.0.0',
     os: 'linux',
     arch: 'amd64',
     cpus: 8,
@@ -69,7 +69,7 @@ function makeAgent(overrides: Record<string, any> = {}) {
     images: 45,
     lastSeen: 'Just now',
     version: '1.4.0',
-    uptime: '4d 3h',
+    uptimeSeconds: 356400,
     logLevel: 'info',
     pollInterval: '30s',
     ...overrides,
@@ -247,14 +247,12 @@ describe('AgentsView', () => {
   });
 
   describe('agentAllColumns (card-mode annotations)', () => {
-    it('flags status with cardPriority and demotes docker + os out of the card body', async () => {
+    it('flags status with cardPriority and demotes os out of the card body', async () => {
       const wrapper = await mountAgentsView();
       const vm = wrapper.vm as any;
       const statusCol = vm.agentAllColumns.find((c: any) => c.key === 'status');
-      const dockerCol = vm.agentAllColumns.find((c: any) => c.key === 'docker');
       const osCol = vm.agentAllColumns.find((c: any) => c.key === 'os');
       expect(statusCol.cardPriority).toBe(5);
-      expect(dockerCol.cardPriority).toBe(-1);
       expect(osCol.cardPriority).toBe(-1);
     });
   });
@@ -305,7 +303,7 @@ describe('AgentsView', () => {
       expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(false);
       expect(wrapper.find('[data-col-key="name"]').exists()).toBe(true);
       expect(
-        ['status', 'containers', 'docker', 'os', 'version', 'lastSeen'].every(
+        ['status', 'containers', 'os', 'version', 'lastSeen'].every(
           (key) => !wrapper.find(`[data-col-key="${key}"]`).exists(),
         ),
       ).toBe(true);
@@ -565,13 +563,73 @@ describe('AgentsView', () => {
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
-    // Scoped to the detail panel body — the table's own "Docker" column header text
-    // (now rendered by the richer DataTable stub) would otherwise collide.
     const detailContent = wrapper.find('.detail-content').text();
     expect(detailContent).not.toContain('CPUs');
     expect(detailContent).not.toContain('Memory');
     expect(detailContent).not.toContain('Architecture');
     expect(detailContent).not.toContain('Docker');
+  });
+
+  it('formats uptimeSeconds instead of unsupported uptime strings', async () => {
+    mockGetAgents.mockResolvedValue([{ ...makeAgent(), uptime: 'legacy uptime' }]);
+
+    const wrapper = await mountAgentsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailContent = wrapper.find('.detail-content').text();
+    expect(detailContent).toContain('4d 3h');
+    expect(detailContent).not.toContain('legacy uptime');
+  });
+
+  it('does not project unsupported Docker metadata into agent details', async () => {
+    mockGetAgents.mockResolvedValue([{ ...makeAgent(), dockerVersion: '27.0.0' }]);
+
+    const wrapper = await mountAgentsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailContent = wrapper.find('.detail-content').text();
+    expect(detailContent).not.toContain('Docker');
+    expect(detailContent).not.toContain('27.0.0');
+  });
+
+  it('shows supported agent table fields without a Docker column', async () => {
+    const wrapper = await mountAgentsView();
+
+    expect(
+      wrapper.findAll('.dt-header').map((header) => header.attributes('data-col-key')),
+    ).toEqual(['name', 'status', 'containers', 'os', 'version', 'lastSeen']);
+    const row = wrapper.get('.data-table-row').text();
+    for (const value of ['edge-1', '10.0.0.31:2376', 'Connected', 'linux', 'v1.4.0', 'Just now']) {
+      expect(row).toContain(value);
+    }
+
+    await wrapper.get('.row-click-first').trigger('click');
+    const detail = wrapper.get('.detail-content').text();
+    expect(detail).not.toContain('Docker');
+    for (const value of ['linux', 'amd64', 'v1.4.0', '4d 3h']) {
+      expect(detail).toContain(value);
+    }
+  });
+
+  it('shows supported agent card fields without a Docker field', async () => {
+    preferences.views.agents.mode = 'cards';
+    const wrapper = await mountAgentsCardView();
+
+    const card = wrapper.get('[data-card-id="edge-1"]').text();
+    expect(card).not.toContain('Docker');
+    for (const value of [
+      'edge-1',
+      '10.0.0.31:2376',
+      'Connected',
+      '10/12',
+      'linux',
+      'v1.4.0',
+      'Just now',
+    ]) {
+      expect(card).toContain(value);
+    }
   });
 
   it('renders agent cards and wires card-mode sort controls', async () => {
@@ -583,7 +641,6 @@ describe('AgentsView', () => {
         host: 'unix:///var/run/docker.sock',
         port: undefined,
         connected: false,
-        dockerVersion: undefined,
         os: undefined,
         version: undefined,
         containers: { total: 3, running: 0, stopped: 3 },
@@ -601,9 +658,7 @@ describe('AgentsView', () => {
     expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('false');
 
     const sort = wrapper.get('.agent-sort-control');
-    expect(sort.attributes('data-columns')).toBe(
-      'name,status,containers,docker,os,version,lastSeen',
-    );
+    expect(sort.attributes('data-columns')).toBe('name,status,containers,os,version,lastSeen');
     expect(sort.attributes('data-sort-key')).toBe('name');
     expect(sort.attributes('data-sort-asc')).toBe('true');
 
@@ -613,7 +668,6 @@ describe('AgentsView', () => {
     expect(connectedCard.text()).toContain('Connected');
     expect(connectedCard.text()).toContain('10/12');
     expect(connectedCard.text()).toContain('v1.4.0');
-    expect(connectedCard.text()).toContain('27.0.0');
     expect(connectedCard.text()).toContain('linux');
     expect(connectedCard.text()).toContain('Just now');
 
