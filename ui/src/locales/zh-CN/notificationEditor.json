@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "通知策略",
     "edit": "编辑通知策略",
-    "boundary": "仅编辑发送策略。保存不会测试触发器或发送通知。凭据、目标、模板和执行设置仍为只读。",
+    "boundary": "编辑投递策略和安全摘要模板。保存不会测试触发器或发送通知。凭据、目标和执行设置仍为只读。",
     "providerForced": "此值由提供程序控制，无法在此编辑。",
     "triggerUnavailable": "编辑器快照中没有此确切的通知触发器。",
     "apiUnavailable": "此服务器不提供通知策略编辑器 API。",
@@ -12,7 +12,14 @@
       "mode": "发送模式",
       "securitymode": "安全通知发送模式",
       "digestcron": "摘要计划（cron）",
-      "resolvenotifications": "发送问题解决通知"
-    }
+      "resolvenotifications": "发送问题解决通知",
+      "securitydigesttitle": "安全摘要标题",
+      "securitydigestbody": "安全摘要正文"
+    },
+    "templateHelp": "移除模板后，渲染时将使用内置默认值。模板不能为空。编辑模板不会更改安全投递模式。",
+    "templateUnavailable": "此服务器不提供此模板字段。",
+    "templateEmpty": "模板不能为空。请输入文本或明确移除文件中的值。",
+    "providerUnsupported": "此提供程序不支持安全摘要模板。",
+    "interpolationHelp": "整个值为 {reference} 或 {fallback} 时会使用 YAML 环境变量插值，重新加载后将变为只读。{expression} 等扫描表达式仍可编辑。请勿在模板中放入机密信息。"
   }
 }

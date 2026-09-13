@@ -583,7 +583,8 @@ describe('notification policy editor integration', () => {
       expect(wrapper.find('[data-testid="edit-notification-policy"]').exists()).toBe(true);
       await wrapper.get('[data-testid="edit-notification-policy"]').trigger('click');
       await flushPromises();
-      expect(wrapper.findAll('[data-field]')).toHaveLength(6);
+      expect(wrapper.findAll('[data-field]')).toHaveLength(8);
+      expect(wrapper.findAll('[data-field]:not([disabled])')).toHaveLength(6);
       expect(
         wrapper.get<HTMLSelectElement>('[data-field="threshold"]').findAll('option'),
       ).toHaveLength(12);

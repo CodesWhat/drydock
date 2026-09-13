@@ -27,6 +27,7 @@ const {
   conflict,
   needsReload,
   canSave,
+  invalidTemplate,
   hasProblems,
   editable,
   setValue,
@@ -43,10 +44,11 @@ const reasonKeys: Record<string, string> = {
   'referenced-field': 'watcherEditor.readOnly.reference',
   'agent-trigger': 'watcherEditor.readOnly.agent',
   'provider-forced': 'notificationEditor.providerForced',
+  'provider-unsupported': 'notificationEditor.providerUnsupported',
 };
 function reason(field: NotificationEditField) {
   return t(
-    reasonKeys[row.value?.fields[field].readOnlyReason ?? ''] ?? 'watcherEditor.readOnly.other',
+    reasonKeys[row.value?.fields[field]?.readOnlyReason ?? ''] ?? 'watcherEditor.readOnly.other',
   );
 }
 function errorMessage() {
@@ -55,7 +57,15 @@ function errorMessage() {
   );
 }
 function change(field: NotificationEditField, event: Event) {
-  const value = (event.target as HTMLInputElement).value;
+  if (
+    !(
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLSelectElement ||
+      event.target instanceof HTMLTextAreaElement
+    )
+  )
+    return;
+  const value = event.target.value;
   setValue(field, isBooleanPolicyField(field) ? value === 'true' : value);
 }
 </script>
@@ -69,21 +79,26 @@ function change(field: NotificationEditField, event: Event) {
       <p v-if="loading" role="status">{{ t('common.loading') }}</p>
       <p v-if="errorKey" role="alert" class="dd-text-danger">{{ errorMessage() }}</p>
       <template v-if="row && !loading">
+        <p class="dd-text-card-description">{{ t('notificationEditor.templateHelp') }}</p>
+        <p class="dd-text-card-description">{{ t('notificationEditor.interpolationHelp', { reference: '${NAME}', fallback: '${NAME:-fallback}', expression: '${scan.alertCount}' }) }}</p>
         <div v-for="field in notificationEditFields" :key="field" class="space-y-1">
           <label :for="`${id}-${field}`" class="block dd-text-label">{{ t(`notificationEditor.fields.${field}`) }}</label>
-          <input v-if="field === 'digestcron'" :id="`${id}-${field}`" :data-field="field" class="w-full min-w-0 px-3 py-2 dd-rounded dd-text-value font-mono disabled:opacity-60" :style="inputStyle" type="text" autocomplete="off" :value="drafts[field]?.value ?? ''" :disabled="!editable(field)" @input="change(field, $event)" />
+          <textarea v-if="field === 'securitydigestbody'" :id="`${id}-${field}`" :data-field="field" class="w-full min-w-0 px-3 py-2 dd-rounded dd-text-value font-mono disabled:opacity-60" :style="inputStyle" rows="5" :value="String(drafts[field]?.value ?? '')" :disabled="!editable(field)" @input="change(field, $event)" />
+          <input v-else-if="field === 'digestcron' || field === 'securitydigesttitle'" :id="`${id}-${field}`" :data-field="field" class="w-full min-w-0 px-3 py-2 dd-rounded dd-text-value font-mono disabled:opacity-60" :style="inputStyle" type="text" autocomplete="off" :value="drafts[field]?.value ?? ''" :disabled="!editable(field)" @input="change(field, $event)" />
           <select v-else :id="`${id}-${field}`" :data-field="field" class="w-full min-w-0 px-3 py-2 dd-rounded dd-text-value disabled:opacity-60" :style="inputStyle" :value="drafts[field]?.value ?? ''" :disabled="!editable(field)" @change="change(field, $event)">
             <option v-if="drafts[field]?.value === undefined" value="" disabled>{{ t('watcherEditor.none') }}</option>
             <template v-if="isBooleanPolicyField(field)"><option value="true">{{ t('common.yes') }}</option><option value="false">{{ t('common.no') }}</option></template>
             <option v-for="value in isBooleanPolicyField(field) ? [] : field === 'threshold' ? notificationThresholds : notificationModes" :key="value" :value="value">{{ value }}</option>
           </select>
-          <p class="dd-text-muted text-xs">{{ t(`watcherEditor.sources.${row.fields[field].source}`) }}</p>
-          <p v-if="row.fields[field].readOnlyReason" class="dd-text-muted text-xs">{{ reason(field) }}</p>
-          <p v-if="!row.agent && row.fields[field].source !== 'reference' && row.fields[field].effectiveValue !== undefined" class="dd-text-muted text-xs break-all">{{ t('watcherEditor.current', { value: row.fields[field].effectiveValue }) }}</p>
+          <p v-if="row.fields[field]" class="dd-text-muted text-xs">{{ t(`watcherEditor.sources.${row.fields[field].source}`) }}</p>
+          <p v-else class="dd-text-muted text-xs">{{ t('notificationEditor.templateUnavailable') }}</p>
+          <p v-if="row.fields[field]?.readOnlyReason" class="dd-text-muted text-xs">{{ reason(field) }}</p>
+          <p v-if="!row.agent && row.fields[field] && row.fields[field].source !== 'reference' && row.fields[field].effectiveValue !== undefined" class="dd-text-muted text-xs break-all">{{ t('watcherEditor.current', { value: row.fields[field].effectiveValue }) }}</p>
           <p v-if="drafts[field]?.operation === 'remove'" class="dd-text-warning text-xs">{{ t('watcherEditor.pendingRemoval') }}</p>
-          <AppButton :data-reset="field" size="xs" variant="text-secondary" :disabled="!editable(field) || !row.fields[field].present" @click="remove(field)">{{ t('watcherEditor.reset') }}</AppButton>
+          <AppButton :data-reset="field" size="xs" variant="text-secondary" :disabled="!editable(field) || !row.fields[field]?.present" @click="remove(field)">{{ t('watcherEditor.reset') }}</AppButton>
         </div>
       </template>
+      <p v-if="invalidTemplate" role="alert" class="dd-text-danger">{{ t('notificationEditor.templateEmpty') }}</p>
       <p v-if="conflict" role="alert" class="dd-text-warning">{{ t('watcherEditor.conflict') }}</p>
       <div v-if="result" :role="hasProblems ? 'alert' : 'status'" :class="hasProblems ? 'dd-text-warning' : 'dd-text-success'" class="space-y-1 text-sm break-words">
         <p>{{ t(result.saved ? (hasProblems ? 'watcherEditor.notApplied' : 'watcherEditor.saved') : 'watcherEditor.notSaved') }}</p>

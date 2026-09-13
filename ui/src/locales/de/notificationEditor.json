@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "Benachrichtigungsrichtlinie",
     "edit": "Benachrichtigungsrichtlinie bearbeiten",
-    "boundary": "Nur die Versandrichtlinie bearbeiten. Speichern testet den Trigger nicht und sendet keine Benachrichtigung. Zugangsdaten, Ziele, Vorlagen und Ausführungseinstellungen bleiben schreibgeschützt.",
+    "boundary": "Zustellungsrichtlinie und Vorlagen für Sicherheitsübersichten bearbeiten. Speichern testet den Auslöser nicht und sendet keine Benachrichtigung. Zugangsdaten, Ziele und Ausführungseinstellungen bleiben schreibgeschützt.",
     "providerForced": "Dieser Wert wird vom Anbieter festgelegt und kann hier nicht bearbeitet werden.",
     "triggerUnavailable": "Dieser genaue Benachrichtigungs-Trigger ist im Editor-Snapshot nicht verfügbar.",
     "apiUnavailable": "Dieser Server bietet die API für den Benachrichtigungsrichtlinien-Editor nicht an.",
@@ -12,7 +12,14 @@
       "mode": "Versandmodus",
       "securitymode": "Versandmodus für Sicherheitsmeldungen",
       "digestcron": "Zusammenfassungszeitplan (Cron)",
-      "resolvenotifications": "Behebungsbenachrichtigungen senden"
-    }
+      "resolvenotifications": "Behebungsbenachrichtigungen senden",
+      "securitydigesttitle": "Titel der Sicherheitsübersicht",
+      "securitydigestbody": "Inhalt der Sicherheitsübersicht"
+    },
+    "templateHelp": "Das Entfernen einer Vorlage stellt beim Rendern die integrierten Standardwerte wieder her. Vorlagen dürfen nicht leer sein. Das Bearbeiten einer Vorlage ändert den Sicherheitszustellungsmodus nicht.",
+    "templateUnavailable": "Dieser Server stellt dieses Vorlagenfeld nicht bereit.",
+    "templateEmpty": "Vorlagen dürfen nicht leer sein. Text eingeben oder den Dateiwert ausdrücklich entfernen.",
+    "providerUnsupported": "Dieser Anbieter unterstützt keine Vorlagen für Sicherheitsübersichten.",
+    "interpolationHelp": "Vollständige Werte wie {reference} oder {fallback} verwenden YAML-Umgebungsinterpolation und sind nach dem Neuladen schreibgeschützt. Scan-Ausdrücke wie {expression} bleiben bearbeitbar. Keine Geheimnisse in Vorlagen eintragen."
   }
 }

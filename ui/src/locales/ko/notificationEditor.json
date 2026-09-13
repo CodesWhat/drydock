@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "알림 정책",
     "edit": "알림 정책 편집",
-    "boundary": "전송 정책만 편집합니다. 저장해도 트리거를 테스트하거나 알림을 보내지 않습니다. 자격 증명, 대상, 템플릿 및 실행 설정은 읽기 전용으로 유지됩니다.",
+    "boundary": "전송 정책과 보안 요약 템플릿을 편집합니다. 저장해도 트리거를 테스트하거나 알림을 보내지 않습니다. 인증 정보, 대상 및 실행 설정은 읽기 전용으로 유지됩니다.",
     "providerForced": "이 값은 공급자가 제어하므로 여기서 편집할 수 없습니다.",
     "triggerUnavailable": "이 알림 트리거와 정확히 일치하는 항목이 편집기 스냅샷에 없습니다.",
     "apiUnavailable": "이 서버는 알림 정책 편집기 API를 제공하지 않습니다.",
@@ -12,7 +12,14 @@
       "mode": "전송 모드",
       "securitymode": "보안 알림 전송 모드",
       "digestcron": "요약 일정(cron)",
-      "resolvenotifications": "해결 알림 보내기"
-    }
+      "resolvenotifications": "해결 알림 보내기",
+      "securitydigesttitle": "보안 요약 제목",
+      "securitydigestbody": "보안 요약 본문"
+    },
+    "templateHelp": "템플릿을 제거하면 렌더링 시 기본 제공 기본값이 복원됩니다. 템플릿은 비워 둘 수 없습니다. 템플릿을 편집해도 보안 전송 모드는 변경되지 않습니다.",
+    "templateUnavailable": "이 서버는 이 템플릿 필드를 제공하지 않습니다.",
+    "templateEmpty": "템플릿은 비워 둘 수 없습니다. 텍스트를 입력하거나 파일 값을 명시적으로 제거하세요.",
+    "providerUnsupported": "이 제공자는 보안 요약 템플릿을 지원하지 않습니다.",
+    "interpolationHelp": "{reference} 또는 {fallback} 같은 전체 값은 YAML 환경 변수 치환을 사용하며 다시 로드하면 읽기 전용이 됩니다. {expression} 같은 스캔 표현식은 계속 편집할 수 있습니다. 템플릿에 비밀 정보를 넣지 마세요."
   }
 }

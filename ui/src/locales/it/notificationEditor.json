@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "Criteri di notifica",
     "edit": "Modifica criteri di notifica",
-    "boundary": "Modifica solo i criteri di invio. Salvare non testa il trigger e non invia notifiche. Credenziali, destinazioni, modelli e impostazioni di esecuzione restano di sola lettura.",
+    "boundary": "Modifica la politica di consegna e i modelli del riepilogo di sicurezza. Il salvataggio non testa il trigger e non invia notifiche. Credenziali, destinazioni e impostazioni di esecuzione restano di sola lettura.",
     "providerForced": "Questo valore è controllato dal provider e non può essere modificato qui.",
     "triggerUnavailable": "Questo specifico trigger di notifica non è disponibile nello snapshot dell’editor.",
     "apiUnavailable": "Questo server non offre l’API dell’editor dei criteri di notifica.",
@@ -12,7 +12,14 @@
       "mode": "Modalità di invio",
       "securitymode": "Modalità di invio degli avvisi di sicurezza",
       "digestcron": "Pianificazione del riepilogo (cron)",
-      "resolvenotifications": "Invia notifiche di risoluzione"
-    }
+      "resolvenotifications": "Invia notifiche di risoluzione",
+      "securitydigesttitle": "Titolo del riepilogo di sicurezza",
+      "securitydigestbody": "Corpo del riepilogo di sicurezza"
+    },
+    "templateHelp": "La rimozione di un modello ripristina i valori predefiniti durante il rendering. I modelli non possono essere vuoti. Modificare un modello non cambia la modalità di consegna di sicurezza.",
+    "templateUnavailable": "Questo server non fornisce questo campo del modello.",
+    "templateEmpty": "I modelli non possono essere vuoti. Inserisci del testo o rimuovi esplicitamente il valore dal file.",
+    "providerUnsupported": "Questo provider non supporta i modelli del riepilogo di sicurezza.",
+    "interpolationHelp": "Valori interi come {reference} o {fallback} usano l’interpolazione delle variabili d’ambiente YAML e diventano di sola lettura dopo il ricaricamento. Espressioni di scansione come {expression} restano modificabili. Non inserire segreti nei modelli."
   }
 }
