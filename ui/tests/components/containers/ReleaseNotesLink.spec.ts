@@ -790,27 +790,38 @@ describe('ReleaseNotesLink', () => {
     }
   });
 
-  it('does not propagate icon-trigger or popover clicks to container rows', async () => {
-    const bodyClick = vi.fn();
-    document.body.addEventListener('click', bodyClick);
-    const wrapper = mount(ReleaseNotesLink, {
-      props: { releaseNotes: sampleNotes, iconOnly: true },
-      global: globalConfig,
-      attachTo: document.body,
-    });
+  it.each(['structured', 'fallback'])(
+    'does not propagate %s icon-trigger or popover clicks to container rows',
+    async (variant) => {
+      const structured = variant === 'structured';
+      const bodyClick = vi.fn();
+      const wrapper = mount(ReleaseNotesLink, {
+        props: structured
+          ? { releaseNotes: sampleNotes, iconOnly: true }
+          : { releaseLink: 'https://example.com/releases', iconOnly: true },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+      document.body.addEventListener('click', bodyClick);
+      try {
+        await wrapper
+          .get(structured ? '[data-test="release-notes-link"]' : '[data-test="release-link"]')
+          .trigger('click');
+        await nextTick();
+        const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+        expect(popover).not.toBeNull();
+        if (!popover) throw new Error('Missing release notes popover');
+        popover.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await nextTick();
 
-    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
-    await nextTick();
-    document.body
-      .querySelector('[data-test="release-notes-popover"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await nextTick();
-
-    document.body.removeEventListener('click', bodyClick);
-    expect(bodyClick).not.toHaveBeenCalled();
-
-    wrapper.unmount();
-  });
+        expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBe(popover);
+        expect(bodyClick).not.toHaveBeenCalled();
+      } finally {
+        document.body.removeEventListener('click', bodyClick);
+        wrapper.unmount();
+      }
+    },
+  );
 
   it('pressing a non-Escape key does not close the popover', async () => {
     const wrapper = mount(ReleaseNotesLink, {

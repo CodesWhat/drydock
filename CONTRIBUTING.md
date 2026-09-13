@@ -6,7 +6,7 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
 
 ## How contributions work
 
-Drydock maintains strict quality gates (100% coverage of configured sources, multi-stage CI pipeline, mutation testing). **You don't need to worry about any of that.** Here's how it works:
+Drydock maintains strict quality gates (100% configured TypeScript coverage, measured Vue SFC coverage floors, multi-stage CI pipeline, mutation testing). **You don't need to worry about any of that.** Here's how it works:
 
 1. **You write the code** — focus on the feature or fix itself
 2. **Open a PR** — even if it's rough, incomplete, or has no tests
@@ -160,7 +160,7 @@ Don't stress about getting the format perfect — the commit-msg hook will tell 
 
 ## Testing (optional for contributors)
 
-Tests are welcome but **not required** in your PR. The maintainer will add or update tests to maintain 100% coverage.
+Tests are welcome but **not required** in your PR. The maintainer will add or update tests to meet the configured coverage thresholds.
 
 If you do want to write tests:
 
@@ -220,18 +220,20 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 7 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
 | 8 | `typecheck-ui` | TypeScript and Vue SFC script/template checks via `vue-tsc` | Fail |
 | 9 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
-| 10 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
+| 10 | `coverage` | Sharded app+ui parallel vitest with configured TS and SFC thresholds | Fail |
 | 11 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
 | 12 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
 | 13 | `zizmor` | GitHub Actions security scanning when available | Fail |
 
-The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
+The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. Coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`. This is an uncovered-source inventory; Vitest's configured aggregate thresholds determine failure, not the presence of an individual SFC in that report.
 
 E2E Cucumber API/stream contracts and the dedicated Playwright browser tests are intentionally not part of the local pre-push hook; they run in CI on the same commit. Browser navigation and rendering assertions belong in Playwright, not Cucumber.
 
 ### Coverage policy
 
-100% line/branch/function/statement coverage is enforced for the configured coverage sources in `app/` and `ui/`. UI instrumentation includes `src/**/*.ts`, excluding typecheck fixtures, declarations, types directories, and dependencies. Vue SFCs (`.vue`) are outside that denominator, so this is not a claim of 100% SFC runtime coverage. Component tests exercise SFC behavior; `npm run typecheck` uses `vue-tsc` to check scripts and templates under the existing compiler configuration. Type checking and runtime coverage are separate checks. External contributors are not expected to meet the coverage thresholds.
+100% line/branch/function/statement coverage remains enforced for configured backend sources and UI `src/**/*.ts`. Every UI `src/**/*.vue`, including unimported components, is also measured, with separate aggregate floors of 87.54% statements, 81.57% branches, 84.39% functions and 87.89% lines. These floors come from the measured full-suite baseline and should increase as coverage improves; they are not per-file thresholds. Existing exclusions for typecheck fixtures, declarations, types directories and dependencies remain unchanged.
+
+SFC instrumentation includes script and generated-template mappings, not a claim of complete behavioral assertions. Component tests exercise SFC behavior; `npm run typecheck` separately uses `vue-tsc` to check scripts and templates. Runtime coverage, type checking and mutation testing answer different questions. External contributors are not expected to meet the coverage thresholds.
 
 ### Mutation testing
 
