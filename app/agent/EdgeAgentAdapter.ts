@@ -474,7 +474,11 @@ export class EdgeAgentAdapter {
     const triggers = Array.isArray(data.triggers)
       ? (data.triggers as AgentComponentDescriptor[])
       : [];
-    await this.client.handleComponentSync(watchers, triggers);
+    await this.client.handleComponentSync(
+      watchers,
+      triggers,
+      () => !this.disconnected && getAgent(this.agentName) === this.client,
+    );
   }
 
   private handleMetrics(data: Record<string, unknown>): void {
@@ -942,6 +946,7 @@ export class EdgeAgentAdapter {
       timestamps?: boolean;
     } = {},
   ): Promise<string> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
@@ -1000,6 +1005,10 @@ export class EdgeAgentAdapter {
     },
     handlers: ContainerLogStreamHandlers,
   ): ContainerLogStreamHandle {
+    if (this.disconnected) {
+      handlers.onError(new Error('connection closed'));
+      return { cancel: () => {} };
+    }
     if (this.pendingRequests.size + this.liveContainerLogStreams.size >= MAX_PENDING_REQUESTS) {
       handlers.onError(new Error('concurrent request limit reached'));
       return { cancel: () => {} };
@@ -1061,6 +1070,7 @@ export class EdgeAgentAdapter {
    * the legacy fallback. See that doc comment for the full explanation.
    */
   deleteContainer(containerId: string): Promise<void> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
@@ -1116,6 +1126,7 @@ export class EdgeAgentAdapter {
     headers?: Record<string, string>,
     body?: unknown,
   ): Promise<unknown> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (Buffer.isBuffer(body)) {
       return this.sendBodyRequest(method, path, headers, body, true);
     }
@@ -1158,6 +1169,7 @@ export class EdgeAgentAdapter {
     headers?: Record<string, string>,
     body?: unknown,
   ): Promise<unknown> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (Buffer.isBuffer(body)) {
       return this.sendBodyRequest(method, path, headers, body, false);
     }
@@ -1214,7 +1226,6 @@ export class EdgeAgentAdapter {
     if (!this.supportsRequestBodyStream) {
       return Promise.reject(new Error('Edge agent does not support streamed request bodies'));
     }
-    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (body.length > MAX_REQUEST_BODY_BYTES) {
       return Promise.reject(new Error('request body exceeds 512 MiB limit'));
     }
@@ -1323,6 +1334,7 @@ export class EdgeAgentAdapter {
       endCallback?: (reason?: string) => void;
     },
   ): Promise<string> {
+    if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (this.execSessions.size >= MAX_EXEC_SESSIONS) {
       return Promise.reject(new Error('session limit reached'));
     }
