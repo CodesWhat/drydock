@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Toast queue.** The UI now shows at most three toast notifications, with overflow waiting in first-in, first-out order. Each notification's dismissal timer starts when it becomes visible; persistent messages remain until dismissed.
 
+- **Shareable label grouping.** Container URLs accept `group-by-label=<exact Docker label key>`, and the existing label grouping controls keep that parameter up to date. Explicit stack grouping takes precedence when a link requests both.
+
 ### Changed
 
 - **The UI typecheck gate now checks Vue SFC scripts and templates.** `npm run typecheck` uses pinned `vue-tsc` instead of plain `tsc`, with regression tests proving nonexistent properties fail in both scripts and templates. Existing compiler settings and coverage thresholds are unchanged; documentation now distinguishes configured TypeScript coverage from uninstrumented SFCs.

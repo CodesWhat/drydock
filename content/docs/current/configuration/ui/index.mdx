@@ -140,6 +140,10 @@ Turn on stack grouping in the Containers toolbar to organize rows by group. Dock
 
 To change the presentation without redeploying a container, open its **More** menu and choose **Set group**. Enter an existing or new group name, or clear the override to return to the Docker-derived group. Browser overrides take precedence only in this UI; they do not write Docker labels or change the container-groups API response. They are stored with the rest of the UI preferences and sync to other signed-in devices when **Sync across devices** is enabled.
 
+To share grouping by a Docker label, select **Label** in the grouping control and enter the exact label key. The address updates automatically, for example `/containers?group-by-label=com.example.team`. Opening that link selects label grouping even if the browser previously used stack grouping. Label keys are case-sensitive; let the browser encode special characters rather than encoding the key before entering it.
+
+If a link contains both `groupByStack=true` (or `1`) and `group-by-label`, explicit stack grouping wins. Switching grouping modes or clearing the label removes `group-by-label` without removing unrelated query fields. Navigating from a label-group link to a URL without that parameter clears label grouping; an empty parameter also clears it. A fresh page load without a grouping parameter keeps saved grouping preferences.
+
 ### Card Sorting
 
 Containers, Agents, and Security cards include a sort-field and ascending/descending control in the toolbar when in card mode, so cards can be ordered the same way table rows can.
