@@ -125,6 +125,10 @@ const toDateFilter = ref(parseDateQuery(route.query.to));
 const showFilters = ref(false);
 const showEventPicker = ref(false);
 const auditViewMode = useViewMode('audit');
+const contentWidth = ref(0);
+const loadingCards = computed(
+  () => auditViewMode.value === 'cards' || (contentWidth.value > 0 && contentWidth.value < 640),
+);
 // Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
 // width has already forced cards, so the switcher isn't a dead control at that size.
 const cardReflowForced = ref(false);
@@ -337,14 +341,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <DataViewLayout>
+  <DataViewLayout @content-width="contentWidth = $event">
     <div v-if="error"
          class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('auditView.loadingAuditLog') }}</div>
+    <div v-if="loading" role="status" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('auditView.loadingAuditLog') }}</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -438,6 +442,28 @@ onUnmounted(() => {
           @reset="resetColumns" />
       </template>
     </DataFilterBar>
+
+    <div v-if="loading" data-test="audit-loading" aria-busy="true">
+      <div
+        aria-hidden="true"
+        class="grid min-w-0"
+        :data-layout="loadingCards ? 'cards' : 'table'"
+        :class="loadingCards ? 'grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-3' : ''"
+      >
+        <div
+          v-for="row in 6" :key="row"
+          data-test="audit-loading-entry"
+          class="grid min-w-0 gap-3 dd-border"
+          :class="loadingCards ? 'grid-cols-2 border dd-rounded dd-bg-card p-4' : 'grid-cols-5 border-b px-4 py-3'"
+        >
+          <span
+            v-for="column in 5" :key="column"
+            class="block h-3 min-w-0 dd-rounded dd-bg-elevated"
+            :class="loadingCards && column === 5 ? 'col-span-2' : ''"
+          />
+        </div>
+      </div>
+    </div>
 
     <!-- Table view -->
     <DataTable

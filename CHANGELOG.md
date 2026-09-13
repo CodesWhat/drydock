@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Audit log loading placeholders** match the selected table/card view and switch to cards in narrow content areas. They use the active theme, stay static for reduced-motion comfort, and retain the localized loading announcement without adding requests or placeholder actions.
+
 - Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.
 
 - Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
