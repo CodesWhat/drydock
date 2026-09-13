@@ -9,7 +9,9 @@
 # "exec /sbin/tini: exec format error" on first start. That is drydock#1021.
 #
 # Usage: scripts/check-image-arch.sh <image-ref> <platform>
-#   scripts/check-image-arch.sh drydock:dev linux/arm64
+#   scripts/check-image-arch.sh 'ghcr.io/codeswhat/drydock@sha256:<digest>' linux/arm64
+# Requires a registry-accessible image reference, not a local-only image.
+# Registry inspection runs first; docker run uses --pull always for the probe.
 set -euo pipefail
 
 image_ref="${1:-}"
@@ -70,9 +72,9 @@ echo "Checking ${image_ref} (${platform}) for ${expected_arch} binaries, e_machi
 # fails the second time: docker's classic image store cannot hold two
 # platform variants under one digest, and aborts with "cannot overwrite
 # digest sha256:<index>". Resolve the platform's own manifest digest first so
-# each docker run pulls a distinct reference. A reference that is not an
-# index at all (no digest, or already a single-platform manifest) has
-# nothing to resolve, so it runs unchanged.
+# each docker run pulls a distinct reference. Tag references can also resolve to an index.
+# A reference whose registry response is a single-platform manifest has nothing
+# to resolve, so it runs unchanged.
 repository="${image_ref%@*}"
 last_segment="${repository##*/}"
 if [[ ${last_segment} == *:* ]]; then
