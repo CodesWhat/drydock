@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore website referral-source reporting while keeping referrer URLs and campaign parameters out of analytics.
+
 ## [1.7.0-rc.15] — 2026-09-10
 
 ### Fixed
