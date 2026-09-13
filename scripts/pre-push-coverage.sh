@@ -200,4 +200,4 @@ fi
 
 # Clean state — remove gap files when everything passes
 rm -f "${GAPS_FILE}" .coverage-gaps.app.json .coverage-gaps.ui.json
-echo "Coverage thresholds met (100%)."
+echo "Coverage thresholds met."
