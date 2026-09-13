@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Website analytics now retain validated referring hostnames without sending full referrer URLs.
+
 - Fleet health now reads a names-only agent roster independently of status data, so configured clients remain visible when the first status request fails. Unavailable rows cannot refresh inventory; successful reads reconcile identities without polling or a persistent cache.
 
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
