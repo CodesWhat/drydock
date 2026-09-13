@@ -14,6 +14,11 @@ export interface ApiComponent {
   metadata?: Record<string, unknown>;
 }
 
+/** Names-only identity returned by GET /api/v1/agents/roster. */
+export interface ApiAgentIdentity {
+  name: string;
+}
+
 /** Agent shape returned by GET /api/agents. */
 export interface ApiAgent {
   name: string;

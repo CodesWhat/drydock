@@ -34,6 +34,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'DELETE /api/v1/portwing/keys/:keyId → session-only',
   'GET /api/v1/agents → read',
   'GET /api/v1/agents/:name/log/entries → read',
+  'GET /api/v1/agents/roster → read',
   'GET /api/v1/api-keys → api-keys:manage',
   'GET /api/v1/app → read',
   'GET /api/v1/approvals → read',

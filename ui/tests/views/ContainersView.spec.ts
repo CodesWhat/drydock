@@ -49,7 +49,10 @@ vi.mock('@/composables/useServerFeatures', () => ({
 }));
 
 // --- Mock all services ---
-vi.mock('@/services/agent', () => ({ getAgents: vi.fn().mockResolvedValue([]) }));
+vi.mock('@/services/agent', () => ({
+  getAgents: vi.fn().mockResolvedValue([]),
+  getAgentRoster: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('@/services/watcher', () => ({
   getAllWatchers: vi.fn().mockResolvedValue([]),
   refreshWatcherInventory: vi.fn(),

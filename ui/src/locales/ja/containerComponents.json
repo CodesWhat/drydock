@@ -1,6 +1,7 @@
 {
   "containerComponents": {
     "fleetHealth": {
+      "rosterUnavailable": "エージェント一覧を取得できません。設定済みのエージェントが一部表示されない可能性があります。",
       "title": "フリートの状態",
       "description": "フリート全体の状態です。インベントリの更新は、レジストリの確認や更新操作を行わずにコンテナを検出します。",
       "reload": "状態を再読み込み",
