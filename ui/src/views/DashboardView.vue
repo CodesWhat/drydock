@@ -713,10 +713,8 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         const next = new Map(dashboardUpdatingById.value);
         next.delete(row.id);
         dashboardUpdatingById.value = next;
-        dashboardUpdateError.value = errorMessage(
-          e,
-          t('dashboardView.toast.updateError', { name: row.name }),
-        );
+        dashboardUpdateError.value =
+          errorMessage(e, '') || t('dashboardView.toast.updateError', { name: row.name });
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -746,8 +744,8 @@ function confirmDashboardUpdateAll() {
       const snapshotRowKeys = pendingRowsSnapshot.map((row) =>
         getDashboardRecentUpdateSequenceKey(row),
       );
-      let acceptedRowKeys = [...snapshotRowKeys];
-      syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
+      let acceptedRowKeys: string[] = [];
+      syncDashboardUpdateSequenceValue(snapshotRowKeys, snapshotRowKeys);
       startDashboardPendingUpdateTracking();
       try {
         const response = await updateContainers(pendingRowsSnapshot.map((row) => row.id));
@@ -795,10 +793,13 @@ function confirmDashboardUpdateAll() {
             t('dashboardView.toast.updateAllError'),
           );
         }
+      } catch (e: unknown) {
+        dashboardUpdateError.value = errorMessage(e, '') || t('dashboardView.toast.updateAllError');
       } finally {
         if (acceptedRowKeys.length === 0) {
           syncDashboardUpdateSequenceValue(snapshotRowKeys, []);
           pruneDashboardUpdateSequence();
+          if (!hasDashboardTrackedUpdates()) stopDashboardPendingUpdatePolling();
         }
         dashboardUpdateAllInProgress.value = false;
       }
