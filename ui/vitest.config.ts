@@ -15,20 +15,28 @@ interface CustomCoverageConfig {
   reporter: string[];
   include: string[];
   exclude: string[];
-  thresholds: CoverageThresholds;
+  thresholds: Record<'src/**/*.ts' | 'src/**/*.vue', CoverageThresholds>;
 }
 
 const coverageConfig: CustomCoverageConfig = {
   provider: 'custom',
   customProviderModule: './vitest.coverage-provider.ts',
   reporter: ['text', 'lcov', 'html', 'json-summary'],
-  include: ['src/**/*.ts'],
+  include: ['src/**/*.ts', 'src/**/*.vue'],
   exclude: ['**/*.typecheck.ts', '**/*.d.ts', '**/types/**', '**/node_modules/**'],
   thresholds: {
-    lines: 100,
-    branches: 100,
-    functions: 100,
-    statements: 100,
+    'src/**/*.ts': {
+      lines: 100,
+      branches: 100,
+      functions: 100,
+      statements: 100,
+    },
+    'src/**/*.vue': {
+      lines: 87.89,
+      branches: 81.57,
+      functions: 84.39,
+      statements: 87.54,
+    },
   },
 };
 

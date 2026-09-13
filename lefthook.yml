@@ -127,7 +127,7 @@ pre-push:
       priority: 10
       timeout: 60s
 
-    # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
+    # ── Coverage: sharded app+ui parallel, configured thresholds ────
     # Runs tests with coverage. On failure, writes .coverage-gaps.json
     # with exact files + uncovered lines/branches (parsed from lcov.info).
     # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
