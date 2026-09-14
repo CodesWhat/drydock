@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "通知原則",
     "edit": "編輯通知原則",
-    "boundary": "僅編輯傳送原則。儲存不會測試觸發器或傳送通知。憑證、目的地、範本和執行設定仍為唯讀。",
+    "boundary": "編輯傳遞原則與安全摘要範本。儲存不會測試觸發器或傳送通知。憑證、目的地與執行設定仍為唯讀。",
     "providerForced": "此值由提供者控制，無法在此編輯。",
     "triggerUnavailable": "編輯器快照中沒有此確切的通知觸發器。",
     "apiUnavailable": "此伺服器不提供通知原則編輯器 API。",
@@ -12,7 +12,14 @@
       "mode": "傳送模式",
       "securitymode": "安全通知傳送模式",
       "digestcron": "摘要排程（cron）",
-      "resolvenotifications": "傳送問題解決通知"
-    }
+      "resolvenotifications": "傳送問題解決通知",
+      "securitydigesttitle": "安全摘要標題",
+      "securitydigestbody": "安全摘要內文"
+    },
+    "templateHelp": "移除範本後，呈現時將使用內建預設值。範本不可為空。編輯範本不會變更安全傳遞模式。",
+    "templateUnavailable": "此伺服器不提供此範本欄位。",
+    "templateEmpty": "範本不可為空。請輸入文字或明確移除檔案中的值。",
+    "providerUnsupported": "此提供者不支援安全摘要範本。",
+    "interpolationHelp": "整個值為 {reference} 或 {fallback} 時會使用 YAML 環境變數插值，重新載入後將變為唯讀。{expression} 等掃描運算式仍可編輯。請勿在範本中放入機密資訊。"
   }
 }

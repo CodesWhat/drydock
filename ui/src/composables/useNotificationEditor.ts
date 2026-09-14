@@ -17,11 +17,16 @@ interface Draft {
 export function isBooleanPolicyField(field: NotificationEditField) {
   return field === 'once' || field === 'resolvenotifications';
 }
+function isTemplatePolicyField(field: NotificationEditField) {
+  return field === 'securitydigesttitle' || field === 'securitydigestbody';
+}
 function fieldValue(field: NotificationEditField, value: unknown) {
   if (value === undefined) return undefined;
   if (isBooleanPolicyField(field))
     return typeof value === 'boolean' ? value : String(value).toLowerCase() === 'true';
-  return field === 'digestcron' ? String(value) : String(value).toLowerCase();
+  return field === 'digestcron' || isTemplatePolicyField(field)
+    ? String(value)
+    : String(value).toLowerCase();
 }
 
 export function useNotificationEditor(identity: () => NotificationIdentity) {
@@ -92,6 +97,10 @@ export function useNotificationEditor(identity: () => NotificationIdentity) {
       revision.value = snapshot.revision;
       for (const field of notificationEditFields) {
         const descriptor = row.value.fields[field];
+        if (!descriptor) {
+          if (isTemplatePolicyField(field)) continue;
+          throw new Error('Missing notification policy field');
+        }
         drafts.value[field] = {
           operation: 'keep',
           value:
@@ -137,7 +146,7 @@ export function useNotificationEditor(identity: () => NotificationIdentity) {
     drafts.value[field] = { operation: 'set', value };
   }
   function remove(field: NotificationEditField) {
-    if (!editable(field) || !row.value?.fields[field].present) return;
+    if (!editable(field) || !row.value?.fields[field]?.present) return;
     drafts.value[field] = { operation: 'remove', value: undefined };
   }
   const changes = computed<WatcherEditChange[]>(() =>
@@ -151,6 +160,14 @@ export function useNotificationEditor(identity: () => NotificationIdentity) {
       return [{ path: [...descriptor.path], operation: 'set', value: draft.value }];
     }),
   );
+  const invalidTemplate = computed(() =>
+    notificationEditFields.some(
+      (field) =>
+        isTemplatePolicyField(field) &&
+        drafts.value[field]?.operation === 'set' &&
+        drafts.value[field]?.value === '',
+    ),
+  );
   const canSave = computed(
     () =>
       active.value &&
@@ -158,6 +175,7 @@ export function useNotificationEditor(identity: () => NotificationIdentity) {
       !loading.value &&
       !saving.value &&
       !needsReload.value &&
+      !invalidTemplate.value &&
       changes.value.length > 0,
   );
   async function save() {
@@ -203,6 +221,7 @@ export function useNotificationEditor(identity: () => NotificationIdentity) {
     needsReload,
     changes,
     canSave,
+    invalidTemplate,
     hasProblems,
     editable,
     setValue,

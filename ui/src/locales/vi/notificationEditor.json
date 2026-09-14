@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "Chính sách thông báo",
     "edit": "Sửa chính sách thông báo",
-    "boundary": "Chỉ sửa chính sách gửi. Lưu không kiểm tra trình kích hoạt hay gửi thông báo. Thông tin xác thực, đích đến, mẫu và cài đặt thực thi vẫn chỉ đọc.",
+    "boundary": "Chỉnh sửa chính sách gửi và mẫu tổng hợp bảo mật. Lưu không kiểm tra trình kích hoạt hoặc gửi thông báo. Thông tin đăng nhập, đích đến và cài đặt thực thi vẫn chỉ đọc.",
     "providerForced": "Giá trị này do nhà cung cấp kiểm soát và không thể sửa tại đây.",
     "triggerUnavailable": "Không có trình kích hoạt thông báo khớp chính xác này trong ảnh chụp của trình sửa.",
     "apiUnavailable": "Máy chủ này không cung cấp API sửa chính sách thông báo.",
@@ -12,7 +12,14 @@
       "mode": "Chế độ gửi",
       "securitymode": "Chế độ gửi cảnh báo bảo mật",
       "digestcron": "Lịch tổng hợp (cron)",
-      "resolvenotifications": "Gửi thông báo đã giải quyết"
-    }
+      "resolvenotifications": "Gửi thông báo đã giải quyết",
+      "securitydigesttitle": "Tiêu đề tổng hợp bảo mật",
+      "securitydigestbody": "Nội dung tổng hợp bảo mật"
+    },
+    "templateHelp": "Xóa mẫu sẽ khôi phục giá trị mặc định tích hợp khi kết xuất. Mẫu không được để trống. Chỉnh sửa mẫu không thay đổi chế độ gửi bảo mật.",
+    "templateUnavailable": "Máy chủ này không cung cấp trường mẫu này.",
+    "templateEmpty": "Mẫu không được để trống. Nhập văn bản hoặc xóa rõ ràng giá trị trong tệp.",
+    "providerUnsupported": "Nhà cung cấp này không hỗ trợ mẫu tổng hợp bảo mật.",
+    "interpolationHelp": "Giá trị toàn phần như {reference} hoặc {fallback} dùng nội suy biến môi trường YAML và trở thành chỉ đọc sau khi tải lại. Biểu thức quét như {expression} vẫn có thể chỉnh sửa. Không đưa bí mật vào mẫu."
   }
 }

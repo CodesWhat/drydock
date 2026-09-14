@@ -8,6 +8,8 @@ export const notificationEditFields = [
   'securitymode',
   'digestcron',
   'resolvenotifications',
+  'securitydigesttitle',
+  'securitydigestbody',
 ] as const;
 export type NotificationEditField = (typeof notificationEditFields)[number];
 export const notificationThresholds = [
@@ -33,7 +35,11 @@ export interface NotificationIdentity {
 }
 export interface NotificationEditRow extends NotificationIdentity {
   category: 'notification';
-  fields: Record<NotificationEditField, WatcherEditRow['fields']['cron']>;
+  fields: Record<
+    Exclude<NotificationEditField, 'securitydigesttitle' | 'securitydigestbody'>,
+    WatcherEditRow['fields']['cron']
+  > &
+    Partial<Record<'securitydigesttitle' | 'securitydigestbody', WatcherEditRow['fields']['cron']>>;
 }
 export interface NotificationEditSnapshot {
   available: boolean;

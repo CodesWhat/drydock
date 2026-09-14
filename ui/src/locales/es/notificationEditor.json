@@ -2,7 +2,7 @@
   "notificationEditor": {
     "title": "Política de notificaciones",
     "edit": "Editar política de notificaciones",
-    "boundary": "Edita solo la política de envío. Guardar no prueba el disparador ni envía notificaciones. Las credenciales, destinos, plantillas y opciones de ejecución siguen siendo de solo lectura.",
+    "boundary": "Edita la política de entrega y las plantillas del resumen de seguridad. Guardar no prueba el activador ni envía notificaciones. Las credenciales, los destinos y los ajustes de ejecución siguen siendo de solo lectura.",
     "providerForced": "El proveedor controla este valor. No se puede editar aquí.",
     "triggerUnavailable": "Este disparador de notificaciones exacto no está disponible en la instantánea del editor.",
     "apiUnavailable": "Este servidor no ofrece la API del editor de políticas de notificaciones.",
@@ -12,7 +12,14 @@
       "mode": "Modo de envío",
       "securitymode": "Modo de envío de seguridad",
       "digestcron": "Programación del resumen (cron)",
-      "resolvenotifications": "Enviar notificaciones de resolución"
-    }
+      "resolvenotifications": "Enviar notificaciones de resolución",
+      "securitydigesttitle": "Título del resumen de seguridad",
+      "securitydigestbody": "Cuerpo del resumen de seguridad"
+    },
+    "templateHelp": "Eliminar una plantilla restaura los valores predeterminados al renderizar. Las plantillas no pueden estar vacías. Editar una plantilla no cambia el modo de entrega de seguridad.",
+    "templateUnavailable": "Este servidor no proporciona este campo de plantilla.",
+    "templateEmpty": "Las plantillas no pueden estar vacías. Introduce texto o elimina explícitamente el valor del archivo.",
+    "providerUnsupported": "Este proveedor no admite plantillas de resumen de seguridad.",
+    "interpolationHelp": "Los valores completos como {reference} o {fallback} usan interpolación de variables de entorno YAML y pasan a ser de solo lectura al recargar. Las expresiones de análisis como {expression} siguen siendo editables. No incluyas secretos en las plantillas."
   }
 }
