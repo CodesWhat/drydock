@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Aktionsrichtlinie",
+    "edit": "Aktionsrichtlinie bearbeiten",
+    "boundary": "Nur die Planungsrichtlinie bearbeiten. Speichern führt keine Aktion, keinen Befehl, kein Update und keine Benachrichtigung aus. Zugangsdaten und Ausführungseinstellungen bleiben schreibgeschützt. Der globale manuelle Modus und die Container-Zulässigkeit gelten weiterhin.",
+    "actionUnavailable": "Diese genaue Aktion ist im Editor-Snapshot nicht verfügbar.",
+    "apiUnavailable": "Dieser Server stellt keine API zum Bearbeiten von Aktionsrichtlinien bereit.",
+    "reset": "Dateiüberschreibung entfernen / Einstellungen erben",
+    "orderHelp": "Negative Werte und Dezimalzahlen sind erlaubt. Die bestehende Vererbung der Reihenfolge kann auch andere Aktionen und Benachrichtigungen mit demselben Namen betreffen.",
+    "concurrencyHelp": "Eine positive ganze Zahl. Das Entfernen der Dateiüberschreibung stellt geerbte Einstellungen wieder her. Bei Compose begrenzt dies unabhängige Projekte, nicht Dienste innerhalb einer Datei.",
+    "invalidNumber": "Eine endliche Zahl eingeben. Zum Erben der Einstellungen die Dateiüberschreibung ausdrücklich entfernen.",
+    "invalidConcurrency": "Eine positive ganze Zahl eingeben. Zum Erben der Einstellungen die Dateiüberschreibung ausdrücklich entfernen.",
+    "fields": {
+      "auto": "Automatische Auslösung",
+      "order": "Ausführungsreihenfolge",
+      "concurrency": "Gleichzeitige Updates"
+    },
+    "autoModes": {
+      "all": "Alle zulässigen Container",
+      "oninclude": "Ausdrücklich eingeschlossene Container",
+      "onauto": "Durch die automatische Aktionsrichtlinie zugelassene Container",
+      "none": "Keine automatische Auslösung"
+    }
+  }
+}

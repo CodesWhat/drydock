@@ -32,9 +32,13 @@ A stale revision produces a conflict: your draft stays visible, Save is blocked,
 
 This editor does not change database-backed notification rules or the notification bell. Other configuration fields and per-container label overrides are not included in this slice.
 
-## Action policy editing API
+## Edit action policy in the UI
 
-`GET /api/v1/config/editor/actions` provides a session-only editing snapshot for existing Docker, Docker Compose, Portainer, and Command action instances. It exposes only `auto`, `order`, and `concurrency`, together with exact identity, source, editable paths, and an opaque revision. This endpoint is an API foundation; action-policy forms are not yet included in the UI.
+Open an existing Docker, Docker Compose, Portainer, or Command provider in **Triggers**, then choose **Edit action policy**. The form loads `GET /api/v1/config/editor/actions` only on Edit or explicit reload. It shows `auto`, `order`, and `concurrency`, together with source ownership and the server's effective values. Credentials, commands and provider execution settings stay outside the form.
+
+Automatic dispatch uses the four named modes below. Existing boolean and mixed-case values are normalized only for display and comparison; untouched file values are not rewritten. Order accepts negative and fractional numbers. Concurrency requires a positive whole number. Blank numeric inputs are invalid, not zero or removal. **Remove file override / inherit settings** explicitly removes only that file leaf. The form does not guess hidden inherited values or replace them with `1`.
+
+**Save** sends only changed leaves with the snapshot revision and exact original-case paths. **Cancel** does not write. Environment-owned, referenced, agent-owned and ambiguous fields remain read-only. Conflicts retain the draft and require explicit reload; uncertain saves are never automatically retried. Saved-file and live-application outcomes remain separate, including reload and audit errors. A saved result refreshes only the matching surrounding detail/list row while retaining editor feedback. Saving never invokes **Test Trigger**, executes an action or sends a notification.
 
 The fields use the providers' existing validation and runtime defaults:
 

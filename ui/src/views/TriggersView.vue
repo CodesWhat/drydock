@@ -6,6 +6,8 @@ import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import DetailField from '@/components/DetailField.vue';
 import NotificationPolicyEditor from '@/components/NotificationPolicyEditor.vue';
+import ActionPolicyEditor from '@/components/ActionPolicyEditor.vue';
+import { isActionProvider } from '../services/action-editor';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
@@ -427,6 +429,7 @@ onMounted(async () => {
             </div>
 
             <NotificationPolicyEditor v-if="detailOpen && isNotificationProvider(String(selectedTrigger.type))" :trigger="{ id: String(selectedTrigger.id), type: String(selectedTrigger.type), name: String(selectedTrigger.name), agent: selectedTrigger.agent as string | undefined }" @saved="refreshSavedTrigger" />
+            <ActionPolicyEditor v-if="detailOpen && isActionProvider(selectedTrigger.type)" :action="{ id: selectedTrigger.id, type: selectedTrigger.type, name: selectedTrigger.name, agent: selectedTrigger.agent }" @saved="refreshSavedTrigger" />
             <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
             <div v-if="Object.keys(selectedTrigger.config).length === 0">
               <div class="text-2xs-plus dd-text-muted">{{ t('triggersView.detail.noConfig') }}</div>

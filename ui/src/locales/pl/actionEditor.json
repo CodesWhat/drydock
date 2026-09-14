@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Zasady akcji",
+    "edit": "Edytuj zasady akcji",
+    "boundary": "Edytuj tylko zasady harmonogramu. Zapis nie uruchamia akcji, polecenia, aktualizacji ani powiadomienia. Dane uwierzytelniające i ustawienia wykonania pozostają tylko do odczytu. Nadal obowiązują globalny tryb ręczny i kwalifikacja kontenerów.",
+    "actionUnavailable": "Ta konkretna akcja nie jest dostępna w migawce edytora.",
+    "apiUnavailable": "Ten serwer nie udostępnia API edytora zasad akcji.",
+    "reset": "Usuń wartość z pliku / dziedzicz ustawienia",
+    "orderHelp": "Dozwolone są wartości ujemne i ułamkowe. Istniejące dziedziczenie kolejności może też wpływać na inne akcje i powiadomienia o tej samej nazwie.",
+    "concurrencyHelp": "Dodatnia liczba całkowita. Usunięcie wartości z pliku przywraca dziedziczone ustawienia. W Compose ogranicza to niezależne projekty, a nie usługi w jednym pliku.",
+    "invalidNumber": "Wpisz liczbę skończoną. Aby dziedziczyć ustawienia, jawnie usuń wartość z pliku.",
+    "invalidConcurrency": "Wpisz dodatnią liczbę całkowitą. Aby dziedziczyć ustawienia, jawnie usuń wartość z pliku.",
+    "fields": {
+      "auto": "Automatyczne uruchamianie",
+      "order": "Kolejność uruchamiania",
+      "concurrency": "Równoczesne aktualizacje"
+    },
+    "autoModes": {
+      "all": "Wszystkie kwalifikujące się kontenery",
+      "oninclude": "Jawnie uwzględnione kontenery",
+      "onauto": "Kontenery dozwolone przez zasady automatycznych akcji",
+      "none": "Bez automatycznego uruchamiania"
+    }
+  }
+}
