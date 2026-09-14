@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Criteri delle azioni",
+    "edit": "Modifica criteri delle azioni",
+    "boundary": "Modifica solo i criteri di pianificazione. Il salvataggio non esegue azioni, comandi, aggiornamenti o notifiche. Credenziali e impostazioni di esecuzione restano di sola lettura. Restano validi la modalità manuale globale e i requisiti dei container.",
+    "actionUnavailable": "Questa specifica azione non è disponibile nell’istantanea dell’editor.",
+    "apiUnavailable": "Questo server non fornisce l’API per modificare i criteri delle azioni.",
+    "reset": "Rimuovi valore del file / eredita impostazioni",
+    "orderHelp": "Sono ammessi valori negativi e decimali. L’ereditarietà dell’ordine esistente può influire anche su altre azioni e notifiche con lo stesso nome.",
+    "concurrencyHelp": "Un intero positivo. Rimuovere il valore del file ripristina le impostazioni ereditate. Per Compose, il limite riguarda progetti indipendenti, non servizi nello stesso file.",
+    "invalidNumber": "Inserisci un numero finito. Per ereditare le impostazioni, rimuovi esplicitamente il valore del file.",
+    "invalidConcurrency": "Inserisci un intero positivo. Per ereditare le impostazioni, rimuovi esplicitamente il valore del file.",
+    "fields": {
+      "auto": "Esecuzione automatica",
+      "order": "Ordine di esecuzione",
+      "concurrency": "Aggiornamenti simultanei"
+    },
+    "autoModes": {
+      "all": "Tutti i container idonei",
+      "oninclude": "Container inclusi esplicitamente",
+      "onauto": "Container consentiti dai criteri delle azioni automatiche",
+      "none": "Nessuna esecuzione automatica"
+    }
+  }
+}
