@@ -91,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.
+
 - Logs now use the selected language for HTTP load failures without a usable server diagnostic, while preserving server and network error details.
 
 - Starchart refreshes now open a chart-only PR through the existing GitHub App instead of pushing directly to protected dev branches. Unchanged charts remove the temporary branch without opening a PR.

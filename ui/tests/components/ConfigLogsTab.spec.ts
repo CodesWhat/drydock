@@ -67,4 +67,17 @@ describe('ConfigLogsTab', () => {
 
     expect(preferences.views.logs.newestFirst).toBe(false);
   });
+
+  it.each([
+    { loading: false, error: '', streamingEnabled: false },
+    { loading: true, error: 'Unavailable', streamingEnabled: false },
+    { loading: false, error: 'Unavailable', streamingEnabled: true },
+  ])('does not offer retry outside a settled paused error: %o', (state) => {
+    const wrapper = mount(ConfigLogsTab, {
+      props: { ...baseProps, ...state },
+      global: { stubs: { AppLogViewer: AppLogViewerStub, AppIcon: true } },
+    });
+    expect(wrapper.findComponent({ name: 'AppButton' }).exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
