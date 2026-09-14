@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Action details offer a three-field policy editor for automatic dispatch, order and concurrency, with explicit Save/Cancel, source-aware read-only fields, inherited-setting removal and separate saved/live-reload feedback. Saving does not execute actions or notifications.
 - **Audit log loading placeholders** match the selected table/card view and switch to cards in narrow content areas. They use the active theme, stay static for reduced-motion comfort, and retain the localized loading announcement without adding requests or placeholder actions.
 
 - Binary Docker request bodies over Portwing edge connections, including tar build contexts. Capability negotiation preserves older agents; uploads use bounded chunks, backpressure, and cancellation on timeout or disconnect.

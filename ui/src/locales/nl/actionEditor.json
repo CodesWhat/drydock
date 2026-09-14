@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Actiebeleid",
+    "edit": "Actiebeleid bewerken",
+    "boundary": "Bewerk alleen het planningsbeleid. Opslaan voert geen actie, opdracht, update of melding uit. Aanmeldgegevens en uitvoeringsinstellingen blijven alleen-lezen. De globale handmatige modus en de geschiktheid van containers blijven gelden.",
+    "actionUnavailable": "Deze specifieke actie is niet beschikbaar in de editorsnapshot.",
+    "apiUnavailable": "Deze server biedt geen API voor de actiebeleideditor.",
+    "reset": "Bestandswaarde verwijderen / instellingen overnemen",
+    "orderHelp": "Negatieve waarden en decimalen zijn toegestaan. Bestaande overerving van de volgorde kan ook andere acties en meldingen met dezelfde naam beïnvloeden.",
+    "concurrencyHelp": "Een positief geheel getal. Het verwijderen van de bestandswaarde herstelt overgenomen instellingen. Bij Compose beperkt dit onafhankelijke projecten, niet diensten binnen hetzelfde bestand.",
+    "invalidNumber": "Voer een eindig getal in. Verwijder de bestandswaarde expliciet om instellingen over te nemen.",
+    "invalidConcurrency": "Voer een positief geheel getal in. Verwijder de bestandswaarde expliciet om instellingen over te nemen.",
+    "fields": {
+      "auto": "Automatische uitvoering",
+      "order": "Uitvoeringsvolgorde",
+      "concurrency": "Gelijktijdige updates"
+    },
+    "autoModes": {
+      "all": "Alle geschikte containers",
+      "oninclude": "Expliciet opgenomen containers",
+      "onauto": "Containers toegestaan door het automatische actiebeleid",
+      "none": "Geen automatische uitvoering"
+    }
+  }
+}
