@@ -18,6 +18,8 @@ You just need to give them different names.</Callout>
 
 ## Edit notification delivery policy in the UI
 
+This editor and the action policy editor below are new in unreleased v1.8 builds and require a writable [configuration file](/docs/configuration/config-file).
+
 Open a notification provider in **Triggers**, then choose **Edit notification policy**. The editor fetches a fresh configuration snapshot only when you open it or explicitly reload it. It edits `threshold`, `once`, `mode`, `securitymode`, `digestcron`, and `resolvenotifications`, plus `securitydigesttitle` and `securitydigestbody` when the server provides them. The two boolean fields use Yes/No choices and are saved as booleans, including `false`. Older servers retain the six-field editor with template controls unavailable.
 
 The threshold selector supports `all`, `major`, `minor`, `patch`, `major-only`, `minor-only`, `digest`, `major-no-digest`, `minor-no-digest`, `patch-no-digest`, `major-only-no-digest`, and `minor-only-no-digest`. Both mode selectors support `simple`, `batch`, `digest`, and `batch+digest`.

@@ -308,15 +308,16 @@ export const roadmap: Milestone[] = [
   },
   {
     version: "v1.8.0",
-    title: "Fleet Management & Live Config",
+    title: "Fleet Management & Live Config (in development, unreleased)",
     emoji: "\u{2699}️",
     status: "planned",
     dotColor:
       "border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-400",
     items: [
-      "Live configuration surfaces",
-      "Config file and API foundation",
-      "Fleet-scale operations and storage path",
+      "Landed: drydock.yml configuration with environment overrides",
+      "Landed: revision-checked editors for selected local file-owned settings",
+      "Landed: fleet bulk actions with confirmation and bounded update concurrency",
+      "Landed: SQLite persistence and one-time legacy JSON import",
     ],
   },
   {

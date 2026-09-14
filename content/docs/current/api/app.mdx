@@ -118,7 +118,7 @@ Providers are `trivy`, `grype`, and `syft`; operations are `pull` and `warm`. Th
 
 Downloads a comprehensive, redacted diagnostic dump of the running drydock instance as a JSON file. Useful for troubleshooting and support requests.
 
-The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. Store statistics include document counts and UTF-8 serialized byte attribution for the whole LokiJS store and each collection, making unexpected persistence growth traceable without exposing raw store contents.
+The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. In unreleased v1.8 builds, store statistics report SQLite table row counts under the compatibility field `collections` (each entry has `name` and `documents`). The aggregate `serializedBytes` is SQLite's `page_count` multiplied by `page_size`, not JSON serialization size or per-table byte attribution. Internal migration and store-metadata tables are excluded from the row counts; raw stored rows are not included.
 
 Redaction works on the key name, and the exact rule matters — a key that falls outside it is returned verbatim:
 
@@ -152,7 +152,7 @@ The response is a JSON attachment with a timestamped filename (e.g. `drydock-deb
 | `mqttHomeAssistant` | Home Assistant MQTT sensor discovery topics and definitions |
 | `dockerEvents` | Active Docker event subscriptions and recent events within the time window |
 | `aliasFiltering` | Recent container alias filter decisions |
-| `store` | LokiJS collection document counts and serialized byte attribution, including per-collection `serializedBytes` |
+| `store` | SQLite table row counts, aggregate database page size as `serializedBytes`, and store paths; no per-table byte attribution |
 | `dockerApi` | Docker daemon version and info per watcher (connection errors captured gracefully) |
 | `environment` | All `DD_*` environment variable names, with values redacted by the rules above |
 
