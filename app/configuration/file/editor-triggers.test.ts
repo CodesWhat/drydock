@@ -4,7 +4,7 @@ import path from 'node:path';
 import yaml from 'yaml';
 import { validateOpenApiJsonResponse } from '../../api/openapi-contract.js';
 import Discord from '../../triggers/providers/discord/Discord.js';
-import { configFileSources, ddEnvVars } from '../index.js';
+import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
 import {
   getNotificationTriggerEditSnapshot,
   getWatcherEditSnapshot,
@@ -26,6 +26,7 @@ describe('notification policy editor', () => {
   let configPath: string;
   let current: typeof ddEnvVars;
   let sources: typeof configFileSources;
+  let interpolated: Set<string>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -33,6 +34,8 @@ describe('notification policy editor', () => {
     configPath = path.join(directory, 'drydock.yml');
     current = { ...ddEnvVars };
     sources = { ...configFileSources };
+    interpolated = new Set(configFileInterpolatedKeys);
+    configFileInterpolatedKeys.clear();
     for (const key of Object.keys(ddEnvVars)) delete ddEnvVars[key];
     for (const key of Object.keys(configFileSources)) delete configFileSources[key];
     mockState.trigger = {
@@ -65,6 +68,8 @@ describe('notification policy editor', () => {
     for (const key of Object.keys(configFileSources)) delete configFileSources[key];
     Object.assign(ddEnvVars, current);
     Object.assign(configFileSources, sources);
+    configFileInterpolatedKeys.clear();
+    for (const key of interpolated) configFileInterpolatedKeys.add(key);
     resetConfigFileLayer();
     fs.rmSync(directory, { recursive: true, force: true });
   });
@@ -72,6 +77,244 @@ describe('notification policy editor', () => {
     fs.writeFileSync(configPath, raw, { mode: 0o600 });
     setConfigFileLayer({}, new Set(), { path: configPath, modifiedAt: new Date().toISOString() });
   }
+
+  test('round-trips literal security scan templates without changing case, whitespace or mode', async () => {
+    const original = '${scan.alertCount} Alerts';
+    fixture(
+      yaml.stringify({
+        notification: {
+          discord: {
+            private: {
+              url: 'https://discord.example/private',
+              securitydigesttitle: original,
+            },
+          },
+        },
+      }),
+    );
+    const snapshot = await getNotificationTriggerEditSnapshot();
+    expect(snapshot.triggers[0].fields.securitydigesttitle).toMatchObject({
+      value: original,
+      source: 'file',
+      path: ['notification', 'discord', 'private', 'securitydigesttitle'],
+    });
+    expect(snapshot.triggers[0].fields.securitydigestbody).toEqual({
+      present: false,
+      source: 'default',
+      path: ['notification', 'discord', 'private', 'securitydigestbody'],
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/api/v1/config/editor/triggers',
+        method: 'get',
+        statusCode: '200',
+        payload: snapshot,
+      }),
+    ).toEqual({ valid: true, errors: [] });
+    const values = {
+      securitydigesttitle: '${scan.alertCount} Mixed CASE',
+      securitydigestbody: '${scan.criticalList}\n  Keep CASE and spaces\n',
+    };
+    const result = await writeNotificationTriggerEdits({
+      revision: snapshot.revision,
+      changes: Object.entries(values).map(([field, value]) => ({
+        path: ['notification', 'discord', 'private', field],
+        operation: 'set',
+        value,
+      })),
+    });
+    expect(result).toMatchObject({ status: 200, saved: true, applied: true });
+    expect(yaml.parse(fs.readFileSync(configPath, 'utf8')).notification.discord.private).toEqual({
+      url: 'https://discord.example/private',
+      ...values,
+    });
+    const updated = await getNotificationTriggerEditSnapshot();
+    for (const [field, value] of Object.entries(values))
+      expect(updated.triggers[0].fields[field].value).toBe(value);
+  });
+
+  test.each(['securitydigesttitle', 'securitydigestbody'])(
+    'shows literal environment-owned %s as public text without allowing writes',
+    async (field) => {
+      const envKey = `DD_NOTIFICATION_DISCORD_PRIVATE_${field.toUpperCase()}`;
+      fixture(`notification:\n  discord:\n    private:\n      ${field}: File template\n`);
+      vi.stubEnv(envKey, 'Public environment template');
+      mockState.trigger = {
+        'discord.private': {
+          type: 'discord',
+          name: 'private',
+          configuration: { [field]: 'Public environment template' },
+        },
+      };
+      const snapshot = await getNotificationTriggerEditSnapshot();
+      expect(snapshot.triggers[0].fields[field]).toEqual({
+        present: true,
+        source: 'env',
+        readOnlyReason: 'environment-owned',
+        value: 'File template',
+        effectiveValue: 'Public environment template',
+      });
+      const raw = fs.readFileSync(configPath, 'utf8');
+      expect(
+        (
+          await writeNotificationTriggerEdits({
+            revision: snapshot.revision,
+            changes: [
+              {
+                path: ['notification', 'discord', 'private', field],
+                operation: 'set',
+                value: 'Replacement',
+              },
+            ],
+          })
+        ).status,
+      ).toBe(409);
+      expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+      expect(mockReload).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(['securitydigesttitle', 'securitydigestbody'])(
+    'rejects blank %s without changing the document',
+    async (field) => {
+      fixture(
+        'notification:\n  discord:\n    private:\n      url: https://discord.example/private\n',
+      );
+      const raw = fs.readFileSync(configPath, 'utf8');
+      const snapshot = await getNotificationTriggerEditSnapshot();
+      const result = await writeNotificationTriggerEdits({
+        revision: snapshot.revision,
+        changes: [
+          { path: ['notification', 'discord', 'private', field], operation: 'set', value: '' },
+        ],
+      });
+      expect(result).toMatchObject({ status: 400, saved: false });
+      expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+      expect(mockReload).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    'interpolation',
+    'fallback',
+    'file',
+    'alias',
+    'parent-alias',
+    'provider-alias',
+    'section-alias',
+    'ambiguous',
+    'parent-ambiguous',
+    'provider-ambiguous',
+    'section-ambiguous',
+    'old-file',
+    'env-file',
+    'old-interpolation',
+    'live-interpolation',
+    'environment',
+    'agent',
+  ])('protects template ownership and omits referenced values for %s', async (kind) => {
+    const field = 'securitydigesttitle';
+    const envKey = 'DD_NOTIFICATION_DISCORD_PRIVATE_SECURITYDIGESTTITLE';
+    let raw = 'notification:\n  discord:\n    private:\n      securitydigesttitle: safe\n';
+    if (kind === 'interpolation') raw = raw.replace(': safe', ': ${PRIVATE_VALUE}');
+    if (kind === 'fallback') raw = raw.replace(': safe', ': ${PRIVATE_VALUE:-private-sentinel}');
+    if (kind === 'file') raw = raw.replace(': safe', ':\n        _file: /private/credential');
+    if (kind === 'alias')
+      raw = raw.replace(
+        '      securitydigesttitle: safe',
+        '      securitydigestbody: &private private-sentinel\n      securitydigesttitle: *private',
+      );
+    if (kind === 'parent-alias')
+      raw =
+        'notification:\n  discord:\n    original: &private\n      securitydigesttitle: private-sentinel\n    private: *private\n';
+    if (kind === 'provider-alias')
+      raw =
+        'notification:\n  slack: &private\n    private:\n      securitydigesttitle: private-sentinel\n  discord: *private\n';
+    if (kind === 'section-alias')
+      raw =
+        'original: &private\n  discord:\n    private:\n      securitydigesttitle: private-sentinel\nnotification: *private\n';
+    if (kind === 'ambiguous') raw += '      SecurityDigestTitle: private-sentinel\n';
+    if (kind === 'parent-ambiguous')
+      raw += '    Private:\n      securitydigesttitle: private-sentinel\n';
+    if (kind === 'provider-ambiguous')
+      raw += '  Discord:\n    private:\n      securitydigesttitle: private-sentinel\n';
+    if (kind === 'section-ambiguous')
+      raw +=
+        'Notification:\n  discord:\n    private:\n      securitydigesttitle: private-sentinel\n';
+    fixture(raw);
+    mockState.trigger = {
+      'discord.private': {
+        type: 'discord',
+        name: 'private',
+        ...(kind === 'agent' ? { agent: 'edge' } : {}),
+        configuration: { securitydigesttitle: 'private-sentinel' },
+      },
+    };
+    if (kind === 'old-file')
+      setConfigFileLayer({ [`${envKey}__FILE`]: '/private/credential' }, new Set(), {
+        path: configPath,
+        modifiedAt: new Date().toISOString(),
+      });
+    if (kind === 'env-file') vi.stubEnv(`${envKey}__FILE`, '/private/credential');
+    if (kind === 'old-interpolation')
+      setConfigFileLayer({}, new Set([envKey]), {
+        path: configPath,
+        modifiedAt: new Date().toISOString(),
+      });
+    if (kind === 'live-interpolation') configFileInterpolatedKeys.add(envKey);
+    if (kind === 'environment') vi.stubEnv(envKey, 'environment-owned');
+    const snapshot = await getNotificationTriggerEditSnapshot();
+    const descriptor = snapshot.triggers[0].fields[field];
+    expect(descriptor).toBeDefined();
+    expect(descriptor.path).toBeUndefined();
+    if (kind !== 'environment') {
+      expect(descriptor.value).toBeUndefined();
+      expect(descriptor.effectiveValue).toBeUndefined();
+    }
+    const result = await writeNotificationTriggerEdits({
+      revision: snapshot.revision,
+      changes: [
+        {
+          path: ['notification', 'discord', 'private', field],
+          operation: 'set',
+          value: 'replacement',
+        },
+      ],
+    });
+    expect(result).toMatchObject({ status: 409, saved: false });
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+    expect(mockReload).not.toHaveBeenCalled();
+  });
+
+  test.each(['securitydigesttitle', 'securitydigestbody'])(
+    'makes MQTT %s unsupported and refuses writes',
+    async (field) => {
+      fixture('notification:\n  mqtt:\n    private:\n      mode: simple\n');
+      mockState.trigger = {
+        'mqtt.private': { type: 'mqtt', name: 'private', configuration: { mode: 'simple' } },
+      };
+      const snapshot = await getNotificationTriggerEditSnapshot();
+      expect(snapshot.triggers[0].fields[field]).toEqual({
+        present: false,
+        source: 'default',
+        readOnlyReason: 'provider-unsupported',
+      });
+      expect(
+        (
+          await writeNotificationTriggerEdits({
+            revision: snapshot.revision,
+            changes: [
+              {
+                path: ['notification', 'mqtt', 'private', field],
+                operation: 'set',
+                value: 'Alert',
+              },
+            ],
+          })
+        ).status,
+      ).toBe(409);
+    },
+  );
 
   test('edits all six policy fields while retaining credentials, references, destinations and comments', async () => {
     const credentialPath = path.join(directory, 'credential');

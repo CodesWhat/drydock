@@ -27,6 +27,10 @@ const FILE_MARKER_KEY = '_file';
 // (an empty string after `:-` is a valid, deliberate empty default).
 const INTERPOLATION_PATTERN = /^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?\}$/;
 
+export function isWholeScalarReference(value: string): boolean {
+  return INTERPOLATION_PATTERN.test(value);
+}
+
 export interface InterpolateConfigTreeResult {
   /** The tree with every whole-scalar `${NAME}` match replaced. Never the
    * same object as the input — the input is not mutated. */

@@ -414,6 +414,8 @@ const notificationTriggerSnapshotSchema = {
               securitymode: editFieldSchema,
               digestcron: editFieldSchema,
               resolvenotifications: editFieldSchema,
+              securitydigesttitle: editFieldSchema,
+              securitydigestbody: editFieldSchema,
             },
             required: [
               'threshold',
@@ -503,7 +505,7 @@ export const configPaths = {
       summary: 'Get a safe notification trigger policy snapshot',
       operationId: 'getNotificationTriggerEditSnapshot',
       description:
-        'Session-only projection of six common notification policy fields. Action providers are excluded; agents, environment-owned and referenced fields remain read-only. Provider-forced settings such as MQTT mode remain read-only. No credentials, destinations or templates are returned.',
+        'Session-only projection of eight notification policy fields, including literal digest templates from the file or environment. Action providers are excluded; agents, environment-owned and referenced fields remain read-only. Referenced values, credentials, destinations and unrelated template fields are omitted. Provider-forced settings such as MQTT mode remain read-only, and MQTT digest templates are unsupported.',
       responses: {
         ...watcherEditorPaths['/api/v1/config/editor/watchers'].get.responses,
         200: jsonResponse('Notification policy edit snapshot', notificationTriggerSnapshotSchema),
@@ -515,7 +517,7 @@ export const configPaths = {
       summary: 'Edit allowlisted notification trigger policy leaves',
       operationId: 'writeNotificationTriggerEdits',
       description:
-        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron and resolvenotifications. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
+        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron, resolvenotifications, securitydigesttitle and securitydigestbody. The two template fields preserve literal scan expressions and whitespace; removal restores renderer defaults, while empty strings are invalid. Whole-scalar environment references and file/alias-owned values are read-only. MQTT does not support security digest templates. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
     },
   },
   '/api/v1/config': {
