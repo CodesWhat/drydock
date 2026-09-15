@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
 - Backport [#1139](https://github.com/CodesWhat/drydock/pull/1139) to publish agent container state on the MQTT topic Home Assistant discovery advertises, fixing a cause of entities staying `Unknown` with v1.7's default agent segmentation. Existing retained state on the old unscoped topics is not removed automatically.
