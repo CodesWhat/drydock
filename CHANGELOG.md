@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.16] — 2026-09-15
+
+### Fixed
+
+- Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
+- Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
+- Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
+- Backport [#1139](https://github.com/CodesWhat/drydock/pull/1139) to publish agent container state on the MQTT topic Home Assistant discovery advertises, fixing a cause of entities staying `Unknown` with v1.7's default agent segmentation. Existing retained state on the old unscoped topics is not removed automatically.
+- Restore website referral-source reporting while keeping referrer URLs and campaign parameters out of analytics.
+
 ## [1.7.0-rc.15] — 2026-09-10
 
 ### Fixed
@@ -2747,7 +2757,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.15...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.16...HEAD
+[1.7.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.15...v1.7.0-rc.16
 [1.7.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.14...v1.7.0-rc.15
 [1.7.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.13...v1.7.0-rc.14
 [1.7.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...v1.7.0-rc.13

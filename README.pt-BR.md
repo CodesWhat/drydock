@@ -219,6 +219,17 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.16</strong></summary>
+
+A descoberta do Home Assistant e a publicação de estado agora usam o mesmo tópico MQTT para contêineres de agentes. O padrão existente `HASS_AGENTTOPICSEGMENT=true` é mantido; os nomes canônicos dos contêineres e os tópicos MQTT sem integração com o Home Assistant não mudam. Obrigado a [@depuits](https://github.com/depuits) pelos detalhes de reprodução na [discussão #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+Esta versão também atualiza as dependências e o pacote de fusos horários do Alpine, restaura o registro de referências do site com respeito à privacidade e corrige a seleção de branch do Crowdin e as verificações de dependências. As mudanças de execução exigem um novo período de testes de sete dias. Mensagens MQTT retidas antigas não são apagadas automaticamente; verifique se há outros publicadores antes de remover estados obsoletos.
+
+[Notas completas](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.16/CHANGELOG.md#170-rc16--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>Destaques da v1.7.0-rc.15</strong></summary>
 
 Agentes de borda desconectados não podem mais registrar um componente cuja

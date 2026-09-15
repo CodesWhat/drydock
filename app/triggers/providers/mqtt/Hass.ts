@@ -24,10 +24,13 @@ import {
   isHassInstallPayload,
   resolveHassCommandContainer,
 } from './hass-commands.js';
+import { getStaleSanitizedContainerNameCandidates } from './naming.js';
 import {
-  getSanitizedCanonicalContainerName,
-  getStaleSanitizedContainerNameCandidates,
-} from './naming.js';
+  getContainerStateTopic,
+  getContainerStateTopicFromName,
+  getWatcherTopicPrefix,
+  normalizeAgentValue,
+} from './topics.js';
 
 const HASS_DEVICE_ID = 'drydock';
 const HASS_DEVICE_NAME = 'drydock';
@@ -93,14 +96,6 @@ interface HassConfiguration {
     agenttopicsegment?: boolean;
     commands?: boolean;
   };
-}
-
-// #386 — replicated from Docker.ts (not exported there)
-function normalizeAgentValue(agent: unknown): string | undefined {
-  if (typeof agent !== 'string') {
-    return undefined;
-  }
-  return agent === '' ? undefined : agent;
 }
 
 // Deprecation: "Agent-less Home Assistant MQTT topic layout (multi-agent)"
@@ -549,7 +544,13 @@ class Hass {
     containerName: string;
     agentName?: string;
   }) {
-    return `${this.getWatcherTopicPrefix({ watcherName, agentName })}/${containerName}`;
+    return getContainerStateTopicFromName({
+      baseTopic: this.configuration.topic,
+      watcherName,
+      containerName,
+      agentName,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment,
+    });
   }
 
   private getWatcherTopicPrefix({
@@ -559,11 +560,12 @@ class Hass {
     watcherName: string;
     agentName?: string;
   }) {
-    // #386 — insert agent segment only when flag is on and agent is non-empty
-    if (this.configuration.hass.agenttopicsegment && agentName) {
-      return `${this.configuration.topic}/agent/${agentName}/${watcherName}`;
-    }
-    return `${this.configuration.topic}/${watcherName}`;
+    return getWatcherTopicPrefix({
+      baseTopic: this.configuration.topic,
+      watcherName,
+      agentName,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment,
+    });
   }
 
   private getStaleContainerStateTopics({
@@ -1253,10 +1255,10 @@ class Hass {
    * @return {string}
    */
   getContainerStateTopic({ container }) {
-    return this.getContainerStateTopicFromName({
-      watcherName: container.watcher,
-      containerName: getSanitizedCanonicalContainerName(container),
-      agentName: normalizeAgentValue(container?.agent),
+    return getContainerStateTopic({
+      baseTopic: this.configuration.topic,
+      container,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment,
     });
   }
 
