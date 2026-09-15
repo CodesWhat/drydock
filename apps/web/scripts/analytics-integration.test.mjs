@@ -24,6 +24,11 @@ function walk(directory) {
 function assertAnalyticsDependencies(packageJson, lockfile) {
   const pin = packageJson.dependencies?.["posthog-js"];
   assert.match(pin, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/u);
+  const [major, minor, patch] = pin.split(".").map(BigInt);
+  assert.ok(
+    major > 1n || (major === 1n && (minor > 427n || (minor === 427n && patch >= 2n))),
+    "PostHog must remain at 1.427.2 or newer",
+  );
   assert.equal(lockfile.packages?.[""]?.dependencies?.["posthog-js"], pin);
   assert.equal(lockfile.packages?.["node_modules/posthog-js"]?.version, pin);
   assert.equal(packageJson.dependencies["@vercel/analytics"], undefined);
@@ -49,10 +54,17 @@ test("PostHog replaces both Vercel telemetry packages at one exact stable versio
   );
 });
 
-for (const version of ["1.427.2", "1.430.2", "2.0.0"]) {
+for (const version of ["1.427.2", "1.427.3", "1.428.0", "1.430.2", "2.0.0"]) {
   test(`accepts a consistent stable PostHog pin ${version}`, () => {
     const { manifest, lockfile } = dependencyFixture(version);
     assert.doesNotThrow(() => assertAnalyticsDependencies(manifest, lockfile));
+  });
+}
+
+for (const version of ["0.0.0", "0.999.999", "1.426.999", "1.427.0", "1.427.1"]) {
+  test(`rejects a consistent downgraded PostHog pin ${version}`, () => {
+    const { manifest, lockfile } = dependencyFixture(version);
+    assert.throws(() => assertAnalyticsDependencies(manifest, lockfile));
   });
 }
 
