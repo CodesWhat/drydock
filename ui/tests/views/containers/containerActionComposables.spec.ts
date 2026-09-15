@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
+import { ApiError } from '@/utils/error';
 import { loadContainerDetailListState } from '@/views/containers/loadContainerDetailListState';
 import {
   formatOperationPhase,
@@ -103,6 +104,20 @@ describe('container action focused composables', () => {
     expect(value.value).toEqual([{ id: 'a' }]);
     expect(error.value).toBeNull();
     expect(loading.value).toBe(false);
+  });
+
+  it('retains localized backup context with HTTP diagnostics', async () => {
+    const error = ref<string | null>(null);
+    await loadContainerDetailListState({
+      containerId: 'container-b',
+      loading: ref(false),
+      error,
+      value: ref([]),
+      loader: vi.fn().mockRejectedValue(new ApiError('Not Found', 404)),
+      failureMessage: 'Impossible de charger les backups',
+    });
+
+    expect(error.value).toBe('Impossible de charger les backups: HTTP 404: Not Found');
   });
 
   it('handles loader failures by clearing the list and setting an error', async () => {

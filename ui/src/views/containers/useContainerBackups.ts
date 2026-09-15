@@ -4,6 +4,7 @@ import { useToast } from '../../composables/useToast';
 import { type ContainerBackup, getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import type { ApiContainerUpdateOperation } from '../../types/api';
+import { backupErrorMessage } from '../../utils/backup-error';
 import { errorMessage } from '../../utils/error';
 import { loadContainerDetailListState } from './loadContainerDetailListState';
 
@@ -141,7 +142,7 @@ async function rollbackToBackupState(args: {
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
   } catch (e: unknown) {
-    const msg = errorMessage(e, args.t('containerComponents.backups.rollback.failedDetail'));
+    const msg = backupErrorMessage(e, args.t('containerComponents.backups.rollback.failedDetail'));
     args.rollbackError.value = msg;
     const toast = useToast();
     toast.error(args.t('containerComponents.backups.rollback.failedTitle'), msg);
