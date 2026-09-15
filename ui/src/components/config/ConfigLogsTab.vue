@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AppButton from '@/components/AppButton.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import AppLogViewer from '../AppLogViewer.vue';
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   (e: 'update:componentFilter', value: string): void;
   (e: 'update:streamingEnabled', value: boolean): void;
   (e: 'toggle-pause'): void;
+  (e: 'retry'): void;
 }>();
 
 const logLevelFilterModel = computed({
@@ -131,7 +133,12 @@ function togglePin() {
           class="dd-text-body px-3 py-2 dd-rounded"
           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
         >
-          {{ props.error }}
+          <p>{{ props.error }}</p>
+          <AppButton
+            v-if="!props.streamingEnabled"
+            class="mt-2"
+            @click="emit('retry')"
+          >{{ t('common.retry') }}</AppButton>
         </div>
 
         <AppLogViewer
