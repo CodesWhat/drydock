@@ -628,6 +628,8 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 | **v1.8.0** | 集群管理与实时配置 | **已合入 `dev/v1.8`，尚未发布：** SQLite 存储、审批队列、YAML 配置、限定范围的监视器/通知/操作策略编辑器及安全摘要模板、并行更新、选择性批量更新（[#232](https://github.com/CodesWhat/drydock/discussions/232)）、依赖顺序界面、镜像清单与清理、集群健康状态与清单刷新、可分享的标签分组、仅限制安装的维护窗口 ([#946](https://github.com/CodesWhat/drydock/discussions/946))、第一方身份验证、限定范围的 API 密钥 ([#469](https://github.com/CodesWhat/drydock/discussions/469))，以及 Home Assistant 更新进度与设备 ([#210](https://github.com/CodesWhat/drydock/discussions/210))。**待完成：** 更广泛的实时配置和分组通知路由需要确定设置归属；TOTP 需要批准实施方案；静态镜像列表监视器暂缓至 GA 之后。 |
 | **v2.0+** | 平台扩展及其他 | Swarm/Kubernetes 观察者、GitOps 同步、卷浏览器、根据声明的上游基础监控本地构建的镜像（[#897](https://github.com/CodesWhat/drydock/discussions/897)）、健康门、金丝雀部署、Web 终端、RBAC、LDAP/AD、通过其 Docker 兼容 API 提供的基础 Podman 支持、CLI、Wolfi 强化映像、套接字代理 |
 
+**尚未完成的社区需求：** 跨主机依赖更新和重启（[#219](https://github.com/CodesWhat/drydock/discussions/219)）、基于版本发布数量的成熟度判断（[#558](https://github.com/CodesWhat/drydock/discussions/558)）以及整个集群的摘要检查默认设置（[#657](https://github.com/CodesWhat/drydock/discussions/657)）均尚未实现。同一主机上的依赖排序及其新界面并不满足远程主机的需求。本地构建检测和安全选择重新构建操作仍属于未来工作（[#897](https://github.com/CodesWhat/drydock/discussions/897)）；这些条目均不承诺具体发布日期。
+
 </details>
 
 <hr>
