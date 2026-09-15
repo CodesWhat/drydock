@@ -219,6 +219,17 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.16</strong></summary>
+
+Home-Assistant-Erkennung und Statusveröffentlichung verwenden jetzt für Agent-Container dasselbe MQTT-Topic. Der bisherige Standard `HASS_AGENTTOPICSEGMENT=true` bleibt bestehen; kanonische Containernamen und reine MQTT-Topics ändern sich nicht. Danke an [@depuits](https://github.com/depuits) für die Reproduktionsdetails in [Diskussion #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+Diese Version aktualisiert außerdem Abhängigkeiten und das Alpine-Zeitzonenpaket, stellt die datenschutzfreundliche Referrer-Erfassung der Website wieder her und korrigiert die Crowdin-Branch-Auswahl sowie die Prüfungen der Abhängigkeiten. Die Laufzeitänderungen erfordern eine neue Testphase von sieben Tagen. Alte gespeicherte MQTT-Nachrichten werden nicht automatisch gelöscht; vor dem Entfernen veralteter Zustände prüfen, ob andere Publisher sie noch verwenden.
+
+[Vollständige Versionshinweise](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.16/CHANGELOG.md#170-rc16--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.15</strong></summary>
 
 Eine noch laufende Komponenteninitialisierung einer getrennten Edge-Verbindung

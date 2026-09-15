@@ -222,6 +222,25 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.16 highlights</strong></summary>
+
+Home Assistant discovery and state publishing now agree for agent containers
+with the existing `HASS_AGENTTOPICSEGMENT=true` default. Canonical container
+names and plain MQTT topics are unchanged. Thanks to
+[@depuits](https://github.com/depuits) for the reproduction details in
+[discussion #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+This candidate also refreshes dependencies and the Alpine timezone package pin,
+restores privacy-preserving website referrer reporting, and fixes Crowdin branch
+selection and dependency guards. The runtime changes start a fresh seven-day soak.
+Old retained MQTT payloads are not deleted automatically; check for other
+publishers before removing obsolete state.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.16/CHANGELOG.md#170-rc16--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.15 highlights</strong></summary>
 
 Disconnected edge agents can no longer publish an in-flight component over

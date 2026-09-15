@@ -1,16 +1,16 @@
 export const auditEntries = [
   {
     id: 'aud-030',
-    timestamp: '2026-09-10T00:00:05.000Z',
+    timestamp: '2026-09-15T00:00:05.000Z',
     action: 'container:watch',
     container: 'drydock',
-    details: 'Started watching ghcr.io/codeswhat/drydock:1.7.0-rc.15',
+    details: 'Started watching ghcr.io/codeswhat/drydock:1.7.0-rc.16',
   },
   {
     id: 'aud-001',
-    timestamp: '2026-09-10T00:00:00.000Z',
+    timestamp: '2026-09-15T00:00:00.000Z',
     action: 'system:start',
-    details: 'Drydock v1.7.0-rc.15 started',
+    details: 'Drydock v1.7.0-rc.16 started',
   },
   {
     id: 'aud-002',

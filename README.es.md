@@ -219,6 +219,17 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.16</strong></summary>
+
+El descubrimiento de Home Assistant y la publicación de estado ahora usan el mismo tema MQTT para los contenedores de agentes. Se mantiene el valor predeterminado `HASS_AGENTTOPICSEGMENT=true`; los nombres canónicos de los contenedores y los temas MQTT sin integración con Home Assistant no cambian. Gracias a [@depuits](https://github.com/depuits) por los detalles de reproducción en la [discusión #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+Esta versión también actualiza las dependencias y el paquete de zonas horarias de Alpine, restaura el registro de referencias del sitio web respetando la privacidad y corrige la selección de la rama de Crowdin y las comprobaciones de dependencias. Los cambios en tiempo de ejecución requieren un nuevo periodo de pruebas de siete días. Los mensajes MQTT retenidos antiguos no se eliminan automáticamente; comprueba si hay otros publicadores antes de borrar estados obsoletos.
+
+[Notas completas](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.16/CHANGELOG.md#170-rc16--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>Aspectos destacados de v1.7.0-rc.15</strong></summary>
 
 Los agentes edge desconectados ya no pueden registrar un componente cuya

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.15';
-const PREV_RC_VERSION = '1.7.0-rc.14';
-const RC_DATE = '2026-09-10';
-const RC_DISPLAY_DATE = 'September 10, 2026';
+const RC_VERSION = '1.7.0-rc.16';
+const PREV_RC_VERSION = '1.7.0-rc.15';
+const RC_DATE = '2026-09-15';
+const RC_DISPLAY_DATE = 'September 15, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -24,6 +24,13 @@ function extractMarkdownSection(document, heading) {
   assert.notEqual(sectionStart, -1, `missing Markdown section: ${heading}`);
   const nextSectionStart = document.indexOf('\n## ', sectionStart + heading.length + 1);
   return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
+}
+
+function assertMarkdownLink(document, url) {
+  const destinations = [...(document ?? '').matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)].map(
+    (match) => match[1],
+  );
+  assert.ok(destinations.includes(url), `missing Markdown link: ${url}`);
 }
 
 function assertReleaseRedirectAllowlist(name, section) {
@@ -167,6 +174,9 @@ test('rc.14 release notes retain the post-promotion fixes', () => {
 });
 
 test('rc.15 notes identify the ownership fix and immutable changelog', () => {
+  const RC_VERSION = '1.7.0-rc.15';
+  const RC_DATE = '2026-09-10';
+  const RC_DISPLAY_DATE = 'September 10, 2026';
   const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
   const updates = extractMarkdownSection(
     read('content/docs/current/updates/index.mdx'),
@@ -190,6 +200,39 @@ test('rc.15 notes identify the ownership fix and immutable changelog', () => {
       `[Full changelog](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE})`,
     ),
   );
+});
+
+test('credit links require an exact Markdown destination', () => {
+  const url = 'https://github.com/depuits';
+  assert.doesNotThrow(() => assertMarkdownLink(`Thanks [depuits](${url}).`, url));
+  for (const document of [
+    `Thanks [depuits](${url}-other).`,
+    `Thanks [depuits](https://example.com/${url}).`,
+    `Plain text ${url}`,
+    undefined,
+  ]) {
+    assert.throws(() => assertMarkdownLink(document, url));
+  }
+});
+
+test('current candidate notes credit the MQTT report and describe its fresh soak', () => {
+  const updates = extractMarkdownSection(
+    read('content/docs/current/updates/index.mdx'),
+    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
+  );
+  const changelogUrl = `https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`;
+  assert.match(updates, /HASS_AGENTTOPICSEGMENT=true/u);
+  assert.match(updates, /fresh seven-day soak/u);
+  assert.match(updates, /not deleted automatically/u);
+  assert.ok(updates.includes(changelogUrl));
+  for (const suffix of ['', '.de', '.es', '.fr', '.pl', '.pt-BR', '.zh-CN']) {
+    const readme = read(`README${suffix}.md`);
+    const currentHighlights = readme.split('<details open>')[1]?.split('</details>')[0];
+    assert.ok(currentHighlights?.includes(`v${RC_VERSION}`), suffix);
+    assert.ok(currentHighlights?.includes(changelogUrl), suffix);
+    assertMarkdownLink(currentHighlights, 'https://github.com/depuits');
+    assertMarkdownLink(currentHighlights, 'https://github.com/CodesWhat/drydock/discussions/1201');
+  }
 });
 
 test('security policy names active v1.7 and maintained v1.6 without supporting old candidates', () => {
