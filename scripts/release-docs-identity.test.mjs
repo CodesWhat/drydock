@@ -26,6 +26,13 @@ function extractMarkdownSection(document, heading) {
   return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
 }
 
+function assertMarkdownLink(document, url) {
+  const destinations = [...(document ?? '').matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)].map(
+    (match) => match[1],
+  );
+  assert.ok(destinations.includes(url), `missing Markdown link: ${url}`);
+}
+
 function assertReleaseRedirectAllowlist(name, section) {
   assert.doesNotMatch(section, /\b3xx\b/iu, `${name} must not use generic 3xx wording`);
   assert.doesNotMatch(
@@ -195,6 +202,19 @@ test('rc.15 notes identify the ownership fix and immutable changelog', () => {
   );
 });
 
+test('credit links require an exact Markdown destination', () => {
+  const url = 'https://github.com/depuits';
+  assert.doesNotThrow(() => assertMarkdownLink(`Thanks [depuits](${url}).`, url));
+  for (const document of [
+    `Thanks [depuits](${url}-other).`,
+    `Thanks [depuits](https://example.com/${url}).`,
+    `Plain text ${url}`,
+    undefined,
+  ]) {
+    assert.throws(() => assertMarkdownLink(document, url));
+  }
+});
+
 test('current candidate notes credit the MQTT report and describe its fresh soak', () => {
   const updates = extractMarkdownSection(
     read('content/docs/current/updates/index.mdx'),
@@ -210,11 +230,8 @@ test('current candidate notes credit the MQTT report and describe its fresh soak
     const currentHighlights = readme.split('<details open>')[1]?.split('</details>')[0];
     assert.ok(currentHighlights?.includes(`v${RC_VERSION}`), suffix);
     assert.ok(currentHighlights?.includes(changelogUrl), suffix);
-    assert.ok(currentHighlights?.includes('https://github.com/depuits'), suffix);
-    assert.ok(
-      currentHighlights?.includes('https://github.com/CodesWhat/drydock/discussions/1201'),
-      suffix,
-    );
+    assertMarkdownLink(currentHighlights, 'https://github.com/depuits');
+    assertMarkdownLink(currentHighlights, 'https://github.com/CodesWhat/drydock/discussions/1201');
   }
 });
 
