@@ -44,6 +44,14 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 
 <Callout type="warning">**Multi-agent deployments:** Home Assistant MQTT topics include an `agent/<name>` segment for agent-owned containers by default as of v1.7.0, scoping topics, watcher running-status, sensor counts, and discovery cleanup per agent so multiple agents sharing the default watcher name `local` no longer collide. This changed the Home Assistant entity IDs for agent containers on upgrade — update any automations or dashboards that reference the old (agent-less) entity IDs. Drydock does not retroactively remove the old discovery entities; they remain retained on the broker and show up as orphaned, frozen-at-last-state duplicates until manually removed. Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_AGENTTOPICSEGMENT=false` to temporarily opt back into the pre-v1.7.0 unscoped layout — see [Deprecations](https://getdrydock.com/docs/deprecations).</Callout>
 
+### Unreleased v1.7 state-topic fix
+
+The maintenance backport of [#1139](https://github.com/CodesWhat/drydock/pull/1139) makes agent container state publish to the same topic advertised by Home Assistant discovery. With `HASS_ENABLED=true` and v1.7's unchanged `HASS_AGENTTOPICSEGMENT=true` default, an agent `edge`, watcher `local`, and container `nginx` now publish state to `dd/container/agent/edge/local/nginx`. Earlier v1.7 builds published to `dd/container/local/nginx` while discovery advertised the agent-scoped topic, which could leave the entity on `Unknown`. State reaches the corrected topic on the next container publish.
+
+Controller-local topics, the explicit `HASS_AGENTTOPICSEGMENT=false` opt-out, and plain MQTT topics when `HASS_ENABLED=false` keep their existing layout. Container names still follow v1.7's canonical-name rules.
+
+Old retained state messages on unscoped topics are not removed automatically. Move any custom subscribers for agent state to the corrected topic, and clear an old retained message only after checking that no controller-local container or other publisher still uses that topic. Any orphaned discovery entities from an earlier layout change still need the manual cleanup described above.
+
 ## Examples
 
 ### Post a message to a local mosquitto broker
