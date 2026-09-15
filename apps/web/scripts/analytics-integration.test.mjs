@@ -21,13 +21,97 @@ function walk(directory) {
   return files;
 }
 
-test("PostHog replaces both Vercel telemetry packages at one exact version", () => {
-  const packageJson = JSON.parse(source("package.json"));
-
-  assert.equal(packageJson.dependencies["posthog-js"], "1.427.2");
+function assertAnalyticsDependencies(packageJson, lockfile) {
+  const pin = packageJson.dependencies?.["posthog-js"];
+  assert.match(pin, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/u);
+  assert.equal(lockfile.packages?.[""]?.dependencies?.["posthog-js"], pin);
+  assert.equal(lockfile.packages?.["node_modules/posthog-js"]?.version, pin);
   assert.equal(packageJson.dependencies["@vercel/analytics"], undefined);
   assert.equal(packageJson.dependencies["@vercel/speed-insights"], undefined);
+}
+
+function dependencyFixture(version = "1.427.2") {
+  return {
+    manifest: { dependencies: { "posthog-js": version } },
+    lockfile: {
+      packages: {
+        "": { dependencies: { "posthog-js": version } },
+        "node_modules/posthog-js": { version },
+      },
+    },
+  };
+}
+
+test("PostHog replaces both Vercel telemetry packages at one exact stable version", () => {
+  assertAnalyticsDependencies(
+    JSON.parse(source("package.json")),
+    JSON.parse(source("package-lock.json")),
+  );
 });
+
+for (const version of ["1.427.2", "1.430.2", "2.0.0"]) {
+  test(`accepts a consistent stable PostHog pin ${version}`, () => {
+    const { manifest, lockfile } = dependencyFixture(version);
+    assert.doesNotThrow(() => assertAnalyticsDependencies(manifest, lockfile));
+  });
+}
+
+const invalidVersions = [
+  undefined,
+  "",
+  "^1.427.2",
+  "~1.427.2",
+  ">=1.427.2",
+  "*",
+  "latest",
+  "v1.427.2",
+  "1.427",
+  "1.427.2.0",
+  "01.427.2",
+  "1.427.2-beta.1",
+  "1.427.2+build",
+  "1.427.2\n",
+  "garbage",
+];
+for (const location of ["manifest", "lock root", "lock install"]) {
+  for (const version of invalidVersions) {
+    test(`rejects invalid PostHog ${location} version ${JSON.stringify(version)}`, () => {
+      const { manifest, lockfile } = dependencyFixture();
+      if (location === "manifest") manifest.dependencies["posthog-js"] = version;
+      if (location === "lock root") lockfile.packages[""].dependencies["posthog-js"] = version;
+      if (location === "lock install")
+        lockfile.packages["node_modules/posthog-js"].version = version;
+      assert.throws(() => assertAnalyticsDependencies(manifest, lockfile));
+    });
+  }
+}
+for (const location of ["lock root", "lock install"]) {
+  test(`rejects a mismatched PostHog ${location} version`, () => {
+    const { manifest, lockfile } = dependencyFixture();
+    if (location === "lock root") lockfile.packages[""].dependencies["posthog-js"] = "1.430.2";
+    else lockfile.packages["node_modules/posthog-js"].version = "1.430.2";
+    assert.throws(() => assertAnalyticsDependencies(manifest, lockfile));
+  });
+}
+for (const lockfile of [
+  {},
+  { packages: {} },
+  { packages: { "": { dependencies: { "posthog-js": "1.427.2" } } } },
+]) {
+  test(`rejects missing PostHog lockfile entries ${JSON.stringify(lockfile)}`, () => {
+    assert.throws(() => assertAnalyticsDependencies(dependencyFixture().manifest, lockfile));
+  });
+}
+test("rejects missing manifest dependencies", () => {
+  assert.throws(() => assertAnalyticsDependencies({}, dependencyFixture().lockfile));
+});
+for (const name of ["@vercel/analytics", "@vercel/speed-insights"]) {
+  test(`rejects the removed ${name} dependency`, () => {
+    const { manifest, lockfile } = dependencyFixture();
+    manifest.dependencies[name] = "1.0.0";
+    assert.throws(() => assertAnalyticsDependencies(manifest, lockfile));
+  });
+}
 
 test("route generation is a checked build and development prerequisite", () => {
   const scripts = JSON.parse(source("package.json")).scripts;

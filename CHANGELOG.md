@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Restore website referral-source reporting while keeping referrer URLs and campaign parameters out of analytics.
 
 ## [1.7.0-rc.15] — 2026-09-10
