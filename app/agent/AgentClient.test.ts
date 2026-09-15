@@ -3589,6 +3589,52 @@ describe('AgentClient', () => {
       );
     });
 
+    test.each(['succeeded', 'rolled-back', 'failed', 'expired', 'skipped-dependency'])(
+      'preserves terminal %s event fields and ignores a repeated terminal event',
+      async (status) => {
+        const payload = {
+          operationId: `terminal-${status}`,
+          containerName: 'local_nginx',
+          containerId: 'old-id',
+          newContainerId: 'new-id',
+          status,
+          phase: status,
+          container: { id: 'new-id', name: 'local_nginx', watcher: 'local' },
+        };
+        await client.handleEvent('dd:update-operation-changed', payload);
+
+        const terminal = vi.mocked(updateOperationStore.markOperationTerminal);
+        expect(terminal).toHaveBeenCalledExactlyOnceWith(`agent-test-agent-terminal-${status}`, {
+          status,
+          containerName: payload.containerName,
+          containerId: payload.containerId,
+          newContainerId: payload.newContainerId,
+          phase: payload.phase,
+          container: { ...payload.container, agent: 'test-agent' },
+        });
+        vi.mocked(updateOperationStore.getOperationById).mockReturnValue(
+          terminal.mock.results[0].value,
+        );
+        await client.handleEvent('dd:update-operation-changed', payload);
+        expect(terminal).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test.each(['succeeded', 'rolled-back', 'failed', 'expired', 'skipped-dependency'])(
+      'omits absent optional fields from terminal %s events',
+      async (status) => {
+        await client.handleEvent('dd:update-operation-changed', {
+          operationId: `minimal-${status}`,
+          containerName: 'local_nginx',
+          status,
+        });
+        expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledExactlyOnceWith(
+          `agent-test-agent-minimal-${status}`,
+          { status, containerName: 'local_nginx' },
+        );
+      },
+    );
+
     test('should ignore invalid update-operation-changed payloads from agents', async () => {
       await client.handleEvent('dd:update-operation-changed', null);
       await client.handleEvent('dd:update-operation-changed', {

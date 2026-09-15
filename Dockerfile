@@ -48,15 +48,15 @@ FROM base AS app-build
 # Copy app package.json
 COPY app/package* ./
 
-# Install dependencies (including dev)
-RUN npm ci --include=dev --omit=optional --no-audit --no-fund --no-update-notifier
+# Include optional platform packages required by the native TypeScript compiler.
+RUN npm ci --include=dev --include=optional --no-audit --no-fund --no-update-notifier
 
 # Copy app source
 COPY app/ ./
 
-# Build and remove dev dependencies
+# Build, then remove dev and optional dependencies from the runtime image.
 RUN npm run build \
-    && npm prune --omit=dev
+    && npm prune --omit=dev --omit=optional
 
 # Build stage for frontend UI
 FROM base AS ui-build

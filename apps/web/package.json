@@ -48,7 +48,7 @@
     "@types/react-dom": "19.2.7",
     "lefthook": "2.1.12",
     "tailwindcss": "4.3.3",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "overrides": {
     "postcss": "8.5.28",
