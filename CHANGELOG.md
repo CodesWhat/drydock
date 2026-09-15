@@ -97,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
+- Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Configuration editor snapshots now omit both stored and effective values for watcher and notification fields still owned by live interpolation after an external file edit, or inherited through YAML parent aliases. These fields remain read-only and reject edits with HTTP 409.

@@ -52,9 +52,11 @@ describe('formatOperationPhase / formatOperationStatus / formatRollbackReason (m
     expect(mockT).toHaveBeenCalledWith('containerComponents.sideTabContent.unknown');
   });
 
-  it('normalizes string values regardless of whether t is provided', () => {
+  it('normalizes string values and translates recognized codes when t is provided', () => {
     expect(formatOperationPhase('IN_PROGRESS')).toBe('in progress');
-    expect(formatOperationStatus('ROLLED-BACK', vi.fn())).toBe('rolled back');
+    const t = vi.fn().mockReturnValue('Restored');
+    expect(formatOperationStatus('ROLLED-BACK', t)).toBe('Restored');
+    expect(t).toHaveBeenCalledWith('containerComponents.backups.operationValues.rolled-back');
   });
 });
 

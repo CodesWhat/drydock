@@ -2691,7 +2691,7 @@ describe('useContainerActions', () => {
     expect(composable.formatTimestamp(undefined)).toBe('Unknown');
     expect(composable.formatTimestamp('invalid-date')).toBe('invalid-date');
     expect(composable.formatOperationPhase(42)).toBe('Unknown');
-    expect(composable.formatOperationStatus('  IN_PROGRESS  ')).toBe('in progress');
+    expect(composable.formatOperationStatus('  IN_PROGRESS  ')).toBe('In progress');
     expect(composable.formatRollbackReason('ROLLED-BACK')).toBe('rolled back');
     expect(composable.getOperationStatusStyle('succeeded')).toEqual({
       backgroundColor: 'var(--dd-success-muted)',

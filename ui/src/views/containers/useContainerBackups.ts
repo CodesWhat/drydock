@@ -4,6 +4,10 @@ import { useToast } from '../../composables/useToast';
 import { type ContainerBackup, getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import type { ApiContainerUpdateOperation } from '../../types/api';
+import {
+  isContainerUpdateOperationPhase,
+  isContainerUpdateOperationStatus,
+} from '../../types/update-operation';
 import { backupErrorMessage } from '../../utils/backup-error';
 import { errorMessage } from '../../utils/error';
 import { loadContainerDetailListState } from './loadContainerDetailListState';
@@ -31,23 +35,39 @@ export function formatTimestamp(
   return parsed.toLocaleString();
 }
 
-function formatOperationValue(value: unknown, t?: (key: string) => string): string {
+const ROLLBACK_REASONS = new Set([
+  'update-runtime-failed',
+  'create-new-failed',
+  'stop-old-failed',
+  'start-new-failed',
+  'health-gate-failed',
+  'cancelled',
+  'compose-runtime-refresh-failed',
+]);
+
+function formatOperationValue(
+  value: unknown,
+  isKnown: (code: string) => boolean,
+  t?: (key: string) => string,
+): string {
   if (typeof value !== 'string') {
     return t ? t('containerComponents.sideTabContent.unknown') : 'unknown';
   }
-  return value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+  const label = value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+  const code = label.replaceAll(' ', '-');
+  return t && isKnown(code) ? t(`containerComponents.backups.operationValues.${code}`) : label;
 }
 
 export function formatOperationPhase(phase: unknown, t?: (key: string) => string): string {
-  return formatOperationValue(phase, t);
+  return formatOperationValue(phase, isContainerUpdateOperationPhase, t);
 }
 
 export function formatRollbackReason(reason: unknown, t?: (key: string) => string): string {
-  return formatOperationValue(reason, t);
+  return formatOperationValue(reason, (code) => ROLLBACK_REASONS.has(code), t);
 }
 
 export function formatOperationStatus(status: unknown, t?: (key: string) => string): string {
-  return formatOperationValue(status, t);
+  return formatOperationValue(status, isContainerUpdateOperationStatus, t);
 }
 
 function getOperationStatusStyle(status: unknown) {
