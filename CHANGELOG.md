@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.14] — 2026-09-15
+
 ### Fixed
 
 - Exclude parked agent worktrees from workflow-test discovery, preserving Vitest's default exclusions and keeping the maintenance pre-push gate scoped to its own checkout.
@@ -2525,7 +2527,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.13...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.14...HEAD
+[1.6.1-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.13...v1.6.1-rc.14
 [1.6.1-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.12...v1.6.1-rc.13
 [1.6.1-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.11...v1.6.1-rc.12
 [1.6.1-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.10...v1.6.1-rc.11
