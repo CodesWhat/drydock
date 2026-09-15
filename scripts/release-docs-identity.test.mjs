@@ -2,13 +2,22 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.1-rc.13';
-const PREV_RC_VERSION = '1.6.1-rc.12';
-const RC_DATE = '2026-09-10';
-const RC_DISPLAY_DATE = 'September 10, 2026';
+const RC_VERSION = '1.6.1-rc.14';
+const PREV_RC_VERSION = '1.6.1-rc.13';
+const RC_DATE = '2026-09-15';
+const RC_DISPLAY_DATE = 'September 15, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
+
+test('translated README badges identify the same maintenance candidate', () => {
+  for (const locale of ['de', 'es', 'fr', 'pl', 'pt-BR', 'zh-CN']) {
+    assert.ok(
+      read(`README.${locale}.md`).includes(`version-${RC_VERSION.replaceAll('-', '--')}-blue`),
+      `README.${locale}.md must identify the current candidate`,
+    );
+  }
+});
 
 function read(path) {
   return readFileSync(path, 'utf8');

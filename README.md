@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.13-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.14-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,24 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.14 highlights</strong></summary>
+
+Home Assistant discovery and state publishing now agree for agent containers
+when MQTT agent topic segmentation is enabled. The 1.6 default stays off;
+canonical container names and plain MQTT topics are unchanged. Thanks to
+[@depuits](https://github.com/depuits) for the reproduction details in
+[discussion #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+This candidate also refreshes the Alpine timezone package pin and fixes
+Crowdin branch selection and workflow-test discovery. The runtime changes
+start a fresh seven-day soak. Old retained MQTT payloads are not deleted
+automatically; check for other publishers before removing obsolete state.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.14/CHANGELOG.md#161-rc14--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.13 highlights</strong></summary>
 
 Disconnected edge agents can no longer publish an in-flight component over

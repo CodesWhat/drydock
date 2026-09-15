@@ -5,6 +5,21 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.14 Highlights — September 15, 2026
+
+Home Assistant discovery and state publishing now agree for agent containers
+when MQTT agent topic segmentation is enabled. The 1.6 default remains
+`HASS_AGENTTOPICSEGMENT=false`; canonical container names and plain MQTT topics
+are unchanged. Thanks to [@depuits](https://github.com/depuits) for the
+reproduction details in [discussion #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+The candidate also refreshes the Alpine timezone package pin and fixes Crowdin
+branch selection and workflow-test discovery. These runtime changes start a
+fresh seven-day soak. Old retained MQTT payloads are not deleted automatically;
+check for other publishers before removing obsolete state. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.14/CHANGELOG.md#161-rc14--2026-09-15)
+for the full release notes.
+
 ## v1.6.1-rc.13 Highlights — September 10, 2026
 
 Disconnected edge agents can no longer publish an in-flight component over
