@@ -4,13 +4,13 @@ Guidance for coding agents working in this repository.
 
 ## What is Drydock?
 
-Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 20 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
+Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 21 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
 
 ## Repository structure
 
 This is a multi-workspace repo; each JS/TS workspace manages its own `package.json`:
 
-- **`app/`** — Backend (TypeScript, Express, LokiJS). Compiles with `tsc` directly, no bundler.
+- **`app/`** — Backend (TypeScript, Express, SQLite on the v1.8 development line). Compiles with `tsc` directly, no bundler.
 - **`ui/`** — Frontend (Vue 3, Tailwind CSS 4, Vite SPA).
 - **`e2e/`** — Cucumber API/stream contracts + Playwright browser tests.
 - **`content/docs/`** — Versioned MDX documentation, the source of truth for published docs.
@@ -71,11 +71,11 @@ Each component type (watcher, registry, trigger, authentication) extends a base 
 - **Watchers** (`app/watchers/`) — monitor containers via the Docker socket, reading `dd.watch`/`dd.tag.*` labels.
 - **Registries** (`app/registries/`) — query image registries for available tags; 23 providers share auth patterns via `BaseRegistry`.
 - **Triggers** (`app/triggers/`) — send notifications or execute actions on update; category-scoped `DD_ACTION_*`/`DD_NOTIFICATION_*`. The legacy `DD_TRIGGER_*` env vars and `dd.trigger.*` labels are removed as of v1.7.0 — a leftover `DD_TRIGGER_*` variable now fails startup; see `DEPRECATIONS.md`.
-- **Store** (`app/store/`) — LokiJS in-memory database, persisted to `/store/dd.json`.
+- **Store** (`app/store/`) — SQLite persisted to `/store/dd.sqlite` on v1.8, with a one-time import of the legacy `/store/dd.json` used by v1.7 and earlier.
 - **Agents** (`app/agent/`) — controller-agent distributed architecture; agents run remote watchers/triggers, including Portwing edge/standard agents.
 - **API** (`app/api/`) — Express REST API with SSE for real-time updates.
 
-Configuration is env-var only, `DD_` prefix, nested via underscores (e.g. `DD_REGISTRY_HUB_PUBLIC_AUTH`); secret-file support via `DD_PASSWORD__FILE`.
+Configuration uses `DD_` environment variables nested via underscores (e.g. `DD_REGISTRY_HUB_PUBLIC_AUTH`), with secret-file support via `DD_PASSWORD__FILE`. v1.8 also loads `drydock.yml` beneath environment overrides and exposes revision-checked editors for selected local file-owned fields. See `content/docs/current/configuration/config-file/index.mdx`; database-owned settings and per-container labels remain separate.
 
 ## Testing patterns
 

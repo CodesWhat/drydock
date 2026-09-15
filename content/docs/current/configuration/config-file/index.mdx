@@ -166,11 +166,19 @@ Every route below is under `/api/v1/config`, mounted after authentication.
 | --- | --- | --- |
 | `GET /api/v1/config` | `SESSION_ONLY` | The effective, merged configuration, redacted, with each key's source (`env` or `file`) |
 | `GET /api/v1/config/:section` | `SESSION_ONLY` | One section of the same response |
+| `GET /api/v1/config/editor/watchers` | `SESSION_ONLY` | Source-aware snapshot for the [watcher schedule editor](/docs/configuration/watchers#edit-a-watcher-schedule-in-the-ui) |
+| `PATCH /api/v1/config/editor/watchers` | `admin` | Revision-checked changes to the four editable watcher fields |
+| `GET /api/v1/config/editor/triggers` | `SESSION_ONLY` | Snapshot for [notification policy and security digest templates](/docs/configuration/triggers#edit-notification-delivery-policy-in-the-ui) |
+| `PATCH /api/v1/config/editor/triggers` | `admin` | Revision-checked notification policy and supported template changes |
+| `GET /api/v1/config/editor/actions` | `SESSION_ONLY` | Snapshot for the [three-field action policy editor](/docs/configuration/triggers#edit-action-policy-in-the-ui) |
+| `PATCH /api/v1/config/editor/actions` | `admin` | Revision-checked changes to action `auto`, `order`, and `concurrency` |
 | `POST /api/v1/config/validate` | `admin` | Validate a candidate document against every component schema; applies nothing |
 | `POST /api/v1/config/reload` | `admin` | Re-read the file and reconcile components by difference |
 | `PUT /api/v1/config/:section` | `admin` | Write a section to the file, then reload |
 
-Both `GET` routes are `SESSION_ONLY` — unreachable with an API key, even one holding `admin` — the same restriction the diagnostic debug dump and the container env-reveal endpoint already carry, since this is an environment reveal rather than an ordinary read. Every route in this table is rate-limited to 5 requests per 60 seconds.
+All `GET` routes are `SESSION_ONLY`, unreachable with an API key, even one holding `admin`. The diagnostic debug dump and container env-reveal endpoint carry the same restriction because these routes expose configuration rather than ordinary inventory. Every route in this table is rate-limited to 5 requests per 60 seconds.
+
+The editors are new in unreleased v1.8 builds. They edit existing, local file-owned fields only; they do not create providers, override environment or reference ownership, edit container labels, or change database-owned settings. A save reports file persistence separately from live reload and does not execute an action or send a notification.
 
 `GET /api/v1/config` returns:
 

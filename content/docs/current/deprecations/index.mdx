@@ -240,6 +240,20 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 ## Removal in v1.8.0
 
+These changes describe the unreleased v1.8 development line, not the published v1.7 candidate.
+
+### SQLite replaces the live JSON store
+
+v1.8 persists state and sessions in `dd.sqlite`. The legacy `dd.json` is imported only when it exists and the SQLite database does not. A completed import renames it to `dd.json.pre-1.8.bak`, unless that backup already exists; in that case both legacy files are preserved and a warning is logged. Import failure stops startup. An existing SQLite database is never re-imported from JSON.
+
+Backup tools must target a consistent SQLite snapshot, not `dd.json`. Stop Drydock before copying database files, or use SQLite's live backup operation. Downgrades need the appropriate pre-upgrade JSON snapshot and cannot recover changes made only in SQLite. See [Storage](/docs/configuration/storage#downgrade-notes) for the existing-backup and fresh-install cases, and [Store API](/docs/api/store) for `configuration.dbFile`.
+
+### MQTT identity-based topics and discovery
+
+For Compose-labeled containers, state topics now use an encoded `project.service` identity instead of the container name. Each component doubles literal hyphens and replaces dots with hyphens before the two are joined with a dot. Home Assistant `unique_id` is derived from the container identity independently of the topic. Rename and recreate stability applies to Compose-labeled containers, not name-identified standalone containers.
+
+With Home Assistant discovery enabled, resync clears replaced name-based discovery topics derived from known stored containers. A successful sweep is recorded per broker URL, base topic, discovery prefix and agent-topic-segment setting; failed publishes leave the sweep eligible for retry. This is not a broker-wide cleanup and does not remove all pre-v1.7 watcher or aggregate entities. Update hand-written subscriptions and any automations using old entity IDs. See [MQTT](/docs/configuration/triggers/mqtt).
+
 ### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
 
 `GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. As of v1.8.0, the route no longer serves the old shape. Unlike `GET /api/auth/methods` above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead it has its own explicit **410 Gone** tombstone, registered ahead of the authentication guard so the response is the same whether or not the request carries credentials.

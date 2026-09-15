@@ -5,15 +5,18 @@ description: "This API allows to query the configuration of the Store."
 
 ## Get Store configuration
 
-This operation lets you get the state of the Store.
+This operation returns the Store configuration. In unreleased v1.8 builds, `dbFile` names the active SQLite database. `file` remains the legacy JSON filename used for the one-time upgrade import, not the active persistence file. See [Storage](/docs/configuration/storage) for backup and downgrade instructions.
 
 ```bash
 curl http://drydock:3000/api/v1/store
+```
 
+```json
 {
    "configuration":{
       "path":"/store",
-      "file":"dd.json"
+      "file":"dd.json",
+      "dbFile":"dd.sqlite"
    }
 }
 ```

@@ -12,6 +12,8 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 ## Edit a watcher schedule in the UI
 
+This editor is new in unreleased v1.8 builds and requires a writable [configuration file](/docs/configuration/config-file).
+
 Open **Watchers**, select a watcher, then choose **Edit schedule** in its detail
 panel. This editor changes four settings for existing controller-local watchers:
 `cron`, `maintenancewindow`, `maintenancewindowtz`, and `maintenancewindowscope`.
@@ -899,6 +901,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
 <Callout type="info" title="Dependency-ordered updates">
+
+Label-declared dependencies are limited to containers on the same agent and watcher; Compose-detected dependencies resolve service names within the same Compose project and agent. Cross-host dependency updates and restarts are not supported, including a controller on one host coordinating Tdarr nodes on other hosts. A matching target on another agent is reported as `crossHostIgnored` and is not dispatched; a label target outside the watcher's name scope is unresolved. The dependency UI does not extend this scope. See [discussion #219](https://github.com/CodesWhat/drydock/discussions/219) for the remaining cross-host request.
 
 `dd.depends_on` and `dd.depends_on.action` don't just record a relationship — they change dispatch order. Any bulk update (a manual multi-select, a group update, a maintenance-window batch) is partitioned into topological "waves" before dispatch: a container never starts updating until every container it depends on has finished. Dependents configured with `dd.depends_on.action=restart` are restarted (not re-pulled) once their dependency's update completes; if an earlier wave fails outright, dependents that never got a chance to run land in a `skipped-dependency` status rather than silently vanishing from the operations list. A dependency cycle is never a deadlock — cycle members are grouped into one unordered wave and dispatched together.
 
