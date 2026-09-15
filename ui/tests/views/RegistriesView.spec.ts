@@ -214,6 +214,20 @@ describe('RegistriesView', () => {
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
   });
 
+  it('preserves array configuration entries in the detail view', async () => {
+    const registry = makeRegistry({ configuration: ['first entry', 'second entry'] });
+    mockGetAllRegistries.mockResolvedValue([registry]);
+    mockGetRegistry.mockResolvedValue(registry);
+
+    const wrapper = await mountRegistriesView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('first entry');
+    expect(wrapper.text()).toContain('second entry');
+    expect(wrapper.text()).toContain('https://registry-1.docker.io');
+  });
+
   it('clicking a row fetches registry details from per-component endpoint', async () => {
     mockGetAllRegistries.mockResolvedValue([
       makeRegistry({

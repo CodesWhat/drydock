@@ -300,6 +300,27 @@ export function isTriggerCompatibleWithContainer(
 }
 
 /**
+ * The first reason (in the same order `isTriggerAssociatedWithContainer`
+ * checks them — agent ownership, then structural compatibility) a trigger
+ * fails association with a container, or `undefined` if it's associated.
+ * `isTriggerAssociatedWithContainer` and the DR-78 unassociated-trigger
+ * reason reporting in `api/container/triggers.ts` both derive from this, so
+ * the boolean and the reported reason can never disagree.
+ */
+export function getTriggerAssociationFailureReason(
+  trigger: DockerTriggerCandidate,
+  container: ContainerTriggerContext,
+): 'agentOwnership' | 'structuralIncompatibility' | undefined {
+  if (!isTriggerAgentCompatible(trigger, container)) {
+    return 'agentOwnership';
+  }
+  if (!isTriggerStructurallyCompatibleWithContainer(trigger, container)) {
+    return 'structuralIncompatibility';
+  }
+  return undefined;
+}
+
+/**
  * Check whether a trigger is structurally usable for a container, including
  * local/agent routing, without requiring a known update kind.
  */
@@ -307,10 +328,7 @@ export function isTriggerAssociatedWithContainer(
   trigger: DockerTriggerCandidate,
   container: ContainerTriggerContext,
 ): boolean {
-  return (
-    isTriggerAgentCompatible(trigger, container) &&
-    isTriggerStructurallyCompatibleWithContainer(trigger, container)
-  );
+  return getTriggerAssociationFailureReason(trigger, container) === undefined;
 }
 
 /**

@@ -7,8 +7,8 @@ import yaml from 'yaml';
 import type { WorkflowDefinition } from './workflow-test-utils';
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
-const hardenRunnerRef = 'step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40';
-const hardenRunnerVersion = 'v2.20.1';
+const hardenRunnerRef = 'step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c';
+const hardenRunnerVersion = 'v2.21.0';
 
 type EgressPolicy = 'audit' | 'block';
 
@@ -16,6 +16,8 @@ type EgressPolicy = 'audit' | 'block';
 // §2). Any job not listed here defaults to 'audit'. This map is the migration
 // checklist — each stage's PR adds exactly the jobs it flips to 'block'.
 const expectedPolicy: Record<string, EgressPolicy> = {
+  'starchart.yml/prepare': 'block',
+  'starchart.yml/publish': 'block',
   'ci-verify.yml/changes': 'block',
   'ci-verify.yml/dependency-review': 'block',
   'ci-verify.yml/secrets': 'block',

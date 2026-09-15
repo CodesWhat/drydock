@@ -13,7 +13,9 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  mergeConfigWithImgset,
   resolveContainerDependsOn,
+  resolveLabelsFromContainer,
   warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
@@ -29,6 +31,7 @@ import {
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
+import { normalizeContainer } from './image-comparison.js';
 import {
   areRuntimeDetailsEqual,
   getRuntimeDetailsFromContainerSummary,
@@ -62,7 +65,7 @@ export interface ContainerLabelOverrides {
   registryLookupUrl?: string;
 }
 
-interface DockerContainerSummary {
+export type DockerContainerSummary = {
   Id: string;
   Image: string;
   Labels?: Record<string, string>;
@@ -70,9 +73,9 @@ interface DockerContainerSummary {
   Names?: string[];
   Ports?: unknown;
   Mounts?: unknown;
-}
+};
 
-interface DockerContainerInspectPayload {
+export interface DockerContainerInspectPayload {
   Config?: {
     Image?: string;
     [key: string]: unknown;
@@ -233,6 +236,22 @@ interface DockerImageDetailsHelpers {
   ) => ResolvedImgset | undefined;
 }
 
+export function createDockerImageDetailsHelpers(
+  watcher: Pick<
+    DockerImageDetailsHelpers,
+    'resolveImageName' | 'resolveTagName' | 'getMatchingImgsetConfiguration'
+  >,
+): DockerImageDetailsHelpers {
+  return {
+    resolveLabelsFromContainer,
+    mergeConfigWithImgset,
+    normalizeContainer,
+    resolveImageName: (...args) => watcher.resolveImageName(...args),
+    resolveTagName: (...args) => watcher.resolveTagName(...args),
+    getMatchingImgsetConfiguration: (...args) => watcher.getMatchingImgsetConfiguration(...args),
+  };
+}
+
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
 
 interface ResolveContainerImageStateContext {
@@ -358,17 +377,20 @@ async function refreshStoredContainerImageFields(
     // when the old digest.repo isn't among the freshly derived entries (#669).
     containerInStore.image.digest.repoDigests = freshOrderedRepoDigests;
 
-    if (shouldRepairStoredImageReference(containerInStore)) {
-      const resolvedImageState = resolveContainerImageState({
-        watcher,
-        container,
-        dockerContainerName,
-        labelOverrides,
-        image: currentImage,
-        containerInspect,
-        helpers,
-      });
+    // Re-resolved every cycle (not just inside the repair branch below) so
+    // digest.watch can be re-derived unconditionally — see the re-derivation
+    // block after the repair branch for why (#1070).
+    const resolvedImageState = resolveContainerImageState({
+      watcher,
+      container,
+      dockerContainerName,
+      labelOverrides,
+      image: currentImage,
+      containerInspect,
+      helpers,
+    });
 
+    if (shouldRepairStoredImageReference(containerInStore)) {
       if (resolvedImageState) {
         const refreshedContainer = helpers.normalizeContainer({
           ...containerInStore,
@@ -417,6 +439,20 @@ async function refreshStoredContainerImageFields(
         containerInStore.sourceRepo = refreshedContainer.sourceRepo;
         return;
       }
+    }
+
+    // Re-derive digest.watch every cycle — independent of
+    // shouldRepairStoredImageReference above, same as isLocalImage and
+    // digest.repoDigests further up. A row discovered before the
+    // isDigestToWatch default changed from `!isDockerHubDomain(domain)` to
+    // "watch when the tag is meaningful" (dd6c4ae37, v1.5.0-rc.17) had
+    // `watch: false` written once at discovery and never revisited, so it
+    // stayed stuck on the old default forever. resolveContainerImageState
+    // already re-reads the live dd.watch.digest label/imgset value ahead of
+    // the auto-derived default, so an explicit override still wins; only the
+    // stale auto-derived default gets replaced (#1070).
+    if (resolvedImageState) {
+      containerInStore.image.digest.watch = resolvedImageState.watchDigest;
     }
 
     // Keep local digest value populated for digest-watch containers, even when
@@ -502,7 +538,13 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   watcher.ensureLogger();
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
+  const nameBeforeRefresh = containerInStore.name;
+  const displayNameBeforeRefresh = containerInStore.displayName;
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
+  const identityChanged =
+    containerInStore.name !== nameBeforeRefresh ||
+    containerInStore.displayName !== displayNameBeforeRefresh;
+
   applyDockerDeclarativeUpdatePolicy(
     containerInStore,
     container.Labels || {},
@@ -524,6 +566,7 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   // the inspect actually succeeded — a failed inspect degrades gracefully by
   // leaving the previously stored health value untouched.
   const containerInspect = await inspectDiscoveredContainer(watcher, container.Id);
+  const healthObserved = containerInspect !== undefined;
   if (containerInspect) {
     containerInStore.health = normalizeContainerHealth(containerInspect.State?.Health?.Status);
   }
@@ -533,12 +576,17 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore.details,
     containerInspect,
   );
+  let detailsChanged = false;
   if (!areRuntimeDetailsEqual(containerInStore.details, runtimeDetailsToApply)) {
     containerInStore.details = runtimeDetailsToApply;
+    detailsChanged = true;
   }
 
   // Reconcile container status from Docker summary (covers events missed during reconnect gaps)
+  const statusBeforeReconcile = containerInStore.status;
   reconcileStoredContainerStatus(containerInStore, container.State);
+  const statusChanged = containerInStore.status !== statusBeforeReconcile;
+
   await refreshStoredContainerImageFields({
     watcher,
     container,
@@ -548,6 +596,33 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore,
     containerInspect,
   });
+
+  // Persist the runtime observations this discovery pass owns (name,
+  // displayName, health, details, status) the moment they're observed —
+  // before the registry lookup that follows in the watch cycle, which can
+  // run long enough that a whole-record write at the end would carry a
+  // stale copy of whatever this block just refreshed (roadmap 7-STORE,
+  // slice 9 / spec 4.3). `image` is deliberately left out here: it's still
+  // being resolved by `refreshStoredContainerImageFields` above and by the
+  // registry lookup that follows, and lands in the store via the scan
+  // patch in `mapContainerToContainerReport` once that settles.
+  const runtimeObservationPatch: Partial<Container> = {};
+  if (identityChanged) {
+    runtimeObservationPatch.name = containerInStore.name;
+    runtimeObservationPatch.displayName = containerInStore.displayName;
+  }
+  if (healthObserved) {
+    runtimeObservationPatch.health = containerInStore.health;
+  }
+  if (detailsChanged) {
+    runtimeObservationPatch.details = containerInStore.details;
+  }
+  if (statusChanged) {
+    runtimeObservationPatch.status = containerInStore.status;
+  }
+  if (Object.keys(runtimeObservationPatch).length > 0) {
+    storeContainer.updateContainerFields(containerInStore.id, runtimeObservationPatch);
+  }
 
   return containerInStore;
 }
@@ -830,7 +905,6 @@ export async function addImageDetailsToContainerOrchestration(
   helpers: DockerImageDetailsHelpers,
 ): Promise<Container | undefined> {
   const containerId = container.Id;
-  const containerLabels: Record<string, string> = container.Labels || {};
   const dockerContainerName = getContainerName(container);
 
   // Podman pod infra containers have an empty Image field — skip them
@@ -862,6 +936,30 @@ export async function addImageDetailsToContainerOrchestration(
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
   const containerInspect = await inspectDiscoveredContainer(watcher, containerId);
+  const discovered = await buildDiscoveredContainer(
+    watcher,
+    container,
+    labelOverrides,
+    helpers,
+    image,
+    containerInspect,
+  );
+  if (discovered) removeStaleContainerEntriesWithSameName(watcher, discovered);
+  return discovered;
+}
+
+export async function buildDiscoveredContainer(
+  watcher: DockerImageDetailsWatcher,
+  container: DockerContainerSummary,
+  labelOverrides: ContainerLabelOverrides,
+  helpers: DockerImageDetailsHelpers,
+  image: DockerImageInspectPayload,
+  containerInspect: DockerContainerInspectPayload | undefined,
+): Promise<Container | undefined> {
+  const containerId = container.Id;
+  const containerLabels = container.Labels || {};
+  const dockerContainerName = getContainerName(container);
+  const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
   const resolvedImageState = resolveContainerImageState({
     watcher,
     container,
@@ -980,8 +1078,6 @@ export async function addImageDetailsToContainerOrchestration(
     containerName: dockerContainerName,
   });
   await applyContainerDependsOn(containerToReturn, containerLabels, watcher, dockerContainerName);
-  removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
-
   return containerToReturn;
 }
 

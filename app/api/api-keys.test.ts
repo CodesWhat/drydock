@@ -2,12 +2,12 @@
  * Tests for the API key management router.
  *
  * The express Router is mocked so handlers can be called directly, but the
- * store is real and backed by LokiJS: cascade revocation and the minting
+ * store is real and backed by SQLite: cascade revocation and the minting
  * ceiling are the whole point of this router, and a mocked store would only
  * assert that the code calls itself.
  */
-import Loki from 'lokijs';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 
 const { mockRouter, mockRecordCreated, mockRecordRevoked, mockCloseSseClients } = vi.hoisted(
   () => ({
@@ -36,6 +36,7 @@ vi.mock('../log/index.js', () => ({
 }));
 
 import * as apiKeyStore from '../store/api-key.js';
+import type { Database } from '../store/db/driver.js';
 import * as apiKeysRouter from './api-keys.js';
 import {
   ANCESTOR_REVOKE_MESSAGE,
@@ -95,28 +96,26 @@ function mint(name: string, scopes: string[], overrides: Record<string, unknown>
   });
 }
 
-let db: InstanceType<typeof Loki>;
+let db: Database;
 
 /**
  * Reach past the store's projections. `findApiKeyById` hands back a copy, so
- * mutating one leaves the collection the walk actually reads untouched, and a
- * test that did that would assert nothing.
+ * mutating one leaves the row the walk actually reads untouched, and a test
+ * that did that would assert nothing.
  */
-function storedRecord(keyId: string) {
-  return db.getCollection('api-keys').findOne({ keyId });
-}
-
 function setStoredParent(keyId: string, parentKeyId: string) {
-  const stored = storedRecord(keyId);
-  stored.parentKeyId = parentKeyId;
-  db.getCollection('api-keys').update(stored);
+  db.prepare('UPDATE api_keys SET parent_key_id = ? WHERE key_id = ?').run(parentKeyId, keyId);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db = new Loki('api-keys-router.test.db');
-  apiKeyStore.createCollections(db as never);
+  db = createMigratedMemoryDatabase();
+  apiKeyStore.createCollections(db);
   apiKeysRouter.init();
+});
+
+afterEach(() => {
+  db.close();
 });
 
 describe('route registration', () => {

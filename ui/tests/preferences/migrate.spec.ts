@@ -84,6 +84,51 @@ describe('preferences migration', () => {
   });
 
   describe('migrate', () => {
+    it('adds fleet dimensions without changing legacy stack and filter preferences', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        containers: { groupByStack: true, filters: { server: 'edge' } },
+      });
+      expect(result.containers.fleet).toMatchObject({
+        agent: 'all',
+        groupBy: 'none',
+        labelMatch: 'exists',
+      });
+      expect(result.containers.groupByStack).toBe(true);
+      expect(result.containers.filters.server).toBe('edge');
+    });
+
+    it('sanitizes malformed fleet preferences while preserving literal label values', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        containers: {
+          fleet: {
+            agent: 2,
+            registry: {},
+            tagType: 'patch',
+            groupBy: 'bogus',
+            groupLabel: [],
+            labelKey: 'team',
+            labelValue: '',
+            labelMatch: 'bogus',
+          },
+        },
+      });
+      expect(result.containers.fleet).toEqual({
+        agent: 'all',
+        registry: 'all',
+        tagType: 'all',
+        groupBy: 'none',
+        groupLabel: '',
+        labelKey: 'team',
+        labelValue: '',
+        labelMatch: 'exists',
+      });
+      expect(migrate({ containers: { fleet: null } }).containers.fleet).toEqual(
+        DEFAULTS.containers.fleet,
+      );
+    });
+
     it('adds manual container groups when migrating schema version 11', () => {
       const result = migrate({ schemaVersion: 11, containers: { groupByStack: true } });
 
@@ -1328,6 +1373,39 @@ describe('preferences migration', () => {
         },
       });
       expect(result.views.servers).toEqual(DEFAULTS.views.servers);
+    });
+  });
+
+  describe('view hiddenColumns (images)', () => {
+    it('backfills views.images to the defaults when absent from a stored preferences blob', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          watchers: { hiddenColumns: ['cron'] },
+        },
+      });
+      expect(result.views.images).toEqual(DEFAULTS.views.images);
+      expect(result.views.images.hiddenColumns).toEqual(['imageId', 'created']);
+    });
+
+    it('drops unknown column keys from persisted images hiddenColumns', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          images: { hiddenColumns: ['tag', 'bogus-key'] },
+        },
+      });
+      expect(result.views.images.hiddenColumns).toEqual(['tag']);
+    });
+
+    it('drops the required repository column key from persisted images hiddenColumns', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          images: { hiddenColumns: ['repository', 'tag'] },
+        },
+      });
+      expect(result.views.images.hiddenColumns).toEqual(['tag']);
     });
   });
 });

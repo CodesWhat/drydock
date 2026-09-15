@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Aracı listesi kullanılamıyor. Yapılandırılmış bazı aracılar eksik olabilir.",
+      "title": "Filo durumu",
+      "description": "Tüm filonun durumu. Envanter yenileme, kayıt depolarını denetlemeden veya güncelleme yapmadan kapsayıcıları keşfeder.",
+      "reload": "Durumu yeniden yükle",
+      "refresh": "Envanteri yenile",
+      "configured": "Yapılandırıldı",
+      "connected": "Bağlı",
+      "disconnected": "Bağlantı kesildi",
+      "unavailable": "Kullanılamıyor",
+      "agentUnavailable": "Aracı durumu kullanılamıyor. Saklanan veriler eski olabilir.",
+      "watcherUnavailable": "İzleyici meta verileri kullanılamıyor. Saklanan veriler eski olabilir.",
+      "total": "{count} kapsayıcı",
+      "lastKnown": "Son bilinen",
+      "lastSeen": "Son görülme: {value}",
+      "unsupported": "Tüm hedefler envanter yenilemeyi destekleyen Docker izleyicileri gerektirir.",
+      "complete": "Envanter tamamlandı",
+      "partial": "Envanter eksik",
+      "reloadFailed": "Kapsayıcı listesi yeniden yüklenemedi. Envanter sonuçları görünür durumda."
+    },
+    "fleetBulk": {
+      "label": "Filtrelenmiş filo işlemleri",
+      "updateAll": "Tümünü güncelle ({count})",
+      "snoozePatch": "Tüm yamaları ertele",
+      "patchCount": "{count} yama adayı",
+      "duration": "Erteleme süresi",
+      "days": "{count} gün",
+      "untilDate": "Tarihe kadar",
+      "date": "Bu tarihin sonuna kadar ertele",
+      "snoozeConfirm": "{count} yama adayı ertelensin mi?",
+      "snoozeScope": "Bu konteynerlerde yama adayları var. Yalnızca yamaları değil, listelenen konteynerlerin tüm güncellemelerini {duration} ertele. İşaretli seçim değil, filtrelenmiş canlı liste kullanılır. Tarih, yerel gün sonunu kapsar.",
+      "snoozeResult": "Ertelenen: {succeeded}. Başarısız: {failed}.",
+      "refreshFailed": "İlkeler kaydedildi ancak liste yenilenemedi. Listeyi yeniden yükleyin.",
+      "disabled": "İşlemler devre dışı. Hiçbir ilke değişmedi.",
+      "invalid": "Geçersiz süre. Hiçbir ilke değişmedi.",
+      "busy": "Başka bir işlem sürüyor. Ek ilke değişmedi."
+    },
+    "fleetDimensions": {
+      "groupBy": "Gruplama ölçütü",
+      "none": "Gruplama yok",
+      "agent": "Aracı",
+      "registry": "Kayıt deposu",
+      "status": "Durum",
+      "tagType": "Etiket türü",
+      "label": "Docker etiketi",
+      "groupLabel": "Etiket anahtarına göre grupla",
+      "allAgents": "Tüm aracılar",
+      "allRegistries": "Tüm kayıt deposu adresleri",
+      "all": "Tüm etiket türleri",
+      "specific": "Belirli etiket",
+      "floating": "Değişken etiket",
+      "digest": "Sabitlenmiş özet",
+      "semver": "Sürüm etiketi",
+      "tag": "Sürüm olmayan etiket",
+      "unknown": "Bilinmiyor",
+      "local": "Yerel izleyiciler",
+      "running": "Çalışıyor",
+      "stopped": "Durduruldu",
+      "labelKey": "Etiket anahtarı",
+      "labelMatch": "Etiket eşleştirme",
+      "labelValue": "Etiket değeri",
+      "exists": "Etiketi var",
+      "equals": "Eşittir",
+      "missing": "Etiket eksik",
+      "missingLabel": "Etiket yok",
+      "emptyValue": "Boş değer"
+    },
     "fullPageActions": {
       "updateWorkflow": "İş Akışını Güncelle",
       "actionsGroup": "Eylemler",
@@ -58,6 +125,12 @@
       "runningButton": "Çalışıyor...",
       "runButton": "Çalıştır",
       "noTriggersAssociated": "Bu kapsayıcıyla ilişkili tetikleyici yok",
+      "unavailableTriggers": "Kullanılamayan Tetikleyiciler",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Bu kapsayıcıdan farklı bir aracıya ait.",
+        "structuralIncompatibility": "Compose projesi, servisi veya dosyası bu kapsayıcıyla eşleşmiyor.",
+        "labelScope": "Bu kapsayıcının dd.action/dd.notification include veya exclude etiketleri tarafından hariç tutuldu."
+      },
       "backupsRollback": "Yedeklemeler ve Geri Alma",
       "rollingBack": "Geri dönüyor...",
       "rollbackLatest": "En son sürüme geri al",
@@ -273,6 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "Konteynerler yükleniyor...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "Ad veya görsel arayın...",
       "allStatuses": "Tüm Durumlar",
       "running": "Çalışıyor",
@@ -505,6 +581,19 @@
         "failedDetail": "{name} için bağımlılık zinciri güncellenemedi.",
         "staleChainTitle": "Bağımlılık zinciri değişti",
         "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
+      },
+      "bulkUpdate": {
+        "header": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "accept": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "acceptWithParents": "1 üst öğeyi ekle ve güncelle | {count} üst öğeyi ekle ve güncelle",
+        "dispatchHeading": "Güncellenecek",
+        "blockedHeading": "Engellendi, olduğu gibi bırakılacak",
+        "softOverridesHeading": "Uyarılara rağmen güncelleniyor",
+        "skippedHeading": "Atlandı",
+        "staleParentsHeading": "Bekleyen güncellemesi olan üst öğeler, onaylandığında eklenir",
+        "agentCountInfo": "{count} ajanı kapsar; her ajan kendi güncellemelerini çalıştırır.",
+        "stackCountInfo": "{count} yığını kapsar.",
+        "successMessage": "1 kapsayıcı için güncelleme başlatıldı | {count} kapsayıcı için güncelleme başlatıldı"
       }
     },
     "actionToasts": {
@@ -670,6 +759,29 @@
     },
     "logViewer": {
       "invalidRegex": "Geçersiz normal ifade"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Şuna bağlı",
+      "requiredBy": "Şunun tarafından gerekli",
+      "cycle": "Bir bağımlılık döngüsünün parçası",
+      "toggle": "Bağımlılıkları göster",
+      "updateGroup": "Bağımlılık grubunu güncelle ({count})",
+      "staleParentsWarning": "{name}, bekleyen bir güncellemesi olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan bir üst öğeye karşı çalışır durumda bırakabilir. | {name}, bekleyen güncellemeleri olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan üst öğelere karşı çalışır durumda bırakabilir.",
+      "staleParentsOverflow": "ve {count} tane daha",
+      "staleParentsAccept": "Yine de güncelle"
+    },
+    "selection": {
+      "selectRow": "{name} öğesini seç",
+      "selectAll": "Görünen tüm kapsayıcıları seç",
+      "barLabel": "Seçili kapsayıcılar",
+      "count": "1 kapsayıcı seçildi | {count} kapsayıcı seçildi",
+      "updateSelected": "Seçilenleri güncelle",
+      "clear": "Temizle",
+      "reasons": {
+        "stale": "artık listede değil",
+        "inFlight": "zaten güncelleniyor",
+        "noUpdate": "kullanılabilir güncelleme yok"
+      }
     }
   }
 }

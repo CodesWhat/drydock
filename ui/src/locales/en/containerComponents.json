@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Agent roster unavailable. Some configured agents may be missing.",
+      "title": "Fleet health",
+      "description": "Fleet-wide status. Inventory refresh discovers containers without registry checks or update actions.",
+      "reload": "Reload status",
+      "refresh": "Refresh inventory",
+      "configured": "Configured",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "unavailable": "Unavailable",
+      "agentUnavailable": "Agent status unavailable. Retained data may be stale.",
+      "watcherUnavailable": "Watcher metadata unavailable. Retained data may be stale.",
+      "total": "{count} container | {count} containers",
+      "lastKnown": "Last known",
+      "lastSeen": "Last seen: {value}",
+      "unsupported": "Inventory refresh requires supported Docker watchers on every target.",
+      "complete": "Inventory complete",
+      "partial": "Inventory incomplete",
+      "reloadFailed": "Container list reload failed. Inventory results remain visible."
+    },
+    "fleetBulk": {
+      "label": "Filtered fleet actions",
+      "updateAll": "Update all ({count})",
+      "snoozePatch": "Snooze all patch",
+      "patchCount": "{count} patch candidate | {count} patch candidates",
+      "duration": "Snooze duration",
+      "days": "{count} day | {count} days",
+      "untilDate": "Until date",
+      "date": "Snooze through date",
+      "snoozeConfirm": "Snooze {count} patch candidate? | Snooze {count} patch candidates?",
+      "snoozeScope": "These containers currently have patch candidates. Snooze all updates for each listed container for {duration}, not just patch updates. This applies to the filtered live list, not checkbox selection. A date runs through local end of day.",
+      "snoozeResult": "Snoozed: {succeeded}. Failed: {failed}.",
+      "refreshFailed": "Policy writes finished, but refreshing the list failed. Reload to see the current state.",
+      "disabled": "Container actions are disabled. No policies changed.",
+      "invalid": "Invalid snooze duration. No policies changed.",
+      "busy": "Another action is already running. No additional policies changed."
+    },
+    "fleetDimensions": {
+      "groupBy": "Group by",
+      "none": "No grouping",
+      "agent": "Agent",
+      "registry": "Registry",
+      "status": "Status",
+      "tagType": "Tag type",
+      "label": "Label",
+      "groupLabel": "Group by label key",
+      "allAgents": "All agents",
+      "allRegistries": "All registry endpoints",
+      "all": "All tag types",
+      "specific": "Specific tag",
+      "floating": "Floating tag",
+      "digest": "Digest pinned",
+      "semver": "Version tag",
+      "tag": "Non-version tag",
+      "unknown": "Unknown",
+      "local": "Local watchers",
+      "running": "Running",
+      "stopped": "Stopped",
+      "labelKey": "Label key",
+      "labelMatch": "Label match",
+      "labelValue": "Label value",
+      "exists": "Has label",
+      "equals": "Equals",
+      "missing": "Missing label",
+      "missingLabel": "No label",
+      "emptyValue": "Empty value"
+    },
     "fullPageActions": {
       "updateWorkflow": "Update Workflow",
       "actionsGroup": "Actions",
@@ -58,6 +125,12 @@
       "runningButton": "Running...",
       "runButton": "Run",
       "noTriggersAssociated": "No triggers associated with this container",
+      "unavailableTriggers": "Unavailable Triggers",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Belongs to a different agent than this container.",
+        "structuralIncompatibility": "Compose project, service, or file doesn't match this container.",
+        "labelScope": "Excluded by this container's dd.action/dd.notification include or exclude labels."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rolling back...",
       "rollbackLatest": "Rollback Latest",
@@ -273,6 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "Loading containers...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "Search name or image...",
       "allStatuses": "All Statuses",
       "running": "Running",
@@ -505,6 +581,19 @@
         "failedDetail": "Failed to update the dependency chain for {name}.",
         "staleChainTitle": "Dependency chain has changed",
         "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+      },
+      "bulkUpdate": {
+        "header": "Update 1 container | Update {count} containers",
+        "accept": "Update 1 container | Update {count} containers",
+        "acceptWithParents": "Add 1 parent and update | Add {count} parents and update",
+        "dispatchHeading": "Will update",
+        "blockedHeading": "Blocked, will be left alone",
+        "softOverridesHeading": "Updating despite warnings",
+        "skippedHeading": "Skipped",
+        "staleParentsHeading": "Parents with updates waiting, added when you accept",
+        "agentCountInfo": "Spans {count} agents; each agent runs its own updates.",
+        "stackCountInfo": "Spans {count} stacks.",
+        "successMessage": "Update started for 1 container | Update started for {count} containers"
       }
     },
     "actionToasts": {
@@ -670,6 +759,29 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depends on",
+      "requiredBy": "Required by",
+      "cycle": "Part of a dependency cycle",
+      "toggle": "Show dependencies",
+      "updateGroup": "Update dependency group ({count})",
+      "staleParentsWarning": "{name} depends on {parents}, which also has an update pending. Updating the child first can leave it running against an outdated parent. | {name} depends on {parents}, which also have updates pending. Updating the child first can leave it running against an outdated parent.",
+      "staleParentsOverflow": "and {count} more",
+      "staleParentsAccept": "Update anyway"
+    },
+    "selection": {
+      "selectRow": "Select {name}",
+      "selectAll": "Select all visible containers",
+      "barLabel": "Selected containers",
+      "count": "1 container selected | {count} containers selected",
+      "updateSelected": "Update selected",
+      "clear": "Clear",
+      "reasons": {
+        "stale": "no longer in the list",
+        "inFlight": "already updating",
+        "noUpdate": "no update available"
+      }
     }
   }
 }

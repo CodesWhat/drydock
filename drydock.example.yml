@@ -1,0 +1,47 @@
+# drydock.yml
+#
+# Every key here mirrors a DD_* environment variable: nesting joins segments
+# with an underscore, so registry.ghcr.private.token is the same setting as
+# DD_REGISTRY_GHCR_PRIVATE_TOKEN. A key set in the environment always wins
+# over the same key set here, and a key set here always wins over its Joi
+# default — see the configuration file docs for the full mapping rule.
+#
+# Validate a file like this one without starting anything:
+#   node dist/index.js config validate --file drydock.yml
+#
+# Secrets never go inline. A `_file` node points at a file drydock reads at
+# startup instead, the same convention `DD_*_FILE` env vars already use.
+
+server:
+  port: 3000
+  tls:
+    enabled: true
+    cert: /certs/drydock.crt
+    key:
+      _file: /run/secrets/drydock-tls-key
+
+watcher:
+  local:
+    socket: /var/run/docker.sock
+    cron: "0 */6 * * *"
+    maintenance_window: "* 22-23 * * *"
+    maintenance_window_scope: install
+
+registry:
+  ghcr:
+    private:
+      username: scott
+      token:
+        _file: /run/secrets/ghcr
+
+notification:
+  slack:
+    myslack:
+      token:
+        _file: /run/secrets/slack
+      channel: "#updates"
+
+action:
+  docker:
+    local:
+      prune: true

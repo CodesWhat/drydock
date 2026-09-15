@@ -198,4 +198,59 @@ test.describe('Containers', () => {
       ).toBeVisible();
     }
   });
+
+  test('selecting rows shows the selection bar and Update selected opens a confirm that can be cancelled', async ({
+    page,
+  }) => {
+    await openContainersView(page);
+    await page.getByRole('button', { name: 'Table view' }).click();
+    await expect(page.locator('th', { hasText: 'Container' })).toBeVisible();
+
+    const serverResponse = await page.request.get('/api/v1/server');
+    let actionsEnabled = true;
+    if (serverResponse.ok()) {
+      actionsEnabled = readContainerActionsFeatureFlag(await serverResponse.json()) ?? true;
+    }
+    test.skip(!actionsEnabled, 'container actions disabled by server configuration');
+
+    await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 15_000 });
+
+    const checkboxes = page.locator('[data-test="container-select"]');
+    await expect(checkboxes.first()).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(async () => await checkboxes.count(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(2);
+    await checkboxes.nth(0).check();
+    await checkboxes.nth(1).check();
+
+    const selectionBar = page.locator('[data-test="container-selection-bar"]');
+    await expect(selectionBar).toBeVisible({ timeout: 10_000 });
+    await expect(selectionBar).toContainText('2 containers selected');
+
+    const updateButton = page.locator('[data-test="container-selection-update"]');
+    const clearButton = page.locator('[data-test="container-selection-clear"]');
+
+    if (await updateButton.isDisabled()) {
+      await clearButton.click();
+      await expect(selectionBar).toBeHidden();
+      return;
+    }
+
+    await updateButton.click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(dialog).toContainText(/Update \d+ container/);
+    await expect(dialog).toContainText(/Will update|Skipped|Blocked/);
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(selectionBar).toBeVisible();
+    await expect(selectionBar).toContainText('2 containers selected');
+
+    await clearButton.click();
+    await expect(selectionBar).toBeHidden();
+    await expect(checkboxes.nth(0)).not.toBeChecked();
+    await expect(checkboxes.nth(1)).not.toBeChecked();
+  });
 });

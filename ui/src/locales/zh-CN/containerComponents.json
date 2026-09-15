@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "代理列表不可用，某些已配置的代理可能未显示。",
+      "title": "集群健康状态",
+      "description": "显示整个集群的状态。刷新清单仅发现容器，不检查镜像仓库或执行更新。",
+      "reload": "重新加载状态",
+      "refresh": "刷新清单",
+      "configured": "已配置",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "unavailable": "不可用",
+      "agentUnavailable": "代理状态不可用，保留的数据可能已过期。",
+      "watcherUnavailable": "监视器元数据不可用，保留的数据可能已过期。",
+      "total": "{count} 个容器",
+      "lastKnown": "上次已知状态",
+      "lastSeen": "上次在线：{value}",
+      "unsupported": "所有目标都需要支持清单刷新的 Docker 监视器。",
+      "complete": "清单完整",
+      "partial": "清单不完整",
+      "reloadFailed": "容器列表重新加载失败，清单结果仍可查看。"
+    },
+    "fleetBulk": {
+      "label": "筛选后的集群操作",
+      "updateAll": "全部更新（{count}）",
+      "snoozePatch": "延后所有补丁候选",
+      "patchCount": "{count} 个补丁候选",
+      "duration": "延后时长",
+      "days": "{count} 天",
+      "untilDate": "直到日期",
+      "date": "延后至此日期结束",
+      "snoozeConfirm": "延后 {count} 个补丁候选？",
+      "snoozeScope": "这些容器当前有补丁候选。将所列容器的所有更新延后 {duration}，不仅是补丁更新。范围为筛选后的实时列表，而不是复选框选择。日期包含当地时间当天结束。",
+      "snoozeResult": "已延后：{succeeded}。失败：{failed}。",
+      "refreshFailed": "策略已保存，但列表刷新失败。请重新加载列表。",
+      "disabled": "容器操作已禁用。未更改策略。",
+      "invalid": "延后时长无效。未更改策略。",
+      "busy": "其他操作正在进行。未额外更改策略。"
+    },
+    "fleetDimensions": {
+      "groupBy": "分组依据",
+      "none": "不分组",
+      "agent": "代理",
+      "registry": "镜像仓库",
+      "status": "状态",
+      "tagType": "标签类型",
+      "label": "容器标签",
+      "groupLabel": "按容器标签键分组",
+      "allAgents": "所有代理",
+      "allRegistries": "所有仓库地址",
+      "all": "所有标签类型",
+      "specific": "精确标签",
+      "floating": "浮动标签",
+      "digest": "摘要固定",
+      "semver": "版本标签",
+      "tag": "非版本标签",
+      "unknown": "未知",
+      "local": "本地监视器",
+      "running": "运行中",
+      "stopped": "已停止",
+      "labelKey": "容器标签键",
+      "labelMatch": "匹配方式",
+      "labelValue": "容器标签值",
+      "exists": "包含标签",
+      "equals": "等于",
+      "missing": "缺少标签",
+      "missingLabel": "无标签",
+      "emptyValue": "空值"
+    },
     "fullPageActions": {
       "updateWorkflow": "更新工作流",
       "actionsGroup": "操作",
@@ -58,6 +125,12 @@
       "runningButton": "运行中...",
       "runButton": "运行",
       "noTriggersAssociated": "此容器没有关联的触发器",
+      "unavailableTriggers": "不可用的触发器",
+      "unavailableTriggerReason": {
+        "agentOwnership": "属于与此容器不同的代理。",
+        "structuralIncompatibility": "Compose 项目、服务或文件与此容器不匹配。",
+        "labelScope": "被此容器的 dd.action/dd.notification 包含或排除标签排除。"
+      },
       "backupsRollback": "备份与回滚",
       "rollingBack": "回滚中...",
       "rollbackLatest": "回滚到最新",
@@ -273,6 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "正在加载容器...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "搜索名称或镜像...",
       "allStatuses": "所有状态",
       "running": "运行中",
@@ -505,6 +581,19 @@
         "failedDetail": "无法更新 {name} 的依赖链。",
         "staleChainTitle": "依赖链已发生变化",
         "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
+      },
+      "bulkUpdate": {
+        "header": "更新 1 个容器 | 更新 {count} 个容器",
+        "accept": "更新 1 个容器 | 更新 {count} 个容器",
+        "acceptWithParents": "添加 1 个上级容器并更新 | 添加 {count} 个上级容器并更新",
+        "dispatchHeading": "将会更新",
+        "blockedHeading": "已阻止，将保持不变",
+        "softOverridesHeading": "忽略警告继续更新",
+        "skippedHeading": "已跳过",
+        "staleParentsHeading": "有待处理更新的上级容器，将在您接受时添加",
+        "agentCountInfo": "涉及 {count} 个代理；每个代理各自运行自己的更新。",
+        "stackCountInfo": "涉及 {count} 个技术栈。",
+        "successMessage": "已开始更新 1 个容器 | 已开始更新 {count} 个容器"
       }
     },
     "actionToasts": {
@@ -670,6 +759,29 @@
     },
     "logViewer": {
       "invalidRegex": "无效的正则表达式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依赖于",
+      "requiredBy": "被以下依赖",
+      "cycle": "属于依赖循环的一部分",
+      "toggle": "显示依赖关系",
+      "updateGroup": "更新依赖组 ({count})",
+      "staleParentsWarning": "{name} 依赖于 {parents}，该容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。 | {name} 依赖于 {parents}，这些容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。",
+      "staleParentsOverflow": "还有 {count} 个",
+      "staleParentsAccept": "仍然更新"
+    },
+    "selection": {
+      "selectRow": "选择 {name}",
+      "selectAll": "选择所有可见容器",
+      "barLabel": "已选容器",
+      "count": "已选择 1 个容器 | 已选择 {count} 个容器",
+      "updateSelected": "更新所选",
+      "clear": "清除",
+      "reasons": {
+        "stale": "已不在列表中",
+        "inFlight": "已在更新中",
+        "noUpdate": "没有可用更新"
+      }
     }
   }
 }

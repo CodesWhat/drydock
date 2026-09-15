@@ -4,9 +4,12 @@ import {
   clearAllListenersForTests,
   emitContainerAdded,
   emitContainerUpdated,
+  emitUpdateOperationChanged,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { flatten, validate } from '../../../model/container.js';
+import * as containerStore from '../../../store/container.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 
 vi.mock('mqtt');
 vi.mock('node:fs/promises', () => ({
@@ -29,10 +32,12 @@ const configurationValid = {
   topic: 'dd/container',
   clientid: 'dd',
   exclude: '',
+  agenttopicsegment: false,
   hass: {
     discovery: false,
     agenttopicsegment: true,
     commands: false,
+    devicepercontainer: true,
     enabled: false,
     prefix: 'homeassistant',
     attributes: 'short',
@@ -124,6 +129,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     discovery: true,
     agenttopicsegment: true,
     commands: false,
+    devicepercontainer: true,
     attributes: 'short',
     filter: {
       include: '',
@@ -155,6 +161,31 @@ test('validateConfiguration should respect an explicit hass.agenttopicsegment=fa
     },
   });
   expect(validatedConfiguration.hass.agenttopicsegment).toBe(false);
+});
+
+test('validateConfiguration should default hass.devicepercontainer to true', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      prefix: 'homeassistant',
+    },
+  });
+  expect(validatedConfiguration.hass.devicepercontainer).toBe(true);
+});
+
+test('validateConfiguration should respect an explicit hass.devicepercontainer=false opt-out', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      prefix: 'homeassistant',
+      devicepercontainer: false,
+    },
+  });
+  expect(validatedConfiguration.hass.devicepercontainer).toBe(false);
 });
 
 test('validateConfiguration should throw error when invalid', async () => {
@@ -404,6 +435,364 @@ test('trigger should normalize recreated alias-prefixed container names to their
       retain: true,
     },
   );
+});
+
+test('trigger should key the state topic by compose project-service identity when compose labels are present', async () => {
+  mqtt.configuration = {
+    topic: 'dd/container',
+    exclude: '',
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
+  };
+
+  const container = {
+    id: 'abc123',
+    name: 'myapp_web_1',
+    watcher: 'local',
+    labels: {
+      'com.docker.compose.project': 'myapp',
+      'com.docker.compose.service': 'web',
+    },
+    image: {
+      id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+      registry: {
+        url: '123456789.dkr.ecr.eu-west-1.amazonaws.com',
+      },
+      name: 'test',
+      tag: {
+        value: '2021.6.4',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: 'sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72',
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '2021.6.5',
+    },
+  };
+
+  await mqtt.trigger(container);
+
+  expect(mqtt.client.publish).toHaveBeenCalledWith(
+    'dd/container/local/myapp.web',
+    JSON.stringify(flatten(container)),
+    {
+      retain: true,
+    },
+  );
+});
+
+test('trigger should keep the compose-identity state topic stable across a container rename', async () => {
+  mqtt.configuration = {
+    topic: 'dd/container',
+    exclude: '',
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
+  };
+
+  const renamedContainer = {
+    id: 'abc123',
+    name: 'myapp_web_2_renamed',
+    watcher: 'local',
+    labels: {
+      'com.docker.compose.project': 'myapp',
+      'com.docker.compose.service': 'web',
+    },
+    image: {
+      id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+      registry: {
+        url: '123456789.dkr.ecr.eu-west-1.amazonaws.com',
+      },
+      name: 'test',
+      tag: {
+        value: '2021.6.4',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: 'sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72',
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '2021.6.5',
+    },
+  };
+
+  await mqtt.trigger(renamedContainer);
+
+  expect(mqtt.client.publish).toHaveBeenCalledWith(
+    'dd/container/local/myapp.web',
+    JSON.stringify(flatten(renamedContainer)),
+    {
+      retain: true,
+    },
+  );
+});
+
+// #386 / DR-129: two independent publishers build the same container state
+// topic. Mqtt.trigger publishes the state payload; Hass publishes the discovery
+// config that names `state_topic`/`latest_version_topic`/`json_attributes_topic`
+// (and the command topic derived from it). If they disagree for an agent-owned
+// container under `hass.agenttopicsegment`, the Home Assistant entity is created
+// but never receives state and sits permanently on "Unknown".
+describe('agent state topic parity with hass discovery', () => {
+  const agentContainer = {
+    id: '31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816',
+    name: 'nginx',
+    watcher: 'local',
+    agent: 'ml',
+    image: {
+      id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+      registry: {
+        url: '123456789.dkr.ecr.eu-west-1.amazonaws.com',
+      },
+      name: 'test',
+      tag: {
+        value: '2021.6.4',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: 'sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72',
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '2021.6.5',
+    },
+  };
+
+  function buildConfiguration({ enabled, agenttopicsegment }) {
+    return {
+      url: 'mqtt://host:1883',
+      topic: 'dd/container',
+      exclude: '',
+      hass: {
+        enabled,
+        discovery: enabled,
+        prefix: 'homeassistant',
+        agenttopicsegment,
+        commands: false,
+        attributes: 'full',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
+    };
+  }
+
+  async function publishedTopic(configuration, container) {
+    mqtt.configuration = configuration;
+    await mqtt.trigger(container);
+    return mqtt.client.publish.mock.calls[0][0];
+  }
+
+  test('publishes an agent container to the topic hass discovery advertises', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, agentContainer);
+
+      expect(topic).toBe('dd/container/agent/ml/local/nginx');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: agentContainer }));
+      // The payload also carries the Home Assistant update_state object (#1137),
+      // so pin the container fields rather than the exact string.
+      const [, payload, options] = mqtt.client.publish.mock.calls[0];
+      expect(JSON.parse(payload)).toMatchObject(flatten(agentContainer));
+      expect(options).toStrictEqual({ retain: true });
+    } finally {
+      await hass.deregister();
+    }
+  });
+
+  test('publishes an agent container with a Compose identity slug to the topic hass discovery advertises', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const composeAgentContainer = {
+      ...agentContainer,
+      name: 'myapp_web_1',
+      labels: {
+        'com.docker.compose.project': 'myapp',
+        'com.docker.compose.service': 'web',
+      },
+    };
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, composeAgentContainer);
+
+      expect(topic).toBe('dd/container/agent/ml/local/myapp.web');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: composeAgentContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+
+  test('keeps the unscoped topic for an agent container on the agenttopicsegment=false opt-out', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: false });
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, agentContainer);
+
+      expect(topic).toBe('dd/container/local/nginx');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: agentContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+
+  test('keeps the unscoped topic for an agent container when hass is disabled', async () => {
+    const topic = await publishedTopic(
+      buildConfiguration({ enabled: false, agenttopicsegment: true }),
+      agentContainer,
+    );
+
+    expect(topic).toBe('dd/container/local/nginx');
+  });
+
+  test('keeps the unscoped topic for a controller-local container', async () => {
+    const configuration = buildConfiguration({ enabled: true, agenttopicsegment: true });
+    const localContainer = { ...agentContainer, agent: undefined };
+    const hass = new Hass({
+      client: mqtt.client,
+      configuration,
+      log,
+      isContainerAllowed: () => true,
+    });
+
+    try {
+      const topic = await publishedTopic(configuration, localContainer);
+
+      expect(topic).toBe('dd/container/local/nginx');
+      expect(topic).toBe(hass.getContainerStateTopic({ container: localContainer }));
+    } finally {
+      await hass.deregister();
+    }
+  });
+});
+
+// DR-130: with Home Assistant off, two agents that both run a watcher named
+// `local` used to publish container `nginx` to the same unscoped topic and
+// overwrite each other's retained state. The top-level `agenttopicsegment`
+// opt-in scopes plain MQTT topics per agent without requiring Home Assistant.
+describe('plain MQTT topic scoped per agent (DR-130)', () => {
+  function agentNginxContainer(agent) {
+    return { name: 'nginx', watcher: 'local', agent };
+  }
+
+  function buildConfiguration({ agenttopicsegment, hass }) {
+    return {
+      url: 'mqtt://host:1883',
+      topic: 'dd/container',
+      exclude: '',
+      agenttopicsegment,
+      hass: {
+        enabled: false,
+        discovery: false,
+        prefix: 'homeassistant',
+        agenttopicsegment: false,
+        commands: false,
+        attributes: 'full',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+        ...hass,
+      },
+    };
+  }
+
+  async function publishedTopic(configuration, container) {
+    mqtt.configuration = configuration;
+    await mqtt.trigger(container);
+    const calls = mqtt.client.publish.mock.calls;
+    return calls[calls.length - 1][0];
+  }
+
+  test('flag on, hass disabled: two agents sharing a watcher name publish to distinct topics', async () => {
+    const configuration = buildConfiguration({ agenttopicsegment: true });
+
+    const alphaTopic = await publishedTopic(configuration, agentNginxContainer('alpha'));
+    const betaTopic = await publishedTopic(configuration, agentNginxContainer('beta'));
+
+    expect(alphaTopic).toBe('dd/container/agent/alpha/local/nginx');
+    expect(betaTopic).toBe('dd/container/agent/beta/local/nginx');
+  });
+
+  test('flag off (default), hass disabled: two agents sharing a watcher name collide on one topic', async () => {
+    const configuration = buildConfiguration({ agenttopicsegment: false });
+
+    const alphaTopic = await publishedTopic(configuration, agentNginxContainer('alpha'));
+    const betaTopic = await publishedTopic(configuration, agentNginxContainer('beta'));
+
+    expect(alphaTopic).toBe('dd/container/local/nginx');
+    expect(betaTopic).toBe('dd/container/local/nginx');
+  });
+
+  test('flag on: a controller-local container (no agent) keeps the unscoped topic', async () => {
+    const configuration = buildConfiguration({ agenttopicsegment: true });
+
+    const topic = await publishedTopic(configuration, { name: 'nginx', watcher: 'local' });
+
+    expect(topic).toBe('dd/container/local/nginx');
+  });
+
+  test('flag on with hass.enabled and hass.agenttopicsegment=false: validation forces hass.agenttopicsegment on', () => {
+    const validated = mqtt.validateConfiguration(
+      buildConfiguration({
+        agenttopicsegment: true,
+        hass: { enabled: true, agenttopicsegment: false },
+      }),
+    );
+
+    expect(validated.hass.agenttopicsegment).toBe(true);
+  });
+
+  test('schema default: agenttopicsegment defaults to false when omitted', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+    });
+
+    expect(validated.agenttopicsegment).toBe(false);
+  });
 });
 
 test('initTrigger should read TLS files when configured', async () => {
@@ -1105,5 +1494,356 @@ describe('hass isContainerAllowed wiring (#491)', () => {
 
     mustTriggerSpy.mockReturnValueOnce(false);
     expect(hassInstance.isContainerAllowed(container)).toBe(false);
+  });
+});
+
+describe('hass update progress (#210)', () => {
+  const progressContainer = {
+    id: 'container-progress',
+    name: 'progress-test',
+    watcher: 'local',
+    image: {
+      id: 'sha256:abc',
+      registry: { url: 'docker.io' },
+      name: 'nginx',
+      tag: { value: '1.25', semver: true },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+  };
+
+  const hassEnabledConfiguration = {
+    ...configurationValid,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      discovery: true,
+      agenttopicsegment: true,
+      commands: false,
+      devicepercontainer: true,
+      prefix: 'homeassistant',
+      attributes: 'full',
+      filter: { include: '', exclude: '' },
+    },
+  };
+
+  function flush() {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function publishedPayload(callIndex = 0) {
+    return JSON.parse(mqtt.client.publish.mock.calls[callIndex][1]);
+  }
+
+  async function initWithHassEnabled(configurationOverrides = {}) {
+    mqtt.configuration = { ...hassEnabledConfiguration, ...configurationOverrides };
+    const publish = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish });
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
+    await mqtt.initTrigger();
+    return publish;
+  }
+
+  afterEach(async () => {
+    await mqtt.deregister();
+    vi.restoreAllMocks();
+  });
+
+  test('trigger publishes an idle update_state when hass is enabled', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+
+    await mqtt.trigger(progressContainer);
+
+    expect(publishedPayload()).toHaveProperty('update_state', {
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('trigger publishes the phase percentage while an operation is active', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    const getActiveOperation = vi
+      .spyOn(updateOperationStore, 'getActiveOperationByContainerId')
+      .mockReturnValue({ phase: 'pulling' } as never);
+
+    await mqtt.trigger(progressContainer);
+
+    expect(getActiveOperation).toHaveBeenCalledWith('container-progress');
+    expect(publishedPayload().update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: true,
+      update_percentage: 10,
+    });
+  });
+
+  test('trigger omits update_state entirely when hass is not enabled', async () => {
+    mqtt.configuration = {
+      ...hassEnabledConfiguration,
+      hass: { ...hassEnabledConfiguration.hass, enabled: false },
+    };
+    const getActiveOperation = vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId');
+
+    await mqtt.trigger(progressContainer);
+
+    expect(publishedPayload()).not.toHaveProperty('update_state');
+    expect(getActiveOperation).not.toHaveBeenCalled();
+  });
+
+  test('trigger survives a missing hass configuration block', async () => {
+    mqtt.configuration = { topic: 'dd/container', exclude: '' };
+
+    await mqtt.trigger(progressContainer);
+
+    expect(publishedPayload()).not.toHaveProperty('update_state');
+  });
+
+  test('trigger omits installed_version when the container carries no tag value', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+
+    await mqtt.trigger({ ...progressContainer, image: { ...progressContainer.image, tag: {} } });
+
+    expect(publishedPayload().update_state).toStrictEqual({
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('trigger skips the operation lookup for a container with no id', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    const getActiveOperation = vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId');
+
+    await mqtt.trigger({ ...progressContainer, id: undefined });
+
+    expect(getActiveOperation).not.toHaveBeenCalled();
+    expect(publishedPayload().update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('trigger still publishes when the operation store read throws', async () => {
+    mqtt.configuration = hassEnabledConfiguration;
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockImplementation(() => {
+      throw new Error('store unavailable');
+    });
+    const warnSpy = vi.spyOn(mqtt.log, 'warn');
+
+    await mqtt.trigger(progressContainer);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to read active update operation'),
+    );
+    expect(publishedPayload().update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+  });
+
+  test('an update-operation phase change republishes progress, and the terminal one clears it', async () => {
+    const publish = await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockReturnValue(progressContainer as never);
+    const getActiveOperation = vi
+      .spyOn(updateOperationStore, 'getActiveOperationByContainerId')
+      .mockReturnValueOnce({ phase: 'new-started' } as never)
+      .mockReturnValueOnce(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-1',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'new-started',
+    });
+    await flush();
+
+    expect(JSON.parse(publish.mock.calls[0][1]).update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: true,
+      update_percentage: 80,
+    });
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-1',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    await flush();
+
+    expect(JSON.parse(publish.mock.calls[1][1]).update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+    expect(getActiveOperation).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failed operation clears progress without touching the published versions', async () => {
+    const publish = await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockReturnValue(progressContainer as never);
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-2',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'boom',
+    });
+    await flush();
+
+    const payload = JSON.parse(publish.mock.calls[0][1]);
+    expect(payload.update_state).toStrictEqual({
+      installed_version: '1.25',
+      in_progress: false,
+      update_percentage: null,
+    });
+    expect(payload).toHaveProperty('image_tag_value', '1.25');
+  });
+
+  test('the replacement container id is resolved before the original one', async () => {
+    await initWithHassEnabled();
+    const getContainer = vi
+      .spyOn(containerStore, 'getContainer')
+      .mockReturnValue(progressContainer as never);
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-3',
+      containerName: 'progress-test',
+      containerId: 'old-container',
+      newContainerId: 'new-container',
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    await flush();
+
+    expect(getContainer).toHaveBeenCalledTimes(1);
+    expect(getContainer).toHaveBeenCalledWith('new-container');
+    expect(triggerSpy).toHaveBeenCalledWith(progressContainer);
+  });
+
+  test('the original container id is used when the replacement is not stored yet', async () => {
+    await initWithHassEnabled();
+    const getContainer = vi
+      .spyOn(containerStore, 'getContainer')
+      .mockImplementation((id) =>
+        id === 'old-container' ? (progressContainer as never) : undefined,
+      );
+    vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(undefined);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-4',
+      containerName: 'progress-test',
+      containerId: 'old-container',
+      newContainerId: 'new-container',
+      status: 'in-progress',
+      phase: 'renamed',
+    });
+    await flush();
+
+    expect(getContainer).toHaveBeenNthCalledWith(1, 'new-container');
+    expect(getContainer).toHaveBeenNthCalledWith(2, 'old-container');
+    expect(triggerSpy).toHaveBeenCalledWith(progressContainer);
+  });
+
+  test('an unresolvable operation event publishes nothing', async () => {
+    await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockReturnValue(undefined);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(mqtt.log, 'debug');
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-5',
+      containerName: 'gone',
+      containerId: '',
+      status: 'failed',
+      phase: 'failed',
+    });
+    await flush();
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('No stored container'));
+  });
+
+  test('a container lookup failure is warned about, not thrown', async () => {
+    await initWithHassEnabled();
+    vi.spyOn(containerStore, 'getContainer').mockImplementation(() => {
+      throw new Error('store unavailable');
+    });
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(mqtt.log, 'warn');
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-6',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flush();
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to resolve container for update operation op-6'),
+    );
+  });
+
+  test('update-operation events are ignored when hass is not enabled', async () => {
+    mqtt.configuration = {
+      ...hassEnabledConfiguration,
+      hass: { ...hassEnabledConfiguration.hass, enabled: false, discovery: false },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
+      publish: vi.fn().mockResolvedValue(undefined),
+    });
+    await mqtt.initTrigger();
+    const getContainer = vi.spyOn(containerStore, 'getContainer');
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-7',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flush();
+
+    expect(getContainer).not.toHaveBeenCalled();
+    expect(triggerSpy).not.toHaveBeenCalled();
+  });
+
+  test('deregister unsubscribes from update-operation events', async () => {
+    await initWithHassEnabled();
+    const getContainer = vi
+      .spyOn(containerStore, 'getContainer')
+      .mockReturnValue(progressContainer as never);
+    const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+    await mqtt.deregister();
+
+    await emitUpdateOperationChanged({
+      operationId: 'op-8',
+      containerName: 'progress-test',
+      containerId: 'container-progress',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flush();
+
+    expect(getContainer).not.toHaveBeenCalled();
+    expect(triggerSpy).not.toHaveBeenCalled();
   });
 });

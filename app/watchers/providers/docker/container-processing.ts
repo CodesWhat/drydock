@@ -40,6 +40,14 @@ interface WatchContainerDependencies {
    * so it must leave this as false to avoid double-firing batch triggers.
    */
   emitBatchEvent?: boolean;
+  /**
+   * Checked once findNewVersion() has settled, right before the store write and event
+   * emission below. Only the bulk `watch()` loop supplies this (DR-72): the watcher was
+   * deregistered while this container was mid-scan, so the store write and report/batch
+   * emission are stale side effects and must not land. Absent for standalone single-container
+   * scans, which are not part of a generation-tracked bulk scan.
+   */
+  isScanStale?: () => boolean;
 }
 
 interface MapContainerToReportDependencies {
@@ -60,6 +68,7 @@ export async function watchContainer(
     findNewVersion,
     mapContainerToContainerReport,
     emitBatchEvent = false,
+    isScanStale,
   }: WatchContainerDependencies,
 ): Promise<ContainerReport> {
   ensureLogger();
@@ -98,6 +107,13 @@ export async function watchContainer(
       containerWithResult.result = previousResult;
       containerWithResult.currentReleaseNotes = previousCurrentReleaseNotes;
     }
+  }
+
+  if (isScanStale?.()) {
+    logContainer.debug(
+      'Skipping stale scan side effects — the watcher was deregistered while this container was being processed',
+    );
+    return { container: containerWithResult, changed: false };
   }
 
   const containerReport = mapContainerToContainerReport(containerWithResult, watchStartedAtMs);
@@ -159,8 +175,25 @@ export function mapContainerToContainerReport(
   const containerInDb = storeContainer.getContainer(containerToPersist.id);
 
   if (containerInDb) {
-    // Found in DB? => update it
-    const updatedContainer = storeContainer.updateContainer(containerToPersist);
+    // Found in DB? Write only the fields this scan cycle owns (roadmap
+    // 7-STORE, slice 9 / spec 4.3): `result`, `image`, `error` and the
+    // release notes derived from `result`. `containerToPersist` also still
+    // carries whatever runtime fields (name, status, health, labels,
+    // details) this container object had when the cycle started, which can
+    // be stale by the time a long registry lookup finishes — a
+    // whole-record write here would silently revert an event-path rename or
+    // health change that landed mid-cycle. Everything not in this patch is
+    // inherited from the row `updateContainerFields` reads fresh.
+    // Cast: `containerInDb` was just read synchronously above with no
+    // intervening await, so the row cannot have disappeared by the time this
+    // patch runs — `updateContainerFields` only returns undefined when the id
+    // is not found.
+    const updatedContainer = storeContainer.updateContainerFields(containerToPersist.id, {
+      result: containerToPersist.result,
+      image: containerToPersist.image,
+      error: containerToPersist.error,
+      currentReleaseNotes: containerToPersist.currentReleaseNotes,
+    }) as Container;
     return {
       container: updatedContainer,
       changed: containerInDb.resultChanged(updatedContainer) && containerToPersist.updateAvailable,

@@ -185,6 +185,19 @@ function createCaptureResult(input: CaptureResult, properties: CaptureProperties
   return result;
 }
 
+function sanitizeReferringDomain(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (value === "$direct") return value;
+  if (
+    value.length > 253 ||
+    value.trim() !== value ||
+    !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/iu.test(value)
+  ) {
+    return undefined;
+  }
+  return value.toLowerCase();
+}
+
 export function createBeforeSend(token: string, routes: ReadonlySet<string>) {
   return (input: CaptureResult | null): CaptureResult | null => {
     if (
@@ -218,6 +231,8 @@ export function createBeforeSend(token: string, routes: ReadonlySet<string>) {
     const properties = createCommonProperties(token, input.properties, rawPath, routes);
     properties.$raw_user_agent = rawUserAgent;
     properties.$host = host;
+    const referringDomain = sanitizeReferringDomain(input.properties.$referring_domain);
+    if (referringDomain !== undefined) properties.$referring_domain = referringDomain;
 
     if (input.event === "$pageview" || input.event === "$pageleave") {
       // PostHog's Web analytics Page / Entry page / Exit page tables key off

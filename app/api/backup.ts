@@ -36,10 +36,7 @@ function isPortainerOriginatedBackup(backup: { triggerName?: string }): boolean 
 const router = express.Router();
 
 function getContainerBackupScope(container: Parameters<typeof createContainerBackupScope>[0]) {
-  return createContainerBackupScope(
-    container,
-    storeContainer.getContainers({ name: container.name }),
-  );
+  return createContainerBackupScope(container);
 }
 
 /**

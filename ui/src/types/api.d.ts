@@ -14,6 +14,15 @@ export interface ApiComponent {
   metadata?: Record<string, unknown>;
 }
 
+/** Names-only identity returned by GET /api/v1/agents/roster. */
+export interface ApiAgentIdentity {
+  name: string;
+}
+
+export type ApiComponentResponse = Omit<ApiComponent, 'configuration'> & {
+  configuration: unknown;
+};
+
 /** Agent shape returned by GET /api/agents. */
 export interface ApiAgent {
   name: string;
@@ -68,6 +77,24 @@ export interface ApiContainerTrigger {
    * notification and command triggers have no automatic-execution policy.
    */
   resolvedState?: 'blocked' | 'manual' | 'auto';
+}
+
+/**
+ * Why a trigger does not apply to the requested container (DR-78), from
+ * GET /api/containers/:id/triggers' `unassociatedTriggers` list.
+ */
+export type ApiTriggerAssociationReason =
+  | 'agentOwnership'
+  | 'structuralIncompatibility'
+  | 'labelScope';
+
+/** Trigger that does not apply to a container (from GET /api/containers/:id/triggers). */
+export interface ApiUnassociatedContainerTrigger {
+  id: string;
+  type: string;
+  name: string;
+  agent?: string;
+  reason: ApiTriggerAssociationReason;
 }
 
 export type ApiContainerUpdateOperationStatus = ContainerUpdateOperationStatus;

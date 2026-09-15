@@ -43,9 +43,9 @@ vi.mock('../store/settings.js', () => ({
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: vi.fn(),
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
-  getActiveOperationByContainerName: vi.fn(),
-  getRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
-  hasOtherActiveOperationByContainerName: vi.fn(() => false),
+  getActiveOperationByContainerIdentity: vi.fn(),
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
   insertOperation: mockInsertOperation,
   markOperationTerminal: vi.fn(),
 }));

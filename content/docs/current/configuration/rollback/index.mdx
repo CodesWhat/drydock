@@ -19,8 +19,9 @@ The number of backups retained per container is configurable via a trigger envir
 | Env var | Required | Description | Supported values | Default value when missing |
 | -------------------------------------------------- | :--------------: | ---------------------------------------- | ---------------- | -------------------------- |
 | `DD_ACTION_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
 
-<Callout type="info">This variable is set on the [Docker trigger](/docs/configuration/triggers/docker), not on the target container.</Callout>
+<Callout type="info">This variable is set on the [Docker](/docs/configuration/triggers/docker) or [Docker Compose](/docs/configuration/triggers/docker-compose) action trigger, not on the target container. The Docker Compose trigger inherits its configuration schema from Docker, so the same variable and default apply.</Callout>
 
 ## Manual Rollback
 

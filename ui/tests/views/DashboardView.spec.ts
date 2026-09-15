@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
@@ -329,6 +330,31 @@ describe('DashboardView', () => {
       await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
       expect(dashboardViewSource).toContain('<DashboardGrid');
       expect(dashboardViewSource).not.toContain('grid-layout-plus');
+    });
+
+    it('shows customization size badges from the actual widget resize bounds', async () => {
+      const wrapper = await mountDashboard();
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      if (!(editToggle instanceof HTMLButtonElement)) throw new Error('Missing edit toggle');
+      editToggle.click();
+      await flushPromises();
+      const labels = wrapper
+        .findAll('label')
+        .filter((label) => label.find('input[type="checkbox"]').exists());
+      expect(
+        labels.map((label) => label.findAll('.text-4xs').map((badge) => badge.text())),
+      ).toEqual([
+        ['S'],
+        ['S'],
+        ['S'],
+        ['S'],
+        ['S'],
+        ['M', 'L'],
+        ['S', 'M'],
+        ['M', 'L'],
+        ['S', 'M', 'L'],
+        ['S', 'M', 'L'],
+      ]);
     });
 
     it('keeps editable widgets vertically pannable while customizing', async () => {
@@ -1648,6 +1674,146 @@ describe('DashboardView', () => {
       name: 'redis',
       newTag: null,
       updateKind: null,
+    });
+
+    describe('localized real-service failures', () => {
+      let previousLocale: typeof i18n.global.locale.value;
+      let previousFetch: typeof fetch;
+
+      beforeEach(async () => {
+        previousLocale = i18n.global.locale.value;
+        i18n.global.locale.value = 'fr';
+        const service = await vi.importActual<typeof import('@/services/container-actions')>(
+          '@/services/container-actions',
+        );
+        mockUpdateContainer.mockImplementation(service.updateContainer);
+        mockUpdateContainers.mockImplementation(service.updateContainers);
+        previousFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn();
+      });
+
+      afterEach(() => {
+        i18n.global.locale.value = previousLocale;
+        globalThis.fetch = previousFetch;
+      });
+
+      it.each(['single', 'bulk'])(
+        'localizes a %s HTTP failure and recovers on retry',
+        async (operation) => {
+          const wrapper = await mountDashboard(
+            [pendingContainer],
+            [],
+            {},
+            { recentStatuses: { nginx: 'pending' } },
+          );
+          vi.mocked(fetch)
+            .mockReset()
+            .mockResolvedValueOnce(new Response('{broken', { status: 503 }));
+          const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+          const confirm = useConfirmDialog();
+          const selector =
+            operation === 'single'
+              ? '[data-test="dashboard-update-btn"]'
+              : '[data-test="dashboard-update-all-btn"]';
+          await wrapper.get(selector).trigger('click');
+          await confirm.accept();
+          await flushPromises();
+          expect(wrapper.get('[data-test="dashboard-update-error"]').text()).toContain(
+            operation === 'single'
+              ? 'Impossible de mettre à jour nginx'
+              : 'Impossible de mettre à jour tous les conteneurs',
+          );
+          expect(wrapper.get(selector).attributes('disabled')).toBeUndefined();
+          expect(
+            wrapper.get('[data-test="dashboard-update-btn"]').attributes('disabled'),
+          ).toBeUndefined();
+
+          vi.mocked(fetch).mockResolvedValueOnce(
+            Response.json(
+              operation === 'single'
+                ? {}
+                : {
+                    message: 'Container update requests processed',
+                    accepted: [
+                      { containerId: 'c-pending', containerName: 'nginx', operationId: 'op-1' },
+                    ],
+                    rejected: [],
+                  },
+            ),
+          );
+          await wrapper.get(selector).trigger('click');
+          await confirm.accept();
+          await flushPromises();
+          expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
+          expect(fetch).toHaveBeenCalledTimes(2);
+        },
+      );
+
+      it('preserves a real bulk HTTP diagnostic in the banner', async () => {
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        vi.mocked(fetch)
+          .mockReset()
+          .mockResolvedValueOnce(Response.json({ error: 'Queue unavailable' }, { status: 503 }));
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        await wrapper.get('[data-test="dashboard-update-all-btn"]').trigger('click');
+        await useConfirmDialog().accept();
+        await flushPromises();
+        expect(wrapper.get('[data-test="dashboard-update-error"]').text()).toBe(
+          'Queue unavailable',
+        );
+        expect(
+          wrapper.get('[data-test="dashboard-update-all-btn"]').attributes('disabled'),
+        ).toBeUndefined();
+      });
+
+      it('preserves partial acceptance and per-item diagnostics from the real bulk service', async () => {
+        const second = makeContainer({
+          id: 'c-rejected',
+          name: 'redis',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        });
+        const wrapper = await mountDashboard(
+          [pendingContainer, second],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending', redis: 'pending' } },
+        );
+        vi.mocked(fetch)
+          .mockReset()
+          .mockResolvedValueOnce(
+            Response.json({
+              message: 'Container update requests processed',
+              accepted: [{ containerId: 'c-pending', containerName: 'nginx', operationId: 'op-1' }],
+              rejected: [
+                {
+                  containerId: 'c-rejected',
+                  containerName: 'redis',
+                  statusCode: 409,
+                  message: 'Registry unavailable',
+                },
+              ],
+            }),
+          );
+        const initialFetchCount = mockGetAllContainers.mock.calls.length;
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        await wrapper.get('[data-test="dashboard-update-all-btn"]').trigger('click');
+        await useConfirmDialog().accept();
+        await flushPromises();
+        expect(wrapper.get('[data-test="dashboard-update-error"]').text()).toBe(
+          'Registry unavailable',
+        );
+        expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
+        expect(useToast().toasts.value.some((toast) => toast.tone === 'success')).toBe(true);
+        expect(vi.mocked(fetch).mock.calls[0]![1]?.body).toBe(
+          JSON.stringify({ containerIds: ['c-pending', 'c-rejected'] }),
+        );
+      });
     });
 
     it('shows Update button for containers with pending updates', async () => {

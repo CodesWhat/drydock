@@ -1,7 +1,9 @@
 import {
+  type ContainerGroup,
   deleteContainer,
   getAllContainers,
   getContainerDependencies,
+  getContainerGroups,
   getContainerIntermediateReleaseNotes,
   getContainerLogs,
   getContainerRecentStatus,
@@ -9,6 +11,7 @@ import {
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
+  getContainerTriggersWithReasons,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
@@ -23,6 +26,38 @@ import {
   updateContainerPolicy,
   updateDependencyGroup,
 } from '@/services/container';
+
+describe('getContainerGroups', () => {
+  beforeEach(() => {
+    vi.mocked(fetch).mockClear();
+  });
+
+  it('unwraps the real groups envelope without changing container identities', async () => {
+    const groups: ContainerGroup[] = [
+      {
+        name: 'stack',
+        containers: [
+          { id: 'local-web', name: 'web', displayName: 'web', updateAvailable: true },
+          { id: 'edge-web', name: 'web', displayName: 'web', updateAvailable: false },
+        ],
+        containerCount: 2,
+        updatesAvailable: 1,
+      },
+    ];
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: groups, total: 1 }),
+    } as Response);
+    await expect(getContainerGroups()).resolves.toEqual(groups);
+    expect(fetch).toHaveBeenCalledWith('/api/v1/containers/groups', { credentials: 'include' });
+  });
+
+  it('preserves a group-list API failure', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, statusText: 'Forbidden' } as Response);
+    await expect(getContainerGroups()).rejects.toThrow('Failed to get container groups: Forbidden');
+  });
+});
+
 import { ApiError } from '@/utils/error';
 
 // Mock fetch globally
@@ -376,6 +411,55 @@ describe('Container Service', () => {
       } as any);
 
       await expect(getContainerTriggers('c1')).rejects.toThrow(
+        'Failed to get triggers for container c1: Not Found',
+      );
+    });
+  });
+
+  describe('getContainerTriggersWithReasons', () => {
+    it('reads the associated triggers and the unassociatedTriggers reason list from one response (DR-78)', async () => {
+      const mockTriggers = [
+        { type: 'webhook', name: 'trigger1' },
+        { type: 'email', name: 'trigger2' },
+      ];
+      const mockUnassociated = [
+        { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: mockTriggers,
+          total: 2,
+          unassociatedTriggers: mockUnassociated,
+        }),
+      } as any);
+
+      const result = await getContainerTriggersWithReasons('container1');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/triggers', {
+        credentials: 'include',
+      });
+      expect(result).toEqual({ data: mockTriggers, unassociatedTriggers: mockUnassociated });
+    });
+
+    it('returns an empty unassociatedTriggers array when the response has no such field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [], total: 0 }),
+      } as any);
+
+      const result = await getContainerTriggersWithReasons('container1');
+      expect(result).toEqual({ data: [], unassociatedTriggers: [] });
+    });
+
+    it('throws when fetching triggers fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+      } as any);
+
+      await expect(getContainerTriggersWithReasons('c1')).rejects.toThrow(
         'Failed to get triggers for container c1: Not Found',
       );
     });

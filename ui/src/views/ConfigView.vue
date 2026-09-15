@@ -219,25 +219,6 @@ const showSyncToggle = computed(
     profileData.value.username !== 'anonymous',
 );
 
-function formatProfileLastLogin(rawValue: unknown): string {
-  if (rawValue === undefined || rawValue === null || rawValue === '') {
-    return '';
-  }
-  const date = new Date(rawValue as string | number | Date);
-  if (Number.isNaN(date.getTime())) {
-    return String(rawValue);
-  }
-  return date.toLocaleString();
-}
-
-function normalizeSessionCount(rawValue: unknown): number {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return 0;
-  }
-  return Math.floor(parsed);
-}
-
 async function loadGeneralSettingsData() {
   loading.value = true;
   serverError.value = '';
@@ -317,13 +298,8 @@ async function loadProfileData() {
     const user = await getUser();
     if (user) {
       profileData.value = {
+        ...emptyProfileData(),
         username: user.username ?? '',
-        displayName: user.displayName ?? '',
-        email: user.email ?? '',
-        role: user.role ?? '',
-        provider: user.provider ?? user.authentication ?? '',
-        lastLogin: formatProfileLastLogin(user.lastLogin),
-        sessions: normalizeSessionCount(user.sessions),
       };
     }
   } catch (e: unknown) {
@@ -399,7 +375,7 @@ async function handleClearIconCache() {
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const createObjectUrl = globalThis.URL?.createObjectURL;
   if (typeof createObjectUrl !== 'function') {
-    throw new Error('Browser does not support file downloads');
+    throw new Error(t('configView.general.errors.downloadDebugDump'));
   }
 
   const objectUrl = createObjectUrl(blob);
@@ -432,7 +408,10 @@ async function handleDownloadDebugDump() {
 }
 
 function handleSelectThemeFamily(familyId: string, event: Event) {
-  transitionTheme(() => setThemeFamily(familyId as ThemeFamily), event);
+  transitionTheme(
+    () => setThemeFamily(familyId as ThemeFamily),
+    event instanceof MouseEvent ? event : undefined,
+  );
 }
 
 function handleSelectFont(fontId: string) {

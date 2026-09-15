@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import type AppButton from '@/components/AppButton.vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
@@ -130,6 +131,9 @@ const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
 const triggersLoading = ref(false);
 const detailTriggers = ref<Array<{ type: string; name: string; agent?: string }>>([]);
+const unassociatedTriggers = ref<
+  Array<{ id: string; type: string; name: string; agent?: string; reason: string }>
+>([]);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
@@ -225,6 +229,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     previewError,
     triggersLoading,
     detailTriggers,
+    unassociatedTriggers,
     getTriggerKey: (trigger: { type: string; name: string }) => `${trigger.type}.${trigger.name}`,
     triggerRunInProgress,
     runAssociatedTrigger: mockRunAssociatedTrigger,
@@ -349,6 +354,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     policyError.value = null;
     triggersLoading.value = false;
     detailTriggers.value = [];
+    unassociatedTriggers.value = [];
     triggerRunInProgress.value = null;
     triggerMessage.value = null;
     triggerError.value = null;
@@ -818,6 +824,36 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(mockConfirmRollback).toHaveBeenCalledWith('backup-1');
   });
 
+  it('shows why an unassociated trigger does not apply to the container (DR-78)', () => {
+    activeDetailTab.value = 'actions';
+    unassociatedTriggers.value = [
+      { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      {
+        id: 'slack.notify',
+        type: 'slack',
+        name: 'notify',
+        agent: 'agent-2',
+        reason: 'labelScope',
+      },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Unavailable Triggers');
+    const dockerRow = wrapper.get('[data-unassociated-trigger-key="docker.deploy"]');
+    expect(dockerRow.text()).toContain('docker.deploy');
+    expect(dockerRow.text()).toContain('Belongs to a different agent than this container.');
+
+    const slackRow = wrapper.get('[data-unassociated-trigger-key="slack.notify"]');
+    expect(slackRow.text()).toContain('agent: agent-2');
+    expect(slackRow.text()).toContain(
+      "Excluded by this container's dd.action/dd.notification include or exclude labels.",
+    );
+    expect(wrapper.find('[data-unassociated-trigger-key="docker.deploy"] button').exists()).toBe(
+      false,
+    );
+  });
+
   it('renders populated overview rows for ports, volumes, runtime warnings, and hook variables', () => {
     activeDetailTab.value = 'overview';
     const withOverviewData = createSelectedContainer();
@@ -976,6 +1012,32 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(mockClearSkipsSelected).toHaveBeenCalledTimes(1);
     expect(mockClearPolicySelected).toHaveBeenCalledTimes(1);
     expect(mockConfirmRollback).toHaveBeenCalledWith();
+  });
+
+  it('uses plain policy reset buttons and prevents resets while a policy action is pending', async () => {
+    activeDetailTab.value = 'actions';
+    const fields = ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'];
+    selectedPolicyOverrideFields.value = new Set(fields);
+    const wrapper = mountComponent();
+
+    for (const field of fields) {
+      const button = wrapper.findComponent<typeof AppButton>(
+        `[data-test="policy-revert-${field}"]`,
+      );
+      expect(button.props('variant')).toBe('plain');
+      await button.trigger('click');
+    }
+    expect(mockRevertPolicySelected.mock.calls).toEqual(fields.map((field) => [field]));
+
+    policyInProgress.value = 'saving';
+    await nextTick();
+    for (const field of fields) {
+      const button = wrapper.find(`[data-test="policy-revert-${field}"]`);
+      expect(button.attributes('disabled')).toBeDefined();
+      await button.trigger('click');
+    }
+    expect(mockRevertPolicySelected).toHaveBeenCalledTimes(fields.length);
+    wrapper.unmount();
   });
 
   it('shows material override badges and wires field and whole-policy reverts', async () => {

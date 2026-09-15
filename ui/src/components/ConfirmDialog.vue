@@ -72,7 +72,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           </div>
 
           <!-- Body -->
-          <div :id="dialogDescriptionId" class="px-5 py-4.5 text-xs leading-relaxed dd-text-secondary">
+          <div :id="dialogDescriptionId" class="px-5 py-4.5 text-xs leading-relaxed dd-text-secondary whitespace-pre-line">
             {{ current.message }}
             <a
               v-if="current.link"

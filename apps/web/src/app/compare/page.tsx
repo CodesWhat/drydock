@@ -8,11 +8,12 @@ export const metadata: Metadata = {
   // absolute: this title already carries the brand; opt out of the root "%s | Drydock" template.
   title: { absolute: "Drydock vs Alternatives — Container Update Tool Comparisons" },
   description:
-    "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, and WUD. Feature-by-feature breakdowns for container update monitoring tools.",
+    "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, WUD, and Arcane. Feature-by-feature breakdowns for container update monitoring tools.",
   keywords: [
     "watchtower alternative",
     "portainer alternative",
     "diun alternative",
+    "arcane alternative",
     "container update monitoring comparison",
     "docker update tools",
     "watchtower replacement",
@@ -48,6 +49,7 @@ export const metadata: Metadata = {
 };
 
 const tools = [
+  { name: "Arcane", slug: "arcane" },
   { name: "Portainer", slug: "portainer" },
   { name: "Komodo", slug: "komodo" },
   { name: "Diun", slug: "diun" },
@@ -67,7 +69,7 @@ export default function ComparePage() {
         "@type": "CollectionPage",
         name: "Drydock vs Alternatives — Container Update Tool Comparisons",
         description:
-          "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, and WUD.",
+          "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, WUD, and Arcane.",
         url: `${BASE_URL}/compare`,
         mainEntity: {
           "@type": "ItemList",

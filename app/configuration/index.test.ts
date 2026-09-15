@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import log from '../log/index.js';
 import appPackageJson from '../package.json';
+import { UNSUPPORTED_FILE_KEYS } from './file/flatten.js';
 import * as configuration from './index.js';
 
 function getTestDirectory() {
@@ -24,6 +25,9 @@ afterEach(() => {
   delete configuration.ddEnvVars.DD_AGENT_ALLOW_INSECURE_SECRET;
   delete configuration.ddEnvVars.DD_AGENT_SWARM01_HOST;
   delete configuration.ddEnvVars.DD_AGENT_SWARM01_SECRET;
+  delete configuration.ddEnvVars.DD_STORE_X;
+  delete configuration.ddEnvVars.DD_STORE_Y;
+  delete configuration.ddEnvVars.DD_STORE_DB_FILE;
 });
 
 test('getVersion should return dd version', async () => {
@@ -339,6 +343,38 @@ test('getWatcherConfiguration should normalize DISCOVERY_SETTLE_MS to the watche
   delete configuration.ddEnvVars.DD_WATCHER_LOCAL_DISCOVERY_SETTLE_MS;
 });
 
+test('isWatcherSocketExplicitlyConfigured should return true when DD_WATCHER_<name>_SOCKET is set (#10.4 finding 1)', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET = '/var/run/docker.sock';
+
+  expect(configuration.isWatcherSocketExplicitlyConfigured('local')).toBe(true);
+  expect(configuration.isWatcherSocketExplicitlyConfigured('LOCAL')).toBe(true);
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET;
+});
+
+test('isWatcherSocketExplicitlyConfigured should return false for a watcher with no configured socket', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '0 2 * * *';
+
+  expect(configuration.isWatcherSocketExplicitlyConfigured('local')).toBe(false);
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW;
+});
+
+test('isWatcherSocketExplicitlyConfigured should return false for a watcher name with no configuration at all', () => {
+  expect(configuration.isWatcherSocketExplicitlyConfigured('nonexistent')).toBe(false);
+});
+
+test('isWatcherSocketExplicitlyConfigured should resolve independently per watcher', () => {
+  configuration.ddEnvVars.DD_WATCHER_ONE_SOCKET = '/run/one.sock';
+  configuration.ddEnvVars.DD_WATCHER_TWO_MAINTENANCE_WINDOW = '0 3 * * *';
+
+  expect(configuration.isWatcherSocketExplicitlyConfigured('one')).toBe(true);
+  expect(configuration.isWatcherSocketExplicitlyConfigured('two')).toBe(false);
+
+  delete configuration.ddEnvVars.DD_WATCHER_ONE_SOCKET;
+  delete configuration.ddEnvVars.DD_WATCHER_TWO_MAINTENANCE_WINDOW;
+});
+
 test('getWatcherConfiguration should not apply DISCOVERY_SETTLE_MS alias without a watcher name', () => {
   configuration.ddEnvVars.DD_WATCHER__DISCOVERY_SETTLE_MS = '0';
 
@@ -511,6 +547,23 @@ test('getStoreConfiguration should return configured store', async () => {
     x: 'x',
     y: 'y',
   });
+});
+
+test('getStoreConfiguration should map DD_STORE_DB_FILE to a flat dbFile field', async () => {
+  configuration.ddEnvVars.DD_STORE_DB_FILE = 'custom.sqlite';
+  expect(configuration.getStoreConfiguration()).toStrictEqual({
+    dbFile: 'custom.sqlite',
+  });
+});
+
+test('getStoreConfiguration should trim DD_STORE_DB_FILE and omit it when blank', async () => {
+  configuration.ddEnvVars.DD_STORE_DB_FILE = '  padded.sqlite  ';
+  expect(configuration.getStoreConfiguration()).toStrictEqual({
+    dbFile: 'padded.sqlite',
+  });
+
+  configuration.ddEnvVars.DD_STORE_DB_FILE = '   ';
+  expect(configuration.getStoreConfiguration()).toStrictEqual({});
 });
 
 test('getServerConfiguration should return configured api (new vars)', async () => {
@@ -3408,5 +3461,495 @@ describe('replaceSecrets – secret file hardening', () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('getPortwingAuthorizedKeysPath', () => {
+  // The only other exercise of this getter (store/index.test.ts) mocks it
+  // rather than calling through, so it's otherwise uncovered when this file
+  // runs on its own rather than as part of the full suite.
+  test('returns undefined when DD_PORTWING_AUTHORIZED_KEYS is unset', () => {
+    delete configuration.ddEnvVars.DD_PORTWING_AUTHORIZED_KEYS;
+    expect(configuration.getPortwingAuthorizedKeysPath()).toBeUndefined();
+  });
+
+  test('returns the trimmed path when DD_PORTWING_AUTHORIZED_KEYS is set', () => {
+    configuration.ddEnvVars.DD_PORTWING_AUTHORIZED_KEYS = '  /etc/drydock/authorized_keys  ';
+    expect(configuration.getPortwingAuthorizedKeysPath()).toBe('/etc/drydock/authorized_keys');
+    delete configuration.ddEnvVars.DD_PORTWING_AUTHORIZED_KEYS;
+  });
+
+  test('returns undefined for a whitespace-only value', () => {
+    configuration.ddEnvVars.DD_PORTWING_AUTHORIZED_KEYS = '   ';
+    expect(configuration.getPortwingAuthorizedKeysPath()).toBeUndefined();
+    delete configuration.ddEnvVars.DD_PORTWING_AUTHORIZED_KEYS;
+  });
+});
+
+// ── Slice 1: drydock.yml loading (spec-7.1-config-file.md, section 2 and 7) ──
+
+describe('drydock.yml loading', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  /**
+   * Sets `file/layer.ts`'s in-memory layer directly, the way `app/index.ts`'s
+   * bootstrap does via `loadConfigFileIntoLayer`, instead of writing a real
+   * `drydock.yml` and pointing `DD_CONFIG_FILE` at it. Discovery, parsing and
+   * the loader's own error paths (a missing explicit `DD_CONFIG_FILE`,
+   * invalid YAML, a `_file`/base-key collision, world-writable permissions)
+   * are `loader.ts`'s and `flatten.ts`'s job, asserted directly against real
+   * temp files in `loader.test.ts` and `flatten.test.ts`. What belongs here
+   * is only what `configuration/index.ts` itself does with an already-loaded
+   * layer: merge it beneath the environment and let every existing consumer
+   * (`getWatcherConfigurations`, `replaceSecrets`, ...) read the result.
+   *
+   * `vi.resetModules()` must run before `./file/layer.js` is imported, not
+   * after: importing it first and calling `setConfigFileLayer` second would
+   * have the following `vi.resetModules()` throw the set value away by
+   * handing `./index.js` a brand new, empty-state copy of `layer.js`.
+   */
+  async function withConfigFileLayer<T>(
+    layer: Record<string, string>,
+    run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
+  ): Promise<T> {
+    vi.resetModules();
+    const { setConfigFileLayer } = await import('./file/layer.js');
+    setConfigFileLayer(layer);
+    const freshConfiguration = await import('./index.js');
+    return run(freshConfiguration);
+  }
+
+  test('the no-op proof: with no config file present, ddEnvVars deep-equals the env-only map', async () => {
+    const expected: Record<string, string | undefined> = {};
+    Object.keys(process.env)
+      .filter((envVar) => envVar.toUpperCase().startsWith('DD_'))
+      .forEach((envVar) => {
+        expected[envVar] = process.env[envVar];
+      });
+    await configuration.replaceSecrets(expected);
+
+    const freshConfiguration = await importFreshConfiguration();
+
+    expect(freshConfiguration.ddEnvVars).toStrictEqual(expected);
+  });
+
+  test('a file setting a key the environment does not reaches ddEnvVars, sourced as "file"', async () => {
+    await withConfigFileLayer(
+      { DD_SERVER_NAME: 'file-supplied-name' },
+      async (freshConfiguration) => {
+        expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('file-supplied-name');
+        expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('file');
+      },
+    );
+  });
+
+  test('the environment wins when both the environment and the file set the same key', async () => {
+    const originalPort = process.env.DD_SERVER_PORT;
+    process.env.DD_SERVER_PORT = '9999';
+    try {
+      await withConfigFileLayer({ DD_SERVER_PORT: '1111' }, async (freshConfiguration) => {
+        expect(freshConfiguration.ddEnvVars.DD_SERVER_PORT).toBe('9999');
+        expect(freshConfiguration.configFileSources.DD_SERVER_PORT).toBe('env');
+      });
+    } finally {
+      if (originalPort === undefined) {
+        delete process.env.DD_SERVER_PORT;
+      } else {
+        process.env.DD_SERVER_PORT = originalPort;
+      }
+    }
+  });
+
+  test('a file setting watcher.local.maintenance_window_scope reaches the alias normaliser', async () => {
+    await withConfigFileLayer(
+      { DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE: 'scan' },
+      async (freshConfiguration) => {
+        const watchers = freshConfiguration.getWatcherConfigurations();
+        expect(watchers.local.maintenancewindowscope).toBe('scan');
+        expect(watchers.local.maintenance).toBeUndefined();
+      },
+    );
+  });
+
+  test('a file setting store.db_file lands as dbFile, not a nested db.file', async () => {
+    await withConfigFileLayer({ DD_STORE_DB_FILE: 'custom.sqlite' }, async (freshConfiguration) => {
+      const store = freshConfiguration.getStoreConfiguration();
+      expect(store.dbFile).toBe('custom.sqlite');
+      expect((store as Record<string, unknown>).db).toBeUndefined();
+    });
+  });
+
+  test('a _file node in the config file resolves through replaceSecrets, including trimEnd()', async () => {
+    const secretDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-secret-'));
+    const secretPath = path.join(secretDir, 'ghcr-token.txt');
+    fs.writeFileSync(secretPath, 'ghp_fromfile\n', 'utf-8');
+    fs.chmodSync(secretPath, 0o600);
+    try {
+      await withConfigFileLayer(
+        { DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE: secretPath },
+        async (freshConfiguration) => {
+          expect(freshConfiguration.ddEnvVars.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('ghp_fromfile');
+          expect(freshConfiguration.ddEnvVars.DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE).toBeUndefined();
+        },
+      );
+    } finally {
+      fs.rmSync(secretDir, { recursive: true, force: true });
+    }
+  });
+
+  test('a file setting the removed DD_TRIGGER_* prefix still fails startup through assertNoLegacyTriggerEnvVars', async () => {
+    await withConfigFileLayer(
+      { DD_TRIGGER_SLACK_MYSLACK_CHANNEL: '#updates' },
+      async (freshConfiguration) => {
+        expect(() => freshConfiguration.getTriggerConfigurations()).toThrowError(
+          /DD_TRIGGER_SLACK_MYSLACK_CHANNEL → DD_NOTIFICATION_SLACK_MYSLACK_CHANNEL/,
+        );
+      },
+    );
+  });
+
+  test('loads a config file with no dependency on the store or agent flag having initialized first', async () => {
+    // app/index.ts's `--agent` dispatch and app/store/index.ts's
+    // store.init({ memory: isAgent }) never enter the picture here — only
+    // configuration/index.ts is imported. That's the property that matters:
+    // the loader has no way to depend on an ordering it never participates
+    // in, so a file present at agent-mode start behaves the same as any
+    // other start.
+    await withConfigFileLayer(
+      { DD_AGENT_SWARM01_HOST: 'agent.example' },
+      async (freshConfiguration) => {
+        expect(freshConfiguration.ddEnvVars.DD_AGENT_SWARM01_HOST).toBe('agent.example');
+        const agents = freshConfiguration.getAgentConfigurations();
+        expect(agents.swarm01.host).toBe('agent.example');
+      },
+    );
+  });
+});
+
+// The file layer only reaches ddEnvVars/get() consumers. These 21 files read
+// process.env.DD_* directly and are not covered by drydock.yml in v1.8.
+// Shared between the enumeration test below and the UNSUPPORTED_FILE_KEYS
+// recompute test after it, so the two can't drift into disagreement about
+// which files count as direct readers.
+const DIRECT_ENV_READER_FILES = [
+  'agent/AgentClient.ts',
+  'agent/api/index.ts',
+  'api/container/maturity-filter.ts',
+  'api/icons/settings.ts',
+  'api/sse.ts',
+  'authentications/providers/anonymous/Anonymous.ts',
+  'configuration/runtime-defaults.ts',
+  'event/index.ts',
+  'main.ts',
+  'registries/providers/ghcr/Ghcr.ts',
+  'security/scan.ts',
+  'stats/config.ts',
+  'store/container.ts',
+  'store/update-operation.ts',
+  'triggers/hooks/HookRunner.ts',
+  'triggers/providers/docker/self-update-controller.ts',
+  'triggers/providers/docker/self-update-finalize-entrypoint.ts',
+  'updates/health-gate-heartbeat.ts',
+  'updates/post-start-liveness.ts',
+  'updates/recovery.ts',
+  'updates/update-locks.ts',
+].sort();
+
+// ── Slice 1b: ${NAME} interpolation (spec-7.1-config-file.md, decision D1) ──
+
+describe('${NAME} interpolation in drydock.yml', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  /**
+   * Writes a real `drydock.yml` and runs it through the real `loader.ts` into
+   * `file/layer.ts` — the way `app/index.ts`'s bootstrap does via
+   * `loadConfigFileIntoLayer` — before importing a fresh `./index.js` to
+   * consume that layer. `configuration/index.ts` no longer loads the file
+   * itself (see `drydock.yml loading` describe above), so a real end-to-end
+   * interpolation check has to drive the loader explicitly instead of
+   * relying on importing `./index.js` to trigger it.
+   */
+  async function withConfigFile<T>(
+    yamlContents: string,
+    run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
+  ): Promise<T> {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-interp-integration-'));
+    const configPath = path.join(tempDir, 'drydock.yml');
+    fs.writeFileSync(configPath, yamlContents, 'utf-8');
+    fs.chmodSync(configPath, 0o600);
+    const originalConfigFile = process.env.DD_CONFIG_FILE;
+    process.env.DD_CONFIG_FILE = configPath;
+    try {
+      vi.resetModules();
+      const { loadConfigFileIntoLayer } = await import('./file/loader.js');
+      await loadConfigFileIntoLayer();
+      const freshConfiguration = await import('./index.js');
+      return await run(freshConfiguration);
+    } finally {
+      if (originalConfigFile === undefined) {
+        delete process.env.DD_CONFIG_FILE;
+      } else {
+        process.env.DD_CONFIG_FILE = originalConfigFile;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  test('a ${NAME} reference resolves against the real environment and is sourced as "env"', async () => {
+    const originalValue = process.env.DD_TEST_CONFIG_INTERP;
+    process.env.DD_TEST_CONFIG_INTERP = 'resolved-from-env';
+    try {
+      await withConfigFile(
+        'server:\n  name: ${DD_TEST_CONFIG_INTERP}\n',
+        async (freshConfiguration) => {
+          expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('resolved-from-env');
+          expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('env');
+        },
+      );
+    } finally {
+      if (originalValue === undefined) {
+        delete process.env.DD_TEST_CONFIG_INTERP;
+      } else {
+        process.env.DD_TEST_CONFIG_INTERP = originalValue;
+      }
+    }
+  });
+
+  // An unset ${NAME} with no default failing startup, naming the YAML path
+  // and the variable, is now a `loader.ts` concern (`configuration/index.ts`
+  // never sees a load failure, since it only reads whatever's already in
+  // `file/layer.ts`): see loader.test.ts's 'an unset variable with no
+  // default is fatal, wrapped with the file path', and index.test.ts's
+  // 'on a load failure, prints the loader message to stderr, exits 1, and
+  // never imports main' for the bootstrap-level behavior.
+
+  test('a ${NAME:-default} falls back to the default and is still sourced as "env"', async () => {
+    await withConfigFile(
+      'server:\n  name: ${DD_TEST_CONFIG_INTERP_DEFAULT:-fallback-value}\n',
+      async (freshConfiguration) => {
+        expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('fallback-value');
+        expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('env');
+      },
+    );
+  });
+
+  test('a literal value with no ${...} pattern is still sourced as "file"', async () => {
+    await withConfigFile('server:\n  name: literal-name\n', async (freshConfiguration) => {
+      expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('literal-name');
+      expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('file');
+    });
+  });
+});
+
+describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  /**
+   * Same real loader → file/layer.ts → fresh index.js pipeline as the
+   * `${NAME} interpolation` describe's `withConfigFile` above:
+   * `configuration/index.ts` only merges whatever's already in
+   * `file/layer.ts`, so a real drydock.yml has to go through `loader.ts`
+   * explicitly rather than relying on importing `./index.js` to load it.
+   */
+  async function withConfigFile<T>(
+    yamlContents: string,
+    run: (freshConfiguration: Awaited<ReturnType<typeof importFreshConfiguration>>) => Promise<T>,
+  ): Promise<T> {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-config-validate-startup-'));
+    const configPath = path.join(tempDir, 'drydock.yml');
+    fs.writeFileSync(configPath, yamlContents, 'utf-8');
+    fs.chmodSync(configPath, 0o600);
+    const originalConfigFile = process.env.DD_CONFIG_FILE;
+    process.env.DD_CONFIG_FILE = configPath;
+    try {
+      vi.resetModules();
+      const { loadConfigFileIntoLayer } = await import('./file/loader.js');
+      await loadConfigFileIntoLayer();
+      const freshConfiguration = await import('./index.js');
+      return await run(freshConfiguration);
+    } finally {
+      if (originalConfigFile === undefined) {
+        delete process.env.DD_CONFIG_FILE;
+      } else {
+        process.env.DD_CONFIG_FILE = originalConfigFile;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  test('with no config file present, resolves to no errors without walking a single component (env-only gate)', async () => {
+    // No DD_CONFIG_FILE at all in this process's real environment, so every
+    // key in configFileSources (if any) is 'env' — the hasFileSourcedValue
+    // gate short-circuits before the dynamic import of file/validate.js.
+    await expect(configuration.validateStartupConfiguration()).resolves.toStrictEqual({
+      errors: [],
+    });
+  });
+
+  test('a valid config file produces no errors', async () => {
+    await withConfigFile('server:\n  port: 3000\n', async (freshConfiguration) => {
+      await expect(freshConfiguration.validateStartupConfiguration()).resolves.toStrictEqual({
+        errors: [],
+      });
+    });
+  });
+
+  test('an invalid config file value is reported with its YAML path and the Joi message', async () => {
+    await withConfigFile('security:\n  scanner: bogus\n', async (freshConfiguration) => {
+      const result = await freshConfiguration.validateStartupConfiguration();
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe('security.scanner');
+      expect(result.errors[0].envKey).toBe('DD_SECURITY_SCANNER');
+      expect(result.errors[0].message).toContain('"scanner"');
+    });
+  });
+});
+
+describe('applyConfigurationReload', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET;
+    delete configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET;
+    configuration.configFileInterpolatedKeys.delete('DD_WATCHER_LOCAL_SOCKET');
+  });
+
+  test('sets a new key in both ddEnvVars and configFileSources', () => {
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+    );
+
+    expect(configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET).toEqual('/reloaded/socket.sock');
+    expect(configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET).toEqual('file');
+  });
+
+  test('deletes a key whose delta value is undefined, rather than leaving it present and undefined', () => {
+    configuration.ddEnvVars.DD_WATCHER_LOCAL_SOCKET = '/old/socket.sock';
+    configuration.configFileSources.DD_WATCHER_LOCAL_SOCKET = 'file';
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+    );
+
+    expect(Object.hasOwn(configuration.ddEnvVars, 'DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+    expect(Object.hasOwn(configuration.configFileSources, 'DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+
+  test('leaves every key outside the delta untouched', () => {
+    configuration.ddEnvVars.DD_SERVER_PORT = '3000';
+    configuration.configFileSources.DD_SERVER_PORT = 'env';
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+    );
+
+    expect(configuration.ddEnvVars.DD_SERVER_PORT).toEqual('3000');
+    expect(configuration.configFileSources.DD_SERVER_PORT).toEqual('env');
+    delete configuration.ddEnvVars.DD_SERVER_PORT;
+    delete configuration.configFileSources.DD_SERVER_PORT;
+  });
+
+  test('adds a touched key to configFileInterpolatedKeys when newInterpolatedKeys names it', () => {
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/reloaded/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'env' },
+      new Set(['DD_WATCHER_LOCAL_SOCKET']),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(true);
+  });
+
+  test('removes a touched key from configFileInterpolatedKeys once it is no longer named in newInterpolatedKeys', () => {
+    configuration.configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: '/literal/socket.sock' },
+      { DD_WATCHER_LOCAL_SOCKET: 'file' },
+      new Set(),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+
+  test('removes a touched key from configFileInterpolatedKeys when its delta value is undefined (removed), even if newInterpolatedKeys still names it', () => {
+    configuration.configFileInterpolatedKeys.add('DD_WATCHER_LOCAL_SOCKET');
+
+    configuration.applyConfigurationReload(
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      { DD_WATCHER_LOCAL_SOCKET: undefined },
+      new Set(['DD_WATCHER_LOCAL_SOCKET']),
+    );
+
+    expect(configuration.configFileInterpolatedKeys.has('DD_WATCHER_LOCAL_SOCKET')).toBe(false);
+  });
+});
+
+describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
+  // This test enumerates the 21 files so a new direct reader shows up as a
+  // failing assertion instead of a silent coverage gap.
+  const DIRECT_ENV_PATTERN = /process\.env(?:\.DD_|\[['"]DD_)/;
+  const SKIPPED_DIRECTORY_NAMES = new Set(['node_modules', 'dist', 'coverage']);
+
+  function listProductionTsFiles(rootDir: string): string[] {
+    const results: string[] = [];
+    for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRECTORY_NAMES.has(entry.name)) {
+          results.push(...listProductionTsFiles(path.join(rootDir, entry.name)));
+        }
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+        results.push(path.join(rootDir, entry.name));
+      }
+    }
+    return results;
+  }
+
+  test('is exactly these 21 files, verified against the tree rather than trusted', () => {
+    const appRoot = path.resolve(TEST_DIRECTORY, '..');
+    const actual = listProductionTsFiles(appRoot)
+      .filter((filePath) => DIRECT_ENV_PATTERN.test(fs.readFileSync(filePath, 'utf-8')))
+      .map((filePath) => path.relative(appRoot, filePath).split(path.sep).join('/'))
+      .sort();
+
+    expect(actual).toStrictEqual(DIRECT_ENV_READER_FILES);
+  });
+});
+
+describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
+  // Every DD_* variable actually read via process.env(.DD_ / ['DD_...']) in
+  // the 21 direct-reader files above, minus DD_SELF_UPDATE_*: every one of
+  // those is a handoff value the app writes itself as environment for a
+  // helper container it spawns (SelfUpdateTransitionShared.ts and
+  // self-update-controller.ts's own `-e` argument lists), never something an
+  // operator configures. file/flatten.ts's UNSUPPORTED_FILE_KEYS is meant to
+  // hold exactly this set; recomputed here from the tree so it can't drift.
+  const DIRECT_ENV_VAR_NAME_PATTERN =
+    /process\.env\.(DD_[A-Z0-9_]+)|process\.env\[['"](DD_[A-Z0-9_]+)['"]\]/g;
+
+  test('is exactly the direct readers minus DD_SELF_UPDATE_*, recomputed from the tree', () => {
+    const appRoot = path.resolve(TEST_DIRECTORY, '..');
+    const varNames = new Set<string>();
+
+    for (const relativeFilePath of DIRECT_ENV_READER_FILES) {
+      const contents = fs.readFileSync(path.join(appRoot, relativeFilePath), 'utf-8');
+      for (const match of contents.matchAll(DIRECT_ENV_VAR_NAME_PATTERN)) {
+        varNames.add((match[1] ?? match[2]) as string);
+      }
+    }
+
+    const actual = [...varNames].filter((name) => !name.startsWith('DD_SELF_UPDATE_')).sort();
+    expect(actual).toStrictEqual([...UNSUPPORTED_FILE_KEYS]);
   });
 });

@@ -98,7 +98,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -187,7 +187,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -237,7 +237,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -247,16 +247,16 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/autobuild@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           category: /language:${{ matrix.language }}
 
@@ -272,7 +272,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -292,7 +292,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -436,7 +437,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           # api.deps.dev: dependency-review-action fetches changed-package
@@ -469,7 +470,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -482,7 +483,11 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            ui/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -549,7 +554,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -573,7 +578,12 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            apps/demo/package-lock.json
+            ui/package-lock.json
 
       - name: Install repository dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -626,7 +636,18 @@ jobs:
         working-directory: ui
 
       - name: Run ui tests
-        run: npm run test:unit
+        # CI-17: three runs on 2026-09-07 (plus #1102) had this step marked
+        # `cancelled` after 2.5-6 min with no timeout hit and no concurrency
+        # group -- the 7 GB ubuntu-latest runner most likely ran the vitest
+        # coverage pass out of memory and the runner service died, which
+        # GitHub reports as a cancel rather than an OOM. Budget: 1536 MiB
+        # heap cap * 2 processes (the main vitest process plus the single
+        # worker fork --maxWorkers=1 allows) = 3 GiB worst case, comfortably
+        # under the 7 GiB runner with headroom left for non-heap V8
+        # overhead, npm, and the OS.
+        env:
+          NODE_OPTIONS: --max-old-space-size=1536
+        run: npm run test:unit -- --maxWorkers=1
         working-directory: ui
 
       - name: Normalize coverage paths
@@ -643,7 +664,7 @@ jobs:
         # secrets anyway); secrets.CODECOV_TOKEN is optional and covers
         # private-context uploads. Advisory (continue-on-error plus
         # fail_ci_if_error: false): an upload hiccup never blocks CI — the
-        # vitest 100% coverage thresholds enforced in the app/ui test steps
+        # Vitest's configured coverage thresholds enforced in app/ui tests
         # above are the real gate.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v6.0.2
@@ -677,7 +698,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           # fonts.googleapis.com + fonts.gstatic.com: next/font/google in
@@ -702,7 +723,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install apps/web dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -734,7 +756,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -747,7 +769,10 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: |
+            ui/package-lock.json
+            apps/demo/package-lock.json
 
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -774,7 +799,7 @@ jobs:
         working-directory: apps/demo
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
 
       # The multi-arch smoke build below cannot catch a base image pinned to a
       # per-platform manifest digest: buildx resolves a digest identically for
@@ -887,7 +912,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: block
           # raw.githubusercontent.com: anchore/scan-action pulls its grype
@@ -940,7 +965,7 @@ jobs:
         # Distinct category from security-grype.yml's `grype-image` so the two
         # scans (PR-built vs. periodic) don't collide in the same ref's results.
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-image-pr
@@ -972,7 +997,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -1069,7 +1094,7 @@ jobs:
 
       - name: Upload ZAP SARIF
         if: always() && hashFiles('artifacts/zap/zap-baseline.sarif') != ''
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/zap/zap-baseline.sarif
           category: zap-baseline
@@ -1277,7 +1302,7 @@ jobs:
 
       - name: Upload Nuclei SARIF to code scanning
         if: always() && steps.nuclei_sarif.outputs.upload == 'true'
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/dast/nuclei-report.sarif
           category: nuclei
@@ -1371,7 +1396,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -1384,7 +1409,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Download QA image
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -1505,7 +1531,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -1518,10 +1544,11 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
 
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -1627,7 +1654,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -1640,10 +1667,11 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
 
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0

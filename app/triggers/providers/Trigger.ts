@@ -685,6 +685,14 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   securitymode?: string;
   securitydigesttitle?: string;
   securitydigestbody?: string;
+  /**
+   * Per-action DD_ACTION_<TYPE>_<NAME>_CONCURRENCY override for how many
+   * update operations this action instance runs at once. Only declared in
+   * the Joi schema of action-type triggers (docker, dockercompose, command);
+   * notification triggers' schemas don't expose this key, so setting it on
+   * one is a config validation error, not a silent no-op.
+   */
+  concurrency?: number;
 }
 
 interface ContainerReport {
@@ -2751,7 +2759,14 @@ class Trigger<
       if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
         return;
       }
-      if (!this.mustTrigger(container)) {
+      const mustTriggerDecision = this.getMustTriggerDecision(container);
+      if (!mustTriggerDecision.allowed) {
+        // The batch path logs this same exclusion (runUpdateAvailableSimpleTrigger);
+        // the digest path dropped it silently, which left this container's
+        // exclusion invisible to anyone reading the logs (DR-95).
+        this.log.debug(
+          `Trigger conditions not met for ${containerName} => ignore (${mustTriggerDecision.reason})`,
+        );
         return;
       }
       this.bufferContainerForDigest(container);
@@ -4032,7 +4047,7 @@ class Trigger<
     return '';
   }
 
-  private getTemplateContainer(container: Container): TriggerTemplateContainer {
+  protected getTemplateContainer(container: Container): TriggerTemplateContainer {
     const notificationAgentPrefix = this.getNotificationAgentPrefix(container);
     const notificationServerName = this.getNotificationServerName(container);
     const notificationWatcherSuffix = this.getNotificationWatcherSuffix(

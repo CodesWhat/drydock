@@ -43,6 +43,7 @@ import {
   isTerminalContainerUpdateOperationStatus,
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
+import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
@@ -55,8 +56,10 @@ import { getRequestedOperationId } from '../triggers/providers/docker/update-run
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
+import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js';
+import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
-import { ddRegistryLookupImage, ddRegistryLookupUrl } from '../watchers/providers/docker/label.js';
+import { AgentInventoryRefresh } from './agent-inventory.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -323,6 +326,8 @@ export class AgentClient {
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
   private readonly controllerDockerTransportWatchers: Set<string>;
+  private readonly inventoryRefreshWatchers = new Set<string>();
+  private readonly inventory: AgentInventoryRefresh;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
   /**
@@ -359,6 +364,58 @@ export class AgentClient {
     this.watcherSnapshotCache = new Map();
     this.controllerDockerTransportWatchers = new Set();
     this.statsChangedTimer = undefined;
+    this.inventory = new AgentInventoryRefresh({
+      agent: name,
+      isConnected: () => this.isConnected && !this.stopped,
+      onMutation: () => this.scheduleStatsChanged(),
+      request: async (type, watcherName, options) => {
+        const target = `/api/watchers/${encodeURIComponent(type)}/${encodeURIComponent(watcherName)}/inventory`;
+        const body = { operationId: options.operationId };
+        try {
+          const response = await axios.post(`${this.baseUrl}${target}`, body, {
+            ...this.buildRequestConfig('POST', target, body),
+            signal: options.signal,
+          });
+          return response.data;
+        } catch (error) {
+          const failure = error as { code?: string; response?: { status?: number } } | null;
+          const status = failure?.code === 'ECONNABORTED' ? 504 : failure?.response?.status;
+          const messages: Record<number, string> = {
+            404: 'Component not found',
+            501: 'Inventory refresh is not supported by this watcher',
+            503: 'Agent is disconnected',
+            504: 'Inventory refresh timed out',
+          };
+          throw new InventoryRefreshOperationError(
+            status && messages[status] ? status : 500,
+            status && messages[status] ? messages[status] : 'Agent inventory refresh failed',
+          );
+        }
+      },
+    });
+  }
+
+  isInventoryRefreshSupported(type: string, name: string): boolean {
+    return (
+      type === 'docker' && this.inventoryRefreshWatchers.has(watcherSnapshotCacheKey(type, name))
+    );
+  }
+
+  async refreshInventory(type: string, name: string, options: InventoryRefreshOptions = {}) {
+    if (!this.isConnected || this.stopped)
+      throw new InventoryRefreshOperationError(503, 'Agent is disconnected');
+    if (!this.isInventoryRefreshSupported(type, name))
+      throw new InventoryRefreshOperationError(
+        501,
+        'Inventory refresh is not supported by this watcher',
+      );
+    const id = `${this.name}.${type}.${name}`;
+    const watcher = registry.getState().watcher[id];
+    return this.inventory.refresh(type, name, {
+      ...options,
+      isCurrent: () =>
+        registry.getState().watcher[id] === watcher && (options.isCurrent?.() ?? true),
+    });
   }
 
   getWatcherSnapshot(
@@ -570,10 +627,14 @@ export class AgentClient {
     if (this.edgeAdapter) {
       let edgeBody: unknown;
       if (body && body.length > 0) {
-        try {
-          edgeBody = JSON.parse(body.toString('utf8'));
-        } catch {
-          throw new Error('Edge Docker API request body must be valid JSON');
+        if (this.edgeAdapter.supportsRequestBodyStream) {
+          edgeBody = body;
+        } else {
+          try {
+            edgeBody = JSON.parse(body.toString('utf8'));
+          } catch {
+            throw new Error('Edge Docker API request body must be valid JSON');
+          }
         }
       }
       const response = await (isStreamingDockerTarget(target)
@@ -886,16 +947,20 @@ export class AgentClient {
    * (`container-init.ts`) does that translation for containers the controller watches
    * directly, but nothing in the agent path ever ran it, so `dd.registry.lookup.image`
    * (and its legacy alias `dd.registry.lookup.url`) silently did nothing for any
-   * agent-reported container. Mirrors `container-init.ts`'s own label precedence
-   * (`dd.registry.lookup.image` before the legacy `dd.registry.lookup.url` alias) and
-   * never overwrites a value the agent already reported.
+   * agent-reported container. Shares `container-init.ts`'s
+   * `resolveLookupImageFromContainerLabels` (called here with no overrides — the agent
+   * path has none of its own) for the label precedence
+   * (`dd.registry.lookup.image` before the legacy `dd.registry.lookup.url` alias), and
+   * never overwrites a value the agent already reported — checked before that shared
+   * helper ever runs, since the agent path's precedence (an agent-reported lookupUrl or
+   * lookupImage beats the label) differs from `container-init.ts`'s own call site.
    */
   private applyRegistryLookupLabels(container: Container): Container {
     if (container.image.registry.lookupImage || container.image.registry.lookupUrl) {
       return container;
     }
     const labels = container.labels ?? {};
-    const lookupImage = labels[ddRegistryLookupImage] || labels[ddRegistryLookupUrl];
+    const lookupImage = resolveLookupImageFromContainerLabels(labels, {});
     if (!lookupImage) {
       return container;
     }
@@ -950,12 +1015,39 @@ export class AgentClient {
         merged[field] = existingRecord[field];
       }
     }
+    // `image.digest.watch` is derived from the `dd.watch.digest` label by the
+    // controller's own bridged Docker watcher (AgentWatcher's
+    // PortwingDockerBridge), never by Portwing itself — Portwing hardcodes
+    // `image.digest.watch` to false on every report of its own "live runtime
+    // state" since it does not do digest watching. Nothing else in this merge
+    // restores it (the field lives on `image`, which isn't in
+    // `controllerOwnedFields`), so without this, a later Portwing report
+    // wholesale-replaces the store's `image` and silently turns digest
+    // watching back off (DR-38).
+    if (existing.image?.digest) {
+      const mergedImage = merged.image as Container['image'] | undefined;
+      if (mergedImage) {
+        merged.image = {
+          ...mergedImage,
+          digest: {
+            ...mergedImage.digest,
+            watch: existing.image.digest.watch,
+          },
+        };
+      }
+    }
     return merged as unknown as Container;
   }
 
   private setControllerDockerTransportWatchers(descriptors: AgentComponentDescriptor[]): void {
+    this.inventory.invalidate();
+    this.inventoryRefreshWatchers.clear();
     this.controllerDockerTransportWatchers.clear();
     for (const descriptor of descriptors) {
+      if (descriptor.type === 'docker' && descriptor.metadata?.inventoryRefreshSupported === true)
+        this.inventoryRefreshWatchers.add(
+          watcherSnapshotCacheKey(descriptor.type, descriptor.name),
+        );
       if (isControllerDockerTransportWatcher(descriptor)) {
         this.controllerDockerTransportWatchers.add(descriptor.name);
       }
@@ -1068,8 +1160,10 @@ export class AgentClient {
   private async registerAgentComponents(
     kind: 'watcher' | 'trigger',
     remoteComponents: AgentComponentDescriptor[],
+    isOwnerValid?: () => boolean,
   ) {
     for (const remoteComponent of remoteComponents) {
+      if (isOwnerValid && !isOwnerValid()) return;
       this.log.debug(`Registering agent ${kind} ${remoteComponent.type}.${remoteComponent.name}`);
       await registry.registerComponent({
         kind,
@@ -1078,8 +1172,10 @@ export class AgentClient {
         configuration: remoteComponent.configuration,
         componentPath: 'agent/components',
         agent: this.name,
+        isOwnerValid,
       });
 
+      if (isOwnerValid && !isOwnerValid()) return;
       if (kind === 'watcher' && isControllerDockerTransportWatcher(remoteComponent)) {
         await registry.registerComponent({
           kind: 'trigger',
@@ -1093,6 +1189,7 @@ export class AgentClient {
           },
           componentPath: 'agent/components',
           agent: this.name,
+          isOwnerValid,
         });
       }
     }
@@ -1100,10 +1197,12 @@ export class AgentClient {
 
   private async registerAgentWatchersTransactional(
     watchers: AgentComponentDescriptor[],
+    isOwnerValid?: () => boolean,
   ): Promise<void> {
     try {
-      await this.registerAgentComponents('watcher', watchers);
+      await this.registerAgentComponents('watcher', watchers, isOwnerValid);
     } catch (registrationError: unknown) {
+      if (isOwnerValid && !isOwnerValid()) throw registrationError;
       try {
         // A controller-transport watcher starts a cron and loopback bridge
         // before its synthetic Docker trigger is registered. Tear down every
@@ -1140,6 +1239,14 @@ export class AgentClient {
       this.buildRequestConfig('GET', '/api/containers'),
     );
     const containers = response.data;
+    if (!Array.isArray(containers)) {
+      this.log.warn(
+        `Handshake for agent ${sanitizeLogParam(this.name)} received a non-array /api/containers body (${typeof containers}); aborting before deregistering triggers`,
+      );
+      throw new Error(
+        `Handshake failed for agent ${this.name}: /api/containers returned ${typeof containers}, expected an array`,
+      );
+    }
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
     // isRegisteringComponents is true for the entire deregister → re-register
@@ -1237,6 +1344,7 @@ export class AgentClient {
   }
 
   stop() {
+    this.inventory.invalidate();
     this.stopped = true;
     const activeSseStream = this.activeSseStream;
     this.activeSseStream = undefined;
@@ -1282,6 +1390,7 @@ export class AgentClient {
       return;
     }
     const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
+    this.inventory.invalidate();
     const wasConnected = this.isConnected;
     this.isConnected = false;
     // A disconnect is never a "still registering" state — it's a hard loss of
@@ -1858,7 +1967,12 @@ export class AgentClient {
       ...(watcher !== undefined ? { watcher } : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
-      ...(containerSnapshot !== undefined ? { container: containerSnapshot } : {}),
+      // The wire payload from an agent is untyped JSON; the store only ever
+      // reads named Container fields off it (identityKey, agent, watcher,
+      // labels), so this cast is a trust boundary, not a shape guarantee.
+      ...(containerSnapshot !== undefined
+        ? { container: containerSnapshot as unknown as Container }
+        : {}),
     };
   }
 
@@ -2155,6 +2269,11 @@ export class AgentClient {
 
   async handleEvent(eventName: string, data: unknown) {
     switch (eventName) {
+      case 'dd:inventory-added':
+      case 'dd:inventory-updated':
+      case 'dd:inventory-removed':
+        this.inventory.handleEvent(eventName, data);
+        return;
       case 'dd:ack':
         this.handleAckEvent(data);
         return;
@@ -2542,17 +2661,24 @@ export class AgentClient {
   async handleComponentSync(
     watchers: AgentComponentDescriptor[],
     triggers: AgentComponentDescriptor[],
+    isOwnerValid?: () => boolean,
   ): Promise<void> {
+    if (isOwnerValid && !isOwnerValid()) return;
     // Same deregister → re-register window as _doHandshake(): keep transient
     // eligibility blockers soft while components are being replaced.
     this.isRegisteringComponents = true;
     try {
       this.setControllerDockerTransportWatchers([]);
       await registry.deregisterAgentComponents(this.name);
-      await this.registerAgentWatchersTransactional(watchers);
+      if (isOwnerValid && !isOwnerValid()) return;
+      await this.registerAgentWatchersTransactional(watchers, isOwnerValid);
+      if (isOwnerValid && !isOwnerValid()) return;
       this.setControllerDockerTransportWatchers(watchers);
       this.seedWatcherSnapshotCacheFromHandshake(watchers);
-      await this.registerAgentComponents('trigger', triggers);
+      await this.registerAgentComponents('trigger', triggers, isOwnerValid);
+    } catch (error: unknown) {
+      if (!isOwnerValid || isOwnerValid()) throw error;
+      this.log.warn(`Retired edge component sync stopped (${getErrorMessage(error)})`);
     } finally {
       this.isRegisteringComponents = false;
     }

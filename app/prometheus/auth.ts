@@ -1,4 +1,4 @@
-import { Counter, Gauge, Histogram, register } from 'prom-client';
+import { Counter, Gauge, Histogram, register } from '@prometheus-io/client';
 
 export type AuthLoginOutcome = 'success' | 'invalid' | 'locked' | 'error';
 export type AuthProvider = 'basic' | 'oidc';

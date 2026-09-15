@@ -19,8 +19,9 @@ withDefaults(
     doneCount?: number;
     tt: (label: string) => { value: string; showDelay: number };
     showUpdateControls?: boolean;
+    showUpdateAll?: boolean;
   }>(),
-  { showUpdateControls: true },
+  { showUpdateControls: true, showUpdateAll: true },
 );
 
 const emit = defineEmits<{
@@ -57,7 +58,7 @@ const emit = defineEmits<{
       {{ group.updatesAvailable }} {{ group.updatesAvailable === 1 ? t('containerComponents.groupHeader.updateSingular') : t('containerComponents.groupHeader.updatePlural') }}
     </AppBadge>
     <div
-      v-if="showUpdateControls && (group.updatesAvailable > 0 || !containerActionsEnabled)"
+      v-if="showUpdateControls && showUpdateAll && (group.updatesAvailable > 0 || !containerActionsEnabled)"
       data-test="group-header-update-all-sticky"
       class="ms-auto shrink-0 sticky end-0 z-10 flex items-center"
     >

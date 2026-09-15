@@ -35,16 +35,17 @@ reviews:
   related_issues: true
   related_prs: true
   suggested_labels: true
-  auto_apply_labels: true
+  auto_apply_labels: false
   labeling_instructions:
     - label: "second-opinion"
       instructions: |
-        Apply when the diff is security-sensitive (auth, release workflows,
-        proxy/socket logic), is a large refactor, or when CodeRabbit's own
-        findings conflict with the author's stated intent and a tiebreaker
-        reviewer is warranted. This label triggers a one-time Greptile
-        second-opinion summon via .github/workflows/greptile.yml — apply it
-        deliberately, not on every PR.
+        Suggest this label only for genuinely high-stakes security-sensitive changes
+        (auth, authorization, cryptography, release trust, proxy/socket boundaries,
+        workflow permissions, or cross-repository contracts), after a completed
+        CodeRabbit source review. Applying it requires explicit maintainer or agent
+        opt-in; never apply it automatically. Routine UI changes and generated charts
+        do not qualify. The label triggers a one-time Greptile second-opinion summon
+        via .github/workflows/greptile.yml.
   suggested_reviewers: false
   auto_assign_reviewers: false
   enable_prompt_for_ai_agents: true

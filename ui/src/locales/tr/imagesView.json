@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "İmajlar",
+    "subtitle": "Her sunucudaki tüm imajlar; neyin kullandığı ve prune ile ne kadar yer geri kazanılacağıyla birlikte",
+    "loading": "İmajlar yükleniyor...",
+    "loadFailed": "İmajlar yüklenemedi",
+    "columns": {
+      "repository": "Depo",
+      "tag": "Etiket",
+      "imageId": "İmaj Kimliği",
+      "size": "Boyut",
+      "containers": "Konteynerler",
+      "created": "Oluşturuldu",
+      "lastSeen": "Son kullanım",
+      "host": "Sunucu"
+    },
+    "filters": {
+      "host": "Sunucu",
+      "allHosts": "Tüm sunucular",
+      "unusedOnly": "Yalnızca kullanılmayanlar"
+    },
+    "dangling": "sahipsiz",
+    "untagged": "etiketsiz",
+    "hostUnsupported": "Bu sunucunun aracısı Docker API'sini denetleyiciye sunmadığından imajlar burada listelenemez veya temizlenemez.",
+    "hostError": "{host} üzerindeki imajlar listelenemedi: {message}",
+    "empty": {
+      "title": "İmaj yok",
+      "description": "Geçerli filtrelerle eşleşen imaj yok."
+    },
+    "prune": {
+      "dangling": "Sahipsizleri temizle",
+      "unused": "Kullanılmayanları temizle",
+      "confirm": {
+        "header": {
+          "dangling": "{host} üzerindeki sahipsiz imajları temizle",
+          "unused": "{host} üzerindeki kullanılmayan imajları temizle"
+        },
+        "message": "Bu işlem 1 imajı kaldırır ve yaklaşık {size} yer geri kazandırır. Bu rakam bir tahmindir; paylaşılan katmanlar onu düşürebilir. | Bu işlem {count} imajı kaldırır ve yaklaşık {size} yer geri kazandırır. Bu rakam bir tahmindir; paylaşılan katmanlar onu düşürebilir.",
+        "nothing": "Bu sunucuda temizlenecek bir şey yok.",
+        "accept": "Temizle"
+      },
+      "inProgress": "{host} üzerinde imajlar temizleniyor...",
+      "success": "{host} üzerinde 1 imaj kaldırıldı ve {size} geri kazanıldı | {host} üzerinde {count} imaj kaldırıldı ve {size} geri kazanıldı",
+      "stillRunning": "Aracının Docker proxy'si {host} için sonuç döndürmedi; temizleme hâlâ devam ediyor olabilir. Listeyi biraz sonra yenileyin.",
+      "failed": "{host} üzerinde temizleme başarısız oldu: {message}"
+    },
+    "refresh": "Yenile"
+  }
+}

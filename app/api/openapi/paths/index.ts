@@ -13,12 +13,15 @@ import { apiKeyPaths } from './api-keys.js';
 import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
+import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
 import { dependencyGroupPaths } from './dependency-groups.js';
+import { imagePaths } from './images.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
 import { triggerPaths } from './triggers.js';
+import { watcherInventoryPaths } from './watcher-inventory.js';
 
 const updateOperationIdPathParam = {
   name: 'id',
@@ -353,6 +356,7 @@ export const openApiPaths = {
       },
     },
   },
+  ...configPaths,
   '/api/v1/server': {
     get: {
       tags: ['System'],
@@ -424,6 +428,7 @@ export const openApiPaths = {
   },
   ...containerPaths,
   ...statsPaths,
+  ...imagePaths,
   ...dependencyGroupPaths,
   '/api/v1/operations/{id}/cancel': {
     post: {
@@ -501,6 +506,7 @@ export const openApiPaths = {
   ...triggerPaths,
   ...portwingPaths,
   ...componentReadPaths,
+  ...watcherInventoryPaths,
   '/api/v1/agents': {
     get: {
       tags: ['Agents'],
@@ -509,6 +515,34 @@ export const openApiPaths = {
       responses: {
         200: jsonResponse('Agent list', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
+      },
+    },
+  },
+  '/api/v1/agents/roster': {
+    get: {
+      tags: ['Agents'],
+      summary: 'List exact names of live configured agent clients without status or configuration',
+      operationId: 'getAgentRoster',
+      responses: {
+        200: jsonResponse('Agent identities', {
+          type: 'object',
+          required: ['data', 'total'],
+          additionalProperties: false,
+          properties: {
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['name'],
+                additionalProperties: false,
+                properties: { name: { type: 'string' } },
+              },
+            },
+            total: { type: 'integer', minimum: 0 },
+          },
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Missing required read scope'),
       },
     },
   },

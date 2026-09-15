@@ -1,6 +1,7 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useDependencyGraph } from '../../composables/useDependencyGraph';
 import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useScanLifecycle } from '../../composables/useScanLifecycle';
 import { useServerFeatures } from '../../composables/useServerFeatures';
@@ -24,6 +25,8 @@ import {
 } from '../../services/container-actions';
 import type { UpdateMode } from '../../services/settings';
 import type { Container } from '../../types/container';
+import { formatBulkUpdateConfirm } from '../../utils/bulk-update-confirm';
+import { type BulkUpdatePlan, withStaleParents } from '../../utils/bulk-update-plan';
 import type { ContainerActionKind } from '../../utils/container-action-key';
 import {
   getContainerActionIdentityKey,
@@ -40,6 +43,8 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   type TranslateFn,
 } from '../../utils/container-update';
+import type { DependencyAdjacency } from '../../utils/dependency-graph-view';
+import { findStaleParents, formatStaleParentNames } from '../../utils/dependency-update-guard';
 import { ApiError, errorMessage } from '../../utils/error';
 import {
   getPrimaryHardBlocker,
@@ -259,10 +264,9 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
-    const msg = errorMessage(
-      e,
-      args.t('containerComponents.actionToasts.actionFailedDetail', { name: args.name }),
-    );
+    const msg =
+      errorMessage(e, '') ||
+      args.t('containerComponents.actionToasts.actionFailedDetail', { name: args.name });
     args.inputError.value = msg;
     const toast = useToast();
     toast.error(
@@ -280,27 +284,19 @@ async function executeContainerActionState(args: {
   }
 }
 
-async function updateAllInGroupState(args: {
+function getGroupUpdateTargets(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
   projectContainerDisplayState: (container: Container) => Container;
   inputError: Ref<string | null>;
   actionInProgress: Ref<Map<string, ContainerActionKind>>;
-  actionPending: Ref<Map<string, Container>>;
-  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
-  actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (pendingKey: string) => void;
   group: ContainerActionGroup;
-  loadContainers: () => Promise<void>;
-  captureBatch: (groupKey: string, frozenTotal: number) => void;
-  clearBatch: (groupKey: string) => void;
   alreadyInProgressMessage: string;
-  t: TranslateFn;
-}) {
+}): Container[] {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
-    return;
+    return [];
   }
   const updatableContainers = args.group.containers.filter((container) => {
     return (
@@ -324,16 +320,30 @@ async function updateAllInGroupState(args: {
     })
   ) {
     useToast().warning(args.alreadyInProgressMessage);
-    return;
+    return [];
   }
+  return updatableContainers;
+}
+
+async function updateAllInGroupState(
+  args: Parameters<typeof getGroupUpdateTargets>[0] & {
+    actionPending: Ref<Map<string, Container>>;
+    actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+    actionPendingLifecycleObserved: Ref<Set<string>>;
+    groupUpdateQueue: Ref<Set<string>>;
+    startPolling: (pendingKey: string) => void;
+    loadContainers: () => Promise<void>;
+    captureBatch: (groupKey: string, frozenTotal: number) => void;
+    clearBatch: (groupKey: string) => void;
+    t: TranslateFn;
+  },
+  updatableContainers: Container[],
+) {
   const frozenUpdateTargets = updatableContainers.map((container) => ({
     id: container.id,
     identityKey: container.identityKey,
     name: container.name,
   }));
-  if (frozenUpdateTargets.length === 0) {
-    return;
-  }
   const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
   const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
   const headActionInProgress = new Map(args.actionInProgress.value);
@@ -359,6 +369,9 @@ async function updateAllInGroupState(args: {
     }
 
     await args.loadContainers();
+    const isMultiContainerBatch = acceptedTargetIds.length >= 2;
+    const headTargetId = frozenUpdateTargets[0]!.id;
+    const nextGroupUpdateQueue = new Set(args.groupUpdateQueue.value);
     for (const container of updatableContainers) {
       if (!acceptedTargetIdSet.has(container.id)) {
         continue;
@@ -372,8 +385,17 @@ async function updateAllInGroupState(args: {
         snapshot: container,
         mode: 'update',
       });
+      if (isMultiContainerBatch && container.id !== headTargetId) {
+        // Mark containers waiting behind the batch head as queued right away:
+        // a client-side signal so they render a "Queued" state immediately,
+        // rather than looking stalled until their own updateOperation is next
+        // observed. It clears itself via prunePendingActionsState once that
+        // container's pending action settles.
+        nextGroupUpdateQueue.add(container.id);
+      }
     }
-    if (acceptedTargetIds.length >= 2) {
+    args.groupUpdateQueue.value = nextGroupUpdateQueue;
+    if (isMultiContainerBatch) {
       args.captureBatch(args.group.key, acceptedTargetIds.length);
     } else {
       args.clearBatch(args.group.key);
@@ -391,15 +413,159 @@ async function updateAllInGroupState(args: {
   } catch (error: unknown) {
     args.clearBatch(args.group.key);
     useToast().error(
-      errorMessage(
-        error,
+      errorMessage(error, '') ||
         args.t('containerComponents.actionToasts.groupUpdateFailed', { name: args.group.key }),
-      ),
     );
   } finally {
     if (acceptedTargetIds.length === 0) {
       args.clearBatch(args.group.key);
     }
+    const nextActionInProgress = new Map(args.actionInProgress.value);
+    nextActionInProgress.delete(firstTargetActionKey);
+    args.actionInProgress.value = nextActionInProgress;
+  }
+}
+
+/**
+ * Dispatches a selective bulk update (roadmap 6.1.1): the same head-tracked,
+ * `apiUpdateContainers`-backed flow as `updateAllInGroupState`, but over an
+ * arbitrary, already-planned `targets` list instead of a dependency group,
+ * and with no batch tracking (there is no group key to key a batch by).
+ */
+async function runBulkUpdateState(args: {
+  containerActionsEnabled: boolean;
+  containerActionsDisabledReason: string;
+  containers: Readonly<Ref<Container[]>>;
+  projectContainerDisplayState: (container: Container) => Container;
+  inputError: Ref<string | null>;
+  actionInProgress: Ref<Map<string, ContainerActionKind>>;
+  actionPending: Ref<Map<string, Container>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
+  startPolling: (pendingKey: string) => void;
+  targets: Container[];
+  loadContainers: () => Promise<void>;
+  t: TranslateFn;
+}) {
+  // c8 ignore next 4: confirmBulkUpdate already bails before opening the
+  // confirm dialog; this stays as a defensive re-check for the window
+  // between opening the dialog and the user clicking accept, where a
+  // reactive containerActionsEnabled could flip in between.
+  /* c8 ignore next 4 */
+  if (!args.containerActionsEnabled) {
+    args.inputError.value = args.containerActionsDisabledReason;
+    return;
+  }
+  const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
+  // The plan resolved eligibility an instant ago; if any target has since
+  // started (or was already mid-flight), abort the whole batch with a
+  // warning rather than silently dispatching a subset the user didn't see
+  // confirmed. Mirrors updateAllInGroupState's same three-way check.
+  if (
+    args.targets.some((container) => {
+      const liveContainer = displayContainers.find((entry) => entry.id === container.id);
+      const operation =
+        liveContainer?.updateOperation ??
+        args.projectContainerDisplayState(container).updateOperation;
+      return (
+        operation?.status === 'queued' ||
+        operation?.status === 'in-progress' ||
+        args.actionInProgress.value.has(container.id)
+      );
+    })
+  ) {
+    useToast().warning(args.t('containersView.toast.updateAlreadyInProgress'));
+    return;
+  }
+  const frozenUpdateTargets = args.targets.map((container) => ({
+    id: container.id,
+    identityKey: container.identityKey,
+    name: container.name,
+  }));
+  // c8 ignore next 3: confirmBulkUpdate only calls this with a non-empty
+  // plan.dispatch (formatBulkUpdateConfirm disables accept at count === 0),
+  // and withStaleParents only ever adds to dispatch, never empties it. Kept
+  // as a defensive guard against an empty targets list from any future caller.
+  /* c8 ignore next 3 */
+  if (frozenUpdateTargets.length === 0) {
+    return;
+  }
+  const targetIds = frozenUpdateTargets.map((target) => target.id);
+  const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
+  const headActionInProgress = new Map(args.actionInProgress.value);
+  headActionInProgress.set(firstTargetActionKey, 'update');
+  args.actionInProgress.value = headActionInProgress;
+  let acceptedTargetIds: string[] = [];
+  try {
+    const response = await apiUpdateContainers(targetIds);
+    acceptedTargetIds = response.accepted.map((accepted) => accepted.containerId);
+    const acceptedTargetIdSet = new Set(acceptedTargetIds);
+
+    const toast = useToast();
+    for (const rejected of response.rejected) {
+      if (isStaleContainerUpdateError(rejected.message)) {
+        continue;
+      }
+      toast.error(
+        args.t('containerComponents.actionToasts.groupUpdateRejected', {
+          name: rejected.containerName,
+          message: rejected.message,
+        }),
+      );
+    }
+
+    await args.loadContainers();
+    const isMultiContainerBatch = acceptedTargetIds.length >= 2;
+    // The head is the first ACCEPTED target in request order, not simply
+    // frozenUpdateTargets[0]: if the first requested target was itself
+    // rejected, frozenUpdateTargets[0] never appears in acceptedTargetIdSet,
+    // so nothing would ever match "the head" and every accepted target would
+    // render queued.
+    const headTargetId = targetIds.find((id) => acceptedTargetIdSet.has(id));
+    const nextGroupUpdateQueue = new Set(args.groupUpdateQueue.value);
+    for (const container of args.targets) {
+      if (!acceptedTargetIdSet.has(container.id)) {
+        continue;
+      }
+      markPendingActionState({
+        actionPending: args.actionPending,
+        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        startPolling: args.startPolling,
+        pendingKey: container.id,
+        snapshot: container,
+        mode: 'update',
+      });
+      if (isMultiContainerBatch && container.id !== headTargetId) {
+        // Mark containers waiting behind the batch head as queued right away:
+        // a client-side signal so they render a "Queued" state immediately,
+        // rather than looking stalled until their own updateOperation is next
+        // observed. It clears itself via prunePendingActionsState once that
+        // container's pending action settles.
+        nextGroupUpdateQueue.add(container.id);
+      }
+    }
+    args.groupUpdateQueue.value = nextGroupUpdateQueue;
+    if (acceptedTargetIds.length > 0) {
+      toast.success(
+        args.t('containerComponents.confirmDialogs.bulkUpdate.successMessage', {
+          count: acceptedTargetIds.length,
+        }),
+      );
+    }
+  } catch (error: unknown) {
+    useToast().error(
+      errorMessage(error, '') ||
+        (frozenUpdateTargets.length === 1
+          ? args.t('containerComponents.actionToasts.groupUpdateFailed', {
+              name: frozenUpdateTargets[0]!.name,
+            })
+          : args.t('containersView.toast.batchFailedNoGroup', {
+              count: frozenUpdateTargets.length,
+            })),
+    );
+  } finally {
     const nextActionInProgress = new Map(args.actionInProgress.value);
     nextActionInProgress.delete(firstTargetActionKey);
     args.actionInProgress.value = nextActionInProgress;
@@ -651,6 +817,7 @@ function clearPendingActionState(args: {
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
   pendingKey: string;
 }) {
   args.actionPending.value.delete(args.pendingKey);
@@ -659,6 +826,11 @@ function clearPendingActionState(args: {
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
   nextObserved.delete(args.pendingKey);
   args.actionPendingLifecycleObserved.value = nextObserved;
+  if (args.groupUpdateQueue.value.has(args.pendingKey)) {
+    const nextQueue = new Set(args.groupUpdateQueue.value);
+    nextQueue.delete(args.pendingKey);
+    args.groupUpdateQueue.value = nextQueue;
+  }
 }
 
 export function isPendingUpdateSettled(args: {
@@ -709,6 +881,7 @@ export function prunePendingActionsState(args: {
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
 }) {
@@ -752,6 +925,7 @@ export function prunePendingActionsState(args: {
         actionPendingStartTimes: args.actionPendingStartTimes,
         actionPendingLifecycleModes: args.actionPendingLifecycleModes,
         actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        groupUpdateQueue: args.groupUpdateQueue,
         pendingKey,
       });
     }
@@ -828,8 +1002,59 @@ function schedulePendingActionsPoll(args: {
   }, args.pendingActionsPollIntervalMs.value);
 }
 
+/**
+ * Builds the child-before-parent warning suffix + acceptLabel override for
+ * per-row and stack update confirmations (#219).
+ *
+ * A transitive parent is "stale" when it is not part of this dispatch (a
+ * one-container dispatch by default) AND already has a
+ * pending update of its own — updating the child now would leave it running
+ * against a parent that is about to change underneath it.
+ */
+function buildStaleParentsWarning(args: {
+  adjacency: DependencyAdjacency;
+  containerId: string | undefined;
+  dispatchIds?: ReadonlySet<string>;
+  name: string;
+  containers: Container[];
+  t: TranslateFn;
+}): { suffix: string; acceptLabel?: string } {
+  if (!args.containerId) {
+    return { suffix: '' };
+  }
+  const staleParents = findStaleParents({
+    adjacency: args.adjacency,
+    containerId: args.containerId,
+    dispatchIds: args.dispatchIds ?? new Set([args.containerId]),
+    hasPendingUpdate: (id) => {
+      const container = args.containers.find((c) => c.id === id);
+      return container ? Boolean(container.newTag) : undefined;
+    },
+  });
+  if (staleParents.length === 0) {
+    return { suffix: '' };
+  }
+  const { names, overflow } = formatStaleParentNames(staleParents);
+  let suffix = `\n\n${args.t('containerComponents.dependencyGraph.staleParentsWarning', {
+    name: args.name,
+    parents: names,
+    count: staleParents.length,
+  })}`;
+  if (overflow > 0) {
+    suffix += ` ${args.t('containerComponents.dependencyGraph.staleParentsOverflow', {
+      count: overflow,
+    })}`;
+  }
+  return {
+    suffix,
+    acceptLabel: args.t('containerComponents.dependencyGraph.staleParentsAccept'),
+  };
+}
+
 function createConfirmHandlers(args: {
   confirm: ReturnType<typeof useConfirmDialog>;
+  containerIdMap: Readonly<Ref<Record<string, string>>>;
+  containers: Readonly<Ref<Container[]>>;
   executeAction: (
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
@@ -851,6 +1076,8 @@ function createConfirmHandlers(args: {
   updateMode: Readonly<Ref<UpdateMode>>;
   t: TranslateFn;
 }) {
+  const { adjacency } = useDependencyGraph();
+
   function confirmStop(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
@@ -893,11 +1120,21 @@ function createConfirmHandlers(args: {
       return;
     }
     const name = typeof target === 'string' ? target : target.name;
+    const { containerId } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    const staleParents = buildStaleParentsWarning({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      containers: args.containers.value,
+      t: args.t,
+    });
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.forceUpdate.header'),
-      message: args.t('containerComponents.confirmDialogs.forceUpdate.message', { name }),
+      message: `${args.t('containerComponents.confirmDialogs.forceUpdate.message', { name })}${staleParents.suffix}`,
       rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
-      acceptLabel: args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
+      acceptLabel:
+        staleParents.acceptLabel ??
+        args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
       severity: 'warn',
       accept: () => args.forceUpdate(target),
     });
@@ -952,14 +1189,25 @@ function createConfirmHandlers(args: {
       message = `${message}${args.t('containerComponents.confirmDialogs.update.softBlockerSuffix', { list })}`;
     }
 
+    const { containerId } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    const staleParents = buildStaleParentsWarning({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      containers: args.containers.value,
+      t: args.t,
+    });
+    message = `${message}${staleParents.suffix}`;
+
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.update.header'),
       message,
       rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
       acceptLabel:
-        softBlockers.length > 0
+        staleParents.acceptLabel ??
+        (softBlockers.length > 0
           ? args.t('containerComponents.confirmDialogs.update.acceptLabelOverride')
-          : args.t('containerComponents.confirmDialogs.update.acceptLabel'),
+          : args.t('containerComponents.confirmDialogs.update.acceptLabel')),
       severity: 'warn',
       link:
         softBlockers.length > 0
@@ -1305,6 +1553,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
   const actionPendingLifecycleModes = ref<Map<string, PendingActionLifecycleMode>>(new Map());
   const actionPendingLifecycleObserved = ref<Set<string>>(new Set());
+  const groupUpdateQueue = ref<Set<string>>(new Set());
   const pendingActionsPollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
   const pendingActionsPollIntervalMs = ref(PENDING_ACTIONS_POLL_INTERVAL_MS);
   const pendingActionsPollInFlight = ref(false);
@@ -1323,6 +1572,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
       pollTimeout: POLL_TIMEOUT,
       stopPendingActionsPolling,
     });
@@ -1443,7 +1693,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     ) {
       return false;
     }
-    return liveOperation?.status === 'queued';
+    return liveOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id);
   }
 
   function isContainerScanInProgress(target: ContainerActionTarget) {
@@ -1521,8 +1771,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
-  async function updateAllInGroup(group: ContainerActionGroup) {
-    await updateAllInGroupState({
+  function groupUpdateArgs(group: ContainerActionGroup) {
+    return {
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containers: input.containers,
@@ -1532,6 +1782,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       actionPending,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
       startPolling,
       group,
       loadContainers: input.loadContainers,
@@ -1539,6 +1790,55 @@ export function useContainerActions(input: UseContainerActionsInput) {
       clearBatch,
       alreadyInProgressMessage: t('containersView.toast.updateAlreadyInProgress'),
       t: t as TranslateFn,
+    };
+  }
+
+  function updateAllInGroup(group: ContainerActionGroup) {
+    const targets = getGroupUpdateTargets(groupUpdateArgs(group));
+    if (targets.length === 0) return;
+    const groupKey = group.key;
+    const dispatchIds = new Set(targets.map((container) => container.id));
+    const { adjacency } = useDependencyGraph();
+    const warnings = targets.map((container) =>
+      buildStaleParentsWarning({
+        adjacency: adjacency.value,
+        containerId: container.id,
+        name: container.name,
+        dispatchIds,
+        containers: input.containers.value,
+        t: t as TranslateFn,
+      }),
+    );
+    const count = targets.length;
+    confirm.require({
+      header: t('containerComponents.confirmDialogs.bulkUpdate.header', { count }),
+      message:
+        [
+          t('containerComponents.confirmDialogs.bulkUpdate.dispatchHeading'),
+          ...targets.map((container) => `• ${container.name}`),
+        ].join('\n') + warnings.map((warning) => warning.suffix).join(''),
+      acceptLabel:
+        warnings.find((warning) => warning.acceptLabel)?.acceptLabel ??
+        t('containerComponents.confirmDialogs.bulkUpdate.accept', { count }),
+      rejectLabel: t('containerComponents.confirmDialogs.cancel'),
+      severity: 'warn',
+      accept: async () => {
+        const liveById = new Map(
+          input.containers.value.map((container) => [container.id, container]),
+        );
+        const confirmedContainers = [...dispatchIds].flatMap((id) => {
+          const container = liveById.get(id);
+          return container ? [container] : [];
+        });
+        const currentArgs = groupUpdateArgs({ key: groupKey, containers: confirmedContainers });
+        const currentTargets = getGroupUpdateTargets(currentArgs);
+        if (currentTargets.length === 0) return;
+        if (currentTargets.length < dispatchIds.size) {
+          updateAllInGroup({ key: groupKey, containers: currentTargets });
+          return;
+        }
+        await updateAllInGroupState(currentArgs, currentTargets);
+      },
     });
   }
 
@@ -1588,7 +1888,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
       } else if (statusCode === 404) {
         toast.error(t('containerComponents.actionToasts.cancelOperationNotFound', { name }));
       } else {
-        toast.error(errorMessage(e, t('containerComponents.actionToasts.cancelFailed', { name })));
+        toast.error(
+          errorMessage(e, '') || t('containerComponents.actionToasts.cancelFailed', { name }),
+        );
       }
     }
   }
@@ -1624,6 +1926,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     confirmUpdate,
   } = createConfirmHandlers({
     confirm,
+    containerIdMap: input.containerIdMap,
+    containers: input.containers,
     executeAction,
     forceUpdate,
     deleteContainer,
@@ -1648,6 +1952,48 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
+  function confirmBulkUpdate(plan: BulkUpdatePlan) {
+    if (!containerActionsEnabled.value) {
+      input.error.value = containerActionsDisabledReason.value;
+      return;
+    }
+    const dialog = formatBulkUpdateConfirm(plan, t as TranslateFn);
+    if (dialog.disabled) {
+      return;
+    }
+    confirm.require({
+      header: dialog.header,
+      message: dialog.message,
+      rejectLabel: t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: dialog.acceptLabel,
+      accept: () => {
+        const finalPlan = plan.staleParents.length > 0 ? withStaleParents(plan) : plan;
+        const byId = new Map(
+          input.containers.value.map((container) => [container.id, container] as const),
+        );
+        const targets = finalPlan.dispatch
+          .map((entry) => byId.get(entry.id))
+          .filter((container): container is Container => Boolean(container));
+        void runBulkUpdateState({
+          containerActionsEnabled: containerActionsEnabled.value,
+          containerActionsDisabledReason: containerActionsDisabledReason.value,
+          containers: input.containers,
+          projectContainerDisplayState,
+          inputError: input.error,
+          actionInProgress,
+          actionPending,
+          actionPendingLifecycleModes,
+          actionPendingLifecycleObserved,
+          groupUpdateQueue,
+          startPolling,
+          targets,
+          loadContainers: input.loadContainers,
+          t: t as TranslateFn,
+        });
+      },
+    });
+  }
+
   return {
     actionInProgress,
     actionPending,
@@ -1661,6 +2007,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearSkipsSelected: policy.clearSkipsSelected,
     maturityMinAgeDaysInput: policy.maturityMinAgeDaysInput,
     maturityModeInput: policy.maturityModeInput,
+    confirmBulkUpdate,
     confirmDelete,
     confirmDependencyGroupUpdate,
     confirmForceUpdate,
@@ -1726,6 +2073,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     triggerMessage: triggers.triggerMessage,
     triggerRunInProgress: triggers.triggerRunInProgress,
     triggersLoading: triggers.triggersLoading,
+    unassociatedTriggers: triggers.unassociatedTriggers,
     unsnoozeSelected: policy.unsnoozeSelected,
     updateAllInGroup,
     updateContainer,

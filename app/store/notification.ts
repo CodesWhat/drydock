@@ -1,27 +1,25 @@
 /**
  * Notification rules store.
+ *
+ * Backed by three tables (roadmap 7-STORE, slice 6): `notification_rules`
+ * holds the scalar fields, `notification_rule_trigger` holds the `triggers:
+ * string[]` allow-list (one row per trigger, `ordinal` preserving array
+ * order), and `notification_rule_template` holds the `templates` map (one
+ * row per `(triggerId, field)` pair). Both join tables are read as whole sets
+ * on every access and rewritten wholesale, exactly as the LokiJS-era
+ * `triggers`/`templates` arrays were, so the join tables cost nothing extra
+ * here and make "which rules reference trigger X" a query instead of a scan.
+ *
+ * `normalizeRules`'s defaults-merge is unchanged: it is pure and operates on
+ * plain `NotificationRule` objects regardless of where they came from.
  */
 import joi from 'joi';
 import { byString } from 'sort-es';
 import { doesNotificationTriggerReferenceMatchId } from '../notifications/trigger-policy.js';
 import { uniqStrings } from '../util/string-array.js';
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
-type NotificationCollectionDocument = NotificationRule;
-
-interface NotificationCollection {
-  find(query?: Record<string, unknown>): NotificationCollectionDocument[];
-  findOne(query: { id: string }): NotificationCollectionDocument | null;
-  insert(document: NotificationCollectionDocument): void;
-  remove(document: NotificationCollectionDocument): void;
-}
-
-interface NotificationStoreDb {
-  getCollection(name: string): NotificationCollection | null;
-  addCollection(name: string): NotificationCollection;
-}
-
-let notifications: NotificationCollection | undefined;
+let db: Database | undefined;
 let notificationRulesCache: NotificationRule[] | null = null;
 
 export const NOTIFICATION_BELL_THRESHOLDS = ['all', 'major', 'minor', 'patch'] as const;
@@ -212,14 +210,15 @@ function normalizeRule(ruleToValidate: Partial<NotificationRule>): NotificationR
   return ruleValidated.value as NotificationRule;
 }
 
-function normalizeRules(rulesToNormalize: unknown): NotificationRule[] {
+// Every caller passes an already-typed NotificationRule[] (readStoredRules() or
+// DEFAULT_NOTIFICATION_RULES), both SQLite- or catalog-shaped and never malformed,
+// so this no longer needs to defend against a non-array or a malformed entry the
+// way it did when it normalized whatever JSON a LokiJS document happened to hold.
+function normalizeRules(rulesToNormalize: NotificationRule[]): NotificationRule[] {
   const rulesById = new Map<string, Partial<NotificationRule>>();
-  const rules = Array.isArray(rulesToNormalize) ? rulesToNormalize : [];
 
-  rules.forEach((rule) => {
-    if (rule && typeof rule === 'object' && 'id' in rule && typeof rule.id === 'string') {
-      rulesById.set(rule.id.toLowerCase(), rule as Partial<NotificationRule>);
-    }
+  rulesToNormalize.forEach((rule) => {
+    rulesById.set(rule.id.toLowerCase(), rule);
   });
 
   const rulesNormalized: NotificationRule[] = [];
@@ -260,25 +259,156 @@ function invalidateNotificationRulesCache() {
   notificationRulesCache = null;
 }
 
-function hasNotificationCollection() {
-  return Boolean(notifications);
+/** Every rule row, with its trigger allow-list and template overrides joined in. */
+function readStoredRules(database: Database): NotificationRule[] {
+  const ruleRows = database.prepare('SELECT * FROM notification_rules').all();
+  if (ruleRows.length === 0) {
+    return [];
+  }
+
+  const triggersByRule = new Map<string, string[]>();
+  for (const row of database
+    .prepare('SELECT rule_id, trigger_id FROM notification_rule_trigger ORDER BY rule_id, ordinal')
+    .all()) {
+    const ruleId = String(row.rule_id);
+    const existing = triggersByRule.get(ruleId);
+    if (existing) {
+      existing.push(String(row.trigger_id));
+    } else {
+      triggersByRule.set(ruleId, [String(row.trigger_id)]);
+    }
+  }
+
+  const templatesByRule = new Map<string, NotificationTemplateOverrides>();
+  for (const row of database
+    .prepare('SELECT rule_id, trigger_id, field, value FROM notification_rule_template')
+    .all()) {
+    const ruleId = String(row.rule_id);
+    const templates = templatesByRule.get(ruleId) ?? {};
+    const triggerId = String(row.trigger_id);
+    const fieldOverrides = templates[triggerId] ?? {};
+    fieldOverrides[String(row.field) as NotificationTemplateField] = String(row.value);
+    templates[triggerId] = fieldOverrides;
+    templatesByRule.set(ruleId, templates);
+  }
+
+  return ruleRows.map((row: Row) => {
+    const id = String(row.id);
+    return {
+      id,
+      name: String(row.name),
+      description: String(row.description),
+      enabled: Boolean(row.enabled),
+      triggers: triggersByRule.get(id) ?? [],
+      bellEnabled: Boolean(row.bell_enabled),
+      bellThreshold: row.bell_threshold as NotificationBellThreshold,
+      templates: templatesByRule.get(id) ?? {},
+    };
+  });
 }
 
-function replaceRules(rulesToSave: NotificationRule[]) {
-  notifications.find().forEach((rule) => notifications.remove(rule));
-  rulesToSave.forEach((rule) => notifications.insert(rule));
+/** One rule row plus its joined triggers and templates, or `undefined` when no such row exists. */
+function readStoredRule(database: Database, id: string): NotificationRule | undefined {
+  const row = database.prepare('SELECT * FROM notification_rules WHERE id = ?').get(id);
+  if (!row) {
+    return undefined;
+  }
+  const triggers = database
+    .prepare('SELECT trigger_id FROM notification_rule_trigger WHERE rule_id = ? ORDER BY ordinal')
+    .all(id)
+    .map((triggerRow) => String(triggerRow.trigger_id));
+  const templates: NotificationTemplateOverrides = {};
+  for (const templateRow of database
+    .prepare('SELECT trigger_id, field, value FROM notification_rule_template WHERE rule_id = ?')
+    .all(id)) {
+    const triggerId = String(templateRow.trigger_id);
+    const fieldOverrides = templates[triggerId] ?? {};
+    fieldOverrides[String(templateRow.field) as NotificationTemplateField] = String(
+      templateRow.value,
+    );
+    templates[triggerId] = fieldOverrides;
+  }
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    description: String(row.description),
+    enabled: Boolean(row.enabled),
+    triggers,
+    bellEnabled: Boolean(row.bell_enabled),
+    bellThreshold: row.bell_threshold as NotificationBellThreshold,
+    templates,
+  };
+}
+
+/** Write one rule's row plus its trigger and template join rows. Caller owns the transaction. */
+function insertRule(database: Database, rule: NotificationRule): void {
+  database
+    .prepare(
+      `INSERT INTO notification_rules (id, name, description, enabled, bell_enabled, bell_threshold)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      rule.id,
+      rule.name,
+      rule.description,
+      rule.enabled ? 1 : 0,
+      rule.bellEnabled ? 1 : 0,
+      rule.bellThreshold,
+    );
+
+  const insertTrigger = database.prepare(
+    'INSERT INTO notification_rule_trigger (rule_id, trigger_id, ordinal) VALUES (?, ?, ?)',
+  );
+  rule.triggers.forEach((triggerId, ordinal) => {
+    insertTrigger.run(rule.id, triggerId, ordinal);
+  });
+
+  const insertTemplateField = database.prepare(
+    'INSERT INTO notification_rule_template (rule_id, trigger_id, field, value) VALUES (?, ?, ?, ?)',
+  );
+  for (const [triggerId, fields] of Object.entries(rule.templates)) {
+    for (const [field, value] of Object.entries(fields)) {
+      insertTemplateField.run(rule.id, triggerId, field, value);
+    }
+  }
+}
+
+/**
+ * Replace the whole rule set: delete every row and reinsert. `ON DELETE
+ * CASCADE` on both join tables' foreign keys means deleting the parent row is
+ * enough to clear its triggers and templates.
+ */
+function replaceRules(database: Database, rulesToSave: NotificationRule[]): void {
+  database.transaction(() => {
+    database.prepare('DELETE FROM notification_rules').run();
+    rulesToSave.forEach((rule) => insertRule(database, rule));
+  });
   invalidateNotificationRulesCache();
 }
 
 /**
- * Create notification collection.
- * @param db
+ * Replace a single rule's row and join rows in place. Used by
+ * `updateNotificationRule`, which only ever changes one rule at a time.
  */
-export function createCollections(db: NotificationStoreDb): void {
-  notifications = initCollection(db, 'notifications') as NotificationCollection;
-  const rulesSaved = notifications.find();
+function writeRule(database: Database, rule: NotificationRule): void {
+  database.transaction(() => {
+    database.prepare('DELETE FROM notification_rules WHERE id = ?').run(rule.id);
+    insertRule(database, rule);
+  });
+  invalidateNotificationRulesCache();
+}
+
+/**
+ * Wire the notification store to the shared SQLite database, normalizing
+ * whatever rules are already there (filling in defaults, dropping unknown
+ * fields, sorting custom rules) and persisting the result back.
+ * @param database
+ */
+export function createCollections(database: Database): void {
+  db = database;
+  const rulesSaved = readStoredRules(database);
   const rulesNormalized = normalizeRules(rulesSaved);
-  replaceRules(rulesNormalized);
+  replaceRules(database, rulesNormalized);
   notificationRulesCache = rulesNormalized;
 }
 
@@ -290,8 +420,8 @@ export function getNotificationRules(): NotificationRule[] {
     return cloneRules(notificationRulesCache);
   }
 
-  const rulesNormalized = hasNotificationCollection()
-    ? normalizeRules(notifications.find())
+  const rulesNormalized = db
+    ? normalizeRules(readStoredRules(db))
     : normalizeRules(DEFAULT_NOTIFICATION_RULES);
   notificationRulesCache = rulesNormalized;
   return cloneRules(rulesNormalized);
@@ -323,11 +453,12 @@ export function updateNotificationRule(
   id: string,
   update: Partial<NotificationRule>,
 ): NotificationRule | undefined {
-  if (!hasNotificationCollection()) {
+  if (!db) {
     return undefined;
   }
+  const database = db;
   const idNormalized = id?.toLowerCase();
-  const ruleCurrent = notifications.findOne({ id: idNormalized });
+  const ruleCurrent = readStoredRule(database, idNormalized);
   if (!ruleCurrent) {
     return undefined;
   }
@@ -338,9 +469,7 @@ export function updateNotificationRule(
     id: idNormalized,
   });
 
-  notifications.remove(ruleCurrent);
-  notifications.insert(ruleUpdated);
-  invalidateNotificationRulesCache();
+  writeRule(database, ruleUpdated);
 
   return ruleUpdated;
 }

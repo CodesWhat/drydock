@@ -1,0 +1,7 @@
+# Minimal config file fixture for the QA/e2e compose stack (roadmap 7.1).
+# Sets one value (DD_SERVER_NAME) that qa-compose.yml doesn't set any other
+# way, so api-config.feature can assert GET /api/v1/config reports a
+# present file, a real value under sections.server.name, and that key's
+# source as "file" rather than "env".
+server:
+  name: qa-config-file-fixture

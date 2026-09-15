@@ -76,9 +76,47 @@ Set `DD_ACTION_DOCKER_<name>_DRYRUN=true` (or the equivalent Docker Compose acti
 
 <Callout type="warn">Dry-run still pulls the candidate image. It does not stop or replace the running container. Set the action trigger's `DRYRUN=false` and recreate Drydock before expecting updates to be applied.</Callout>
 
+## Update concurrency
+
+By default, drydock updates one container at a time per action. Set `DD_UPDATE_CONCURRENCY` to update more containers at once within a fleet-wide update — a scan-triggered digest batch or a manual "Update All" — while still respecting the per-container and per-compose-project locks described under [Global concurrency cap](#global-concurrency-cap) below.
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_CONCURRENCY` | ⚪ | Max simultaneous update executions per action instance (`docker`, `dockercompose`, `command`) | `1` |
+| `DD_ACTION_<TYPE>_<NAME>_CONCURRENCY` | ⚪ | Per-action override; wins over `DD_UPDATE_CONCURRENCY` for that one action instance | unset (inherits the global value) |
+
+**Semantics:**
+
+- `1` (default) → updates through this action run one at a time — drydock's original behavior.
+- `N` (positive integer) → up to N container updates run at once through this action.
+- `0` or a non-integer value → drydock fails fast at startup with a descriptive error.
+
+This gate is per action, not per whole update lifecycle: it bounds how many container updates `docker`, `dockercompose`, or `command` run concurrently, regardless of what triggered them — a scan-triggered digest batch, a manual bulk "Update All", a dependency-chain update, or startup recovery. `DD_ACTION_<TYPE>_<NAME>_CONCURRENCY` follows the same `<type>.<name>` shape as any other per-action override, so `DD_ACTION_DOCKERCOMPOSE_BACKUPS_CONCURRENCY` overrides the `dockercompose` action registered as `backups`.
+
+<Callout type="info">`DD_UPDATE_CONCURRENCY` and `DD_UPDATE_MAX_CONCURRENT` (below) are independent gates layered on top of each other; the effective concurrency is whichever is tighter. `DD_UPDATE_CONCURRENCY` bounds one action's own concurrent executions. `DD_UPDATE_MAX_CONCURRENT` bounds the whole controller's simultaneous update lifecycles, across every action.</Callout>
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      # Update up to 4 containers at once through the docker action.
+      - DD_UPDATE_CONCURRENCY=4
+      # Keep the "backups" compose stack fully serial regardless of the global setting.
+      - DD_ACTION_DOCKERCOMPOSE_BACKUPS_CONCURRENCY=1
+```
+
+### Compose-file-once ordering
+
+Docker Compose groups the containers in one update request by compose file before applying the concurrency limit: `DD_UPDATE_CONCURRENCY` (or its override) bounds how many *compose files* update at once, not how many containers within a shared file update at once. Every container backed by the same compose file still updates through one `docker compose up` invocation, in the same order it always has.
+
+### Fleet update progress in the UI
+
+While a fleet-wide update batch (two or more containers) is in flight, the container list shows a progress banner naming how many containers have finished and which ones are currently running, driven by the same operation events the per-group "Update All" progress already used.
+
 ## Global concurrency cap
 
-By default, drydock runs updates concurrently across containers. Two existing layers of serialization apply:
+Two layers of serialization always apply, regardless of the `DD_UPDATE_CONCURRENCY` setting above:
 
 - **Per-container lock** — prevents the same container from being updated twice in parallel.
 - **Per-compose-project lock** — serializes services within the same compose stack so `docker compose up` orchestration is safe.

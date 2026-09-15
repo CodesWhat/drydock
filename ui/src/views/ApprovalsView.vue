@@ -77,8 +77,8 @@ interface DetailRow {
 }
 type TableRow = ApprovalRecord | DetailRow;
 
-function isDetailRow(row: Record<string, unknown>): row is DetailRow {
-  return row.__kind === 'detail';
+function isDetailRow(row: TableRow): row is DetailRow {
+  return '__kind' in row && row.__kind === 'detail';
 }
 
 const tableRows = computed<TableRow[]>(() => {
@@ -92,8 +92,8 @@ const tableRows = computed<TableRow[]>(() => {
   return rows;
 });
 
-function rowKey(row: Record<string, unknown>): string {
-  return isDetailRow(row) ? row.__key : (row as ApprovalRecord).id;
+function rowKey(row: TableRow): string {
+  return isDetailRow(row) ? row.__key : row.id;
 }
 
 const tableColumns = computed<DataTableColumn[]>(() => [
@@ -477,6 +477,7 @@ onUnmounted(() => {
 
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('approvalsView.loading') }}</div>
 
+    <!-- @vue-generic {TableRow} -->
     <DataTable
       v-if="!loading"
       :columns="tableColumns"
@@ -487,23 +488,25 @@ onUnmounted(() => {
       :show-actions="true"
       actions-width="260px"
       :full-width-row="(row) => isDetailRow(row)"
-      :row-class="(row) => (row.id === focusedId ? 'dd-data-table-row-selected' : '')"
+      :row-class="(row) => (!isDetailRow(row) && row.id === focusedId ? 'dd-data-table-row-selected' : '')"
     >
       <template #cell-containerName="{ row }">
-        <span data-testid="approval-container-name" class="block min-w-0 truncate whitespace-nowrap font-semibold text-2xs-plus dd-text" :title="row.containerName">
-          {{ row.containerName }}
-        </span>
-        <span class="block min-w-0 truncate whitespace-nowrap text-2xs dd-text-muted">
-          {{ row.agent || row.watcher }}
-        </span>
+        <template v-if="!isDetailRow(row)">
+          <span data-testid="approval-container-name" class="block min-w-0 truncate whitespace-nowrap font-semibold text-2xs-plus dd-text" :title="row.containerName">
+            {{ row.containerName }}
+          </span>
+          <span class="block min-w-0 truncate whitespace-nowrap text-2xs dd-text-muted">
+            {{ row.agent || row.watcher }}
+          </span>
+        </template>
       </template>
       <template #cell-image="{ row }">
-        <span class="block min-w-0 truncate whitespace-nowrap font-mono text-2xs-plus dd-text" :title="row.image">
+        <span v-if="!isDetailRow(row)" class="block min-w-0 truncate whitespace-nowrap font-mono text-2xs-plus dd-text" :title="row.image">
           {{ row.image }}
         </span>
       </template>
       <template #cell-version="{ row }">
-        <div class="flex items-center gap-1.5 min-w-0">
+        <div v-if="!isDetailRow(row)" class="flex items-center gap-1.5 min-w-0">
           <span class="truncate font-mono text-2xs-plus dd-text-muted" :title="row.fromRef">{{ row.fromRef }}</span>
           <AppIcon name="arrow-right" :size="10" class="shrink-0 dd-text-muted" />
           <span class="truncate font-mono text-2xs-plus dd-text" :title="row.toRef">{{ row.toRef }}</span>
@@ -513,18 +516,20 @@ onUnmounted(() => {
         </div>
       </template>
       <template #cell-scan="{ row }">
-        <AppBadge v-if="hasScanData(row)" :tone="scanTone(row)" size="xs">
-          {{ (row.scanCritical ?? 0) + (row.scanHigh ?? 0) }}
-        </AppBadge>
-        <span v-else class="text-2xs dd-text-muted">—</span>
+        <template v-if="!isDetailRow(row)">
+          <AppBadge v-if="hasScanData(row)" :tone="scanTone(row)" size="xs">
+            {{ (row.scanCritical ?? 0) + (row.scanHigh ?? 0) }}
+          </AppBadge>
+          <span v-else class="text-2xs dd-text-muted">—</span>
+        </template>
       </template>
       <template #cell-age="{ row }">
-        <span class="block whitespace-nowrap text-2xs dd-text-muted">
+        <span v-if="!isDetailRow(row)" class="block whitespace-nowrap text-2xs dd-text-muted">
           {{ formatAge(row) }}
         </span>
       </template>
       <template #actions="{ row }">
-        <div class="flex items-center justify-end gap-1 whitespace-nowrap">
+        <div v-if="!isDetailRow(row)" class="flex items-center justify-end gap-1 whitespace-nowrap">
           <AppIconButton
             icon="file-text"
             size="sm"
@@ -575,7 +580,7 @@ onUnmounted(() => {
         </div>
       </template>
       <template #full-row="{ row }">
-        <div class="px-5 py-3 space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }" data-testid="approval-detail-row">
+        <div v-if="isDetailRow(row)" class="px-5 py-3 space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }" data-testid="approval-detail-row">
           <div v-if="detailLoadingId === row.approvalId" class="text-2xs dd-text-muted">
             {{ t('approvalsView.detail.loading') }}
           </div>

@@ -1,0 +1,68 @@
+---
+title: "Images"
+description: "Browse every image across your hosts and reclaim disk space by pruning dangling or unused images."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+**Images** at `/images` lists every image Docker knows about on every host drydock watches, with what's using each one and what pruning it would free. It's a read surface plus one destructive action: nothing here changes a container.
+
+## What it shows
+
+Each row is one image on one host:
+
+| Column | Description |
+| --- | --- |
+| Repository | Image repository name |
+| Tag | Image tag |
+| Image ID | Docker image ID |
+| Size | Image size on disk |
+| Containers | How many containers currently reference this image, running or stopped |
+| Created | When the image was built |
+| Last used | The most recent creation time among the containers referencing it; blank when nothing does |
+| Host | The watcher (and agent, if remote) the image was listed from |
+
+An image with no repository tags at all (Docker shows it as `<none>:<none>`) is marked **dangling**; drydock strips those placeholder entries and shows the image untagged instead.
+
+### Filters
+
+- **Host**: scope the list to one host, or view every host at once (**All hosts**).
+- **Unused only**: show only images with zero referencing containers, the same set either prune mode draws from.
+
+## Pruning
+
+Two prune modes are available per host, matching Docker's own image-prune semantics exactly:
+
+- **Prune dangling**: removes only images that are both untagged and unused. This is what `docker image prune` does with no flags.
+- **Prune unused**: removes every image no container references, running or stopped, tagged or not. This is what `docker image prune -a` does.
+
+Both modes only ever touch images with zero referencing containers; an image any container still points at, even a stopped one, is never a candidate.
+
+### The confirm dialog and the estimate
+
+Clicking a prune button opens a confirm dialog naming the host, the mode, and an estimated reclaimable size, before anything is deleted. The estimate is computed by summing each candidate image's own size minus the portion Docker reports as shared with other images still on disk (zero when Docker doesn't report a shared size, in which case the image's full size counts).
+
+<Callout type="warn">The reclaimable figure is an estimate, not a guarantee. It's computed per image and summed; it doesn't account for layers shared between two images that are both being pruned in the same batch, so the bytes Docker actually reclaims can come in lower than the number shown, particularly for multi-arch images or images built from a common base.</Callout>
+
+Confirming dispatches the prune with `X-DD-Confirm-Action: image-prune`. The result reports the number of images removed and the bytes actually reclaimed, from Docker's own prune response, not the earlier estimate. Every prune, successful or failed, writes an `image-prune` [audit trail](/docs/api#audit-trail) entry naming the host, mode, and outcome.
+
+## Gating
+
+Images requires the `admin` API scope and the [container actions feature flag](/docs/configuration/actions#feature-flags) (`DD_SERVER_FEATURE_CONTAINERACTIONS`). Listing images requires only the `read` scope; the prune-preview and prune endpoints both require `admin`. With the feature flag disabled, the prune-preview and prune endpoints return `403`; the read-only list still works.
+
+## Agent hosts
+
+A host behind an agent only appears as prunable when that agent exposes [controller Docker transport](/docs/configuration/agents#features-in-agent-mode), the same capability lifecycle actions (start/stop/restart) already depend on. An agent host without it is still listed, disabled, with a notice that its agent doesn't expose the Docker API to the controller, so images can't be listed or pruned there.
+
+### Still running
+
+Preview requests only read inventory. If an agent preview returns `504`, no prune was started by that request; retry the preview to obtain an estimate.
+
+The controller's connection to an agent host times out after 30 seconds. A prune that outlives that window is reported as a `504` with "returned no result; the prune may still be running", shown in the UI as a warning rather than an error. The same answer covers an agent that was unreachable, because the proxy does not yet distinguish the two (DR-133 on the roadmap). Refresh the list once the prune has had time to finish to see the result.
+
+## Related
+
+- [Container Actions](/docs/configuration/actions): the feature flag Images shares with start, stop, restart, update, and delete.
+- [Container API](/docs/api/container): the `/api/v1/images*` endpoints.

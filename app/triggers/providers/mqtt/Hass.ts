@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { MqttClient } from 'mqtt';
 import { recordAuditEvent } from '../../../api/audit-events.js';
 import { providers as iconProviders, normalizeSlug } from '../../../api/icons/providers.js';
@@ -10,8 +11,9 @@ import {
   registerWatcherStart,
   registerWatcherStop,
 } from '../../../event/index.js';
-import type { Container } from '../../../model/container.js';
+import { type Container, deriveContainerIdentityKey } from '../../../model/container.js';
 import * as containerStore from '../../../store/container.js';
+import * as mqttHassStore from '../../../store/mqtt-hass.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
@@ -24,15 +26,30 @@ import {
   isHassInstallPayload,
   resolveHassCommandContainer,
 } from './hass-commands.js';
+import { HASS_UPDATE_STATE_KEY } from './hass-progress.js';
 import {
   getSanitizedCanonicalContainerName,
   getStaleSanitizedContainerNameCandidates,
 } from './naming.js';
+import {
+  getContainerStateTopic,
+  getContainerStateTopicFromName,
+  getWatcherTopicPrefix,
+  normalizeAgentValue,
+} from './topics.js';
 
 const HASS_DEVICE_ID = 'drydock';
 const HASS_DEVICE_NAME = 'drydock';
 const HASS_MANUFACTURER = 'drydock';
-const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
+// Installed version plus live install progress (#210). HA renders this template
+// against the state payload and parses the RESULT as JSON, reading `in_progress` and
+// `update_percentage` only when that result is a JSON object; a template rendering a
+// bare version string (what this used to be) means HA never sees either field, so the
+// Install button spins with no feedback until the next watch cycle. `update_state` is
+// built in `hass-progress.ts` and re-emitted verbatim here. The `is defined` guard
+// keeps the old scalar behaviour for a payload that predates the key — a retained
+// message published by an older drydock, still on the broker until the next publish.
+const HASS_ENTITY_VALUE_TEMPLATE = `{% if value_json.${HASS_UPDATE_STATE_KEY} is defined %}{{ value_json.${HASS_UPDATE_STATE_KEY} | to_json }}{% else %}{{ value_json.image_tag_value }}{% endif %}`;
 // Newest version. When no update is pending, container.result is absent, so
 // result_tag/result_digest never appear in the flattened payload. Fall back to
 // the installed tag (image_tag_value) so HA resolves latest == installed ("up to
@@ -87,20 +104,20 @@ function hasHassCommandCapableClient(client: HassClient): client is HassCommandC
 
 interface HassConfiguration {
   topic: string;
+  // Optional here because Hass's own unit tests construct a bare
+  // `{ topic, hass }` configuration; a real Hass instance is always
+  // constructed from `Mqtt.ts`'s `MqttConfiguration`, which has this set
+  // (roadmap 7-STORE slice 10 review finding 2 — the one-shot cleanup
+  // marker's route key is built from it, see
+  // `getIdentityTopicCleanupRouteKey`).
+  url?: string;
   hass: {
     prefix: string;
     discovery: boolean;
     agenttopicsegment?: boolean;
     commands?: boolean;
+    devicepercontainer?: boolean;
   };
-}
-
-// #386 — replicated from Docker.ts (not exported there)
-function normalizeAgentValue(agent: unknown): string | undefined {
-  if (typeof agent !== 'string') {
-    return undefined;
-  }
-  return agent === '' ? undefined : agent;
 }
 
 // Deprecation: "Agent-less Home Assistant MQTT topic layout (multi-agent)"
@@ -125,6 +142,37 @@ function getHassEntityId(topic) {
 }
 
 /**
+ * Home Assistant `unique_id` for a container's update sensor, derived from
+ * the container's durable identity key instead of its MQTT state topic. The
+ * state topic changes on a rename or a Compose recreate (it is built from
+ * `getContainerIdentitySlug`); `unique_id` is what HA actually uses to keep an
+ * entity's history and dashboard placement across a discovery payload update,
+ * so keeping it independent of the topic is what stops a rename from orphaning
+ * the entity and spawning a duplicate "Unknown" ghost next to it. `dd_` keeps
+ * the id from starting with a bare hex digit; 12 hex characters match the
+ * length of a Docker short id for a familiar shape (the two are unrelated
+ * otherwise — this is a hash of the identity key, not of any Docker id).
+ *
+ * Rename stability of both the topic and (when this falls through to
+ * `deriveContainerIdentityKey`, i.e. `container.identityKey` was never
+ * stored) `unique_id` is a Compose guarantee: `deriveContainerIdentityKey`
+ * only omits the container's own name from the key when Compose project/
+ * service labels are present, so a container with no Compose labels gets a
+ * key built from its current name and both the topic and this fallback
+ * `unique_id` change on every rename, same as before. `unique_id` derived
+ * from a stored `container.identityKey` is stable regardless of Compose,
+ * because that key was captured once and persisted rather than
+ * re-derived from the container's current name on every call.
+ */
+function getHassUniqueId(container: Container): string {
+  const identityKey = container.identityKey ?? deriveContainerIdentityKey(container);
+  return `dd_${createHash('sha256')
+    .update(identityKey ?? '')
+    .digest('hex')
+    .slice(0, 12)}`;
+}
+
+/**
  * Get HA drydock device info.
  * @returns {*}
  */
@@ -135,6 +183,44 @@ function getHaDevice() {
     model: HASS_DEVICE_ID,
     name: HASS_DEVICE_NAME,
     sw_version: getVersion(),
+  };
+}
+
+/**
+ * The container's image name, used as the HA device model. Absent for a
+ * container the store never recorded an image for, in which case the key is
+ * dropped from the payload entirely (`JSON.stringify` omits `undefined`)
+ * rather than published as an empty string, which HA would render as a blank
+ * model row on the device page.
+ */
+function getHaContainerDeviceModel(container: { image?: { name?: unknown } }): string | undefined {
+  const imageName = container.image?.name;
+  return typeof imageName === 'string' && imageName !== '' ? imageName : undefined;
+}
+
+/**
+ * HA device info for a single watched container (roadmap 7.8, #210).
+ *
+ * `identifiers` reuses `getHassUniqueId` verbatim instead of deriving a
+ * second key from the same container identity, so the device id and the
+ * update entity's `unique_id` can never drift apart: both survive a rename
+ * and a Compose recreate for a Compose-labeled container, and both change
+ * together on a rename for a container Compose never labeled (see
+ * `getHassUniqueId`).
+ *
+ * `via_device` nests the container device under the single drydock device
+ * that keeps the global and watcher-level entities. Current Home Assistant
+ * (2024.12+, home-assistant/core#131588) stub-creates the parent device on
+ * first sight of `via_device`, so publish ordering doesn't matter there; on
+ * older HA the link heals on the next discovery publish.
+ */
+function getHaContainerDevice(container: Container, stateTopic: string) {
+  return {
+    identifiers: [`${HASS_DEVICE_ID}_${getHassUniqueId(container)}`],
+    manufacturer: HASS_MANUFACTURER,
+    model: getHaContainerDeviceModel(container),
+    name: container.displayName || getHassEntityId(stateTopic),
+    via_device: HASS_DEVICE_ID,
   };
 }
 
@@ -402,6 +488,8 @@ class Hass {
       return;
     }
 
+    await this.cleanupLegacyIdentityTopics(containers);
+
     let previousSnapshot = Promise.resolve();
     const snapshotSyncs = containers.map((container) => {
       const waitForPreviousSnapshot = previousSnapshot;
@@ -549,7 +637,13 @@ class Hass {
     containerName: string;
     agentName?: string;
   }) {
-    return `${this.getWatcherTopicPrefix({ watcherName, agentName })}/${containerName}`;
+    return getContainerStateTopicFromName({
+      baseTopic: this.configuration.topic,
+      watcherName,
+      containerName,
+      agentName,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment,
+    });
   }
 
   private getWatcherTopicPrefix({
@@ -559,11 +653,14 @@ class Hass {
     watcherName: string;
     agentName?: string;
   }) {
-    // #386 — insert agent segment only when flag is on and agent is non-empty
-    if (this.configuration.hass.agenttopicsegment && agentName) {
-      return `${this.configuration.topic}/agent/${agentName}/${watcherName}`;
-    }
-    return `${this.configuration.topic}/${watcherName}`;
+    // #386 — agent segment inserted only when the flag is on and the agent is
+    // non-empty; the rule itself lives in topics.ts so Mqtt.ts shares it.
+    return getWatcherTopicPrefix({
+      baseTopic: this.configuration.topic,
+      watcherName,
+      agentName,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment,
+    });
   }
 
   private getStaleContainerStateTopics({
@@ -832,6 +929,13 @@ class Hass {
       currentStateTopic: containerStateSensor.topic,
     });
     const entityPictureOverride = resolveEntityPictureOverride(container);
+    // roadmap 7.8 — the update entity is the only per-container entity there
+    // is. Everything else published from this class (global counts, watcher
+    // counts, watcher running status) is drydock-level and keeps the shared
+    // drydock device.
+    const containerDevice = this.configuration.hass.devicepercontainer
+      ? getHaContainerDevice(container, containerStateSensor.topic)
+      : undefined;
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
       await this.removeDiscoveryTopics({
@@ -845,9 +949,20 @@ class Hass {
         }),
         kind: containerStateSensor.kind,
         stateTopic: containerStateSensor.topic,
-        name: container.displayName,
+        // HA sets `has_entity_name` on every discovered entity, so an entity
+        // that belongs to a device is displayed as "<device name> <entity
+        // name>". Keeping the container's display name on both would render
+        // every container as "nginx nginx". A null entity name is HA's
+        // documented marker for "this entity is the device's main feature",
+        // which is exactly what the update entity is here: the friendly name
+        // becomes the device name on its own. Without a per-container device
+        // the entity name is still the display name, prefixed by "drydock" as
+        // it always has been.
+        name: containerDevice ? null : container.displayName,
         icon: sanitizeIcon(container.displayIcon),
         entityPicture: entityPictureOverride,
+        uniqueId: getHassUniqueId(container),
+        device: containerDevice,
         options: {
           force_update: true,
           value_template: HASS_ENTITY_VALUE_TEMPLATE,
@@ -1197,24 +1312,41 @@ class Hass {
     name,
     icon,
     entityPicture,
+    uniqueId,
+    device,
     options = {},
   }: {
     discoveryTopic: string;
     stateTopic: string;
     kind: string;
-    name: string;
+    // `null` marks the entity as its device's main feature (HA's own naming
+    // convention), so HA uses the device name alone as the friendly name
+    // instead of concatenating the two. Anything else falls back to the
+    // topic-derived entity id when empty, as it always has.
+    name?: string | null;
     icon?: string;
     entityPicture?: string;
+    // Per-container sensors pass the identity-derived id from
+    // `getHassUniqueId` so `unique_id` survives a rename/recreate; the
+    // aggregate total/watcher sensors below have no container identity to
+    // derive from and fall back to the topic-derived entity id, same as
+    // before.
+    uniqueId?: string;
+    // roadmap 7.8 — per-container entities pass their own device block so HA
+    // nests them under a device per container; drydock-level entities pass
+    // nothing and stay on the single shared drydock device, which is also
+    // what every entity gets when `hass.devicepercontainer` is off.
+    device?: Record<string, unknown>;
     options?: Record<string, unknown>;
   }) {
     const entityId = getHassEntityId(stateTopic);
     return this.client.publish(
       discoveryTopic,
       JSON.stringify({
-        unique_id: entityId,
+        unique_id: uniqueId ?? entityId,
         default_entity_id: `${kind}.${entityId}`,
-        name: name || entityId,
-        device: getHaDevice(),
+        name: name === null ? null : name || entityId,
+        device: device ?? getHaDevice(),
         icon: icon || sanitizeIcon('mdi:docker'),
         entity_picture: entityPicture || resolveEntityPicture(icon),
         state_topic: stateTopic,
@@ -1248,16 +1380,105 @@ class Hass {
   }
 
   /**
-   * Get container state topic.
+   * Get container state topic. Identity-based (`getContainerIdentitySlug`) so
+   * a rename or Compose recreate does not change it — see
+   * `getLegacyContainerStateTopics` for the pre-v1.8 name-based shape this
+   * replaces, still needed for the one-time post-upgrade discovery cleanup.
    * @param container
    * @return {string}
    */
   getContainerStateTopic({ container }) {
-    return this.getContainerStateTopicFromName({
-      watcherName: container.watcher,
-      containerName: getSanitizedCanonicalContainerName(container),
-      agentName: normalizeAgentValue(container?.agent),
+    return getContainerStateTopic({
+      baseTopic: this.configuration.topic,
+      container,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment,
     });
+  }
+
+  /**
+   * The pre-v1.8 name-based state topic for a container, plus its
+   * rename/recreate stale-name variants. Used only by the one-time
+   * post-upgrade discovery cleanup in `resyncDiscovery`: whenever the
+   * container carries Compose labels this always differs from the
+   * identity-based topic `getContainerStateTopic` now returns, and it can
+   * differ even without Compose labels if the container was renamed before
+   * the upgrade.
+   */
+  private getLegacyContainerStateTopics(container: {
+    id?: unknown;
+    name?: unknown;
+    watcher?: unknown;
+    agent?: unknown;
+  }): string[] {
+    const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+    if (watcherName === '') {
+      return [];
+    }
+    const agentName = normalizeAgentValue(container?.agent);
+    const legacyContainerNames = new Set<string>([
+      getSanitizedCanonicalContainerName(container),
+      ...getStaleSanitizedContainerNameCandidates(container),
+    ]);
+    return Array.from(legacyContainerNames).map((containerName) =>
+      this.getContainerStateTopicFromName({ watcherName, containerName, agentName }),
+    );
+  }
+
+  /**
+   * The route this Hass instance's one-shot legacy-topic cleanup sweep
+   * belongs to (roadmap 7-STORE slice 10 review finding 2). Two
+   * discovery-enabled MQTT triggers sharing one store — different brokers or
+   * topic layouts — must not share one cleanup marker.
+   */
+  private getIdentityTopicCleanupRouteKey(): string {
+    return mqttHassStore.getHassIdentityTopicCleanupRouteKey({
+      brokerUrl: this.configuration.url,
+      baseTopic: this.configuration.topic,
+      discoveryPrefix: this.configuration.hass.prefix,
+      agentTopicSegment: this.configuration.hass.agenttopicsegment ?? false,
+    });
+  }
+
+  /**
+   * One-time post-upgrade cleanup (MQTT identity cut): publish an empty
+   * retained message on every pre-v1.8 name-based discovery topic the
+   * identity-based topic scheme replaces, so Home Assistant prunes the old
+   * entity instead of leaving a duplicate "Unknown" ghost beside the new one.
+   * Guarded by a `store_metadata` marker (`app/store/mqtt-hass.ts`), scoped
+   * to this trigger's route (broker + base topic + discovery prefix +
+   * agent-topic-segment mode), so it runs at most once ever per route, not
+   * once per restart. A container-level publish failure is logged and
+   * skipped, and — unlike a fully clean sweep — does NOT mark the route's
+   * cleanup complete, so the next resync retries the containers that were
+   * missed instead of leaving a permanent ghost entity behind (roadmap
+   * 7-STORE slice 10 review finding 3).
+   */
+  private async cleanupLegacyIdentityTopics(containers: Container[]): Promise<void> {
+    const routeKey = this.getIdentityTopicCleanupRouteKey();
+    if (
+      !this.configuration.hass.discovery ||
+      mqttHassStore.hasRunHassIdentityTopicCleanup(routeKey)
+    ) {
+      return;
+    }
+    let sweepFullySucceeded = true;
+    for (const container of containers) {
+      try {
+        const currentStateTopic = this.getContainerStateTopic({ container });
+        const legacyStateTopics = this.getLegacyContainerStateTopics(container).filter(
+          (stateTopic) => stateTopic !== currentStateTopic,
+        );
+        await this.removeDiscoveryTopics({ kind: 'update', stateTopics: legacyStateTopics });
+      } catch (error: unknown) {
+        sweepFullySucceeded = false;
+        this.log.warn(
+          `Failed to clean up legacy hass discovery topics for container [${container.name}] (${getErrorMessage(error)})`,
+        );
+      }
+    }
+    if (sweepFullySucceeded) {
+      mqttHassStore.markHassIdentityTopicCleanupComplete(routeKey);
+    }
   }
 
   /**

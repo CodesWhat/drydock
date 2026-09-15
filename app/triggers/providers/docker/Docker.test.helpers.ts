@@ -137,9 +137,9 @@ const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
-const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
-const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
 vi.mock('../../../store/update-operation.js', () => ({
@@ -147,12 +147,12 @@ vi.mock('../../../store/update-operation.js', () => ({
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getOperationById: (...args: any[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
-  getInProgressOperationByContainerName: (...args: any[]) =>
-    mockGetInProgressOperationByContainerName(...args),
+  getInProgressOperationByContainerIdentity: (...args: any[]) =>
+    mockGetInProgressOperationByContainerIdentity(...args),
   getInProgressOperationByContainerId: (...args: any[]) =>
     mockGetInProgressOperationByContainerId(...args),
-  getActiveOperationByContainerName: (...args: any[]) =>
-    mockGetActiveOperationByContainerName(...args),
+  getActiveOperationByContainerIdentity: (...args: any[]) =>
+    mockGetActiveOperationByContainerIdentity(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
   OperationCancelledError: class OperationCancelledError extends Error {
@@ -444,6 +444,12 @@ export function registerCommonDockerBeforeEach() {
     vi.resetAllMocks();
     mockGetState.mockImplementation(createDefaultRegistryState);
     docker.configuration = configurationValid;
+    // The update-concurrency semaphore is created lazily and cached per
+    // instance (so it can bound concurrency across separate trigger() calls,
+    // not just within one triggerBatch()) — reset it whenever configuration
+    // is reset so a test that sets `concurrency` doesn't inherit a semaphore
+    // sized by whatever ran before it against this shared `docker` instance.
+    docker.updateSemaphore = undefined;
     docker.log = log;
     docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
       id: '123456789',
@@ -500,7 +506,7 @@ export function registerCommonDockerBeforeEach() {
       ...operation,
     }));
     mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
-    mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
     mockIsOperationCancelRequested.mockReturnValue(false);
   });
@@ -532,9 +538,9 @@ export function getDockerTestMocks() {
     mockUpdateOperation,
     mockGetOperationById,
     mockMarkOperationTerminal,
-    mockGetInProgressOperationByContainerName,
+    mockGetInProgressOperationByContainerIdentity,
     mockGetInProgressOperationByContainerId,
-    mockGetActiveOperationByContainerName,
+    mockGetActiveOperationByContainerIdentity,
     mockGetActiveOperationByContainerId,
     mockIsOperationCancelRequested,
     mockSyncComposeFileTag,

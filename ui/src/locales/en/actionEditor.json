@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Action policy",
+    "edit": "Edit action policy",
+    "boundary": "Edit scheduling policy only. Saving does not execute an action, command, update or notification. Credentials and execution settings remain read-only. Global manual mode and container eligibility still apply.",
+    "actionUnavailable": "This exact action is not available in the editor snapshot.",
+    "apiUnavailable": "This server does not provide the action policy editor API.",
+    "reset": "Remove file override / inherit settings",
+    "orderHelp": "Negative and fractional values are allowed. Existing order inheritance can also affect other actions and notifications with the same name.",
+    "concurrencyHelp": "A positive whole number. Removing the file override restores inherited settings. For Compose, this limits independent projects, not services within one file.",
+    "invalidNumber": "Enter a finite number. To inherit settings, remove the file override explicitly.",
+    "invalidConcurrency": "Enter a positive whole number. To inherit settings, remove the file override explicitly.",
+    "fields": {
+      "auto": "Automatic dispatch",
+      "order": "Dispatch order",
+      "concurrency": "Concurrent updates"
+    },
+    "autoModes": {
+      "all": "All eligible containers",
+      "oninclude": "Explicitly included containers",
+      "onauto": "Containers allowed by automatic action policy",
+      "none": "No automatic dispatch"
+    }
+  }
+}

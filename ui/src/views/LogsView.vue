@@ -109,11 +109,16 @@ async function refreshAppLogs() {
         )
       : [];
   } catch (e: unknown) {
-    appLogsError.value = errorMessage(e, t('logsView.loadFailed'));
+    appLogsError.value = errorMessage(e, '') || t('logsView.loadFailed');
     appLogEntries.value = [];
   } finally {
     appLogsLoading.value = false;
   }
+}
+
+function retryAppLogs() {
+  if (streamingEnabled.value || appLogsLoading.value) return;
+  void refreshAppLogs();
 }
 
 function applyFilters() {
@@ -181,6 +186,7 @@ onMounted(() => {
       @update:component-filter="appLogComponent = $event"
       @update:streaming-enabled="streamingEnabled = $event"
       @toggle-pause="toggleStreamingPause"
+      @retry="retryAppLogs"
     />
   </div>
 </template>

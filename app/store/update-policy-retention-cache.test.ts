@@ -2,84 +2,38 @@
  * Tests for the update-policy-retention-cache store — the durable backing for
  * container.ts's in-memory updatePolicyRetentionCache Map (#565).
  */
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import * as updatePolicyRetentionCache from './update-policy-retention-cache.js';
 
-function createMockCollection(
-  initialDocs: updatePolicyRetentionCache.UpdatePolicyRetentionCacheRecord[] = [],
-) {
-  const docs = [...initialDocs];
-  return {
-    docs,
-    findOne: vi.fn(
-      (
-        query: Record<string, unknown>,
-      ): updatePolicyRetentionCache.UpdatePolicyRetentionCacheRecord | null => {
-        const match = docs.find((doc) => {
-          return Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v);
-        });
-        return match ?? null;
-      },
-    ),
-    find: vi.fn(
-      (
-        query?: Record<string, unknown>,
-      ): updatePolicyRetentionCache.UpdatePolicyRetentionCacheRecord[] => {
-        if (!query || Object.keys(query).length === 0) {
-          return [...docs];
-        }
-        return docs.filter((doc) =>
-          Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
-        );
-      },
-    ),
-    insert: vi.fn((doc: updatePolicyRetentionCache.UpdatePolicyRetentionCacheRecord) => {
-      docs.push(doc);
-    }),
-    update: vi.fn(),
-    remove: vi.fn((doc: updatePolicyRetentionCache.UpdatePolicyRetentionCacheRecord) => {
-      const index = docs.indexOf(doc);
-      if (index !== -1) {
-        docs.splice(index, 1);
-      }
-    }),
-  };
-}
-
-function createMockDb(collection = createMockCollection()) {
-  return {
-    getCollection: vi.fn(() => collection),
-    addCollection: vi.fn(() => collection),
-  };
-}
+let db: Database;
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  db = createMigratedMemoryDatabase();
   updatePolicyRetentionCache.clearCollectionForTesting();
 });
 
-describe('createCollections', () => {
-  test('uses existing collection when present', () => {
-    const collection = createMockCollection();
-    const db = createMockDb(collection);
-    updatePolicyRetentionCache.createCollections(db);
-    expect(db.addCollection).not.toHaveBeenCalled();
-  });
+afterEach(() => {
+  db.close();
+});
 
-  test('creates collection when not present', () => {
-    const collection = createMockCollection();
-    const db = {
-      getCollection: vi.fn(() => null),
-      addCollection: vi.fn(() => collection),
-    };
+describe('createCollections', () => {
+  test('wires the store to the given database', () => {
     updatePolicyRetentionCache.createCollections(db);
-    expect(db.addCollection).toHaveBeenCalled();
+    expect(() =>
+      updatePolicyRetentionCache.upsertRecord({
+        cacheKey: '::local::myapp',
+        updatePolicyOverrides: { maturityMode: 'mature' },
+        expiresAt: 1_000,
+      }),
+    ).not.toThrow();
+    expect(updatePolicyRetentionCache.listRecords()).toHaveLength(1);
   });
 });
 
 describe('upsertRecord', () => {
   test('inserts a new record when none exists for the cacheKey', () => {
-    const collection = createMockCollection();
-    updatePolicyRetentionCache.createCollections(createMockDb(collection));
+    updatePolicyRetentionCache.createCollections(db);
 
     updatePolicyRetentionCache.upsertRecord({
       cacheKey: '::local::myapp',
@@ -87,17 +41,17 @@ describe('upsertRecord', () => {
       expiresAt: 1_000,
     });
 
-    expect(collection.insert).toHaveBeenCalledWith({
-      cacheKey: '::local::myapp',
-      updatePolicyOverrides: { maturityMode: 'mature', maturityMinAgeDays: 5 },
-      expiresAt: 1_000,
-    });
-    expect(updatePolicyRetentionCache.listRecords()).toHaveLength(1);
+    expect(updatePolicyRetentionCache.listRecords()).toEqual([
+      {
+        cacheKey: '::local::myapp',
+        updatePolicyOverrides: { maturityMode: 'mature', maturityMinAgeDays: 5 },
+        expiresAt: 1_000,
+      },
+    ]);
   });
 
   test('updates fields in place on a second call for the same cacheKey', () => {
-    const collection = createMockCollection();
-    updatePolicyRetentionCache.createCollections(createMockDb(collection));
+    updatePolicyRetentionCache.createCollections(db);
 
     updatePolicyRetentionCache.upsertRecord({
       cacheKey: '::local::myapp',
@@ -110,29 +64,41 @@ describe('upsertRecord', () => {
       expiresAt: 2_000,
     });
 
-    expect(collection.insert).toHaveBeenCalledTimes(1);
-    expect(collection.update).toHaveBeenCalledTimes(1);
-    const [record] = updatePolicyRetentionCache.listRecords();
-    expect(record.updatePolicyOverrides).toEqual({ maturityMode: 'all' });
-    expect(record.expiresAt).toBe(2_000);
+    const records = updatePolicyRetentionCache.listRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0].updatePolicyOverrides).toEqual({ maturityMode: 'all' });
+    expect(records[0].expiresAt).toBe(2_000);
   });
 
   test('is a no-op when the collection has not been initialized', () => {
     expect(() =>
       updatePolicyRetentionCache.upsertRecord({
         cacheKey: '::local::myapp',
-        updatePolicyOverrides: {},
+        updatePolicyOverrides: { maturityMode: 'mature' },
         expiresAt: 1_000,
       }),
     ).not.toThrow();
     expect(updatePolicyRetentionCache.listRecords()).toEqual([]);
   });
+
+  test('stores an explicit undefined updatePolicyOverrides as NULL', () => {
+    updatePolicyRetentionCache.createCollections(db);
+
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: '::local::myapp',
+      updatePolicyOverrides: undefined,
+      expiresAt: 1_000,
+    });
+
+    expect(
+      db.prepare('SELECT update_policy_overrides FROM update_policy_retention_cache').get(),
+    ).toEqual({ update_policy_overrides: null });
+  });
 });
 
 describe('deleteRecord', () => {
   test('removes the record for the given cacheKey', () => {
-    const collection = createMockCollection();
-    updatePolicyRetentionCache.createCollections(createMockDb(collection));
+    updatePolicyRetentionCache.createCollections(db);
     updatePolicyRetentionCache.upsertRecord({
       cacheKey: '::local::myapp',
       updatePolicyOverrides: { maturityMode: 'mature' },
@@ -141,16 +107,13 @@ describe('deleteRecord', () => {
 
     updatePolicyRetentionCache.deleteRecord('::local::myapp');
 
-    expect(collection.remove).toHaveBeenCalledTimes(1);
     expect(updatePolicyRetentionCache.listRecords()).toEqual([]);
   });
 
   test('is a no-op when no record exists for the cacheKey', () => {
-    const collection = createMockCollection();
-    updatePolicyRetentionCache.createCollections(createMockDb(collection));
+    updatePolicyRetentionCache.createCollections(db);
 
     expect(() => updatePolicyRetentionCache.deleteRecord('never-stashed')).not.toThrow();
-    expect(collection.remove).not.toHaveBeenCalled();
   });
 
   test('is a no-op when the collection has not been initialized', () => {
@@ -163,9 +126,18 @@ describe('listRecords', () => {
     expect(updatePolicyRetentionCache.listRecords()).toEqual([]);
   });
 
+  test('reads a NULL update_policy_overrides column back as undefined', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    db.prepare(
+      'INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at) VALUES (?, ?, ?)',
+    ).run('::local::raw-row', null, 1_000);
+
+    const [record] = updatePolicyRetentionCache.listRecords();
+    expect(record.updatePolicyOverrides).toBeUndefined();
+  });
+
   test('returns every persisted record', () => {
-    const collection = createMockCollection();
-    updatePolicyRetentionCache.createCollections(createMockDb(collection));
+    updatePolicyRetentionCache.createCollections(db);
     updatePolicyRetentionCache.upsertRecord({
       cacheKey: '::local::app-1',
       updatePolicyOverrides: { maturityMode: 'mature' },
@@ -179,12 +151,52 @@ describe('listRecords', () => {
 
     expect(updatePolicyRetentionCache.listRecords()).toHaveLength(2);
   });
+
+  // Finding 2 (roadmap 7-STORE slice 7 review): container.ts's eviction reads
+  // Map insertion order as its LRU, and rehydration inserts into that Map in
+  // listRecords() order. A refresh (upsertRecord on an existing cacheKey)
+  // does not move the row's rowid, so without an explicit refresh_order
+  // column and ORDER BY, a just-refreshed entry could sort ahead of a row it
+  // should have outlived. This also proves the ordering is not merely an
+  // expiresAt proxy: A's expiresAt stays lower than B's throughout, yet A
+  // still lists last once refreshed.
+  test('orders by refresh, not by expiresAt or original insertion: insert A, insert B, refresh A, and B lists first', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'A',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 1_000,
+    });
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'B',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 5_000,
+    });
+    // Refresh A: same cacheKey, later call, still a lower expiresAt than B.
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'A',
+      updatePolicyOverrides: { maturityMode: 'all' },
+      expiresAt: 2_000,
+    });
+
+    // Reopen: simulate a restart by clearing the module's wiring and
+    // re-wiring it to the SAME underlying database, the way
+    // rehydrateUpdatePolicyRetentionCacheFromStore() consumes listRecords()
+    // after a real process restart.
+    updatePolicyRetentionCache.clearCollectionForTesting();
+    updatePolicyRetentionCache.createCollections(db);
+
+    const keysInOrder = updatePolicyRetentionCache.listRecords().map((record) => record.cacheKey);
+    // B was never refreshed again, so it is the least-recently-refreshed
+    // entry and must sort first — the Map-insertion-order eviction in
+    // container.ts evicts index 0 first, which must be B, not A.
+    expect(keysInOrder).toEqual(['B', 'A']);
+  });
 });
 
 describe('clearCollectionForTesting', () => {
   test('resets the module back to the uninitialized state', () => {
-    const collection = createMockCollection();
-    updatePolicyRetentionCache.createCollections(createMockDb(collection));
+    updatePolicyRetentionCache.createCollections(db);
     updatePolicyRetentionCache.upsertRecord({
       cacheKey: '::local::myapp',
       updatePolicyOverrides: { maturityMode: 'mature' },

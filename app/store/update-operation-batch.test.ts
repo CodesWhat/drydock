@@ -17,103 +17,43 @@ vi.mock('../event/index.js', () => ({
   emitContainerUpdateFailed: mockEmitContainerUpdateFailed,
 }));
 
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import * as updateOperation from './update-operation.js';
 
 // ---------------------------------------------------------------------------
-// In-memory DB helpers (copied from update-operation.test.ts)
+// In-memory SQLite DB helpers (mirrors update-operation.test.ts)
 // ---------------------------------------------------------------------------
 
-function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string> }) {
-  function getByPath(object, path) {
-    return path.split('.').reduce((acc, key) => acc?.[key], object);
+const openDatabases: Database[] = [];
+
+afterEach(() => {
+  for (const database of openDatabases.splice(0)) {
+    database.close();
   }
+});
 
-  function matchesQuery(doc, query = {}) {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
-  }
-
-  const inactiveIds = options?.inactiveIds ?? new Set<string>();
-  const missingIds = options?.missingIds ?? new Set<string>();
-  const collections = {};
-  return {
-    getCollection: (name) => collections[name] || null,
-    addCollection: (name) => {
-      const docs = [];
-      collections[name] = {
-        insert: (doc) => {
-          doc.$loki = docs.length;
-          docs.push(doc);
-        },
-        find: (query = {}) => docs.filter((doc) => matchesQuery(doc, query)),
-        findOne: (query = {}) => {
-          const id = query['data.id'];
-          const doc = docs.find((item) => matchesQuery(item, query));
-
-          if (missingIds.has(id)) {
-            return null;
-          }
-
-          if (inactiveIds.has(id) && doc) {
-            return {
-              ...doc,
-              data: {
-                ...doc.data,
-                status: 'failed',
-              },
-            };
-          }
-
-          return doc || null;
-        },
-        remove: (doc) => {
-          const idx = docs.indexOf(doc);
-          if (idx >= 0) docs.splice(idx, 1);
-        },
-      };
-      return collections[name];
-    },
-  };
+function createDb(): Database {
+  const database = createMigratedMemoryDatabase();
+  openDatabases.push(database);
+  return database;
 }
 
-function createDocumentBackedDb(documents: any[]) {
-  return {
-    getCollection: () => null,
-    addCollection: () => ({
-      insert: (doc: any) => {
-        documents.push(doc);
-      },
-      find: (query: Record<string, string> = {}) =>
-        documents.filter((doc) =>
-          Object.entries(query).every(([key, value]) => {
-            const path = key.split('.');
-            let current: any = doc;
-            for (const segment of path) current = current?.[segment];
-            return current === value;
-          }),
-        ),
-      findOne: (query: Record<string, string>) =>
-        documents.find((doc) =>
-          Object.entries(query).every(([key, value]) => {
-            const path = key.split('.');
-            let current: any = doc;
-            for (const segment of path) current = current?.[segment];
-            return current === value;
-          }),
-        ) || null,
-      remove: (doc: any) => {
-        const index = documents.indexOf(doc);
-        if (index >= 0) {
-          documents.splice(index, 1);
-        }
-      },
-    }),
-  };
+/** Seed a row directly into storage, as if it were written before this process started. */
+function seedRow(database: Database, data: Record<string, unknown>): void {
+  const row = updateOperation.buildImportedUpdateOperationRow(data);
+  if (row) {
+    updateOperation.insertImportedUpdateOperationRow(database, row);
+  }
 }
 
 describe('update-operation batch completion', () => {
+  let database: Database;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    updateOperation.createCollections(createDb());
+    database = createDb();
+    updateOperation.createCollections(database);
   });
 
   test('does not emit batch-update-completed when operation has no batchId', () => {
@@ -136,9 +76,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('does not emit batch-update-completed when operation is already terminal (idempotent)', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const op = updateOperation.insertOperation({
       containerName: 'nginx',
       containerId: 'c-1',
@@ -157,9 +94,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('does not emit batch-update-completed when sibling operations are still active', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     // Insert two operations in the same batch
     const op1 = updateOperation.insertOperation({
       containerName: 'nginx',
@@ -184,23 +118,21 @@ describe('update-operation batch completion', () => {
   });
 
   test('rehydrates persisted batch membership and emits completion once after restart', () => {
-    const documents: any[] = [
-      {
-        data: {
-          id: 'preexisting-op-1',
-          containerName: 'nginx',
-          containerId: 'c-1',
-          status: 'queued',
-          phase: 'queued',
-          batchId: 'batch-before-boot',
-          queuePosition: 1,
-          queueTotal: 1,
-          createdAt: '2026-02-23T00:00:00.000Z',
-          updatedAt: '2026-02-23T00:00:00.000Z',
-        },
-      },
-    ];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+    // Seed a queued row directly into storage before createCollections runs,
+    // simulating a document that was already persisted at the last restart.
+    seedRow(database, {
+      id: 'preexisting-op-1',
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'queued',
+      phase: 'queued',
+      batchId: 'batch-before-boot',
+      queuePosition: 1,
+      queueTotal: 1,
+      createdAt: '2026-02-23T00:00:00.000Z',
+      updatedAt: '2026-02-23T00:00:00.000Z',
+    });
+    updateOperation.createCollections(database);
 
     const terminal = updateOperation.markOperationTerminal('preexisting-op-1', {
       status: 'succeeded',
@@ -216,41 +148,37 @@ describe('update-operation batch completion', () => {
       }),
     );
 
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+    // Re-running startup reconciliation against the same (now-terminal) row
+    // must not re-fire batch completion.
+    updateOperation.createCollections(database);
     updateOperation.markOperationTerminal('preexisting-op-1', { status: 'succeeded' });
     expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
   });
 
   test('does not emit a misleading partial batch for legacy rows missing persisted identity', () => {
-    const documents: any[] = [
-      {
-        data: {
-          id: 'legacy-terminal-op',
-          containerName: 'nginx',
-          containerId: 'c-1',
-          status: 'succeeded',
-          phase: 'succeeded',
-          completedAt: '2026-02-23T00:01:00.000Z',
-          createdAt: '2026-02-23T00:00:00.000Z',
-          updatedAt: '2026-02-23T00:01:00.000Z',
-        },
-      },
-      {
-        data: {
-          id: 'active-op',
-          containerName: 'redis',
-          containerId: 'c-2',
-          status: 'queued',
-          phase: 'queued',
-          batchId: 'legacy-batch',
-          queuePosition: 2,
-          queueTotal: 2,
-          createdAt: '2026-02-23T00:00:00.000Z',
-          updatedAt: '2026-02-23T00:00:00.000Z',
-        },
-      },
-    ];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+    seedRow(database, {
+      id: 'legacy-terminal-op',
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'succeeded',
+      phase: 'succeeded',
+      completedAt: '2026-02-23T00:01:00.000Z',
+      createdAt: '2026-02-23T00:00:00.000Z',
+      updatedAt: '2026-02-23T00:01:00.000Z',
+    });
+    seedRow(database, {
+      id: 'active-op',
+      containerName: 'redis',
+      containerId: 'c-2',
+      status: 'queued',
+      phase: 'queued',
+      batchId: 'legacy-batch',
+      queuePosition: 2,
+      queueTotal: 2,
+      createdAt: '2026-02-23T00:00:00.000Z',
+      updatedAt: '2026-02-23T00:00:00.000Z',
+    });
+    updateOperation.createCollections(database);
 
     updateOperation.markOperationTerminal('active-op', { status: 'succeeded' });
 
@@ -258,9 +186,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('emits batch-update-completed when the last operation in a 2-op batch succeeds', async () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-both-succeed';
 
     const op1 = updateOperation.insertOperation({
@@ -312,9 +237,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('emits batch-update-completed with correct succeeded/failed counts for mixed batch', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-mixed';
 
     const op1 = updateOperation.insertOperation({
@@ -351,9 +273,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('omits expired operations from batch completion counts and items', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-success-expired';
 
     const op1 = updateOperation.insertOperation({
@@ -390,9 +309,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('does not emit batch-update-completed when every batch operation expires silently', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-all-expired';
 
     const op1 = updateOperation.insertOperation({
@@ -418,9 +334,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('durationMs in batch payload is a non-negative number', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-duration';
 
     const op1 = updateOperation.insertOperation({
@@ -449,9 +362,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('emits batch-update-completed only once even when both ops become terminal in the same tick', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-race';
 
     const op1 = updateOperation.insertOperation({
@@ -478,9 +388,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('items array in batch payload contains only operations from the batch, not unrelated ones', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-scoped';
 
     const batchOp1 = updateOperation.insertOperation({
@@ -500,7 +407,7 @@ describe('update-operation batch completion', () => {
     } as any);
 
     // Unrelated operation — no batchId
-    updateOperation.insertOperation({
+    const unrelated = updateOperation.insertOperation({
       containerName: 'postgres',
       containerId: 'c-3',
       status: 'in-progress',
@@ -515,15 +422,10 @@ describe('update-operation batch completion', () => {
     const itemIds = payload.items.map((i) => i.operationId);
     expect(itemIds).toContain(batchOp1.id);
     expect(itemIds).toContain(batchOp2.id);
-    expect(itemIds).not.toContain(
-      documents.find((d) => d.data?.containerName === 'postgres')?.data?.id,
-    );
+    expect(itemIds).not.toContain(unrelated.id);
   });
 
   test('batch completion silently skips a member whose store entry has been removed (defensive continue)', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-missing-member';
 
     const op1 = updateOperation.insertOperation({
@@ -543,7 +445,7 @@ describe('update-operation batch completion', () => {
     } as any);
 
     // Insert a third member so batchMemberRegistry has three IDs, then
-    // splice its document out so getOperationById returns undefined for it.
+    // delete its row directly so getOperationById returns undefined for it.
     const op3 = updateOperation.insertOperation({
       containerName: 'postgres',
       containerId: 'c-3',
@@ -551,15 +453,14 @@ describe('update-operation batch completion', () => {
       phase: 'prepare',
       batchId,
     } as any);
-    const op3DocIndex = documents.findIndex((d) => d.data?.id === op3.id);
-    documents.splice(op3DocIndex, 1);
+    database.prepare('DELETE FROM update_operations WHERE id = ?').run(op3.id);
 
     // Mark op1 terminal first — op2 is still active so no batch completion yet.
     updateOperation.markOperationTerminal(op1.id, { status: 'succeeded' });
     expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
 
-    // Mark op2 terminal — remainingActive is now 0 (op3 is absent from docs),
-    // so batch completion fires. The loop hits op3.id → getOperationById returns
+    // Mark op2 terminal — remainingActive is now 0 (op3's row is gone), so
+    // batch completion fires. The loop hits op3.id → getOperationById returns
     // undefined → continue. Payload should include only op1 and op2.
     updateOperation.markOperationTerminal(op2.id, { status: 'succeeded' });
 
@@ -573,9 +474,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('durationMs is 0 for operations whose createdAt is unparseable (NaN guard)', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-bad-dates';
 
     // Use a malformed createdAt so Date.parse returns NaN for this op.
@@ -607,9 +505,6 @@ describe('update-operation batch completion', () => {
   });
 
   test('falls back to markOperationTerminal completedAt when stored op.completedAt is not a string', () => {
-    const documents: any[] = [];
-    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
-
     const batchId = 'batch-no-completedAt';
 
     const op1 = updateOperation.insertOperation({
@@ -631,15 +526,12 @@ describe('update-operation batch completion', () => {
     // Mark op1 terminal so it transitions to terminal state and has completedAt set.
     updateOperation.markOperationTerminal(op1.id, { status: 'succeeded' });
 
-    // After terminal transition, manually corrupt op1's completedAt in the documents array
-    // so the completedAt property is not a string — this hits the fallback branch at line 673.
-    const op1Doc = documents.find((d) => d.data?.id === op1.id);
-    if (op1Doc) {
-      op1Doc.data.completedAt = null;
-    }
+    // After terminal transition, corrupt op1's stored completed_at directly so
+    // the column reads back as undefined — this hits the fallback branch.
+    database.prepare('UPDATE update_operations SET completed_at = NULL WHERE id = ?').run(op1.id);
 
     // Mark op2 terminal — triggers batch completion, iterates op1 and op2.
-    // For op1, op.completedAt is null (not a string), so completedAt (the current
+    // For op1, op.completedAt is undefined, so completedAt (the current
     // markOperationTerminal local) is used as the fallback.
     updateOperation.markOperationTerminal(op2.id, { status: 'succeeded' });
 

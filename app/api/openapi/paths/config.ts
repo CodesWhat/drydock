@@ -1,0 +1,618 @@
+import { errorResponse, genericObjectSchema, jsonResponse } from '../common.js';
+
+const configSectionPathParam = {
+  name: 'section',
+  in: 'path',
+  required: true,
+  description:
+    'Configuration section name — any DD_<SECTION>_* prefix present in the merged configuration (e.g. server, watcher, registry, action, notification, auth, agent, store), not a fixed list',
+  schema: { type: 'string' },
+} as const;
+
+// `sections` is a map keyed by whatever top-level DD_* prefixes the merged
+// configuration actually has, not a fixed set of properties — the section
+// set is derived from the environment at request time (app/api/config.ts),
+// so this describes the shape (name -> object) rather than enumerating
+// names that would go stale the moment a deployment sets a section this
+// schema didn't list.
+const effectiveConfigurationSchema = {
+  type: 'object',
+  properties: {
+    file: {
+      type: 'object',
+      properties: {
+        present: { type: 'boolean' },
+        path: { type: 'string' },
+        modifiedAt: { type: 'string' },
+      },
+      required: ['present'],
+      additionalProperties: false,
+    },
+    sections: {
+      type: 'object',
+      description:
+        'Keyed by every top-level DD_<SECTION>_* prefix present in the merged configuration, not a fixed list.',
+      additionalProperties: { ...genericObjectSchema },
+    },
+    sources: {
+      type: 'object',
+      additionalProperties: { type: 'string', enum: ['env', 'file'] },
+    },
+    restartRequired: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['file', 'sections', 'sources', 'restartRequired'],
+  additionalProperties: false,
+} as const;
+
+const validateConfigurationRequestBody = {
+  required: true,
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        description:
+          'Either { "yaml": "<document text>" } or the configuration tree itself, the same shape yaml.parse() would produce.',
+        properties: {
+          yaml: { type: 'string', description: 'Raw drydock.yml document text' },
+        },
+        additionalProperties: true,
+      },
+    },
+  },
+} as const;
+
+const configurationValidationErrorSchema = {
+  type: 'object',
+  properties: {
+    path: { type: 'string', description: 'Dot-separated YAML path' },
+    envKey: { type: 'string', description: 'The DD_*-prefixed env key the same value would carry' },
+    message: { type: 'string' },
+  },
+  required: ['path', 'envKey', 'message'],
+  additionalProperties: false,
+} as const;
+
+const validateConfigurationResponseSchema = {
+  type: 'object',
+  properties: {
+    valid: { type: 'boolean' },
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+    diff: {
+      type: 'object',
+      description:
+        'Keys that would change if this candidate replaced the current file layer, and which sections that implies would reload versus need a restart (spec-7.1-config-file.md section 4.3).',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+  },
+  required: ['valid', 'errors', 'diff'],
+  additionalProperties: false,
+} as const;
+
+const reconcileSummarySchema = {
+  type: 'object',
+  description:
+    'Present only when `applied` is true — the component reconciliation outcome for this reload (roadmap 7.1 slice 6), counted rather than named: how many components were added, changed, removed, left unchanged, or errored while being reconciled to the new configuration.',
+  properties: {
+    added: { type: 'integer' },
+    changed: { type: 'integer' },
+    removed: { type: 'integer' },
+    unchanged: { type: 'integer' },
+    errors: { type: 'integer' },
+  },
+  required: ['added', 'changed', 'removed', 'unchanged', 'errors'],
+  additionalProperties: false,
+} as const;
+
+const orphanedNotificationRuleReferenceSchema = {
+  type: 'object',
+  description:
+    'A DB notification rule whose trigger reference no longer resolves after this reload (spec-7.1-config-file.md section 3/4.3) — the rule itself is never deleted or rewritten, only reported.',
+  properties: {
+    ruleId: { type: 'string' },
+    triggerId: { type: 'string' },
+  },
+  required: ['ruleId', 'triggerId'],
+  additionalProperties: false,
+} as const;
+
+const reloadConfigurationResponseSchema = {
+  type: 'object',
+  properties: {
+    applied: { type: 'boolean' },
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+    diff: {
+      type: 'object',
+      description:
+        'Keys that changed between the previous and newly re-read file, and which sections that implies reloaded versus need a restart (spec-7.1-config-file.md section 4.3).',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+    reconcile: { ...reconcileSummarySchema },
+    orphanedRules: {
+      type: 'array',
+      description:
+        'Present only when `applied` is true — every notification rule reference left orphaned by this reload (a trigger it named was renamed or removed).',
+      items: { ...orphanedNotificationRuleReferenceSchema },
+    },
+  },
+  required: ['applied', 'errors', 'diff'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationSectionRequestBody = {
+  required: true,
+  content: {
+    'application/json': {
+      schema: {
+        ...genericObjectSchema,
+        description:
+          'The section tree to write, the same shape one entry of GET /api/v1/config\'s "sections" map has.',
+      },
+    },
+  },
+} as const;
+
+const writeConfigurationReloadSummarySchema = {
+  type: 'object',
+  description: 'The reload this write triggers (roadmap 7.1 slice 6) — same engine, same shape.',
+  properties: {
+    applied: { type: 'boolean' },
+    diff: {
+      type: 'object',
+      properties: {
+        changed: { type: 'array', items: { type: 'string' } },
+        reload: { type: 'array', items: { type: 'string' } },
+        restart: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['changed', 'reload', 'restart'],
+      additionalProperties: false,
+    },
+    reconcile: { ...reconcileSummarySchema },
+    orphanedRules: {
+      type: 'array',
+      items: { ...orphanedNotificationRuleReferenceSchema },
+    },
+  },
+  required: ['applied', 'diff'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationSectionResponseSchema = {
+  type: 'object',
+  properties: {
+    applied: { type: 'boolean' },
+    section: { type: 'string' },
+    changedKeys: { type: 'array', items: { type: 'string' } },
+    restartRequired: {
+      type: 'boolean',
+      description:
+        'True when this section only takes effect after a restart (spec-7.1-config-file.md section 4.3) — the file was still written.',
+    },
+    reload: { ...writeConfigurationReloadSummarySchema },
+  },
+  required: ['applied', 'section', 'changedKeys', 'restartRequired', 'reload'],
+  additionalProperties: false,
+} as const;
+
+const writeConfigurationInvalidResponseSchema = {
+  type: 'object',
+  properties: {
+    errors: { type: 'array', items: { ...configurationValidationErrorSchema } },
+  },
+  required: ['errors'],
+  additionalProperties: false,
+} as const;
+
+const editScalarSchema = {
+  oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+} as const;
+const editFieldSchema = {
+  type: 'object',
+  properties: {
+    present: { type: 'boolean' },
+    path: { type: 'array', items: { type: 'string' } },
+    value: editScalarSchema,
+    effectiveValue: editScalarSchema,
+    source: { type: 'string', enum: ['file', 'env', 'default', 'reference'] },
+    readOnlyReason: { type: 'string' },
+  },
+  required: ['present', 'source'],
+  additionalProperties: false,
+} as const;
+const watcherEditSnapshotSchema = {
+  type: 'object',
+  properties: {
+    available: { type: 'boolean' },
+    revision: { type: 'string' },
+    readOnlyReason: { type: 'string' },
+    watchers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          agent: { type: 'string' },
+          fields: {
+            type: 'object',
+            properties: {
+              cron: editFieldSchema,
+              maintenancewindow: editFieldSchema,
+              maintenancewindowtz: editFieldSchema,
+              maintenancewindowscope: editFieldSchema,
+            },
+            required: [
+              'cron',
+              'maintenancewindow',
+              'maintenancewindowtz',
+              'maintenancewindowscope',
+            ],
+            additionalProperties: false,
+          },
+        },
+        required: ['id', 'name', 'fields'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['available', 'watchers'],
+  additionalProperties: false,
+} as const;
+const watcherEditOutcomeSchema = {
+  type: 'object',
+  properties: {
+    saved: { type: 'boolean' },
+    applied: { type: 'boolean' },
+    revision: { type: 'string' },
+    changedKeys: { type: 'array', items: { type: 'string' } },
+    restartRequired: { type: 'array', items: { type: 'string' } },
+    errors: { type: 'array', items: configurationValidationErrorSchema },
+    reload: {
+      type: 'object',
+      properties: {
+        applied: { type: 'boolean' },
+        errors: { type: 'array', items: configurationValidationErrorSchema },
+        reconcile: {
+          ...reconcileSummarySchema,
+          description: 'Component reconciliation counts, including incomplete reconciliation.',
+        },
+        orphanedRules: { type: 'array', items: orphanedNotificationRuleReferenceSchema },
+      },
+      required: ['applied', 'errors'],
+      additionalProperties: false,
+    },
+  },
+  required: ['saved', 'applied', 'changedKeys', 'restartRequired', 'errors'],
+  additionalProperties: false,
+} as const;
+
+const watcherEditorPaths = {
+  '/api/v1/config/editor/watchers': {
+    get: {
+      tags: ['System'],
+      summary: 'Get a safe watcher configuration edit snapshot',
+      operationId: 'getWatcherEditSnapshot',
+      description:
+        'Session-only projection of existing watcher cron and maintenance fields. Exact editable YAML paths are returned only for controller-local file-owned fields. Secret references omit both raw and effective values. No file is created when unavailable.',
+      responses: {
+        200: jsonResponse('Watcher edit snapshot', watcherEditSnapshotSchema),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('This route is not reachable with an API key'),
+        429: errorResponse('Config read rate limit exceeded'),
+        500: errorResponse('Unable to read the watcher configuration editor'),
+      },
+    },
+    patch: {
+      tags: ['System'],
+      summary: 'Edit allowlisted watcher configuration leaves',
+      operationId: 'writeWatcherEdits',
+      description:
+        'Admin-only changed-leaf edits guarded by an opaque revision over the actual file bytes. Shares the legacy write queue and preserves untouched YAML nodes. A saved file may have applied:false when reload is incomplete; no rollback is implied. This is not cross-process filesystem locking.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                revision: { type: 'string', pattern: '^[A-Za-z0-9_-]{43}$' },
+                changes: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: 32,
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        properties: {
+                          path: {
+                            type: 'array',
+                            minItems: 3,
+                            maxItems: 5,
+                            items: { type: 'string' },
+                          },
+                          operation: { type: 'string', enum: ['set'] },
+                          value: editScalarSchema,
+                        },
+                        required: ['path', 'operation', 'value'],
+                        additionalProperties: false,
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          path: {
+                            type: 'array',
+                            minItems: 3,
+                            maxItems: 5,
+                            items: { type: 'string' },
+                          },
+                          operation: { type: 'string', enum: ['remove'] },
+                        },
+                        required: ['path', 'operation'],
+                        additionalProperties: false,
+                      },
+                    ],
+                  },
+                },
+              },
+              required: ['revision', 'changes'],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Saved and applied outcomes', watcherEditOutcomeSchema),
+        400: jsonResponse('Invalid request or candidate', watcherEditOutcomeSchema),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        409: jsonResponse(
+          'Stale revision, unavailable file or read-only field',
+          watcherEditOutcomeSchema,
+        ),
+        413: errorResponse('Payload exceeds the global 256kb body limit'),
+        429: errorResponse('Config write rate limit exceeded'),
+        500: jsonResponse('Unable to save before writing', watcherEditOutcomeSchema),
+      },
+    },
+  },
+} as const;
+
+const notificationTriggerSnapshotSchema = {
+  type: 'object',
+  properties: {
+    available: { type: 'boolean' },
+    revision: { type: 'string' },
+    readOnlyReason: { type: 'string' },
+    triggers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string' },
+          name: { type: 'string' },
+          category: { type: 'string', enum: ['notification'] },
+          agent: { type: 'string' },
+          fields: {
+            type: 'object',
+            properties: {
+              threshold: editFieldSchema,
+              once: editFieldSchema,
+              mode: editFieldSchema,
+              securitymode: editFieldSchema,
+              digestcron: editFieldSchema,
+              resolvenotifications: editFieldSchema,
+              securitydigesttitle: editFieldSchema,
+              securitydigestbody: editFieldSchema,
+            },
+            required: [
+              'threshold',
+              'once',
+              'mode',
+              'securitymode',
+              'digestcron',
+              'resolvenotifications',
+            ],
+            additionalProperties: false,
+          },
+        },
+        required: ['id', 'type', 'name', 'category', 'fields'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['available', 'triggers'],
+  additionalProperties: false,
+} as const;
+
+export const configPaths = {
+  ...watcherEditorPaths,
+  '/api/v1/config/editor/actions': {
+    get: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].get,
+      summary: 'Get a safe action policy edit snapshot',
+      operationId: 'getActionEditSnapshot',
+      description:
+        'Session-only projection of auto, order and concurrency for existing action providers. Exact paths are editable only for controller-local file-owned fields. Referenced and remote values are omitted, including inherited referenced concurrency. No credentials, commands or provider execution options are returned.',
+      responses: {
+        ...watcherEditorPaths['/api/v1/config/editor/watchers'].get.responses,
+        200: jsonResponse('Action policy edit snapshot', {
+          type: 'object',
+          properties: {
+            available: { type: 'boolean' },
+            revision: { type: 'string' },
+            readOnlyReason: { type: 'string' },
+            actions: {
+              type: 'array',
+              items: {
+                ...notificationTriggerSnapshotSchema.properties.triggers.items,
+                properties: {
+                  ...notificationTriggerSnapshotSchema.properties.triggers.items.properties,
+                  category: { type: 'string', enum: ['action'] },
+                  fields: {
+                    type: 'object',
+                    properties: {
+                      auto: editFieldSchema,
+                      order: editFieldSchema,
+                      concurrency: editFieldSchema,
+                    },
+                    required: ['auto', 'order', 'concurrency'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+          required: ['available', 'actions'],
+          additionalProperties: false,
+        }),
+        500: errorResponse('Unable to read the action policy editor'),
+      },
+    },
+    patch: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch,
+      summary: 'Edit allowlisted action policy leaves',
+      operationId: 'writeActionEdits',
+      responses: {
+        ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch.responses,
+        500: jsonResponse('Unable to save action policy configuration', {
+          oneOf: [
+            watcherEditOutcomeSchema,
+            errorResponse('Unable to save action policy configuration').content['application/json']
+              .schema,
+          ],
+        }),
+      },
+      description:
+        'Admin-only exact [action, provider, instance, field] set/remove edits for auto, order and concurrency. Shares the watcher, notification and legacy write queue, revision checks, startup Joi validation, atomic writer and saved/applied outcomes. Validation and saving do not execute actions. Reload installs changed instances for future dispatch without bypassing global update mode or container eligibility.',
+    },
+  },
+  '/api/v1/config/editor/triggers': {
+    get: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].get,
+      summary: 'Get a safe notification trigger policy snapshot',
+      operationId: 'getNotificationTriggerEditSnapshot',
+      description:
+        'Session-only projection of eight notification policy fields, including literal digest templates from the file or environment. Action providers are excluded; agents, environment-owned and referenced fields remain read-only. Referenced values, credentials, destinations and unrelated template fields are omitted. Provider-forced settings such as MQTT mode remain read-only, and MQTT digest templates are unsupported.',
+      responses: {
+        ...watcherEditorPaths['/api/v1/config/editor/watchers'].get.responses,
+        200: jsonResponse('Notification policy edit snapshot', notificationTriggerSnapshotSchema),
+        500: errorResponse('Unable to read the notification policy editor'),
+      },
+    },
+    patch: {
+      ...watcherEditorPaths['/api/v1/config/editor/watchers'].patch,
+      summary: 'Edit allowlisted notification trigger policy leaves',
+      operationId: 'writeNotificationTriggerEdits',
+      description:
+        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron, resolvenotifications, securitydigesttitle and securitydigestbody. The two template fields preserve literal scan expressions and whitespace; removal restores renderer defaults, while empty strings are invalid. Whole-scalar environment references and file/alias-owned values are read-only. MQTT does not support security digest templates. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
+    },
+  },
+  '/api/v1/config': {
+    get: {
+      tags: ['System'],
+      summary: 'Get the effective, redacted configuration',
+      description:
+        'Returns the merged env+file configuration (roadmap 7.1 slice 4), with every value carrying its source (env or file) and every secret redacted the same way "config export" redacts one. Session-only: never reachable with an API key, matching the debug dump and the container env reveal.',
+      operationId: 'getEffectiveConfiguration',
+      responses: {
+        200: jsonResponse('Effective configuration', { ...effectiveConfigurationSchema }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('This route is not reachable with an API key'),
+        429: errorResponse('Config read rate limit exceeded'),
+        500: errorResponse('Unable to build the effective configuration'),
+      },
+    },
+  },
+  '/api/v1/config/{section}': {
+    get: {
+      tags: ['System'],
+      summary: 'Get one section of the effective, redacted configuration',
+      description:
+        'Same payload as one entry of GET /api/v1/config\'s "sections" map, scoped to a single section named by the path parameter.',
+      operationId: 'getEffectiveConfigurationSection',
+      parameters: [configSectionPathParam],
+      responses: {
+        200: jsonResponse('Effective configuration section', { ...genericObjectSchema }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('This route is not reachable with an API key'),
+        404: errorResponse('Unknown configuration section'),
+        429: errorResponse('Config read rate limit exceeded'),
+        500: errorResponse('Unable to build the effective configuration'),
+      },
+    },
+    put: {
+      tags: ['System'],
+      summary: 'Write a configuration section through the file',
+      description:
+        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched.',
+      operationId: 'writeConfigurationSection',
+      parameters: [configSectionPathParam],
+      requestBody: writeConfigurationSectionRequestBody,
+      responses: {
+        200: jsonResponse('Write result', { ...writeConfigurationSectionResponseSchema }),
+        400: jsonResponse('Invalid candidate section', {
+          ...writeConfigurationInvalidResponseSchema,
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        409: errorResponse(
+          'No configuration file exists, a key in this section is sourced from the environment, or this section is DB-owned',
+        ),
+        413: errorResponse(
+          'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
+        ),
+        429: errorResponse('Config write rate limit exceeded'),
+        500: errorResponse('Unable to write the configuration section'),
+      },
+    },
+  },
+  '/api/v1/config/validate': {
+    post: {
+      tags: ['System'],
+      summary: 'Validate a candidate configuration without applying it',
+      description:
+        'Runs the candidate document through the same flatten/interpolate/validate path real startup and "config validate" use (roadmap 7.1 slice 5), merged beneath the real environment (env still wins). Touches no disk, applies nothing, and constructs no component beyond schema validation.',
+      operationId: 'validateCandidateConfiguration',
+      requestBody: validateConfigurationRequestBody,
+      responses: {
+        200: jsonResponse('Validation result', { ...validateConfigurationResponseSchema }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        413: errorResponse(
+          'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
+        ),
+        429: errorResponse('Config validate rate limit exceeded'),
+        500: errorResponse('Unable to validate the candidate configuration'),
+      },
+    },
+  },
+  '/api/v1/config/reload': {
+    post: {
+      tags: ['System'],
+      summary: 'Re-read the configuration file and reconcile components against it',
+      description:
+        'Re-reads drydock.yml, validates the merged result exactly like /validate, and — only on success — reconciles registered components by difference against the new desired state (roadmap 7.1 slice 6, spec-7.1-config-file.md section 4.3). A restart-only key (server port, store path, log settings, and other module-load-read values) is reported in diff.restart but never applied; refuses the whole reload on any validation error, applying nothing.',
+      operationId: 'reloadEffectiveConfiguration',
+      responses: {
+        200: jsonResponse('Reload result', { ...reloadConfigurationResponseSchema }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        429: errorResponse('Config reload rate limit exceeded'),
+        500: errorResponse('Unable to reload the configuration'),
+      },
+    },
+  },
+} as const;

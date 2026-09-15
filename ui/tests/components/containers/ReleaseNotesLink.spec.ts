@@ -497,6 +497,29 @@ describe('ReleaseNotesLink', () => {
     wrapper.unmount();
   });
 
+  it('preserves focus restoration when opening the fallback release link', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseLink: 'https://github.com/example/repo/releases', iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    try {
+      const trigger = wrapper.get<HTMLButtonElement>('[data-test="release-link"]');
+      await trigger.trigger('click');
+      const link = document.body.querySelector<HTMLAnchorElement>('[data-test="release-link-row"]');
+      if (!link) throw new Error('Missing fallback release link');
+      link.focus();
+      expect(document.activeElement).toBe(link);
+      link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      link.click();
+      await nextTick();
+      expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+      expect(document.activeElement).toBe(trigger.element);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it('returns focus to the icon trigger after the close button closes the popover', async () => {
     const wrapper = mount(ReleaseNotesLink, {
       props: { releaseNotes: sampleNotes, iconOnly: true },
@@ -767,27 +790,38 @@ describe('ReleaseNotesLink', () => {
     }
   });
 
-  it('does not propagate icon-trigger or popover clicks to container rows', async () => {
-    const bodyClick = vi.fn();
-    document.body.addEventListener('click', bodyClick);
-    const wrapper = mount(ReleaseNotesLink, {
-      props: { releaseNotes: sampleNotes, iconOnly: true },
-      global: globalConfig,
-      attachTo: document.body,
-    });
+  it.each(['structured', 'fallback'])(
+    'does not propagate %s icon-trigger or popover clicks to container rows',
+    async (variant) => {
+      const structured = variant === 'structured';
+      const bodyClick = vi.fn();
+      const wrapper = mount(ReleaseNotesLink, {
+        props: structured
+          ? { releaseNotes: sampleNotes, iconOnly: true }
+          : { releaseLink: 'https://example.com/releases', iconOnly: true },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+      document.body.addEventListener('click', bodyClick);
+      try {
+        await wrapper
+          .get(structured ? '[data-test="release-notes-link"]' : '[data-test="release-link"]')
+          .trigger('click');
+        await nextTick();
+        const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+        expect(popover).not.toBeNull();
+        if (!popover) throw new Error('Missing release notes popover');
+        popover.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await nextTick();
 
-    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
-    await nextTick();
-    document.body
-      .querySelector('[data-test="release-notes-popover"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await nextTick();
-
-    document.body.removeEventListener('click', bodyClick);
-    expect(bodyClick).not.toHaveBeenCalled();
-
-    wrapper.unmount();
-  });
+        expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBe(popover);
+        expect(bodyClick).not.toHaveBeenCalled();
+      } finally {
+        document.body.removeEventListener('click', bodyClick);
+        wrapper.unmount();
+      }
+    },
+  );
 
   it('pressing a non-Escape key does not close the popover', async () => {
     const wrapper = mount(ReleaseNotesLink, {
@@ -1026,6 +1060,43 @@ describe('ReleaseNotesLink', () => {
       expect(badge.exists()).toBe(true);
       expect(badge.text()).toContain('3');
     });
+
+    it.each([
+      { iconOnly: false, count: 1, text: '1 older release not shown' },
+      { iconOnly: false, count: 3, text: '3 older releases not shown' },
+      { iconOnly: true, count: 1, text: '1 older release not shown' },
+      { iconOnly: true, count: 3, text: '3 older releases not shown' },
+    ])(
+      'renders the complete hidden-release plural for $count in icon mode $iconOnly',
+      async ({ iconOnly, count, text }) => {
+        vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+          releaseNotes: [intermediateNote1],
+          hiddenCount: count,
+        });
+        const wrapper = mount(ReleaseNotesLink, {
+          props: {
+            releaseNotes: sampleNotes,
+            containerId: 'c1',
+            fromTag: 'v1.8.0',
+            toTag: 'v2.0.0',
+            iconOnly,
+          },
+          global: globalConfig,
+          attachTo: document.body,
+        });
+        try {
+          if (iconOnly) await wrapper.get('[data-test="release-notes-link"]').trigger('click');
+          await flushPromises();
+          expect(
+            document.body
+              .querySelector('[data-test="intermediate-older-hidden"]')
+              ?.textContent?.trim(),
+          ).toBe(text);
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
 
     it('hiddenCount = 0 → no older-hidden badge', async () => {
       vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({

@@ -6,7 +6,7 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
 
 ## How contributions work
 
-Drydock maintains strict quality gates (100% code coverage, multi-stage CI pipeline, mutation testing). **You don't need to worry about any of that.** Here's how it works:
+Drydock maintains strict quality gates (100% configured TypeScript coverage, measured Vue SFC coverage floors, multi-stage CI pipeline, mutation testing). **You don't need to worry about any of that.** Here's how it works:
 
 1. **You write the code** — focus on the feature or fix itself
 2. **Open a PR** — even if it's rough, incomplete, or has no tests
@@ -69,6 +69,7 @@ npm run lint:fix                        # Auto-fix formatting
 
 ```bash
 npm run serve                           # Dev server on port 8080
+npm run typecheck                       # TypeScript and Vue SFC scripts/templates
 npx vitest run tests/path/to/file.spec.ts   # Single test file
 npm run lint:fix                        # Auto-fix formatting
 ```
@@ -80,7 +81,7 @@ docker build -t drydock:dev .
 docker compose -f test/qa-compose.yml up -d   # Starts on port 3333
 ```
 
-You don't need to run the full test suite, coverage gates, or e2e tests locally. Just make sure your code compiles (`npm run build`) and your specific tests pass. The maintainer handles the rest.
+You don't need to run the full test suite, coverage gates, or e2e tests locally. Just make sure your code builds (`npm run build`), UI changes pass `npm run typecheck`, and your specific tests pass. The UI build bundles code without type-checking it. The maintainer handles the rest.
 
 ## Architecture overview
 
@@ -159,7 +160,7 @@ Don't stress about getting the format perfect — the commit-msg hook will tell 
 
 ## Testing (optional for contributors)
 
-Tests are welcome but **not required** in your PR. The maintainer will add or update tests to maintain 100% coverage.
+Tests are welcome but **not required** in your PR. The maintainer will add or update tests to meet the configured coverage thresholds.
 
 If you do want to write tests:
 
@@ -217,20 +218,22 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 5 | `qlty-smells` | Code smell advisory scan (non-blocking) | Advisory |
 | 6 | `scripts-test` | Repository maintenance script tests | Fail |
 | 7 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
-| 8 | `typecheck-ui` | Vue/TypeScript type checking | Fail |
+| 8 | `typecheck-ui` | TypeScript and Vue SFC script/template checks via `vue-tsc` | Fail |
 | 9 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
-| 10 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
+| 10 | `coverage` | Sharded app+ui parallel vitest with configured TS and SFC thresholds | Fail |
 | 11 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
 | 12 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
 | 13 | `zizmor` | GitHub Actions security scanning when available | Fail |
 
-The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
+The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. Coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`. This is an uncovered-source inventory; Vitest's configured aggregate thresholds determine failure, not the presence of an individual SFC in that report.
 
 E2E Cucumber API/stream contracts and the dedicated Playwright browser tests are intentionally not part of the local pre-push hook; they run in CI on the same commit. Browser navigation and rendering assertions belong in Playwright, not Cucumber.
 
 ### Coverage policy
 
-100% line/branch/function/statement coverage is enforced for both `app/` and `ui/`. This is achievable because the project uses AI-assisted development for test generation. External contributors are not expected to meet this bar.
+100% line/branch/function/statement coverage remains enforced for configured backend sources and UI `src/**/*.ts`. Every UI `src/**/*.vue`, including unimported components, is also measured, with separate aggregate floors of 87.54% statements, 81.57% branches, 84.39% functions and 87.89% lines. These floors come from the measured full-suite baseline and should increase as coverage improves; they are not per-file thresholds. Existing exclusions for typecheck fixtures, declarations, types directories and dependencies remain unchanged.
+
+SFC instrumentation includes script and generated-template mappings, not a claim of complete behavioral assertions. Component tests exercise SFC behavior; `npm run typecheck` separately uses `vue-tsc` to check scripts and templates. Runtime coverage, type checking and mutation testing answer different questions. External contributors are not expected to meet the coverage thresholds.
 
 ### Mutation testing
 

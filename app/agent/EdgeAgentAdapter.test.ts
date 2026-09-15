@@ -1,12 +1,22 @@
+import { spawn } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
+import { once } from 'node:events';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { WebSocketServer } from 'ws';
 /**
  * Tests for EdgeAgentAdapter frame dispatch.
  */
 import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import * as registry from '../registry/index.js';
+import * as ids from '../util/uuid.js';
 import { AgentClient } from './AgentClient.js';
 import {
   buildEdgeSentinelConfig,
   EdgeAgentAdapter,
+  type EdgeAgentAdapterOptions,
   type HelloMessage,
   type WebSocketLike,
 } from './EdgeAgentAdapter.js';
@@ -149,7 +159,7 @@ function createHello(overrides: Partial<HelloMessage> = {}): HelloMessage {
   };
 }
 
-function createAdapter(hello?: Partial<HelloMessage>, options: { reconnected?: boolean } = {}) {
+function createAdapter(hello?: Partial<HelloMessage>, options: EdgeAgentAdapterOptions = {}) {
   const ws = createMockWs();
   const helloMsg = createHello(hello);
   const client = new AgentClient(`portwing-edge-${helloMsg.agentId}`, {
@@ -164,6 +174,157 @@ function createAdapter(hello?: Partial<HelloMessage>, options: { reconnected?: b
 function sendFrame(ws: ReturnType<typeof createMockWs>, type: string, data: unknown) {
   ws.emit('message', JSON.stringify({ type, data }));
 }
+
+describe('EdgeAgentAdapter — retired proxy admission', () => {
+  test.each([
+    { method: 'sendRequest', supported: false },
+    { method: 'sendRequest', supported: true },
+    { method: 'sendStreamRequest', supported: false },
+    { method: 'sendStreamRequest', supported: true },
+  ] as const)(
+    '$method rejects retired binary requests before capability checks (supported=$supported)',
+    async ({ method, supported }) => {
+      vi.useFakeTimers();
+      const { adapter, ws } = createAdapter(undefined, {
+        capabilities: supported ? ['edge-request-body-stream'] : [],
+      });
+      const allocateId = vi.spyOn(ids, 'uuidv7');
+      try {
+        adapter.activate();
+        await adapter.onDisconnect();
+        vi.mocked(ws.send).mockClear();
+        allocateId.mockClear();
+        const timersBefore = vi.getTimerCount();
+        await expect(adapter[method]('POST', '/build', {}, Buffer.from([255]))).rejects.toThrow(
+          'connection closed',
+        );
+        expect(allocateId).not.toHaveBeenCalled();
+        expect(ws.send).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(timersBefore);
+        expect(adapter['pendingRequests'].size).toBe(0);
+        expect(adapter['uploadingBytes']).toBe(0);
+      } finally {
+        await adapter.onDisconnect();
+        allocateId.mockRestore();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test.each(['requestContainerLogs', 'deleteContainer', 'startExec'] as const)(
+    '%s rejects after disconnect without allocating request state',
+    async (method) => {
+      vi.useFakeTimers();
+      const { adapter, ws } = createAdapter();
+      const allocateId = vi.spyOn(ids, 'uuidv7');
+      const state = adapter as unknown as {
+        pendingRequests: Map<string, unknown>;
+        containerRequestQueues: Map<string, unknown>;
+        execSessions: Map<string, unknown>;
+      };
+      try {
+        adapter.activate();
+        await adapter.onDisconnect();
+        vi.mocked(ws.send).mockClear();
+        allocateId.mockClear();
+        const timersBefore = vi.getTimerCount();
+        const request =
+          method === 'startExec' ? adapter.startExec('c1', ['true']) : adapter[method]('c1');
+        const result = request.catch((error: Error) => error);
+        expect(ws.send).not.toHaveBeenCalled();
+        expect(allocateId).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(timersBefore);
+        expect(state.pendingRequests.size).toBe(0);
+        expect(state.containerRequestQueues.size).toBe(0);
+        expect(state.execSessions.size).toBe(0);
+        await expect(result).resolves.toMatchObject({ message: 'connection closed' });
+
+        // Retirement takes precedence over the live connection's capacity errors.
+        for (let index = 0; index < 100; index++) {
+          state.pendingRequests.set(String(index), {});
+          state.execSessions.set(String(index), {});
+        }
+        const fullRequest =
+          method === 'startExec' ? adapter.startExec('c1', ['true']) : adapter[method]('c1');
+        await expect(fullRequest).rejects.toThrow('connection closed');
+        expect(allocateId).not.toHaveBeenCalled();
+      } finally {
+        state.pendingRequests.clear();
+        state.containerRequestQueues.clear();
+        state.execSessions.clear();
+        allocateId.mockRestore();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test('retired log streams synchronously report one error and return an inert cancel handle', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    const allocateId = vi.spyOn(ids, 'uuidv7');
+    const state = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+      liveContainerLogStreams: Map<string, unknown>;
+    };
+    const handlers = { onChunk: vi.fn(), onEnd: vi.fn(), onError: vi.fn() };
+    try {
+      adapter.activate();
+      await adapter.onDisconnect();
+      vi.mocked(ws.send).mockClear();
+      allocateId.mockClear();
+      const timersBefore = vi.getTimerCount();
+      const handle = adapter.streamContainerLogs('c1', {}, handlers);
+      expect(handlers.onError).toHaveBeenCalledExactlyOnceWith(new Error('connection closed'));
+      handle.cancel();
+      handle.cancel();
+      await adapter.onDisconnect();
+      expect(handlers.onError).toHaveBeenCalledTimes(1);
+      expect(handlers.onChunk).not.toHaveBeenCalled();
+      expect(handlers.onEnd).not.toHaveBeenCalled();
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(allocateId).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(timersBefore);
+      expect(state.pendingRequests.size).toBe(0);
+      expect(state.liveContainerLogStreams.size).toBe(0);
+
+      for (let index = 0; index < 100; index++) state.pendingRequests.set(String(index), {});
+      const fullHandlers = { onChunk: vi.fn(), onEnd: vi.fn(), onError: vi.fn() };
+      adapter.streamContainerLogs('c1', {}, fullHandlers).cancel();
+      expect(fullHandlers.onError).toHaveBeenCalledExactlyOnceWith(new Error('connection closed'));
+      expect(allocateId).not.toHaveBeenCalled();
+    } finally {
+      state.pendingRequests.clear();
+      state.liveContainerLogStreams.clear();
+      allocateId.mockRestore();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  test.each(['sendRequest', 'sendStreamRequest'] as const)(
+    '%s rejects after disconnect without creating a timer or sending a frame',
+    async (method) => {
+      vi.useFakeTimers();
+      const { adapter, ws } = createAdapter();
+      try {
+        adapter.activate();
+        await adapter.onDisconnect();
+        vi.mocked(ws.send).mockClear();
+        const timersBefore = vi.getTimerCount();
+        const result = adapter[method]('GET', '/containers/json').catch((error: Error) => error);
+        expect(ws.send).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(timersBefore);
+        await expect(result).resolves.toMatchObject({ message: 'connection closed' });
+      } finally {
+        await adapter.onDisconnect();
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
+});
 
 describe('EdgeAgentAdapter — activate', () => {
   beforeEach(() => {
@@ -212,7 +373,13 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     expect(
       (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
-    ).toHaveBeenCalledWith(watchers, triggers);
+    ).toHaveBeenCalledWith(watchers, triggers, expect.any(Function));
+    const isOwnerValid = vi.mocked(client.handleComponentSync).mock.calls[0][2];
+    expect(isOwnerValid?.()).toBe(true);
+    vi.mocked(manager.getAgent).mockReturnValueOnce(undefined);
+    expect(isOwnerValid?.()).toBe(false);
+    await adapter.onDisconnect();
+    expect(isOwnerValid?.()).toBe(false);
   });
 
   test('serializes component sync before the following container sync in wire order', async () => {
@@ -2729,7 +2896,7 @@ describe('EdgeAgentAdapter — false-branch coverage for ternary fallbacks', () 
 
     expect(
       (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
-    ).toHaveBeenCalledWith([], []);
+    ).toHaveBeenCalledWith([], [], expect.any(Function));
   });
 
   test('metrics frame with zero memoryTotal and zero uptime uses fallback values', async () => {
@@ -3516,3 +3683,300 @@ describe('EdgeAgentAdapter — terminate (Fix 2: revoke-path zombie frame)', () 
     expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
   });
 });
+
+describe('binary request body uploads', () => {
+  test('sends exact bytes in bounded chunks after each write completes', async () => {
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, {
+      capabilities: ['edge-request-body-stream'],
+    });
+    const callbacks: Array<(error?: Error) => void> = [];
+    vi.mocked(ws.send).mockImplementation((data, callback) => {
+      ws.sentMessages.push(data);
+      if (callback) callbacks.push(callback);
+    });
+    const body = Buffer.alloc(65537, 255);
+    const result = adapter.sendRequest('POST', '/containers/x/archive', {}, body);
+    expect(JSON.parse(ws.sentMessages[0]).data).toMatchObject({ bodyStream: true });
+    expect(JSON.parse(ws.sentMessages[0]).data).not.toHaveProperty('body');
+    expect(ws.sentMessages).toHaveLength(1);
+    for (let i = 0; i < 5; i++) {
+      callbacks.shift()?.();
+      await Promise.resolve();
+    }
+    const frames = ws.sentMessages.map((frame) => JSON.parse(frame));
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'request',
+      'stream',
+      'stream',
+      'stream',
+      'stream_end',
+    ]);
+    expect(
+      Buffer.concat(
+        frames
+          .filter((frame) => frame.type === 'stream')
+          .map((frame) => Buffer.from(frame.data.data, 'base64')),
+      ),
+    ).toEqual(body);
+    await adapter['onMessage'](
+      JSON.stringify({
+        type: 'response',
+        data: { requestId: frames[0].data.requestId, statusCode: 200 },
+      }),
+    );
+    await expect(result).resolves.toMatchObject({ statusCode: 200 });
+  });
+
+  test('binary uploads use the streaming response correlation path', async () => {
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, {
+      capabilities: ['edge-request-body-stream'],
+    });
+    vi.mocked(ws.send).mockImplementation((frame, callback) => {
+      ws.sentMessages.push(frame);
+      callback?.();
+    });
+    const promise = adapter.sendStreamRequest('POST', '/build', {}, Buffer.from([255]));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const requestId = JSON.parse(ws.sentMessages[0]).data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({ type: 'response', data: { requestId, statusCode: 200, isStream: true } }),
+    );
+    await adapter['onMessage'](
+      JSON.stringify({
+        type: 'stream',
+        data: { requestId, data: Buffer.from('built').toString('base64') },
+      }),
+    );
+    await adapter['onMessage'](JSON.stringify({ type: 'stream_end', data: { requestId } }));
+    await expect(promise).resolves.toMatchObject({ statusCode: 200, body: Buffer.from('built') });
+  });
+
+  test('rejects binary bodies without capability before emitting a frame', async () => {
+    const { adapter, ws } = createAdapter();
+    await expect(adapter.sendRequest('POST', '/build', {}, Buffer.from([255]))).rejects.toThrow(
+      'does not support',
+    );
+    expect(ws.sentMessages).toHaveLength(0);
+  });
+});
+
+describe('upload interruption and resource limits', () => {
+  afterEach(() => vi.useRealTimers());
+  function uploadAdapter() {
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, {
+      capabilities: ['edge-request-body-stream'],
+    });
+    const callbacks: Array<(error?: Error) => void> = [];
+    vi.mocked(ws.send).mockImplementation((data, callback) => {
+      ws.sentMessages.push(data);
+      if (callback) callbacks.push(callback);
+    });
+    return { adapter, ws, callbacks };
+  }
+  test('times out a stalled write, releases bytes, and never sends stream_end', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, callbacks } = uploadAdapter();
+    const promise = adapter.sendRequest('POST', '/build', {}, Buffer.from([255]));
+    const rejected = expect(promise).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(30000);
+    await rejected;
+    callbacks.shift()?.();
+    await Promise.resolve();
+    expect(ws.sentMessages.map((s) => JSON.parse(s).type)).toEqual(['request', 'error']);
+    expect(JSON.parse(ws.sentMessages[1]).data.code).toBe('request-cancelled');
+    expect(adapter['uploadingBytes']).toBe(0);
+    expect(adapter['pendingRequests'].size).toBe(0);
+  });
+  test('starts response inactivity timing when the terminal write completes', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, callbacks } = uploadAdapter();
+    const promise = adapter.sendRequest('POST', '/containers/create', {}, Buffer.from([1]));
+    let settled = false;
+    const observed = promise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    callbacks.shift()?.();
+    await Promise.resolve();
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(29000);
+    callbacks.shift()?.();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(settled).toBe(false);
+    const requestId = JSON.parse(ws.sentMessages[0]).data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({ type: 'response', data: { requestId, statusCode: 200 } }),
+    );
+    await observed;
+  });
+
+  test('a terminal callback after the response cannot restart its timer', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, callbacks } = uploadAdapter();
+    const promise = adapter.sendRequest('POST', '/containers/create', {}, Buffer.from([1]));
+    callbacks.shift()?.();
+    await Promise.resolve();
+    callbacks.shift()?.();
+    await Promise.resolve();
+    const requestId = JSON.parse(ws.sentMessages[0]).data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({ type: 'response', data: { requestId, statusCode: 200 } }),
+    );
+    await promise;
+    callbacks.shift()?.();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each(['response', 'error'])('stops writing after an early %s', async (type) => {
+    const { adapter, ws, callbacks } = uploadAdapter();
+    const promise = adapter.sendRequest('POST', '/build', {}, Buffer.from([255]));
+    const settled = promise.catch((error) => error);
+    const requestId = JSON.parse(ws.sentMessages[0]).data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({ type, data: { requestId, statusCode: 413, message: 'rejected' } }),
+    );
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await settled;
+    expect(ws.sentMessages.some((s) => JSON.parse(s).type === 'stream_end')).toBe(false);
+    expect(adapter['uploadingBytes']).toBe(0);
+  });
+  test('disconnect rejects upload and late callbacks cannot write', async () => {
+    const { adapter, ws, callbacks } = uploadAdapter();
+    const promise = adapter.sendRequest('POST', '/build', {}, Buffer.from([255]));
+    const rejected = expect(promise).rejects.toThrow('connection closed');
+    await adapter['onDisconnect']();
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await rejected;
+    expect(ws.sentMessages).toHaveLength(1);
+    expect(adapter['uploadingBytes']).toBe(0);
+    await expect(adapter.sendRequest('POST', '/build', {}, Buffer.from([1]))).rejects.toThrow(
+      'connection closed',
+    );
+  });
+  test.each(['callback', 'throw'])('cleans up a %s write failure', async (mode) => {
+    const { adapter, ws, callbacks } = uploadAdapter();
+    if (mode === 'throw')
+      vi.mocked(ws.send).mockImplementation(() => {
+        throw new Error('write failed');
+      });
+    const promise = adapter.sendRequest('POST', '/build', {}, Buffer.from([255]));
+    const rejected = expect(promise).rejects.toThrow('write failed');
+    if (mode === 'callback') callbacks.shift()?.(new Error('write failed'));
+    await rejected;
+    expect(adapter['uploadingBytes']).toBe(0);
+    expect(adapter['pendingRequests'].size).toBe(0);
+  });
+  test('rejects oversize and aggregate bodies before writes', async () => {
+    const { adapter, ws } = uploadAdapter();
+    const body = Buffer.from([1]);
+    Object.defineProperty(body, 'length', { value: 512 * 1024 * 1024 + 1 });
+    await expect(adapter.sendRequest('POST', '/build', {}, body)).rejects.toThrow('512 MiB');
+    adapter['uploadingBytes'] = 512 * 1024 * 1024;
+    await expect(adapter.sendRequest('POST', '/build', {}, Buffer.from([1]))).rejects.toThrow(
+      'concurrent upload',
+    );
+    expect(ws.sentMessages).toHaveLength(0);
+  });
+});
+
+test.skipIf(!process.env.PORTWING_BINARY)(
+  'streams binary bytes through the real Go Portwing receiver',
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pw-'));
+    const privatePath = join(dir, 'key.pem');
+    const socketPath = join(dir, 'docker.sock');
+    const { privateKey } = generateKeyPairSync('ed25519');
+    await writeFile(privatePath, privateKey.export({ type: 'pkcs8', format: 'pem' }), {
+      mode: 0o600,
+    });
+    const original = Buffer.alloc(128 * 1024 + 3);
+    for (let i = 0; i < original.length; i++) original[i] = i % 256;
+    let received: Buffer | undefined;
+    const docker = createServer(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url?.includes('/build')) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(Buffer.from(chunk));
+        received = Buffer.concat(chunks);
+        res.end('{"stream":"built"}\n');
+      } else if (req.url?.includes('/version')) res.end('{"Version":"27.0.0","ApiVersion":"1.47"}');
+      else if (req.url?.includes('/containers/json')) res.end('[]');
+      else res.end('{}');
+    });
+    docker.listen(socketPath);
+    await once(docker, 'listening');
+    const gateway = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await once(gateway, 'listening');
+    const address = gateway.address();
+    if (typeof address === 'string' || !address) throw new Error('missing gateway address');
+    const connection = once(gateway, 'connection', { signal: AbortSignal.timeout(10000) });
+    const agent = spawn(process.env.PORTWING_BINARY!, [], {
+      env: {
+        ...process.env,
+        DRYDOCK_URL: `http://127.0.0.1:${address.port}`,
+        ALLOW_INSECURE_EDGE_URL: 'true',
+        PRIVATE_KEY_FILE: privatePath,
+        DOCKER_SOCKET: socketPath,
+        PORT: '0',
+        ADAPTER: 'generic',
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    agent.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    try {
+      const [ws] = await connection;
+      const [rawHello] = await once(ws, 'message');
+      const hello = JSON.parse(String(rawHello)).data;
+      expect(hello.capabilities).toContain('edge-request-body-stream');
+      ws.send(
+        JSON.stringify({
+          type: 'welcome',
+          data: { pollInterval: 60, capabilities: ['edge-response-body-b64'] },
+        }),
+      );
+      const { client } = createAdapter();
+      const adapter = new EdgeAgentAdapter(client, ws, { capabilities: hello.capabilities });
+      ws.on('message', (raw: unknown) => void adapter['onMessage'](String(raw)));
+      const response = await adapter.sendStreamRequest(
+        'POST',
+        '/build',
+        { 'Content-Type': 'application/x-tar' },
+        original,
+      );
+      expect(received).toEqual(original);
+      expect(response).toMatchObject({
+        statusCode: 200,
+        body: Buffer.from('{"stream":"built"}\n'),
+      });
+    } catch (error) {
+      throw new Error(`Portwing interop failed: ${String(error)}; agent stderr: ${stderr}`);
+    } finally {
+      if (agent.exitCode === null && agent.signalCode === null) {
+        const exited = once(agent, 'exit', { signal: AbortSignal.timeout(5000) });
+        agent.kill('SIGTERM');
+        await exited;
+      }
+      for (const ws of gateway.clients) ws.terminate();
+      await new Promise<void>((resolve) => gateway.close(() => resolve()));
+      docker.closeAllConnections();
+      await new Promise<void>((resolve) => docker.close(() => resolve()));
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  15000,
+);

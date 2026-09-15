@@ -499,20 +499,26 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
 });
 
-test('triggerBatch should limit concurrent container updates to 3', async () => {
+test('triggerBatch limits concurrent container updates to the configured concurrency', async () => {
+  docker.configuration = { ...configurationValid, concurrency: 3 };
   const containers = Array.from({ length: 8 }, (_, index) => ({ name: `c${index}` }));
   let inFlight = 0;
   let maxInFlight = 0;
-  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
-    inFlight += 1;
-    maxInFlight = Math.max(maxInFlight, inFlight);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    inFlight -= 1;
-  });
+  // The concurrency gate lives inside trigger(), around the call to
+  // runContainerUpdateLifecycle() — spy there so the semaphore acquire/
+  // release actually runs, unlike spying on trigger() itself.
+  const lifecycleSpy = vi
+    .spyOn(docker, 'runContainerUpdateLifecycle')
+    .mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+    });
 
   await docker.triggerBatch(containers);
 
-  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
   expect(maxInFlight).toBeLessThanOrEqual(3);
 });
 

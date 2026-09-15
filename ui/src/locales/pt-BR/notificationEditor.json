@@ -1,0 +1,25 @@
+{
+  "notificationEditor": {
+    "title": "Política de notificações",
+    "edit": "Editar política de notificações",
+    "boundary": "Edite a política de entrega e os modelos de resumo de segurança. Salvar não testa o gatilho nem envia notificações. Credenciais, destinos e configurações de execução permanecem somente leitura.",
+    "providerForced": "Este valor é controlado pelo provedor e não pode ser editado aqui.",
+    "triggerUnavailable": "Este gatilho de notificação exato não está disponível no retrato do editor.",
+    "apiUnavailable": "Este servidor não oferece a API do editor de políticas de notificações.",
+    "fields": {
+      "threshold": "Limite de atualização",
+      "once": "Notificar apenas uma vez",
+      "mode": "Modo de envio",
+      "securitymode": "Modo de envio de segurança",
+      "digestcron": "Agendamento do resumo (cron)",
+      "resolvenotifications": "Enviar notificações de resolução",
+      "securitydigesttitle": "Título do resumo de segurança",
+      "securitydigestbody": "Corpo do resumo de segurança"
+    },
+    "templateHelp": "Remover um modelo restaura os padrões integrados durante a renderização. Os modelos não podem ficar vazios. Editar um modelo não altera o modo de entrega de segurança.",
+    "templateUnavailable": "Este servidor não fornece este campo de modelo.",
+    "templateEmpty": "Os modelos não podem ficar vazios. Insira texto ou remova explicitamente o valor do arquivo.",
+    "providerUnsupported": "Este provedor não oferece suporte a modelos de resumo de segurança.",
+    "interpolationHelp": "Valores inteiros como {reference} ou {fallback} usam interpolação de variáveis de ambiente YAML e tornam-se somente leitura após recarregar. Expressões de varredura como {expression} continuam editáveis. Não coloque segredos nos modelos."
+  }
+}

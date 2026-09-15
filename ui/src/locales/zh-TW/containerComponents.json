@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "代理程式清單無法使用，部分已設定的代理程式可能未顯示。",
+      "title": "叢集健康狀態",
+      "description": "顯示整個叢集的狀態。重新整理清單僅探索容器，不檢查映像倉庫或執行更新。",
+      "reload": "重新載入狀態",
+      "refresh": "重新整理清單",
+      "configured": "已設定",
+      "connected": "已連線",
+      "disconnected": "已中斷連線",
+      "unavailable": "無法使用",
+      "agentUnavailable": "代理程式狀態無法使用，保留的資料可能已過期。",
+      "watcherUnavailable": "監看器中繼資料無法使用，保留的資料可能已過期。",
+      "total": "{count} 個容器",
+      "lastKnown": "上次已知狀態",
+      "lastSeen": "上次上線：{value}",
+      "unsupported": "所有目標都需要支援清單重新整理的 Docker 監看器。",
+      "complete": "清單完整",
+      "partial": "清單不完整",
+      "reloadFailed": "容器清單重新載入失敗，仍可查看探索結果。"
+    },
+    "fleetBulk": {
+      "label": "篩選後的叢集操作",
+      "updateAll": "全部更新（{count}）",
+      "snoozePatch": "延後所有修補候選",
+      "patchCount": "{count} 個修補候選",
+      "duration": "延後時長",
+      "days": "{count} 天",
+      "untilDate": "直到日期",
+      "date": "延後至此日期結束",
+      "snoozeConfirm": "延後 {count} 個修補候選？",
+      "snoozeScope": "這些容器目前有修補候選。將所列容器的所有更新延後 {duration}，不只是修補更新。範圍為篩選後的即時清單，而非核取方塊選取項目。日期包含當地時間當天結束。",
+      "snoozeResult": "已延後：{succeeded}。失敗：{failed}。",
+      "refreshFailed": "原則已儲存，但清單重新整理失敗。請重新載入清單。",
+      "disabled": "容器操作已停用。未變更原則。",
+      "invalid": "延後時長無效。未變更原則。",
+      "busy": "其他操作正在進行。未額外變更原則。"
+    },
+    "fleetDimensions": {
+      "groupBy": "分組依據",
+      "none": "不分組",
+      "agent": "代理程式",
+      "registry": "映像倉庫",
+      "status": "狀態",
+      "tagType": "標籤類型",
+      "label": "容器標籤",
+      "groupLabel": "依容器標籤鍵分組",
+      "allAgents": "所有代理程式",
+      "allRegistries": "所有倉庫位址",
+      "all": "所有標籤類型",
+      "specific": "精確標籤",
+      "floating": "浮動標籤",
+      "digest": "摘要固定",
+      "semver": "版本標籤",
+      "tag": "非版本標籤",
+      "unknown": "未知",
+      "local": "本機監視器",
+      "running": "執行中",
+      "stopped": "已停止",
+      "labelKey": "容器標籤鍵",
+      "labelMatch": "比對方式",
+      "labelValue": "容器標籤值",
+      "exists": "包含標籤",
+      "equals": "等於",
+      "missing": "缺少標籤",
+      "missingLabel": "無標籤",
+      "emptyValue": "空值"
+    },
     "fullPageActions": {
       "updateWorkflow": "更新工作流程",
       "actionsGroup": "操作",
@@ -58,6 +125,12 @@
       "runningButton": "執行中……",
       "runButton": "執行",
       "noTriggersAssociated": "此容器沒有關聯的觸發器",
+      "unavailableTriggers": "無法使用的觸發器",
+      "unavailableTriggerReason": {
+        "agentOwnership": "屬於與此容器不同的代理。",
+        "structuralIncompatibility": "Compose 專案、服務或檔案與此容器不符。",
+        "labelScope": "被此容器的 dd.action/dd.notification 包含或排除標籤排除。"
+      },
       "backupsRollback": "備份與回滾",
       "rollingBack": "回滾中……",
       "rollbackLatest": "回滾到最新",
@@ -273,6 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "正在載入容器……",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "搜尋名稱或映像檔……",
       "allStatuses": "所有狀態",
       "running": "執行中",
@@ -505,6 +581,19 @@
         "failedDetail": "無法更新 {name} 的依賴鏈。",
         "staleChainTitle": "依賴鏈已變更",
         "staleChainDetail": "{name} 的依賴鏈自上次預覽後已變更。請重新開啟更新對話方塊，在確認前檢視目前的鏈結。"
+      },
+      "bulkUpdate": {
+        "header": "更新 1 個容器 | 更新 {count} 個容器",
+        "accept": "更新 1 個容器 | 更新 {count} 個容器",
+        "acceptWithParents": "新增 1 個上層容器並更新 | 新增 {count} 個上層容器並更新",
+        "dispatchHeading": "將會更新",
+        "blockedHeading": "已阻止，將保持不變",
+        "softOverridesHeading": "忽略警告繼續更新",
+        "skippedHeading": "已略過",
+        "staleParentsHeading": "有待處理更新的上層容器，將在您接受時新增",
+        "agentCountInfo": "涉及 {count} 個代理；每個代理各自執行自己的更新。",
+        "stackCountInfo": "涉及 {count} 個技術堆疊。",
+        "successMessage": "已開始更新 1 個容器 | 已開始更新 {count} 個容器"
       }
     },
     "actionToasts": {
@@ -670,6 +759,29 @@
     },
     "logViewer": {
       "invalidRegex": "無效的正規表示式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依賴於",
+      "requiredBy": "被以下依賴",
+      "cycle": "屬於依賴循環的一部分",
+      "toggle": "顯示依賴關係",
+      "updateGroup": "更新依賴群組 ({count})",
+      "staleParentsWarning": "{name} 依賴於 {parents}，該容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。 | {name} 依賴於 {parents}，這些容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。",
+      "staleParentsOverflow": "還有 {count} 個",
+      "staleParentsAccept": "仍然更新"
+    },
+    "selection": {
+      "selectRow": "選擇 {name}",
+      "selectAll": "選擇所有可見容器",
+      "barLabel": "已選容器",
+      "count": "已選擇 1 個容器 | 已選擇 {count} 個容器",
+      "updateSelected": "更新所選",
+      "clear": "清除",
+      "reasons": {
+        "stale": "已不在清單中",
+        "inFlight": "已在更新中",
+        "noUpdate": "沒有可用更新"
+      }
     }
   }
 }

@@ -1,12 +1,12 @@
 /**
  * Tests for API key authentication.
  *
- * The store is real, backed by an in-memory LokiJS database, because the whole
+ * The store is real, backed by an in-memory SQLite database, because the whole
  * point of this authenticator is what it does with a stored digest. Only the
  * audit sink is mocked, so a failure can be observed without asserting on
  * Prometheus internals.
  */
-import Loki from 'lokijs';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 
 const { mockRecordApiKeyAuthFailureAuditEvent } = vi.hoisted(() => ({
   mockRecordApiKeyAuthFailureAuditEvent: vi.fn(),
@@ -23,6 +23,7 @@ vi.mock('../log/index.js', () => ({
 }));
 
 import * as apiKeyStore from '../store/api-key.js';
+import type { Database } from '../store/db/driver.js';
 import {
   _apiKeyAuthFailureSourceCountForTests,
   _resetApiKeyAuthFailureBudgetForTests,
@@ -34,9 +35,7 @@ import {
 import type { AuthRequest } from './auth-types.js';
 import { isAuthenticationRejection } from './authenticator-chain.js';
 
-type LokiDb = InstanceType<typeof Loki>;
-
-let db: LokiDb;
+let db: Database;
 
 function request(authorization?: string | string[], ip = '198.51.100.7'): AuthRequest {
   return {
@@ -57,8 +56,12 @@ function mintKey(overrides: Partial<apiKeyStore.CreateApiKeyInput> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   _resetApiKeyAuthFailureBudgetForTests();
-  db = new Loki('api-key-auth.test.db');
-  apiKeyStore.createCollections(db as never);
+  db = createMigratedMemoryDatabase();
+  apiKeyStore.createCollections(db);
+});
+
+afterEach(() => {
+  db.close();
 });
 
 describe('authenticator registration properties', () => {
@@ -242,9 +245,10 @@ describe('a chain is only as good as the keys above it', () => {
     });
     // The state a process killed part-way through a cascade leaves behind: the
     // root is revoked on disk and the child is not.
-    const stored = db.getCollection('api-keys').findOne({ keyId: root.record.keyId });
-    stored.revokedAt = '2026-09-01T00:00:00.000Z';
-    db.getCollection('api-keys').update(stored);
+    db.prepare('UPDATE api_keys SET revoked_at = ? WHERE key_id = ?').run(
+      '2026-09-01T00:00:00.000Z',
+      root.record.keyId,
+    );
 
     const outcome = await apiKeyAuthenticator.authenticate(
       request(`Bearer ${child.apiKey}`, '203.0.113.30'),

@@ -9,7 +9,7 @@ import { getContainerMaintenanceWindowOpen } from '../model/watcher-maintenance-
 import * as registry from '../registry/index.js';
 import {
   getActiveOperationByContainerId,
-  getActiveOperationByContainerName,
+  getActiveOperationByContainerIdentity,
 } from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 
@@ -29,13 +29,11 @@ export function buildEligibilityContext(container: Container): UpdateEligibility
       getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (c: Container) => {
       const byId = getActiveOperationByContainerId(c.id);
-      // Scoped by agent+watcher so cross-agent same-named ops don't pollute enrichment (issue #411).
-      const byName = byId
-        ? undefined
-        : getActiveOperationByContainerName(c.name, { agent: c.agent, watcher: c.watcher });
-      const matched = byId ?? byName;
+      // Scoped by identity so cross-agent same-named ops don't pollute enrichment (issue #411).
+      const byIdentity = byId ? undefined : getActiveOperationByContainerIdentity(c.identityKey);
+      const matched = byId ?? byIdentity;
       if (!matched || typeof matched !== 'object') return undefined;
-      const m = matched as Record<string, unknown>;
+      const m = matched as unknown as Record<string, unknown>;
       const id = typeof m.id === 'string' ? m.id : undefined;
       const status = m.status === 'queued' || m.status === 'in-progress' ? m.status : undefined;
       if (!id || !status) return undefined;

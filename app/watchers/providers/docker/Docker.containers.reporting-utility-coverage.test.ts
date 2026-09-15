@@ -40,12 +40,17 @@ describe('Docker Watcher', () => {
       };
       docker.log = createMockLogWithChild(['debug']);
       hStoreContainer.getContainer.mockReturnValue(existingContainer);
-      hStoreContainer.updateContainer.mockReturnValue(container);
+      hStoreContainer.updateContainerFields.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 
       expect(result.changed).toBe(true);
-      expect(hStoreContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(hStoreContainer.updateContainerFields).toHaveBeenCalledWith('123', {
+        result: undefined,
+        image: undefined,
+        error: undefined,
+        currentReleaseNotes: undefined,
+      });
     });
 
     test('should not mark as changed when no update available', async () => {
@@ -59,7 +64,7 @@ describe('Docker Watcher', () => {
       };
       docker.log = createMockLogWithChild(['debug']);
       hStoreContainer.getContainer.mockReturnValue(existingContainer);
-      hStoreContainer.updateContainer.mockReturnValue(container);
+      hStoreContainer.updateContainerFields.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 
@@ -87,19 +92,16 @@ describe('Docker Watcher', () => {
       docker.log = createMockLogWithChild(['debug']);
       hStoreContainer.getContainer.mockReturnValue(existingContainer);
       hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(manualClearAtMs);
-      hStoreContainer.updateContainer.mockReturnValue(clearedContainer);
+      hStoreContainer.updateContainerFields.mockReturnValue(clearedContainer);
 
       const result = docker.mapContainerToContainerReport(container, staleWatchStartedAtMs);
 
-      expect(hStoreContainer.updateContainer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: '123',
-          name: 'test',
-          watcher: 'docker',
-          result: undefined,
-          updateAvailable: false,
-        }),
-      );
+      expect(hStoreContainer.updateContainerFields).toHaveBeenCalledWith('123', {
+        result: undefined,
+        image: undefined,
+        error: undefined,
+        currentReleaseNotes: undefined,
+      });
       expect(hStoreContainer.clearPendingFreshStateAfterManualUpdate).not.toHaveBeenCalled();
       expect(result).toEqual({
         container: clearedContainer,
@@ -123,11 +125,16 @@ describe('Docker Watcher', () => {
       docker.log = createMockLogWithChild(['debug']);
       hStoreContainer.getContainer.mockReturnValue(existingContainer);
       hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(manualClearAtMs);
-      hStoreContainer.updateContainer.mockReturnValue(container);
+      hStoreContainer.updateContainerFields.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container, freshWatchStartedAtMs);
 
-      expect(hStoreContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(hStoreContainer.updateContainerFields).toHaveBeenCalledWith('123', {
+        result: { tag: '2.0.0' },
+        image: undefined,
+        error: undefined,
+        currentReleaseNotes: undefined,
+      });
       expect(hStoreContainer.clearPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
         container,
       );
@@ -151,7 +158,7 @@ describe('Docker Watcher', () => {
       docker.log = createMockLogWithChild(['debug']);
       hStoreContainer.getContainer.mockReturnValue(existingContainer);
       hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(500);
-      hStoreContainer.updateContainer.mockReturnValue(container);
+      hStoreContainer.updateContainerFields.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container, 600);
 

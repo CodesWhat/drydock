@@ -2,6 +2,8 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
+Entries marked v1.8.0 describe the unreleased development line, not the current stable release.
+
 **API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint used to keep responding at `/api/*` after that removal, both because they were registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status`. `GET /api/auth/methods` was removed on its own v1.7.0 schedule (see Removed compatibility behaviors below) and now falls through to the same tombstone as the rest of the unversioned surface; `GET /api/auth/status` remains, with no removal scheduled (see its entry below).
 
 ## Active
@@ -65,6 +67,8 @@ node dist/index.js config migrate --source trigger --file .env --file compose.ya
 
 The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible. It runs as a standalone text-rewriting tool over local config files — it is unaffected by the runtime removal above and stays available indefinitely as the migration path off `DD_TRIGGER_*` / `dd.trigger.*`.
 
+The v1.8.0 [config file](https://getdrydock.com/docs/configuration/config-file) (`drydock.yml`) does not reopen this door: its two trigger sections are `action:` and `notification:`, mirroring `DD_ACTION_*` / `DD_NOTIFICATION_*` exactly, and there is no `trigger:` section. A file can't carry `DD_TRIGGER_*` under any name.
+
 ---
 
 ### Manual updates bypassing `dd.action.include` / `dd.action.exclude`
@@ -77,9 +81,9 @@ The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_
 
 In v1.5.x–v1.6.x the eligibility model classified `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill said *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queued the update (the confirm modal listed the soft blocker and switched the accept label to *Update anyway*). This preserved the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
 
-As of v1.7.0 both reasons are **hard** blockers, shipping together with the per-action execution policy (`dd.action.auto` container label, `AUTO=onauto` trigger mode — spec-6.0.1-action-policy.md) that separates action authorization from automatic promotion, so the manual-only escape hatch isn't removed on its own. The Update button is now locked when the labels filter out the action trigger, and the API rejects a manual update request with the blocker's message (`409`). The labels now mean what the pill always said: *this trigger does not handle this container*.
+As of v1.7.0 both reasons are **hard** blockers, shipping together with the per-action execution policy (`dd.action.auto` container label, `AUTO=onauto` trigger mode) that separates action authorization from automatic promotion, so the manual-only escape hatch isn't removed on its own. The Update button is now locked when the labels filter out the action trigger, and the API rejects a manual update request with the blocker's message (`409`). The labels now mean what the pill always said: *this trigger does not handle this container*.
 
-**This does not change `AUTO=oninclude`'s meaning.** A trigger left on `AUTO=oninclude` keeps its pre-6.0.1 conflated behavior permanently: a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before — that row of the migration table is explicitly unchanged. Only the *default-deny* outcome (no matching include/auto label at all) and the *explicit-exclude* outcome (`dd.action.exclude` match) flip from soft to hard. An operator who wants the split between manual-only and automatic access opts in by switching a trigger to `AUTO=onauto`; nothing about this flip forces that switch.
+**This does not change `AUTO=oninclude`'s meaning.** A trigger left on `AUTO=oninclude` keeps its existing behavior: a matching `dd.action.include` label still grants both manual and automatic access under that mode. Only the *default-deny* outcome (no matching include/auto label at all) and the *explicit-exclude* outcome (`dd.action.exclude` match) flip from soft to hard. An operator who wants the split between manual-only and automatic access opts in by switching a trigger to `AUTO=onauto`; nothing about this flip forces that switch.
 
 **Migration:** If legacy `dd.trigger.include` / `dd.trigger.exclude` labels are still present, first rename them to the corresponding `dd.action.*` labels (v1.7.0 no longer reads them — the migration CLI above does this rewrite). Then, if you relied on manual updates running through a trigger that the container's labels excluded, either (a) remove the `dd.action.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` list (or `dd.action.auto` list, for a trigger configured with `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies exactly which trigger / label combination is in conflict.
 
@@ -100,6 +104,28 @@ As of v1.7.0, `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT` defaults to `
 **What upgrading multi-agent deployments see in Home Assistant:** agent-owned container and watcher entities move to new topic paths — new entity IDs — the first time drydock starts under v1.7.0 without the opt-out set. **The old (pre-v1.7.0) discovery entities are not retroactively removed.** Discovery cleanup only clears topics drydock currently has in memory: the per-container "previous topic" tracking is an in-memory map that starts empty on every process restart, and the watcher-level and aggregate sensors never tracked a prior topic scheme at all. The pre-v1.7.0 entities stay retained on the broker and show up in Home Assistant as orphaned, frozen-at-last-state duplicates alongside the new ones until manually removed (delete the entities in Home Assistant, or clear the retained messages on the broker, once the new entities are confirmed working).
 
 **Migration:** No action is required for the default flip itself. Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent-owned containers, and manually remove the orphaned old-path discovery entities described above. Deployments not yet ready to migrate can set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` to keep the pre-v1.7.0 layout temporarily.
+
+---
+
+### MQTT state topics and Home Assistant `unique_id` keyed by container identity
+
+| | |
+| --- | --- |
+| **Changed in** | v1.8.0 (unreleased) |
+| **Affects** | Hand-written MQTT subscriptions to drydock's container state topics, and the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) |
+
+Through v1.7.x, a container's MQTT state topic (`<topic>/<watcher>/<container>`) and its Home Assistant discovery `unique_id` were both derived from the container's current name. A `docker rename`, or a Compose recreate that regenerates the container name from the project, service and an ordinal, changed both: the state topic moved, and because `unique_id` was derived from that topic, Home Assistant treated the renamed container as a brand-new entity. The old entity's history stayed behind under the abandoned `unique_id`, and a fresh "Unknown" entity appeared next to it.
+
+As of v1.8.0:
+
+- The state topic is `<topic>/<watcher>/<identitySlug>`, with the existing optional `agent/<name>` segment for remote containers. When both `com.docker.compose.project` and `com.docker.compose.service` labels are present, `identitySlug` joins the encoded project and service with a dot. Each component doubles literal hyphens and replaces literal dots with hyphens, keeping distinct pairs from sharing a topic (`getContainerIdentitySlug`, `app/triggers/providers/mqtt/naming.ts`). Without both labels, it uses the sanitized container name.
+- The Home Assistant `unique_id` is `dd_` followed by the first 12 hex characters of `sha256(identity_key)` (`getHassUniqueId`, `app/triggers/providers/mqtt/Hass.ts`), independent of the topic entirely.
+
+**Rename stability of both the state topic and the `unique_id` is a guarantee for Compose-labeled containers only.** For a container carrying both Compose labels, a rename or recreate keeps both stable while the project, service, agent and watcher stay the same. A container without both Compose labels uses its name in the topic and in its derived identity key (`agent::watcher::name`), so renaming it changes its state topic. Its `unique_id` also changes when derived from the new name, but stays stable if an existing stored `identityKey` is carried over.
+
+**v1.8.0 automatically cleans up replaced name-based discovery topics for known containers.** With Home Assistant discovery enabled, the discovery resync publishes empty retained messages for legacy topics derived from the stored containers, including known stale-name variants, when those topics differ from the current identity-based topic. It does not enumerate every retained topic on the broker or remove the pre-v1.7 watcher and aggregate entities described above. A successful sweep records a marker in `store_metadata` for that broker URL, base topic, discovery prefix and agent-topic-segment setting (`app/store/mqtt-hass.ts`). Later resyncs skip completed routes; a publish failure leaves the route incomplete so the next resync retries it. Different routes run their own sweep.
+
+**Migration:** Update any hand-written MQTT subscriptions (ones not going through Home Assistant discovery) to the new `<topic>/<watcher>/<identitySlug>` shape. Home Assistant automations, dashboards, or templates that reference the old entity ID for a Compose-managed container should be re-pointed once the new entity appears after the upgrade — the underlying `unique_id` is unaffected by any future rename or recreate, so this should be a one-time cost.
 
 ---
 
@@ -203,7 +229,7 @@ Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unc
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 |
+| **Removed in** | v1.8.0 (unreleased) |
 | **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
 `GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. As of v1.8.0 the route is no longer mounted for the old shape. Unlike the unversioned `/api/*` aliases above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead, `GET /auth/strategies` now has its own explicit **410 Gone** tombstone registered ahead of the authentication guard, so a request gets the same 410 response whether or not it carries credentials, rather than falling through to the SPA's catch-all route. `GET /api/auth/status` (and its versioned form `GET /api/v1/auth/status`) is unaffected and remains available.
@@ -223,6 +249,22 @@ Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unc
 The system log stream WebSocket (`app/api/log-stream.ts`) accepted both the versioned `/api/v1/log/stream` path and the unversioned `/api/log/stream` alias, following the same transition-alias policy as the REST `/api/*` path above. Since v1.6.0, an upgrade request to the unversioned path is rejected with **410 Gone** (`The unversioned /api/log/stream path was removed in v1.6.0. Use /api/v1/log/stream instead.`) instead of being served.
 
 **Migration:** Point WebSocket clients at `/api/v1/log/stream`.
+
+---
+
+### `dd.json` as the live store file
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.8.0 (unreleased) |
+| **Removed in** | v1.8.0 (unreleased, the same release) |
+| **Affects** | Anything reading or backing up `/store/dd.json` directly instead of through the API |
+
+On the v1.8 development line, SQLite replaces LokiJS as the live store. Every collection, including containers, settings, secrets, agent keys, API keys, audit history, notification history and outbox, backups, notification rules, the approval queue, update-lifecycle and retention caches, update operations, and sessions, now lives in `dd.sqlite`, one SQLite database opened by one connection. When `dd.sqlite` is absent and a legacy `dd.json` exists, startup imports the collections through a temporary database before moving the completed database into place. If `dd.sqlite` already exists, startup uses it without importing `dd.json` again. After a successful import, `dd.json` is renamed to `dd.json.pre-1.8.bak` for rollback to v1.7, unless that backup already exists. An existing backup is never overwritten; Drydock logs a warning and leaves `dd.json` in place. An import failure stops startup instead of starting with an empty store. A fresh v1.8 install never creates `dd.json`. The `lokijs` and `connect-loki` npm packages are removed from `app/package.json`.
+
+This also removes the risk from separate LokiJS writers: `express-session`'s `connect-loki` store used to open a second, independent LokiJS instance on the same `dd.json` the main store had open. Since that engine serializes its whole in-memory database on save, whichever instance saved last erased the other's writes. Sessions and every other collection now use the same SQLite connection.
+
+**Migration:** Read and write store state through the API (`GET/PATCH /api/v1/settings`, `/api/v1/containers`, and so on) rather than `dd.json` directly. A backup or restore tool that copied `dd.json` off disk should target `dd.sqlite` now, but a plain file copy of `dd.sqlite` (and its `-wal`/`-shm` sidecars, if present) taken while drydock is running can catch it mid-write and produce a corrupt snapshot. Either stop the container first and then copy the files, or take a consistent live backup with `sqlite3 dd.sqlite ".backup /path/out.sqlite"` (or `VACUUM INTO`) instead. Restore from one complete, consistent snapshot, never from a copy taken mid-write. `GET /api/v1/store` reports the current file names under `configuration.file` (legacy, still resolved for the one-time import) and `configuration.dbFile`.
 
 ## Enforced security changes (no deprecation window)
 

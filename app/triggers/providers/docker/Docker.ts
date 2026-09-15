@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
 import {
@@ -34,9 +33,10 @@ import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import { isMemoryStore, save as saveStore } from '../../../store/index.js';
-import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
+import { Semaphore } from '../../../updates/lock-primitives.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
@@ -71,7 +71,6 @@ const DEFAULT_PULL_TIMEOUT_MS = 600_000;
 const MAX_SIGNED_32_BIT_TIMEOUT_MS = 2_147_483_647;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
-const TRIGGER_BATCH_CONCURRENCY = 3;
 
 type ComposeRollbackTerminalPatch =
   | {
@@ -202,38 +201,6 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
   }
 
   return undefined;
-}
-
-function getOperationIdentityFilter(operation: {
-  agent?: unknown;
-  watcher?: unknown;
-  container?: { agent?: unknown; watcher?: unknown };
-}): ContainerIdentityFilter | undefined {
-  const container = operation.container;
-  /* v8 ignore next 6 -- operation identity filters are requested for watcher-scoped operations. */
-  const watcher =
-    typeof container?.watcher === 'string'
-      ? container.watcher
-      : typeof operation.watcher === 'string'
-        ? operation.watcher
-        : undefined;
-
-  if (!watcher) {
-    return undefined;
-  }
-
-  /* v8 ignore next 5 -- container snapshots carry agent when the operation is agent-owned. */
-  const agent =
-    typeof container?.agent === 'string'
-      ? container.agent
-      : typeof operation.agent === 'string'
-        ? operation.agent
-        : undefined;
-
-  return {
-    ...(agent !== undefined ? { agent } : {}),
-    watcher,
-  };
 }
 
 function getRollbackStateContainerId(
@@ -511,6 +478,28 @@ class Docker<
   updateLifecycleExecutor: UpdateLifecycleExecutor;
 
   rollbackMonitor: RollbackMonitor;
+
+  /**
+   * Persistent per-instance semaphore gating every real container update
+   * this action executes, regardless of caller. Sized once per instance so
+   * it bounds concurrency across ALL entry points, not just calls that
+   * happen to share one triggerBatch() invocation:
+   * runAcceptedContainerUpdates() (manual "Update All", dependency-chain
+   * updates, startup recovery) dispatches one trigger() call per container
+   * from its own wave-worker pool, with no batch boundary of its own — a
+   * pLimit created fresh inside trigger() would never see those sibling
+   * calls and would not bound anything. A persistent Semaphore does,
+   * because every trigger() call on this instance acquires from the same
+   * pool of permits.
+   */
+  protected updateSemaphore?: Semaphore;
+
+  protected getUpdateSemaphore(): Semaphore {
+    if (!this.updateSemaphore) {
+      this.updateSemaphore = new Semaphore(resolveActionConcurrency(this.configuration));
+    }
+    return this.updateSemaphore;
+  }
 
   constructor() {
     super();
@@ -830,6 +819,7 @@ class Docker<
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
+      concurrency: this.joi.number().integer().positive().optional(),
     });
   }
 
@@ -1482,10 +1472,26 @@ class Docker<
    * the previous container was running.
    */
   async recreateContainer(dockerApi, currentContainerSpec, newImage, container, logContainer) {
-    const containerToCreateInspect = this.cloneContainer(
+    // DR-126: resolve clone options through the same helper the update path
+    // uses (ContainerUpdateExecutor.prepareContainerUpdateExecution) instead
+    // of passing logContainer as the runtime-config options. Without this,
+    // sourceImageConfig/targetImageConfig/runtimeFieldOrigins are all
+    // undefined here, sourceImageKnown is false in
+    // ContainerRuntimeConfigManager.shouldDropClonedRuntimeField, and the
+    // UNKNOWN-origin sanitization never fires — so a rollback (auto-rollback
+    // on an unhealthy update, or a manual restore) clones a runtime field the
+    // daemon materialized from the newer image (e.g. Entrypoint) verbatim
+    // onto the older image, which may not have the referenced file.
+    const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
+      dockerApi,
       currentContainerSpec,
       newImage,
       logContainer,
+    );
+    const containerToCreateInspect = this.cloneContainer(
+      currentContainerSpec,
+      newImage,
+      cloneRuntimeConfigOptions,
     );
 
     const newContainer = await this.createContainer(
@@ -1997,8 +2003,16 @@ class Docker<
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     options?: PulledImageIdentityOptions,
+    // Compose-file-once resolves one digest per service from a single,
+    // arbitrarily-picked replica (DR-42), so that resolution must not apply
+    // *that* replica's binding policy: `required` would abort the whole batch
+    // over one container's label, and `disabled` would silently drop a bind
+    // failure every other replica still needs to see. Overriding to `optional`
+    // there gets the raw `{ imageIdentity | reason }` back without either
+    // failure mode; each container then applies its own policy to that result.
+    bindingPolicyOverride?: 'required' | 'optional' | 'disabled',
   ): Promise<PulledImageIdentityOutcome> {
-    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+    const bindingPolicy = bindingPolicyOverride ?? this.getPostPullIdentityBindingPolicy(container);
     if (typeof dockerApi.getImage !== 'function') {
       return this.handleMissingPulledImageIdentity(
         container,
@@ -2375,10 +2389,7 @@ class Docker<
   }
 
   resolveContainerBackupScope(container) {
-    return createContainerBackupScope(
-      container,
-      storeContainer.getContainers({ name: container.name }) ?? [],
-    );
+    return createContainerBackupScope(container);
   }
 
   async runPreRuntimeUpdateLifecycle(context, container, logContainer, _runtimeContext?: unknown) {
@@ -2593,9 +2604,8 @@ class Docker<
           } else if (
             classifyDuplicateOpTerminalStatus(
               error,
-              operation.containerName,
+              operation.containerIdentityKey,
               undefined,
-              getOperationIdentityFilter(operation),
               operation.id,
             ) === 'expired'
           ) {
@@ -2639,27 +2649,40 @@ class Docker<
 
   /**
    * Update the container.
+   *
+   * The fan-out limit is DD_UPDATE_CONCURRENCY (default 1), or this action's
+   * own DD_ACTION_DOCKER_<NAME>_CONCURRENCY override when set. This is the
+   * single choke point where the docker action executes container updates
+   * concurrently: every caller (triggerBatch()'s own fan-out, and
+   * runAcceptedContainerUpdates()'s per-container dispatch for manual bulk
+   * updates, dependency chains, and startup recovery) funnels through this
+   * one method, so they all draw from the same permit pool.
+   * Dockercompose.triggerBatch resolves the same value for its own
+   * (compose-file-scoped) fan-out.
    * @param container the container
    * @returns {Promise<void>}
    */
   async trigger(container, runtimeContext?: unknown) {
-    await this.runContainerUpdateLifecycle(container, runtimeContext);
+    const release = await this.getUpdateSemaphore().acquire();
+    try {
+      await this.runContainerUpdateLifecycle(container, runtimeContext);
+    } finally {
+      release();
+    }
   }
 
   /**
-   * Update the containers.
+   * Update the containers. Concurrency is bounded by trigger()'s own
+   * persistent semaphore, so this fan-out needs no limiter of its own.
    * @param containers
    * @returns {Promise<unknown[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<unknown[]> {
-    const limit = pLimit(TRIGGER_BATCH_CONCURRENCY);
     return Promise.all(
       containers.map((container) =>
-        limit(() =>
-          runtimeContext === undefined
-            ? this.trigger(container)
-            : this.trigger(container, runtimeContext),
-        ),
+        runtimeContext === undefined
+          ? this.trigger(container)
+          : this.trigger(container, runtimeContext),
       ),
     );
   }

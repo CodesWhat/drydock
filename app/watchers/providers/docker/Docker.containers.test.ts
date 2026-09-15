@@ -2868,12 +2868,17 @@ describe('Docker Watcher', () => {
       };
       docker.log = createMockLogWithChild(['debug']);
       storeContainer.getContainer.mockReturnValue(existingContainer);
-      storeContainer.updateContainer.mockReturnValue(container);
+      storeContainer.updateContainerFields.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 
       expect(result.changed).toBe(true);
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith('123', {
+        result: undefined,
+        image: undefined,
+        error: undefined,
+        currentReleaseNotes: undefined,
+      });
     });
 
     test('should not mark as changed when no update available', async () => {
@@ -2887,7 +2892,7 @@ describe('Docker Watcher', () => {
       };
       docker.log = createMockLogWithChild(['debug']);
       storeContainer.getContainer.mockReturnValue(existingContainer);
-      storeContainer.updateContainer.mockReturnValue(container);
+      storeContainer.updateContainerFields.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 

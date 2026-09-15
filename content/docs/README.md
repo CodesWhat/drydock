@@ -6,6 +6,8 @@
 - `v1.4/`: stable `1.4` docs
 - `v1.3/`: previous stable `1.3` docs
 
+On `dev/v1.8`, `current/` also contains unreleased v1.8 documentation. The `v1.7` serving slug is still the release-line mapping, not a claim that every feature in this development checkout exists in the published v1.7 candidate. Release preparation must preserve the production-line v1.7 docs before changing the active mapping; do not deploy this branch's docs as a website-only production fix.
+
 Each directory contains `meta.json` files that define navigation titles and page ordering.
 
 ## Versioned-doc correction policy

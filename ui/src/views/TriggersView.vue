@@ -5,22 +5,28 @@ import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import DetailField from '@/components/DetailField.vue';
+import NotificationPolicyEditor from '@/components/NotificationPolicyEditor.vue';
+import ActionPolicyEditor from '@/components/ActionPolicyEditor.vue';
+import { isActionProvider } from '../services/action-editor';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
-import type { ApiComponent } from '../types/api';
+import { isNotificationProvider, type NotificationIdentity } from '../services/notification-editor';
+import type { ApiComponentResponse } from '../types/api';
 import { isDryRunActionTrigger } from './containers/useContainerTriggers';
 
 const { t } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
-const selectedTrigger = ref<Record<string, unknown> | null>(null);
+type TriggerRow = ReturnType<typeof mapTrigger>;
+
+const selectedTrigger = ref<TriggerRow | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
 let detailRequestId = 0;
 
-const triggersData = ref<Record<string, unknown>[]>([]);
+const triggersData = ref<TriggerRow[]>([]);
 const loading = ref(true);
 const error = ref('');
 const testingTrigger = ref<string | null>(null);
@@ -47,16 +53,16 @@ function parseTriggerTestErrorMessage(errorValue: unknown): string {
   return nestedMessage?.[1]?.trim() || message.trim();
 }
 
-async function testTrigger(trigger: Record<string, unknown>) {
+async function testTrigger(trigger: TriggerRow) {
   if (testingTrigger.value) return;
-  testingTrigger.value = trigger.id as string;
+  testingTrigger.value = trigger.id;
   testResult.value = null;
   testError.value = null;
   try {
     await runTrigger({
-      triggerType: trigger.type as string,
-      triggerName: trigger.name as string,
-      triggerAgent: (trigger.agent as string | undefined) || undefined,
+      triggerType: trigger.type,
+      triggerName: trigger.name,
+      triggerAgent: trigger.agent || undefined,
       container: {
         id: 'test',
         name: t('triggersView.testContainerName'),
@@ -151,16 +157,17 @@ function clearFilters() {
   searchQuery.value = '';
 }
 
-function mapTrigger(trigger: ApiComponent, status = 'active') {
+function mapTrigger(trigger: ApiComponentResponse, status = 'active') {
   const config = trigger.configuration ?? {};
+  const dryrun = typeof config === 'object' && 'dryrun' in config && config.dryrun === true;
   return {
     id: trigger.id,
     name: trigger.name,
     type: trigger.type,
     status,
     config,
-    dryRun: isDryRunActionTrigger(trigger),
-    agent: trigger.agent,
+    dryRun: isDryRunActionTrigger({ ...trigger, configuration: { dryrun } }),
+    agent: trigger.agent ?? undefined,
   };
 }
 
@@ -180,7 +187,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(trigger: Record<string, unknown>) {
+async function openDetail(trigger: TriggerRow, refreshRow = false) {
   selectedTrigger.value = trigger;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -191,10 +198,21 @@ async function openDetail(trigger: Record<string, unknown>) {
     const detail = await getTrigger({
       type: String(trigger.type),
       name: String(trigger.name),
-      agent: trigger.agent as string | undefined,
+      agent: trigger.agent,
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedTrigger.value = mapTrigger(detail, String(trigger.status));
+    if (refreshRow) {
+      const refreshed = selectedTrigger.value;
+      triggersData.value = triggersData.value.map((row) =>
+        row.id === trigger.id &&
+        row.type === trigger.type &&
+        row.name === trigger.name &&
+        row.agent === trigger.agent
+          ? refreshed
+          : row,
+      );
+    }
   } catch {
     if (requestId !== detailRequestId) return;
     detailError.value = t('triggersView.detail.loadError');
@@ -205,10 +223,24 @@ async function openDetail(trigger: Record<string, unknown>) {
   }
 }
 
+function refreshSavedTrigger(identity: NotificationIdentity) {
+  const current = selectedTrigger.value;
+  if (
+    !detailOpen.value ||
+    !current ||
+    current.id !== identity.id ||
+    current.type !== identity.type ||
+    current.name !== identity.name ||
+    current.agent !== identity.agent
+  )
+    return;
+  void openDetail(current, true);
+}
+
 onMounted(async () => {
   try {
     const data = await getAllTriggers();
-    triggersData.value = data.map((trigger: ApiComponent) => mapTrigger(trigger));
+    triggersData.value = data.map((trigger) => mapTrigger(trigger));
   } catch {
     error.value = t('triggersView.loadError');
   } finally {
@@ -396,6 +428,8 @@ onMounted(async () => {
               <div class="mt-0.5">{{ t('triggersView.dryRun.tooltip') }}</div>
             </div>
 
+            <NotificationPolicyEditor v-if="detailOpen && isNotificationProvider(String(selectedTrigger.type))" :trigger="{ id: String(selectedTrigger.id), type: String(selectedTrigger.type), name: String(selectedTrigger.name), agent: selectedTrigger.agent as string | undefined }" @saved="refreshSavedTrigger" />
+            <ActionPolicyEditor v-if="detailOpen && isActionProvider(selectedTrigger.type)" :action="{ id: selectedTrigger.id, type: selectedTrigger.type, name: selectedTrigger.name, agent: selectedTrigger.agent }" @saved="refreshSavedTrigger" />
             <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
             <div v-if="Object.keys(selectedTrigger.config).length === 0">
               <div class="text-2xs-plus dd-text-muted">{{ t('triggersView.detail.noConfig') }}</div>

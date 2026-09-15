@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Danh sách tác nhân không khả dụng. Một số tác nhân đã cấu hình có thể bị thiếu.",
+      "title": "Trạng thái cụm",
+      "description": "Trạng thái toàn cụm. Làm mới danh mục phát hiện container mà không kiểm tra kho ảnh hay thực hiện cập nhật.",
+      "reload": "Tải lại trạng thái",
+      "refresh": "Làm mới danh mục",
+      "configured": "Đã cấu hình",
+      "connected": "Đã kết nối",
+      "disconnected": "Mất kết nối",
+      "unavailable": "Không khả dụng",
+      "agentUnavailable": "Trạng thái tác nhân không khả dụng. Dữ liệu được giữ lại có thể đã cũ.",
+      "watcherUnavailable": "Siêu dữ liệu trình theo dõi không khả dụng. Dữ liệu được giữ lại có thể đã cũ.",
+      "total": "{count} container",
+      "lastKnown": "Thông tin gần nhất",
+      "lastSeen": "Lần cuối hoạt động: {value}",
+      "unsupported": "Mọi đích đều cần trình theo dõi Docker hỗ trợ làm mới danh mục.",
+      "complete": "Danh mục đầy đủ",
+      "partial": "Danh mục chưa đầy đủ",
+      "reloadFailed": "Không thể tải lại danh sách container. Kết quả danh mục vẫn được hiển thị."
+    },
+    "fleetBulk": {
+      "label": "Thao tác cho nhóm đã lọc",
+      "updateAll": "Cập nhật tất cả ({count})",
+      "snoozePatch": "Hoãn tất cả bản vá",
+      "patchCount": "{count} ứng viên bản vá",
+      "duration": "Thời gian hoãn",
+      "days": "{count} ngày",
+      "untilDate": "Đến ngày",
+      "date": "Hoãn đến hết ngày",
+      "snoozeConfirm": "Hoãn {count} ứng viên bản vá?",
+      "snoozeScope": "Các container này hiện có bản vá. Hoãn tất cả cập nhật của chúng trong {duration}, không chỉ bản vá. Áp dụng cho danh sách hiện tại đã lọc, không phải các ô đã chọn. Ngày bao gồm hết ngày theo giờ địa phương.",
+      "snoozeResult": "Đã hoãn: {succeeded}. Thất bại: {failed}.",
+      "refreshFailed": "Đã lưu chính sách nhưng không làm mới được danh sách. Hãy tải lại.",
+      "disabled": "Thao tác container bị tắt. Không đổi chính sách.",
+      "invalid": "Thời gian không hợp lệ. Không đổi chính sách.",
+      "busy": "Một thao tác khác đang chạy. Không đổi thêm chính sách."
+    },
+    "fleetDimensions": {
+      "groupBy": "Nhóm theo",
+      "none": "Không nhóm",
+      "agent": "Tác nhân",
+      "registry": "Kho ảnh",
+      "status": "Trạng thái",
+      "tagType": "Loại thẻ",
+      "label": "Nhãn",
+      "groupLabel": "Nhóm theo khóa nhãn",
+      "allAgents": "Tất cả tác nhân",
+      "allRegistries": "Tất cả địa chỉ kho ảnh",
+      "all": "Tất cả loại thẻ",
+      "specific": "Thẻ cụ thể",
+      "floating": "Thẻ thay đổi",
+      "digest": "Ghim mã băm",
+      "semver": "Thẻ phiên bản",
+      "tag": "Thẻ không phải phiên bản",
+      "unknown": "Không rõ",
+      "local": "Trình theo dõi cục bộ",
+      "running": "Đang chạy",
+      "stopped": "Đã dừng",
+      "labelKey": "Khóa nhãn",
+      "labelMatch": "Điều kiện nhãn",
+      "labelValue": "Giá trị nhãn",
+      "exists": "Có nhãn",
+      "equals": "Bằng",
+      "missing": "Thiếu nhãn",
+      "missingLabel": "Không có nhãn",
+      "emptyValue": "Giá trị trống"
+    },
     "fullPageActions": {
       "updateWorkflow": "Quy trình cập nhật",
       "actionsGroup": "Thao tác",
@@ -58,6 +125,12 @@
       "runningButton": "Đang chạy...",
       "runButton": "Chạy",
       "noTriggersAssociated": "Không có trigger nào liên kết với container này",
+      "unavailableTriggers": "Trigger không khả dụng",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Thuộc về một agent khác với container này.",
+        "structuralIncompatibility": "Dự án, dịch vụ hoặc tệp Compose không khớp với container này.",
+        "labelScope": "Bị loại trừ bởi nhãn include hoặc exclude dd.action/dd.notification của container này."
+      },
       "backupsRollback": "Sao lưu & Khôi phục",
       "rollingBack": "Đang khôi phục...",
       "rollbackLatest": "Khôi phục mới nhất",
@@ -273,6 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "Đang tải container...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "Tìm theo tên hoặc image...",
       "allStatuses": "Tất cả trạng thái",
       "running": "Đang chạy",
@@ -505,6 +581,19 @@
         "failedDetail": "Không thể cập nhật chuỗi phụ thuộc cho {name}.",
         "staleChainTitle": "Chuỗi phụ thuộc đã thay đổi",
         "staleChainDetail": "Chuỗi phụ thuộc cho {name} đã thay đổi kể từ lần xem trước gần nhất. Hãy mở lại hộp thoại cập nhật để xem lại chuỗi hiện tại trước khi xác nhận."
+      },
+      "bulkUpdate": {
+        "header": "Cập nhật 1 container | Cập nhật {count} container",
+        "accept": "Cập nhật 1 container | Cập nhật {count} container",
+        "acceptWithParents": "Thêm 1 container cha và cập nhật | Thêm {count} container cha và cập nhật",
+        "dispatchHeading": "Sẽ được cập nhật",
+        "blockedHeading": "Bị chặn, sẽ được giữ nguyên",
+        "softOverridesHeading": "Đang cập nhật bất chấp cảnh báo",
+        "skippedHeading": "Đã bỏ qua",
+        "staleParentsHeading": "Container cha có cập nhật đang chờ, được thêm khi bạn chấp nhận",
+        "agentCountInfo": "Trải rộng trên {count} agent; mỗi agent tự chạy các bản cập nhật của mình.",
+        "stackCountInfo": "Trải rộng trên {count} stack.",
+        "successMessage": "Đã bắt đầu cập nhật cho 1 container | Đã bắt đầu cập nhật cho {count} container"
       }
     },
     "actionToasts": {
@@ -670,6 +759,29 @@
     },
     "logViewer": {
       "invalidRegex": "Biểu thức chính quy không hợp lệ"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Phụ thuộc vào",
+      "requiredBy": "Được yêu cầu bởi",
+      "cycle": "Là một phần của chu trình phụ thuộc",
+      "toggle": "Hiển thị phụ thuộc",
+      "updateGroup": "Cập nhật nhóm phụ thuộc ({count})",
+      "staleParentsWarning": "{name} phụ thuộc vào {parents}, hiện cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên container cha đã lỗi thời. | {name} phụ thuộc vào {parents}, các mục này cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên các container cha đã lỗi thời.",
+      "staleParentsOverflow": "và {count} mục khác",
+      "staleParentsAccept": "Vẫn cập nhật"
+    },
+    "selection": {
+      "selectRow": "Chọn {name}",
+      "selectAll": "Chọn tất cả container hiển thị",
+      "barLabel": "Container đã chọn",
+      "count": "Đã chọn 1 container | Đã chọn {count} container",
+      "updateSelected": "Cập nhật mục đã chọn",
+      "clear": "Xóa",
+      "reasons": {
+        "stale": "không còn trong danh sách",
+        "inFlight": "đang được cập nhật",
+        "noUpdate": "không có bản cập nhật"
+      }
     }
   }
 }

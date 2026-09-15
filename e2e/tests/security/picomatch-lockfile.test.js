@@ -23,7 +23,7 @@ test('package manifest explicitly pins picomatch to the patched version', () => 
   const packageJsonPath = join(process.cwd(), 'package.json');
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 
-  assert.equal(packageJson.overrides?.picomatch, '4.0.5');
+  assert.equal(packageJson.overrides?.picomatch, '4.0.7');
 });
 
 test('package lockfile does not resolve vulnerable picomatch versions', () => {

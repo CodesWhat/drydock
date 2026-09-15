@@ -178,7 +178,14 @@ export async function processDockerEvent(
 
 interface UpdateContainerFromInspectDependencies {
   getCustomDisplayNameFromLabels: (labels: Record<string, string>) => string | undefined;
-  updateContainer: (container: Container) => void;
+  /**
+   * Field-level write (roadmap 7-STORE, slice 9 / spec 4.3): `patch` carries
+   * only the fields this event actually changed, never the container's other
+   * fields as this function last read them. A whole-record write here would
+   * silently revert whatever an in-flight watch cycle wrote to `result`,
+   * `image` etc. in the gap between that read and this write.
+   */
+  updateContainer: (id: string, patch: Omit<Partial<Container>, 'id'>) => void;
   logInfo?: (message: string) => void;
   /**
    * Re-derive label-driven fields (tagFamily, includeTags, etc.) from a fresh
@@ -188,6 +195,57 @@ interface UpdateContainerFromInspectDependencies {
     container: Container,
     labels: Record<string, string>,
   ) => void;
+}
+
+/** Fields `applyDerivedLabelFieldsToContainer` may set (`container-init.ts`). */
+const LABEL_DERIVED_PATCH_FIELDS = [
+  'includeTags',
+  'excludeTags',
+  'transformTags',
+  'tagFamily',
+  'tagPinInfo',
+  'linkTemplate',
+  'portLabel',
+  'actionTriggerInclude',
+  'actionTriggerExclude',
+  'notificationTriggerInclude',
+  'notificationTriggerExclude',
+  'actionTriggerAuto',
+  'triggerInclude',
+  'triggerExclude',
+  'dependsOn',
+  'dependsOnSource',
+  'dependsOnAction',
+  'updatePolicy',
+  'updatePolicyDeclarative',
+  'updatePolicyOverrides',
+  'updatePolicySources',
+] as const satisfies readonly (keyof Container)[];
+
+function pickFields<T extends object, K extends keyof T>(
+  source: T,
+  fields: readonly K[],
+): Pick<T, K> {
+  const picked = {} as Pick<T, K>;
+  for (const field of fields) {
+    picked[field] = source[field];
+  }
+  return picked;
+}
+
+/** Only the fields whose value actually differs, comparing by content. */
+function diffFields<T extends object, K extends keyof T>(
+  before: Pick<T, K>,
+  after: Pick<T, K>,
+  fields: readonly K[],
+): Partial<T> {
+  const patch: Partial<T> = {};
+  for (const field of fields) {
+    if (JSON.stringify(after[field]) !== JSON.stringify(before[field])) {
+      patch[field] = after[field];
+    }
+  }
+  return patch;
 }
 
 function areLabelsEqual(labelsA: Record<string, string>, labelsB: Record<string, string>): boolean {
@@ -249,39 +307,57 @@ export function updateContainerFromInspect(
   );
 
   let changed = false;
+  const patch: Partial<Container> = {};
 
   if (oldStatus !== newStatus) {
     containerFound.status = newStatus;
+    patch.status = newStatus;
     changed = true;
     dependencies.logInfo?.(`Status changed from ${oldStatus} to ${newStatus}`);
   }
 
   if (oldHealth !== newHealth) {
     containerFound.health = newHealth;
+    patch.health = newHealth;
     changed = true;
     dependencies.logInfo?.(`Health changed from ${oldHealth} to ${newHealth}`);
   }
 
   if (newName !== '' && oldName !== newName) {
     containerFound.name = newName;
+    patch.name = newName;
     changed = true;
     dependencies.logInfo?.(`Name changed from ${oldName} to ${newName}`);
   }
 
   if (labelsChanged) {
     containerFound.labels = labelsToApply;
-    dependencies.applyDerivedLabelFieldsToContainer?.(containerFound, labelsToApply);
+    patch.labels = labelsToApply;
+    if (dependencies.applyDerivedLabelFieldsToContainer) {
+      const labelDerivedBefore = pickFields(containerFound, LABEL_DERIVED_PATCH_FIELDS);
+      dependencies.applyDerivedLabelFieldsToContainer(containerFound, labelsToApply);
+      Object.assign(
+        patch,
+        diffFields(
+          labelDerivedBefore,
+          pickFields(containerFound, LABEL_DERIVED_PATCH_FIELDS),
+          LABEL_DERIVED_PATCH_FIELDS,
+        ),
+      );
+    }
     changed = true;
   }
 
   if (runtimeDetailsChanged) {
     containerFound.details = runtimeDetailsFromInspect;
+    patch.details = runtimeDetailsFromInspect;
     changed = true;
   }
 
   if (hasCustomDisplayName) {
     if (containerFound.displayName !== customDisplayNameFromLabel) {
       containerFound.displayName = customDisplayNameFromLabel;
+      patch.displayName = customDisplayNameFromLabel;
       changed = true;
     }
   } else if (shouldUpdateDisplayNameFromContainerName(newName, oldName, oldDisplayName)) {
@@ -290,10 +366,11 @@ export function updateContainerFromInspect(
       containerFound.image?.name || '',
       undefined,
     );
+    patch.displayName = containerFound.displayName;
     changed = true;
   }
 
   if (changed) {
-    dependencies.updateContainer(containerFound);
+    dependencies.updateContainer(containerFound.id, patch);
   }
 }

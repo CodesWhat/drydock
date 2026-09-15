@@ -1,3 +1,5 @@
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import type { Database } from './db/driver.js';
 import {
   _resetOutboxStoreForTests,
   createCollections,
@@ -17,126 +19,31 @@ vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
 }));
 
-function createDb() {
-  function getByPath(obj: unknown, path: string): unknown {
-    return path
-      .split('.')
-      .reduce((acc: unknown, key) => (acc as Record<string, unknown>)?.[key], obj);
-  }
-  function matchesQueryValue(actual: unknown, expected: unknown): boolean {
-    if (expected && typeof expected === 'object' && !Array.isArray(expected) && '$ne' in expected) {
-      return actual !== (expected as { $ne: unknown }).$ne;
-    }
-    if (
-      expected &&
-      typeof expected === 'object' &&
-      !Array.isArray(expected) &&
-      '$lte' in expected
-    ) {
-      return typeof actual === 'string' && actual <= (expected as { $lte: string }).$lte;
-    }
-    if (expected && typeof expected === 'object' && !Array.isArray(expected) && '$lt' in expected) {
-      return typeof actual === 'string' && actual < (expected as { $lt: string }).$lt;
-    }
-    return actual === expected;
-  }
-  function matchesQuery(doc: unknown, query: Record<string, unknown> = {}): boolean {
-    return Object.entries(query).every(([key, value]) =>
-      matchesQueryValue(getByPath(doc, key), value),
-    );
-  }
-  const collections: Record<string, ReturnType<typeof makeCollection>> = {};
-  function makeCollection() {
-    const docs: unknown[] = [];
-    return {
-      insert: (doc: unknown) => {
-        docs.push(doc);
-      },
-      find: (query: Record<string, unknown> = {}) => docs.filter((d) => matchesQuery(d, query)),
-      findOne: (query: Record<string, unknown> = {}) =>
-        docs.find((d) => matchesQuery(d, query)) ?? null,
-      remove: (doc: unknown) => {
-        const i = docs.indexOf(doc);
-        if (i >= 0) docs.splice(i, 1);
-      },
-    };
-  }
-  return {
-    getCollection: (name: string) => collections[name] ?? null,
-    addCollection: (name: string) => {
-      collections[name] = makeCollection();
-      return collections[name];
-    },
-  };
-}
-
 const BASE_INPUT = {
   eventName: 'container.updated',
   payload: { image: 'nginx:latest' },
   triggerId: 'trigger-1',
 };
 
+let db: Database | undefined;
+
 beforeEach(() => {
   _resetOutboxStoreForTests();
+});
+
+afterEach(() => {
+  db?.close();
+  db = undefined;
 });
 
 // ─── createCollections ───────────────────────────────────────────────────────
 
 describe('createCollections', () => {
-  test('initialises the collection so subsequent operations work', () => {
-    const db = createDb();
-    createCollections(db as never);
+  test('wires the store to the given database so subsequent operations work', () => {
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
     const entry = enqueueOutboxEntry(BASE_INPUT);
     expect(getOutboxEntry(entry.id)).toEqual(entry);
-  });
-
-  test('initialises indexes for terminal outbox purge lookups', () => {
-    const collection = {
-      insert: vi.fn(),
-      find: vi.fn(),
-      findOne: vi.fn(),
-      remove: vi.fn(),
-      ensureIndex: vi.fn(),
-    };
-    const addCollection = vi.fn(() => collection);
-
-    createCollections({
-      getCollection: () => null,
-      addCollection,
-    } as never);
-
-    expect(addCollection).toHaveBeenCalledWith(
-      'notificationOutbox',
-      expect.objectContaining({
-        indices: expect.arrayContaining(['data.deliveredAt', 'data.failedAt']),
-      }),
-    );
-    expect(collection.ensureIndex).toHaveBeenCalledWith('data.deliveredAt');
-    expect(collection.ensureIndex).toHaveBeenCalledWith('data.failedAt');
-  });
-
-  test('initialises binary indexes for ready-delivery scheduler lookups', () => {
-    const collection = {
-      insert: vi.fn(),
-      find: vi.fn(),
-      findOne: vi.fn(),
-      remove: vi.fn(),
-      ensureIndex: vi.fn(),
-    };
-    const addCollection = vi.fn(() => collection);
-
-    createCollections({
-      getCollection: () => null,
-      addCollection,
-    } as never);
-
-    expect(addCollection).toHaveBeenCalledWith(
-      'notificationOutbox',
-      expect.objectContaining({
-        indices: expect.arrayContaining(['data.status', 'data.nextAttemptAt']),
-        binaryIndices: expect.arrayContaining(['data.status', 'data.nextAttemptAt']),
-      }),
-    );
   });
 });
 
@@ -147,7 +54,8 @@ describe('uninitialised guards (before createCollections)', () => {
     const entry = enqueueOutboxEntry(BASE_INPUT);
     expect(entry.status).toBe('pending');
     // After reset, no collection — getOutboxEntry won't find it
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
     expect(getOutboxEntry(entry.id)).toBeUndefined();
   });
 
@@ -194,7 +102,8 @@ describe('uninitialised guards (before createCollections)', () => {
 
 describe('enqueueOutboxEntry', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('defaults: attempts=0, maxAttempts=5, status=pending, id is uuid', () => {
@@ -206,29 +115,27 @@ describe('enqueueOutboxEntry', () => {
   });
 
   test('createdAt and default nextAttemptAt are set to now (within 1s)', () => {
-    const before = new Date().toISOString();
+    const before = Date.now();
     const entry = enqueueOutboxEntry(BASE_INPUT);
-    const after = new Date().toISOString();
-    expect(entry.createdAt >= before).toBe(true);
-    expect(entry.createdAt <= after).toBe(true);
-    expect(entry.nextAttemptAt >= before).toBe(true);
-    expect(entry.nextAttemptAt <= after).toBe(true);
+    const after = Date.now();
+    expect(new Date(entry.createdAt).getTime()).toBeGreaterThanOrEqual(before);
+    expect(new Date(entry.createdAt).getTime()).toBeLessThanOrEqual(after);
+    expect(entry.nextAttemptAt).toBe(entry.createdAt);
   });
 
   test('custom maxAttempts is honoured', () => {
-    const entry = enqueueOutboxEntry({ ...BASE_INPUT, maxAttempts: 10 });
-    expect(entry.maxAttempts).toBe(10);
+    const entry = enqueueOutboxEntry({ ...BASE_INPUT, maxAttempts: 3 });
+    expect(entry.maxAttempts).toBe(3);
   });
 
   test('custom nextAttemptAt is honoured', () => {
-    const future = '2099-01-01T00:00:00.000Z';
-    const entry = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: future });
-    expect(entry.nextAttemptAt).toBe(future);
+    const entry = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2099-01-01T00:00:00.000Z' });
+    expect(entry.nextAttemptAt).toBe('2099-01-01T00:00:00.000Z');
   });
 
   test('optional containerId is preserved when provided', () => {
-    const entry = enqueueOutboxEntry({ ...BASE_INPUT, containerId: 'ctr-abc' });
-    expect(entry.containerId).toBe('ctr-abc');
+    const entry = enqueueOutboxEntry({ ...BASE_INPUT, containerId: 'c1' });
+    expect(entry.containerId).toBe('c1');
   });
 
   test('containerId is undefined when omitted', () => {
@@ -246,7 +153,8 @@ describe('enqueueOutboxEntry', () => {
 
 describe('getOutboxEntry', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('returns entry when found', () => {
@@ -255,7 +163,7 @@ describe('getOutboxEntry', () => {
   });
 
   test('returns undefined when not found', () => {
-    expect(getOutboxEntry('nonexistent')).toBeUndefined();
+    expect(getOutboxEntry('missing')).toBeUndefined();
   });
 });
 
@@ -263,61 +171,44 @@ describe('getOutboxEntry', () => {
 
 describe('findReadyForDelivery', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('queries only pending entries due at or before nowIso', () => {
-    _resetOutboxStoreForTests();
-    const find = vi.fn(() => []);
-    createCollections({
-      getCollection: () => null,
-      addCollection: () => ({
-        insert: vi.fn(),
-        find,
-        findOne: vi.fn(),
-        remove: vi.fn(),
-      }),
-    } as never);
+    const past = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2000-01-01T00:00:00.000Z' });
+    enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2099-01-01T00:00:00.000Z' });
 
-    findReadyForDelivery('2026-05-02T12:00:00.000Z');
-
-    expect(find).toHaveBeenCalledWith({
-      'data.nextAttemptAt': { $lte: '2026-05-02T12:00:00.000Z' },
-      'data.status': 'pending',
-    });
-    expect(Object.keys(find.mock.calls[0][0])).toEqual(['data.nextAttemptAt', 'data.status']);
+    const ready = findReadyForDelivery('2026-01-01T00:00:00.000Z');
+    expect(ready.map((e) => e.id)).toEqual([past.id]);
   });
 
   test('returns pending entries whose nextAttemptAt <= nowIso', () => {
-    const past = '2000-01-01T00:00:00.000Z';
-    const future = '2099-01-01T00:00:00.000Z';
-    enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: past });
-    enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: future });
-    const now = new Date().toISOString();
-    const ready = findReadyForDelivery(now);
-    expect(ready).toHaveLength(1);
-    expect(ready[0].nextAttemptAt).toBe(past);
+    const entry = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2020-01-01T00:00:00.000Z' });
+    expect(findReadyForDelivery('2020-01-01T00:00:00.000Z').map((e) => e.id)).toEqual([entry.id]);
   });
 
   test('uses current time when nowIso is omitted', () => {
-    const past = '2000-01-01T00:00:00.000Z';
-    enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: past });
-    const ready = findReadyForDelivery();
-    expect(ready).toHaveLength(1);
+    const entry = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2000-01-01T00:00:00.000Z' });
+    expect(findReadyForDelivery().map((e) => e.id)).toEqual([entry.id]);
   });
 
   test('results are sorted ascending by nextAttemptAt', () => {
-    enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2000-06-01T00:00:00.000Z' });
-    enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2000-01-01T00:00:00.000Z' });
-    const ready = findReadyForDelivery('2001-01-01T00:00:00.000Z');
-    expect(ready[0].nextAttemptAt < ready[1].nextAttemptAt).toBe(true);
+    const later = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2020-06-01T00:00:00.000Z' });
+    const earlier = enqueueOutboxEntry({
+      ...BASE_INPUT,
+      nextAttemptAt: '2020-01-01T00:00:00.000Z',
+    });
+    expect(findReadyForDelivery('2026-01-01T00:00:00.000Z').map((e) => e.id)).toEqual([
+      earlier.id,
+      later.id,
+    ]);
   });
 
   test('excludes non-pending entries', () => {
     const entry = enqueueOutboxEntry({ ...BASE_INPUT, nextAttemptAt: '2000-01-01T00:00:00.000Z' });
     markOutboxEntryDelivered(entry.id);
-    const ready = findReadyForDelivery(new Date().toISOString());
-    expect(ready).toHaveLength(0);
+    expect(findReadyForDelivery('2026-01-01T00:00:00.000Z')).toEqual([]);
   });
 });
 
@@ -325,16 +216,14 @@ describe('findReadyForDelivery', () => {
 
 describe('findOutboxEntriesByStatus', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('returns entries matching the requested status', () => {
-    const e1 = enqueueOutboxEntry(BASE_INPUT);
-    markOutboxEntryDelivered(e1.id);
-    enqueueOutboxEntry(BASE_INPUT);
-    const delivered = findOutboxEntriesByStatus('delivered');
-    expect(delivered).toHaveLength(1);
-    expect(delivered[0].status).toBe('delivered');
+    const entry = enqueueOutboxEntry(BASE_INPUT);
+    markOutboxEntryDelivered(entry.id);
+    expect(findOutboxEntriesByStatus('delivered').map((e) => e.id)).toEqual([entry.id]);
   });
 
   test('returns empty array when no entries match', () => {
@@ -342,12 +231,9 @@ describe('findOutboxEntriesByStatus', () => {
   });
 
   test('results are sorted ascending by createdAt', () => {
-    // Insert two entries; because they're inserted sequentially, createdAt order is deterministic
-    const e1 = enqueueOutboxEntry(BASE_INPUT);
-    const e2 = enqueueOutboxEntry(BASE_INPUT);
-    const entries = findOutboxEntriesByStatus('pending');
-    const ids = entries.map((e) => e.id);
-    expect(ids.indexOf(e1.id)).toBeLessThanOrEqual(ids.indexOf(e2.id));
+    const first = enqueueOutboxEntry(BASE_INPUT);
+    const second = enqueueOutboxEntry(BASE_INPUT);
+    expect(findOutboxEntriesByStatus('pending').map((e) => e.id)).toEqual([first.id, second.id]);
   });
 });
 
@@ -355,23 +241,15 @@ describe('findOutboxEntriesByStatus', () => {
 
 describe('findAllOutboxEntries', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('returns entries across statuses sorted ascending by createdAt', () => {
-    const pending = enqueueOutboxEntry(BASE_INPUT);
-    const delivered = enqueueOutboxEntry(BASE_INPUT);
-    markOutboxEntryDelivered(delivered.id);
-    const deadLetter = enqueueOutboxEntry({ ...BASE_INPUT, maxAttempts: 1 });
-    markOutboxEntryAttempted(deadLetter.id, {
-      error: 'e',
-      nextAttemptAt: '2099-01-01T00:00:00.000Z',
-    });
-
-    const entries = findAllOutboxEntries();
-
-    expect(entries.map((entry) => entry.id)).toEqual([pending.id, delivered.id, deadLetter.id]);
-    expect(entries.map((entry) => entry.status)).toEqual(['pending', 'delivered', 'dead-letter']);
+    const first = enqueueOutboxEntry(BASE_INPUT);
+    const second = enqueueOutboxEntry(BASE_INPUT);
+    markOutboxEntryDelivered(first.id);
+    expect(findAllOutboxEntries().map((e) => e.id)).toEqual([first.id, second.id]);
   });
 });
 
@@ -379,7 +257,8 @@ describe('findAllOutboxEntries', () => {
 
 describe('markOutboxEntryAttempted', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('increments attempts and sets lastError + nextAttemptAt', () => {
@@ -439,7 +318,8 @@ describe('markOutboxEntryAttempted', () => {
 
 describe('markOutboxEntryDelivered', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('sets status=delivered, deliveredAt, clears lastError, increments attempts', () => {
@@ -462,7 +342,8 @@ describe('markOutboxEntryDelivered', () => {
 
 describe('requeueDeadLetterEntry', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   function makeDeadLetter() {
@@ -508,7 +389,8 @@ describe('requeueDeadLetterEntry', () => {
 
 describe('removeOutboxEntry', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('removes entry and returns true', () => {
@@ -526,34 +408,8 @@ describe('removeOutboxEntry', () => {
 
 describe('purgeTerminalOutboxEntriesOlderThan', () => {
   beforeEach(() => {
-    createCollections(createDb() as never);
-  });
-
-  test('queries delivered and dead-letter entries by indexed status and terminal timestamp', () => {
-    _resetOutboxStoreForTests();
-    const find = vi.fn(() => []);
-    createCollections({
-      getCollection: () => null,
-      addCollection: () => ({
-        insert: vi.fn(),
-        find,
-        findOne: vi.fn(),
-        remove: vi.fn(),
-      }),
-    } as never);
-
-    const cutoffIso = '2099-01-01T00:00:00.000Z';
-    purgeTerminalOutboxEntriesOlderThan(cutoffIso);
-
-    expect(find).toHaveBeenCalledTimes(2);
-    expect(find).toHaveBeenNthCalledWith(1, {
-      'data.status': 'delivered',
-      'data.deliveredAt': { $lt: cutoffIso },
-    });
-    expect(find).toHaveBeenNthCalledWith(2, {
-      'data.status': 'dead-letter',
-      'data.failedAt': { $lt: cutoffIso },
-    });
+    db = createMigratedMemoryDatabase();
+    createCollections(db);
   });
 
   test('removes delivered entries older than cutoff', () => {

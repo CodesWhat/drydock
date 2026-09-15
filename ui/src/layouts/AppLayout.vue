@@ -149,6 +149,7 @@ const navGroups = computed<NavGroup[]>(() => [
       { label: t('appShell.layout.nav.hosts'), icon: 'servers', route: ROUTES.SERVERS },
       { label: t('appShell.layout.nav.registries'), icon: 'registries', route: ROUTES.REGISTRIES },
       { label: t('appShell.layout.nav.watchers'), icon: 'watchers', route: ROUTES.WATCHERS },
+      { label: t('appShell.layout.nav.images'), icon: 'images', route: ROUTES.IMAGES },
     ],
   },
   {
@@ -1155,8 +1156,17 @@ const connectionOverlayStatus = computed(() =>
     : t('appShell.layout.connection.reconnecting'),
 );
 
+function asSidebarRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 function rawContainerHasSecurityIssues(container: Record<string, unknown>): boolean {
-  const summary = container.security?.scan?.summary;
+  const security = asSidebarRecord(container.security);
+  const scan = asSidebarRecord(security?.scan);
+  const summary = asSidebarRecord(scan?.summary);
   return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
 }
 
@@ -1165,8 +1175,9 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
     container.displayName || container.name || container.id || 'container',
   );
   const displayIcon = String(container.displayIcon || '');
-  const imageName = String(container.image?.name || '');
-  const imageTag = String(container.image?.tag?.value || '');
+  const imageDetails = asSidebarRecord(container.image);
+  const imageName = String(imageDetails?.name || '');
+  const imageTag = String(asSidebarRecord(imageDetails?.tag)?.value || '');
   const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
   return {
     id: String(container.id || displayName),

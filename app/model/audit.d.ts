@@ -38,6 +38,10 @@ export interface AuditEntry {
     | 'auth-login'
     | 'env-reveal'
     | 'debug-dump'
+    | 'config-read'
+    | 'config-validated'
+    | 'config-reloaded'
+    | 'config-written'
     | 'auto-update-blocked'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'
@@ -47,7 +51,8 @@ export interface AuditEntry {
     | 'mqtt-command-update'
     | 'api-key-created'
     | 'api-key-revoked'
-    | 'api-key-auth-failed';
+    | 'api-key-auth-failed'
+    | 'image-prune';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;

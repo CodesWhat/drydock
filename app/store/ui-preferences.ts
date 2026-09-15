@@ -1,11 +1,13 @@
 /**
  * UI preferences store.
- * One document per username — the sync key for cross-device preference sync (#220).
+ * One row per username — the sync key for cross-device preference sync (#220).
  * `preferences` is stored as an opaque, unvalidated blob: the server never
  * inspects the client's PreferencesSchema shape, it only persists whatever the
  * (already-validated-at-the-API-layer) envelope hands it.
+ *
+ * Backed by the `ui_preferences` table (roadmap 7-STORE, slice 3).
  */
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
 export interface UiPreferencesRecord {
   username: string;
@@ -14,36 +16,23 @@ export interface UiPreferencesRecord {
   updatedAt: string;
 }
 
-interface UiPreferencesCollection {
-  findOne(query: Record<string, unknown>): UiPreferencesRecord | null;
-  insert(document: UiPreferencesRecord): void;
-  remove(document: UiPreferencesRecord): void;
-}
+let db: Database | undefined;
 
-interface UiPreferencesStoreDb {
-  getCollection(name: string): UiPreferencesCollection | null;
-  addCollection(name: string, options?: Record<string, unknown>): UiPreferencesCollection;
-}
-
-let uiPreferencesCollection: UiPreferencesCollection | undefined;
-
-function cloneRecord(record: UiPreferencesRecord): UiPreferencesRecord {
+function rowToRecord(row: Row): UiPreferencesRecord {
   return {
-    username: record.username,
-    schemaVersion: record.schemaVersion,
-    preferences: structuredClone(record.preferences),
-    updatedAt: record.updatedAt,
+    username: String(row.username),
+    schemaVersion: Number(row.schema_version),
+    preferences: JSON.parse(String(row.preferences)),
+    updatedAt: String(row.updated_at),
   };
 }
 
 /**
  * Create ui-preferences collection.
- * @param db
+ * @param database
  */
-export function createCollections(db: UiPreferencesStoreDb): void {
-  uiPreferencesCollection = initCollection(db, 'ui-preferences', {
-    indices: ['username'],
-  }) as UiPreferencesCollection;
+export function createCollections(database: Database): void {
+  db = database;
 }
 
 /**
@@ -52,17 +41,21 @@ export function createCollections(db: UiPreferencesStoreDb): void {
  * @param username
  */
 export function getPreferences(username: string): UiPreferencesRecord | null {
-  if (!uiPreferencesCollection) {
+  if (!db) {
     return null;
   }
-  const found = uiPreferencesCollection.findOne({ username });
-  return found ? cloneRecord(found) : null;
+  const row = db
+    .prepare(
+      'SELECT username, schema_version, preferences, updated_at FROM ui_preferences WHERE username = ?',
+    )
+    .get(username);
+  return row ? rowToRecord(row) : null;
 }
 
 /**
  * Replace the synced preferences document for a username.
- * Upsert via remove-then-insert (never Loki's `.update()`), matching the rest
- * of the store layer's upsert idiom. `updatedAt` is always server-set.
+ * Upsert, matching the rest of the store layer's replace-on-write idiom.
+ * `updatedAt` is always server-set.
  * @param username
  * @param schemaVersion
  * @param preferencesBlob
@@ -72,21 +65,19 @@ export function replacePreferences(
   schemaVersion: number,
   preferencesBlob: Record<string, unknown>,
 ): UiPreferencesRecord {
-  if (!uiPreferencesCollection) {
-    throw new Error('ui-preferences collection not initialized');
+  if (!db) {
+    throw new Error('ui-preferences store not initialized');
   }
 
-  const existing = uiPreferencesCollection.findOne({ username });
-  if (existing) {
-    uiPreferencesCollection.remove(existing);
-  }
+  const updatedAt = new Date().toISOString();
+  const preferences = structuredClone(preferencesBlob);
+  db.prepare(
+    `INSERT INTO ui_preferences (username, schema_version, preferences, updated_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(username) DO UPDATE SET
+       schema_version = excluded.schema_version,
+       preferences = excluded.preferences,
+       updated_at = excluded.updated_at`,
+  ).run(username, schemaVersion, JSON.stringify(preferences), updatedAt);
 
-  const record: UiPreferencesRecord = {
-    username,
-    schemaVersion,
-    preferences: structuredClone(preferencesBlob),
-    updatedAt: new Date().toISOString(),
-  };
-  uiPreferencesCollection.insert(record);
-  return cloneRecord(record);
+  return { username, schemaVersion, preferences: structuredClone(preferences), updatedAt };
 }

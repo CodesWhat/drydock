@@ -158,6 +158,26 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
   expect(shellTagComputations).toStrictEqual([]);
 });
 
+// DR-119: docker/metadata-action defaults org.opencontainers.image.revision
+// to github.sha, which is the run's own checkout (main's head at cut time),
+// not the release source SHA. For a maintenance cut those differ, so the
+// shipped image labeled the wrong commit (v1.6.1-rc.9 carried main's head
+// instead of the dev-branch commit it was actually built from). Both
+// metadata-action invocations must override the label explicitly.
+test('release-cut pins the revision label to the release source SHA, not github.sha', () => {
+  const metadataStep = getStep('Docker metadata');
+  const stagingMetadataStep = getStep('Docker staging metadata');
+
+  for (const step of [metadataStep, stagingMetadataStep]) {
+    expect(blockLines(step?.with?.labels)).toStrictEqual([
+      'org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}',
+    ]);
+  }
+
+  const releaseStepText = JSON.stringify(loadReleaseSteps());
+  expect(releaseStepText).not.toContain('org.opencontainers.image.revision=${{ github.sha }}');
+});
+
 test('release-cut defines external registry repositories once at job scope', () => {
   const workflow = loadWorkflow(workflowPath);
   const releaseJob = workflow.jobs?.release;

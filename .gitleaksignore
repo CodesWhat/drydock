@@ -22,10 +22,6 @@
 0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/registries/ibmcr/index.mdx:generic-api-key:93
 0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:60
 0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:67
-0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:115
-0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:122
-0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:129
-0ad4605b2ae927da0421fb2488c103ba8f93a4e6:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:46
 0cb001091285bcea52465bd8cf1b19468216e370:app/agent/components/Agent.test.ts:private-key:141
 12e3fe8232e6865df44598d0c38157320134df56:app/triggers/providers/rocketchat/Rocketchat.test.ts:generic-api-key:116
 12e3fe8232e6865df44598d0c38157320134df56:app/triggers/providers/rocketchat/Rocketchat.test.ts:generic-api-key:133
@@ -49,7 +45,6 @@
 35ff2dc8cf0571774a73054a1ccf8e9d6761db4b:app/triggers/providers/rocketchat/Rocketchat.test.ts:generic-api-key:144
 35ff2dc8cf0571774a73054a1ccf8e9d6761db4b:app/triggers/providers/rocketchat/Rocketchat.test.ts:generic-api-key:33
 35ff2dc8cf0571774a73054a1ccf8e9d6761db4b:app/triggers/providers/rocketchat/Rocketchat.test.ts:generic-api-key:98
-36bd81c33256fb42230eb599407a1e77f3550fe4:content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:46
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/api/registry.mdx:generic-api-key:35
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/api/registry.mdx:generic-api-key:53
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/authentications/oidc/index.mdx:private-key:39
@@ -75,9 +70,6 @@
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/triggers/rocketchat/index.mdx:generic-api-key:56
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:37
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:45
-382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:47
-382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:54
-382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:61
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/api/registry.mdx:generic-api-key:35
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/api/registry.mdx:generic-api-key:53
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/authentications/oidc/index.mdx:private-key:39
@@ -103,9 +95,6 @@
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/triggers/rocketchat/index.mdx:generic-api-key:56
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:37
 382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:45
-382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/webhooks/index.mdx:curl-auth-header:47
-382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/webhooks/index.mdx:curl-auth-header:54
-382eed500dc20cb9418775d45c44353ee25f09cb:content/docs/v1.3/configuration/webhooks/index.mdx:curl-auth-header:61
 382eed500dc20cb9418775d45c44353ee25f09cb:docs/content/api/registry.mdx:generic-api-key:35
 382eed500dc20cb9418775d45c44353ee25f09cb:docs/content/api/registry.mdx:generic-api-key:53
 382eed500dc20cb9418775d45c44353ee25f09cb:docs/content/configuration/authentications/oidc/index.mdx:private-key:39
@@ -188,10 +177,6 @@
 999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/registries/ibmcr/index.mdx:generic-api-key:93
 999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:60
 999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:67
-999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:115
-999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:122
-999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:129
-999d98a1258f275be93419819df072cc61cb4990:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:46
 999d98a1258f275be93419819df072cc61cb4990:ui/src/views/ConfigView.vue:curl-auth-header:158
 9bec28a28dd16f096244f3b3fe6cea7e22bcf817:README.md:generic-api-key:28
 9bec28a28dd16f096244f3b3fe6cea7e22bcf817:docs/configuration/registries/dhi/README.md:generic-api-key:53
@@ -236,9 +221,6 @@ a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/trigger
 a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/triggers/rocketchat/index.mdx:generic-api-key:56
 a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:37
 a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:45
-a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:76
-a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:83
-a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:90
 ab7027d791b5aac9d59436c20a782d34f67859fa:app/registries/providers/custom/Custom.test.ts:generic-api-key:62
 ab7027d791b5aac9d59436c20a782d34f67859fa:website/app/page.tsx:generic-api-key:168
 app/agent/components/Agent.test.ts:private-key:152
@@ -295,9 +277,6 @@ cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/trigger
 cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/triggers/rocketchat/index.mdx:generic-api-key:56
 cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:37
 cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/triggers/telegram/index.mdx:telegram-bot-api-token:45
-cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:76
-cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:83
-cd5825f86c0a0ec92017f0110728c083be264eeb:content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:90
 cd5b18c12362fdbff0fca60766f1a5430af7963f:app/agent/components/Agent.test.ts:private-key:152
 cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/current/configuration/registries/hub/index.mdx:generic-api-key:102
 cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/current/configuration/registries/hub/index.mdx:generic-api-key:109
@@ -317,10 +296,6 @@ cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/registr
 cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/registries/ibmcr/index.mdx:generic-api-key:93
 cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:60
 cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:67
-cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:115
-cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:122
-cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:129
-cd5b18c12362fdbff0fca60766f1a5430af7963f:content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:46
 cd5b18c12362fdbff0fca60766f1a5430af7963f:ui/src/views/ConfigView.vue:curl-auth-header:158
 content/docs/current/configuration/authentications/oidc/index.mdx:private-key:55
 content/docs/current/configuration/registries/alicr/index.mdx:generic-api-key:60
@@ -336,14 +311,6 @@ content/docs/current/configuration/registries/ibmcr/index.mdx:generic-api-key:86
 content/docs/current/configuration/registries/ibmcr/index.mdx:generic-api-key:93
 content/docs/current/configuration/registries/ocir/index.mdx:generic-api-key:60
 content/docs/current/configuration/registries/ocir/index.mdx:generic-api-key:67
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:115
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:122
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:129
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:46
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:117
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:124
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:131
-content/docs/current/configuration/webhooks/index.mdx:curl-auth-header:48
 content/docs/v1.3/api/registry.mdx:generic-api-key:36
 content/docs/v1.3/api/registry.mdx:generic-api-key:56
 content/docs/v1.3/configuration/authentications/oidc/index.mdx:private-key:39
@@ -367,9 +334,6 @@ content/docs/v1.3/configuration/triggers/gotify/index.mdx:generic-api-key:45
 content/docs/v1.3/configuration/triggers/gotify/index.mdx:generic-api-key:53
 content/docs/v1.3/configuration/triggers/rocketchat/index.mdx:generic-api-key:46
 content/docs/v1.3/configuration/triggers/rocketchat/index.mdx:generic-api-key:56
-content/docs/v1.3/configuration/webhooks/index.mdx:curl-auth-header:47
-content/docs/v1.3/configuration/webhooks/index.mdx:curl-auth-header:54
-content/docs/v1.3/configuration/webhooks/index.mdx:curl-auth-header:61
 content/docs/v1.4/api/registry.mdx:generic-api-key:36
 content/docs/v1.4/api/registry.mdx:generic-api-key:59
 content/docs/v1.4/configuration/authentications/oidc/index.mdx:private-key:53
@@ -393,9 +357,6 @@ content/docs/v1.4/configuration/triggers/gotify/index.mdx:generic-api-key:45
 content/docs/v1.4/configuration/triggers/gotify/index.mdx:generic-api-key:53
 content/docs/v1.4/configuration/triggers/rocketchat/index.mdx:generic-api-key:46
 content/docs/v1.4/configuration/triggers/rocketchat/index.mdx:generic-api-key:56
-content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:76
-content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:83
-content/docs/v1.4/configuration/webhooks/index.mdx:curl-auth-header:90
 content/docs/v1.5/configuration/authentications/oidc/index.mdx:private-key:55
 content/docs/v1.5/configuration/registries/alicr/index.mdx:generic-api-key:60
 content/docs/v1.5/configuration/registries/alicr/index.mdx:generic-api-key:67
@@ -410,10 +371,6 @@ content/docs/v1.5/configuration/registries/ibmcr/index.mdx:generic-api-key:86
 content/docs/v1.5/configuration/registries/ibmcr/index.mdx:generic-api-key:93
 content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:60
 content/docs/v1.5/configuration/registries/ocir/index.mdx:generic-api-key:67
-content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:115
-content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:122
-content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:129
-content/docs/v1.5/configuration/webhooks/index.mdx:curl-auth-header:46
 content/docs/v1.6/configuration/authentications/oidc/index.mdx:private-key:55
 content/docs/v1.6/configuration/registries/alicr/index.mdx:generic-api-key:60
 content/docs/v1.6/configuration/registries/alicr/index.mdx:generic-api-key:67
@@ -428,10 +385,6 @@ content/docs/v1.6/configuration/registries/ibmcr/index.mdx:generic-api-key:86
 content/docs/v1.6/configuration/registries/ibmcr/index.mdx:generic-api-key:93
 content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:60
 content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:67
-content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:115
-content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:122
-content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:129
-content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:46
 d18fad052565a4088f4e7dea1f6f82b963c09eaf:README.md:generic-api-key:28
 e612c2b72e5e0eb5129240db5cde9135bc5e078e:app/registries/providers/shared/basicAuthConfigurationSchema.test.ts:generic-api-key:21
 e612c2b72e5e0eb5129240db5cde9135bc5e078e:app/registries/providers/shared/basicAuthConfigurationSchema.test.ts:generic-api-key:48

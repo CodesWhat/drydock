@@ -2,9 +2,14 @@ import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
 import DataTable from '@/components/DataTable.vue';
+import {
+  resetContainerSelectionState,
+  useContainerSelection,
+} from '@/composables/useContainerSelection';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
-import type { Container } from '@/types/container';
+import type { Container, DependencyGraph } from '@/types/container';
 import {
   expectContainerQuickLinks,
   QUICK_LINK_SELECTOR,
@@ -73,6 +78,7 @@ const DataTableStub = defineComponent({
   },
   template: `
     <div class="data-table-stub" :data-hidden-column-keys="JSON.stringify(hiddenColumnKeys || [])">
+      <div class="header-icon-stub"><slot name="header-icon" /></div>
       <div
         v-for="row in rows"
         :key="keyFor(row)"
@@ -203,6 +209,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     recheckContainer: vi.fn(),
     scanContainer: vi.fn(),
     confirmForceUpdate: vi.fn(),
+    confirmDependencyGroupUpdate: vi.fn(),
     skipUpdate: vi.fn(),
     closeActionsMenu: vi.fn(() => {
       openActionsMenu.value = null;
@@ -274,6 +281,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     recheckContainer: spies.recheckContainer,
     scanContainer: spies.scanContainer,
     confirmForceUpdate: spies.confirmForceUpdate,
+    confirmDependencyGroupUpdate: spies.confirmDependencyGroupUpdate,
     skipUpdate: spies.skipUpdate,
     closeActionsMenu: spies.closeActionsMenu,
     confirmDelete: spies.confirmDelete,
@@ -474,6 +482,8 @@ describe('ContainersGroupedViews', () => {
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
+    resetDependencyGraphState();
+    resetContainerSelectionState();
   });
 
   it('passes tableColumns and hiddenColumnKeys straight through to DataTable', () => {
@@ -501,6 +511,59 @@ describe('ContainersGroupedViews', () => {
       'registry',
       'uptime',
     ]);
+  });
+
+  it('renders every fleet group while stack grouping is off and preserves row selection', async () => {
+    const first = makeContainer({ id: 'fleet-first', name: 'alpha' });
+    const second = makeContainer({ id: 'fleet-second', name: 'beta', agent: 'edge' });
+    const { context } = makeContext();
+    context.fleet = { groupBy: ref('agent') };
+    context.filteredContainers.value = [first, second];
+    context.displayContainers.value = [first, second];
+    context.renderGroups.value = [first, second].map((c) => ({
+      key: c.id,
+      name: c.name,
+      containers: [c],
+      containerCount: 1,
+      updatesAvailable: 0,
+      updatableCount: 0,
+    }));
+    mocked.context = context;
+    useContainerSelection().toggle(first.id);
+    const wrapper = mountSubject();
+    expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
+    expect(wrapper.findAll('.full-row-stub')).toHaveLength(2);
+    context.renderGroups.value = [...context.renderGroups.value].reverse();
+    await nextTick();
+    expect(useContainerSelection().isSelected(first.id)).toBe(true);
+    expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it('keeps stack update-all controls out of fleet groups', async () => {
+    const row = makeContainer({ id: 'fleet-update', name: 'alpha', newTag: '2.0' });
+    const { context } = makeContext();
+    context.fleet = { groupBy: ref('agent') };
+    context.filteredContainers.value = [row];
+    context.displayContainers.value = [row];
+    context.renderGroups.value = [
+      {
+        key: 'fleet',
+        name: 'edge',
+        containers: [row],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+    const wrapper = mountSubject();
+    expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(false);
+    context.fleet.groupBy.value = 'none';
+    context.groupByStack.value = true;
+    await nextTick();
+    expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(true);
+    wrapper.unmount();
   });
 
   it('hoists card sorting when cards are selected or measured card reflow is forced', async () => {
@@ -3579,5 +3642,312 @@ describe('ContainersGroupedViews', () => {
       expect.objectContaining({ id: 'c-recheck', name: 'recheck-me' }),
     );
     expect(spies.closeActionsMenu).toHaveBeenCalled();
+  });
+
+  describe('dependency expansion row (#219)', () => {
+    function makeDependencyGraph(): DependencyGraph {
+      return {
+        nodes: [
+          { id: 'c-web', name: 'web', displayName: 'web' },
+          { id: 'c-db', name: 'db', displayName: 'db' },
+        ],
+        edges: [{ from: 'c-web', to: 'c-db', action: 'update', source: 'label' }],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    it('shows the dependency toggle only for containers with a dependency or dependent count', async () => {
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const plain = makeContainer({ id: 'c-plain', name: 'plain' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [web, plain];
+      context.displayContainers.value = [web, plain];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web, plain],
+          containerCount: 2,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      expect(
+        rowByName(wrapper, 'web').find('[data-test="container-dependency-toggle"]').exists(),
+      ).toBe(true);
+      expect(
+        rowByName(wrapper, 'plain').find('[data-test="container-dependency-toggle"]').exists(),
+      ).toBe(false);
+    });
+
+    it('inserts a dependency row directly after the container when expanded, and removes it on collapse', async () => {
+      useDependencyGraph().graph.value = makeDependencyGraph();
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const { context } = makeContext();
+      context.filteredContainers.value = [web];
+      context.displayContainers.value = [web];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="container-dependency-row"]').exists()).toBe(false);
+
+      const toggle = () =>
+        rowByName(wrapper, 'web').find('[data-test="container-dependency-toggle"]');
+      await toggle().trigger('click');
+      await nextTick();
+
+      const dependencyRow = wrapper.find('[data-test="container-dependency-row"]');
+      expect(dependencyRow.exists()).toBe(true);
+      expect(dependencyRow.text()).toContain('Depends on');
+      expect(dependencyRow.text()).toContain('db');
+
+      await toggle().trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-test="container-dependency-row"]').exists()).toBe(false);
+    });
+
+    it('never selects the container when the dependency row or its toggle is clicked', async () => {
+      useDependencyGraph().graph.value = makeDependencyGraph();
+      useDependencyGraph().toggleExpanded('c-web');
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const { context, spies } = makeContext();
+      context.filteredContainers.value = [web];
+      context.displayContainers.value = [web];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      // The stub's DataTable auto-fires a row-click for the first clickable
+      // (non-full-width) row on mount — that's the container row itself, not
+      // this test's concern, so the assertions below compare call counts
+      // rather than asserting zero calls.
+      const callsAfterMount = spies.selectContainer.mock.calls.length;
+
+      const dependencyRow = wrapper.find('[data-test="container-dependency-row"]');
+      expect(dependencyRow.exists()).toBe(true);
+      await dependencyRow.trigger('click');
+      expect(spies.selectContainer.mock.calls.length).toBe(callsAfterMount);
+
+      await rowByName(wrapper, 'web')
+        .find('[data-test="container-dependency-toggle"]')
+        .trigger('click');
+      expect(spies.selectContainer.mock.calls.length).toBe(callsAfterMount);
+    });
+
+    it('wires the dependency row update-group event to confirmDependencyGroupUpdate', async () => {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'c-web', name: 'web', displayName: 'web' },
+          { id: 'c-db', name: 'db', displayName: 'db' },
+          { id: 'c-cache', name: 'cache', displayName: 'cache' },
+        ],
+        edges: [
+          { from: 'c-web', to: 'c-db', action: 'update', source: 'label' },
+          { from: 'c-web', to: 'c-cache', action: 'update', source: 'label' },
+        ],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+      useDependencyGraph().toggleExpanded('c-web');
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 2 });
+      const { context, spies } = makeContext();
+      context.filteredContainers.value = [web];
+      context.displayContainers.value = [web];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const updateGroupButton = wrapper.find('[data-test="container-dependency-update-group"]');
+      expect(updateGroupButton.exists()).toBe(true);
+      await updateGroupButton.trigger('click');
+
+      expect(spies.confirmDependencyGroupUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c-web', name: 'web' }),
+      );
+    });
+  });
+
+  describe('container selection (roadmap 6.1.1)', () => {
+    it('toggles selection on checkbox click and stops row-click propagation', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context, spies } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+      spies.selectContainer.mockClear();
+
+      const checkbox = rowByName(wrapper, 'alpha').find('[data-test="container-select"]');
+      expect(checkbox.exists()).toBe(true);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+
+      await checkbox.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(spies.selectContainer).not.toHaveBeenCalled();
+    });
+
+    it('stops the keydown from reaching the row when a key is pressed on the checkbox', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const row = rowByName(wrapper, 'alpha');
+      const rowKeydownSpy = vi.fn();
+      row.element.addEventListener('keydown', rowKeydownSpy);
+
+      const checkbox = row.find('[data-test="container-select"]');
+      checkbox.element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(rowKeydownSpy).not.toHaveBeenCalled();
+    });
+
+    it('renders the checkbox in the card header and toggles selection without selecting the card', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const { wrapper, spies } = await mountCardsWithContainers([alpha]);
+      spies.selectContainer.mockClear();
+
+      const card = cardByName(wrapper, 'alpha');
+      const checkbox = card.find('[data-test="container-select"]');
+      expect(checkbox.exists()).toBe(true);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+
+      await checkbox.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(spies.selectContainer).not.toHaveBeenCalled();
+    });
+
+    it('does not render the row checkbox or the select-all header when actions are disabled', () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha];
+      context.displayContainers.value = [alpha];
+      context.containerActionsEnabled.value = false;
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+
+      expect(rowByName(wrapper, 'alpha').find('[data-test="container-select"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('[data-test="container-select-all"]').exists()).toBe(false);
+    });
+
+    it('selects then clears all visible containers from the header checkbox', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      const selectAll = wrapper.find('[data-test="container-select-all"]');
+      expect(selectAll.exists()).toBe(true);
+      expect((selectAll.element as HTMLInputElement).checked).toBe(false);
+
+      await selectAll.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(true);
+      expect(useContainerSelection().isSelected('c-beta')).toBe(true);
+      await nextTick();
+      expect((selectAll.element as HTMLInputElement).checked).toBe(true);
+
+      await selectAll.trigger('click');
+
+      expect(useContainerSelection().isSelected('c-alpha')).toBe(false);
+      expect(useContainerSelection().isSelected('c-beta')).toBe(false);
+    });
+
+    it('sets indeterminate on the header checkbox when only some visible rows are selected', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      useContainerSelection().toggle('c-alpha');
+      await nextTick();
+
+      const selectAll = wrapper.find('[data-test="container-select-all"]')
+        .element as HTMLInputElement;
+      expect(selectAll.indeterminate).toBe(true);
+      expect(selectAll.checked).toBe(false);
+    });
+
+    it('prunes the selection to the currently visible containers when the filter changes', async () => {
+      const alpha = makeContainer({ id: 'c-alpha', name: 'alpha' });
+      const beta = makeContainer({ id: 'c-beta', name: 'beta' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [alpha, beta];
+      context.displayContainers.value = [alpha, beta];
+      mocked.context = context;
+
+      mountSubject();
+      useContainerSelection().toggle('c-beta');
+      expect(useContainerSelection().isSelected('c-beta')).toBe(true);
+
+      context.filteredContainers.value = [alpha];
+      await nextTick();
+
+      expect(useContainerSelection().isSelected('c-beta')).toBe(false);
+    });
   });
 });

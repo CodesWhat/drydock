@@ -32,6 +32,7 @@ export const ROUTES = {
   AGENTS: '/agents',
   TRIGGERS: '/triggers',
   WATCHERS: '/watchers',
+  IMAGES: '/images',
   AUTH: '/auth',
   NOTIFICATIONS: '/notifications',
   NOTIFICATION_OUTBOX: '/notifications/outbox',

@@ -409,7 +409,11 @@ describe('container event update helpers', () => {
     expect(container.displayName).toBe('renamed-container');
     expect(logInfo).toHaveBeenCalledWith('Status changed from stopped to running');
     expect(logInfo).toHaveBeenCalledWith('Name changed from old-temp-name to renamed-container');
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      status: 'running',
+      name: 'renamed-container',
+      displayName: 'renamed-container',
+    });
   });
 
   test('updateContainerFromInspect should canonicalize alias name from Docker inspect', () => {
@@ -486,7 +490,10 @@ describe('container event update helpers', () => {
     );
 
     expect(container.name).toBe('bar');
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      name: 'bar',
+      displayName: 'bar',
+    });
   });
 
   test('updateContainerFromInspect preserves a legitimate rollback-shaped stored name', () => {
@@ -536,7 +543,12 @@ describe('container event update helpers', () => {
     );
 
     expect(container.displayName).toBe('Custom Label Name');
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      status: 'running',
+      name: 'renamed-container',
+      labels: { 'dd.display.name': 'Custom Label Name' },
+      displayName: 'Custom Label Name',
+    });
   });
 
   test('updateContainerFromInspect skips persistence when tracked fields are unchanged', () => {
@@ -619,7 +631,7 @@ describe('container event update helpers', () => {
     );
 
     expect(found.health).toBe(next);
-    expect(updateContainer).toHaveBeenCalledWith(found);
+    expect(updateContainer).toHaveBeenCalledWith(found.id, { health: next });
     expect(logInfo).toHaveBeenCalledWith(`Health changed from ${previous} to ${next}`);
   });
 
@@ -783,7 +795,9 @@ describe('container event update helpers', () => {
     );
 
     expect(container.labels).toEqual({ alpha: '1', beta: 'changed' });
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      labels: { alpha: '1', beta: 'changed' },
+    });
   });
 
   test('updateContainerFromInspect calls applyDerivedLabelFieldsToContainer when labels change', () => {
@@ -814,7 +828,9 @@ describe('container event update helpers', () => {
     expect(applyDerivedLabelFieldsToContainer).toHaveBeenCalledWith(container, {
       'dd.tag.family': 'loose',
     });
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      labels: { 'dd.tag.family': 'loose' },
+    });
   });
 
   test('processDockerEvent re-derives label fields on die event when labels changed', async () => {
@@ -862,7 +878,12 @@ describe('container event update helpers', () => {
     );
     expect(container.includeTags).toBe('^2\\.');
     expect(container.tagFamily).toBe('loose');
-    expect(updateContainerMock).toHaveBeenCalledWith(container);
+    expect(updateContainerMock).toHaveBeenCalledWith(container.id, {
+      status: 'exited',
+      labels: { 'dd.tag.include': '^2\\.', 'dd.tag.family': 'loose' },
+      includeTags: '^2\\.',
+      tagFamily: 'loose',
+    });
   });
 
   test('updateContainerFromInspect does not call applyDerivedLabelFieldsToContainer when labels are unchanged', () => {
@@ -918,7 +939,9 @@ describe('container event update helpers', () => {
       ),
     ).not.toThrow();
 
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      labels: { 'dd.tag.family': 'loose' },
+    });
   });
 
   test('updateContainerFromInspect re-derives multiple label fields when labels change', () => {
@@ -961,6 +984,64 @@ describe('container event update helpers', () => {
     expect(container.includeTags).toBe('^2\\.');
     expect(container.excludeTags).toBe('^alpha');
     expect(container.tagFamily).toBe('loose');
-    expect(updateContainer).toHaveBeenCalledWith(container);
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      labels: {
+        'dd.tag.include': '^2\\.',
+        'dd.tag.exclude': '^alpha',
+        'dd.tag.family': 'loose',
+      },
+      includeTags: '^2\\.',
+      excludeTags: '^alpha',
+      tagFamily: 'loose',
+    });
+  });
+
+  // #CodeRabbit — LABEL_DERIVED_PATCH_FIELDS omitted the four
+  // updatePolicy*/declarative fields, so a label change that only touches
+  // the declarative update policy (applyEffectiveDockerConfigFromLabels ->
+  // applyDockerDeclarativeUpdatePolicy -> applyDeclarativeUpdatePolicy)
+  // mutated the in-memory container but never made it into the patch this
+  // event path writes.
+  test('updateContainerFromInspect includes declarative update-policy fields in the patch when labels change them', () => {
+    const container = createMockContainer({
+      name: 'my-app',
+      status: 'running',
+      labels: { 'dd.update-policy.skip-tags': 'v1' },
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: {}, label: { skipTags: ['v1'] } },
+      updatePolicyOverrides: {},
+      updatePolicySources: { maturityMode: 'env' },
+    });
+    const updateContainer = vi.fn();
+    // Simulate what applyEffectiveDockerConfigFromLabels really does: mutate
+    // the four declarative update-policy fields on the container in place.
+    const applyDerivedLabelFieldsToContainer = vi.fn((c) => {
+      c.updatePolicy = { maturityMode: 'mature' };
+      c.updatePolicyDeclarative = { env: {}, label: { skipTags: ['v2'] } };
+      c.updatePolicyOverrides = { maturityMode: 'mature' };
+      c.updatePolicySources = { maturityMode: 'label' };
+    });
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/my-app',
+        State: { Status: 'running' },
+        Config: { Labels: { 'dd.update-policy.skip-tags': 'v2' } },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+        applyDerivedLabelFieldsToContainer,
+      },
+    );
+
+    expect(updateContainer).toHaveBeenCalledWith(container.id, {
+      labels: { 'dd.update-policy.skip-tags': 'v2' },
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: {}, label: { skipTags: ['v2'] } },
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      updatePolicySources: { maturityMode: 'label' },
+    });
   });
 });

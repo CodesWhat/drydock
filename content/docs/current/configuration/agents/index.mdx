@@ -10,6 +10,45 @@ The **Agent Mode** allows running drydock in a distributed manner.
 - **Agent Node**: Runs near the Docker socket (or other container sources). It performs discovery and update checks.
 - **Controller Node**: The central instance. It manages its own local watchers AND connects to remote Agents. It aggregates containers from Agents, and handles persistence, UI, and Notifications.
 
+## Fleet health and inventory-only refresh
+
+The Containers page shows every configured agent, including agents with no
+containers and disconnected agents. Counts cover the whole fleet, regardless of
+the current container filters. Disconnected counts are marked as last known;
+missing statistics and failed status reads are shown as unavailable, not zero.
+Controller-local watchers have a separate neutral **Configured** tile. That label
+does not claim Docker connectivity, and an agent named `Local` remains distinct.
+
+The page independently reads `GET /api/v1/agents/roster`, a names-only collection
+available with the existing `read` API-key scope (or normal session access).
+It can show an agent as unavailable even if the first status request fails and
+the agent has not registered any watchers. Status and roster failures have separate
+warnings; failed reads retain known identities, while a successful read can remove
+obsolete identities. Unavailable rows cannot refresh inventory. No extra polling
+or persistent browser cache is used.
+
+This roster describes live controller client registrations, not a persistent
+enrollment directory. It includes configured native clients before their handshake,
+but not invalid configurations that never created a client. Inbound edge clients
+removed on disconnect are no longer in the roster. Older controllers without the
+route still show agents returned by the status API, with a roster warning.
+
+**Refresh inventory** targets all Docker watchers belonging to that exact agent
+or local tile. It discovers and reconciles container inventory without registry
+checks, update actions, or notifications. The control requires every target to
+advertise inventory-refresh support and is disabled for disconnected agents.
+Older agents without that capability remain visible but cannot use this action.
+There is no fallback to a registry scan. **Reload status** only reloads agent and
+watcher metadata.
+
+Each refresh snapshots its target watchers. Results distinguish complete inventory
+from partial or non-authoritative inventory, with watcher names and error details.
+An authoritative empty inventory is a valid success. Returned containers describe
+the final source inventory, not the number of containers changed. After all watcher
+requests finish, the page reloads the container list once; failure of that read is
+shown separately from the inventory results. Connection status and the last
+inventory result are separate signals.
+
 ## Architecture
 
 The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE).
@@ -131,6 +170,8 @@ This example talks to the agent over plain HTTP, so it sets `DD_AGENT_ALLOW_INSE
 ## Agent Configuration
 
 To run drydock in Agent mode, start the application with the `--agent` command line flag.
+
+<Callout type="info">An agent reads its own [config file](/docs/configuration/config-file) from its own `/config/drydock.yml`, using the same shape and the same sections (`watcher.*`, `action.*`, `notification.*`, `registry.*`, `server.*`) it already accepts as environment variables. `DD_AGENT_SECRET` is not one of them: the file loader rejects it, so each agent still needs its secret from the environment (or `DD_AGENT_SECRET_FILE`). The controller does not push configuration to an agent in v1.8 — each side's file (or environment) is its own.</Callout>
 
 ### Agent Environment Variables
 

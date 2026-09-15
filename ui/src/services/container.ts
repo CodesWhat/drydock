@@ -1,4 +1,8 @@
-import type { ApiContainerUpdateOperation } from '../types/api';
+import type {
+  ApiContainerTrigger,
+  ApiContainerUpdateOperation,
+  ApiUnassociatedContainerTrigger,
+} from '../types/api';
 import type { DependencyGraph, UpdateChainPreview } from '../types/container';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
@@ -17,6 +21,11 @@ interface ContainerGroup {
   containers: ContainerGroupMember[];
   containerCount: number;
   updatesAvailable: number;
+}
+
+interface ContainerSbomResult extends Record<string, unknown> {
+  generatedAt?: string;
+  document?: unknown;
 }
 
 interface ContainerSummary {
@@ -210,6 +219,33 @@ async function getContainerTriggers(containerId: string) {
   return extractCollectionData<Record<string, unknown>>(payload);
 }
 
+/**
+ * GET /api/v1/containers/:id/triggers — single request for both the associated trigger list
+ * (`data`) and the unassociated-trigger reason list (`unassociatedTriggers`, DR-78). Reading both
+ * from one response, instead of issuing the request twice, avoids the trigger/agent/label
+ * configuration changing between two separate round trips and briefly showing a trigger in both
+ * lists or neither.
+ */
+async function getContainerTriggersWithReasons(containerId: string): Promise<{
+  data: ApiContainerTrigger[];
+  unassociatedTriggers: ApiUnassociatedContainerTrigger[];
+}> {
+  const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
+  }
+  const payload = await readJsonResponse(response, 'Container triggers API');
+  const envelope = payload as { unassociatedTriggers?: unknown };
+  return {
+    data: extractCollectionData<ApiContainerTrigger>(payload),
+    unassociatedTriggers: Array.isArray(envelope.unassociatedTriggers)
+      ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
+      : [],
+  };
+}
+
 async function runTrigger({
   containerId,
   triggerType,
@@ -287,7 +323,7 @@ async function getContainerSbom(containerId: string, format: string = 'spdx-json
   if (!response.ok) {
     throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
   }
-  return readJsonResponse<Record<string, unknown>>(response, 'Container SBOM API');
+  return readJsonResponse<ContainerSbomResult>(response, 'Container SBOM API');
 }
 
 async function updateContainerPolicy(
@@ -534,6 +570,10 @@ async function getUpdateOperationById(
   return readJsonResponse<ApiContainerUpdateOperation>(response, 'Container update operation API');
 }
 
+interface RevealedContainerEnv {
+  env: { key: string; value: string; sensitive: boolean }[];
+}
+
 async function revealContainerEnv(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/env/reveal`, {
     method: 'POST',
@@ -542,7 +582,7 @@ async function revealContainerEnv(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to reveal env vars: ${response.statusText}`);
   }
-  return readJsonResponse(response, 'Container env API');
+  return readJsonResponse<RevealedContainerEnv>(response, 'Container env API');
 }
 
 export type { ContainerGroup };
@@ -558,6 +598,7 @@ export {
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
+  getContainerTriggersWithReasons,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,

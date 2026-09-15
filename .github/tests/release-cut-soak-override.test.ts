@@ -200,6 +200,11 @@ function runSourceStep(options: {
   }
 }
 
+// CA-11: each test here shells out to git and a real bash script and is the
+// slowest file in .github/tests, so it flakes first under load. 60s: two
+// pre-push gates plus a docker build running alongside on the same machine.
+vi.setConfig({ testTimeout: 60_000 });
+
 test('a blank soak_override_reason still hard-fails with the unchanged error message', () => {
   const result = runSourceStep({
     isPrerelease: false,

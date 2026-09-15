@@ -1,0 +1,49 @@
+{
+  "imagesView": {
+    "title": "Images",
+    "subtitle": "Alle images op elke host, met wat ze gebruikt en wat een prune zou vrijmaken",
+    "loading": "Images laden...",
+    "loadFailed": "Kan images niet laden",
+    "columns": {
+      "repository": "Repository",
+      "tag": "Tag",
+      "imageId": "Image-ID",
+      "size": "Grootte",
+      "containers": "Containers",
+      "created": "Aangemaakt",
+      "lastSeen": "Laatst gebruikt",
+      "host": "Host"
+    },
+    "filters": {
+      "host": "Host",
+      "allHosts": "Alle hosts",
+      "unusedOnly": "Alleen ongebruikte"
+    },
+    "dangling": "loshangend",
+    "untagged": "zonder tag",
+    "hostUnsupported": "De agent van deze host stelt de Docker-API niet beschikbaar aan de controller, dus images kunnen hier niet worden weergegeven of opgeruimd.",
+    "hostError": "Kan images op {host} niet weergeven: {message}",
+    "empty": {
+      "title": "Geen images",
+      "description": "Geen images komen overeen met de huidige filters."
+    },
+    "prune": {
+      "dangling": "Loshangende opruimen",
+      "unused": "Ongebruikte opruimen",
+      "confirm": {
+        "header": {
+          "dangling": "Loshangende images op {host} opruimen",
+          "unused": "Ongebruikte images op {host} opruimen"
+        },
+        "message": "Dit verwijdert 1 image en maakt ongeveer {size} vrij. Dit cijfer is een schatting; gedeelde lagen kunnen het verlagen. | Dit verwijdert {count} images en maakt ongeveer {size} vrij. Dit cijfer is een schatting; gedeelde lagen kunnen het verlagen.",
+        "nothing": "Niets om op te ruimen op deze host.",
+        "accept": "Opruimen"
+      },
+      "inProgress": "Images op {host} worden opgeruimd...",
+      "success": "1 image verwijderd en {size} vrijgemaakt op {host} | {count} images verwijderd en {size} vrijgemaakt op {host}",
+      "stillRunning": "De Docker-proxy van de agent gaf geen resultaat terug voor {host}; het opruimen loopt mogelijk nog. Ververs de lijst zo dadelijk.",
+      "failed": "Opruimen op {host} mislukt: {message}"
+    },
+    "refresh": "Vernieuwen"
+  }
+}

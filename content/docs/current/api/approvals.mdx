@@ -128,4 +128,4 @@ curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f
 
 ## Events
 
-Every reconciler and decision writes an SSE event: `dd:approval-created` when a row is minted, `dd:approval-decided` on approve/reject/defer, and `dd:approval-resolved` when a row leaves the queue by any other path (candidate withdrawn or superseded, container removed). All three carry `{ id, containerId, containerName, decision, pendingCount }` — `pendingCount` is the post-write count, so a client can update a badge directly without a follow-up request. See the [SSE event list](/docs/api#server-sent-events).
+Every reconciler and decision writes an SSE event: `dd:approval-created` when a row is minted, `dd:approval-decided` on approve/reject/defer, and `dd:approval-resolved` when a row leaves the queue by any other path (candidate withdrawn or superseded, container removed). All three carry `{ id, containerId, containerName, decision, pendingCount }` — `pendingCount` is the post-write count, so a client can update a badge directly without a follow-up request. See the [SSE event list](/docs/api#server-sent-events-sse).

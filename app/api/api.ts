@@ -10,6 +10,7 @@ import * as auditRouter from './audit.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
+import * as configRouter from './config.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
 import * as containerDependenciesRouter from './container-dependencies.js';
@@ -20,6 +21,7 @@ import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
 import { isIconProxyApiPath } from './icons/route.js';
 import * as iconsRouter from './icons.js';
+import * as imagesRouter from './images.js';
 import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
@@ -188,6 +190,10 @@ export function init(): express.Router {
   // Mount debug dump router
   mountRouter(router, '/debug', debugRouter.init());
 
+  // Mount config router (effective configuration, redacted, session-only —
+  // roadmap 7.1 slice 4)
+  mountRouter(router, '/config', configRouter.init());
+
   // Mount server router
   mountRouter(router, '/server', serverRouter.init());
 
@@ -208,6 +214,9 @@ export function init(): express.Router {
 
   // Mount container actions router (start/stop/restart)
   mountRouter(router, '/containers', containerActionsRouter.init());
+
+  // Mount images router (image inventory and prune, sibling of /containers)
+  mountRouter(router, '/images', imagesRouter.init());
 
   // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
   mountRouter(router, '/stats', statsRouter.init());

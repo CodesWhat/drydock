@@ -65,6 +65,7 @@
         "hosts": "ホスト",
         "registries": "レジストリ",
         "watchers": "ウォッチャー",
+        "images": "イメージ",
         "settingsGroup": "設定",
         "general": "一般",
         "notifications": "通知",

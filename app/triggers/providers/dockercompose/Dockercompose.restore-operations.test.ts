@@ -1,7 +1,9 @@
 import { watch } from 'node:fs';
 import { emitBatchUpdateCompleted, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
+import type { Database } from '../../../store/db/driver.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { createMigratedMemoryDatabase } from '../../../test/sqlite-db.js';
 import Dockercompose from './Dockercompose.js';
 import {
   makeCompose,
@@ -97,51 +99,9 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-/**
- * Minimal Loki-shaped store so the update-operation collection is the real one:
- * these tests assert on the persisted operation and on the terminal lifecycle
- * event that only the real `markOperationTerminal` emits.
- */
-function createUpdateOperationDb() {
-  const collections = new Map<string, unknown>();
-  const getByPath = (object, path: string) =>
-    path.split('.').reduce((accumulator, key) => accumulator?.[key], object);
-  const matchesQuery = (doc, query: Record<string, unknown> = {}) =>
-    Object.entries(query).every(([key, value]) => {
-      const docValue = getByPath(doc, key);
-      if (value !== null && typeof value === 'object' && '$in' in (value as object)) {
-        return (value as { $in: unknown[] }).$in.includes(docValue);
-      }
-      return docValue === value;
-    });
-
-  return {
-    getCollection: (name: string) => collections.get(name) ?? null,
-    addCollection: (name: string) => {
-      const docs: Record<string, unknown>[] = [];
-      const collection = {
-        insert: (doc) => {
-          doc.$loki = docs.length + 1;
-          docs.push(doc);
-        },
-        find: (query = {}) => docs.filter((doc) => matchesQuery(doc, query)),
-        findOne: (query = {}) => docs.find((doc) => matchesQuery(doc, query)) ?? null,
-        remove: (doc) => {
-          const index = docs.indexOf(doc);
-          if (index >= 0) {
-            docs.splice(index, 1);
-          }
-        },
-        ensureIndex: () => undefined,
-      };
-      collections.set(name, collection);
-      return collection;
-    },
-  };
-}
-
 describe('Dockercompose compose restore operation records', () => {
   let trigger;
+  let db: Database | undefined;
   const composeFile = '/opt/drydock/test/stack.yml';
   const restoreFailureError =
     'runtime refresh failed (compose file restore failed: Failed to restore compose file ' +
@@ -153,7 +113,13 @@ describe('Dockercompose compose restore operation records', () => {
       watchMock: watch,
       getStateMock: getState,
     }));
-    updateOperationStore.createCollections(createUpdateOperationDb() as never);
+    db = createMigratedMemoryDatabase();
+    updateOperationStore.createCollections(db);
+  });
+
+  afterEach(() => {
+    db?.close();
+    db = undefined;
   });
 
   /**

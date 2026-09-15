@@ -98,5 +98,13 @@ describe('tag/precision', () => {
     test('treats whitespace-only transformed tags as not pinned', () => {
       expect(isTagPinned('1.2.3', '^.*$ =>    ')).toBe(false);
     });
+
+    test('treats bare distro and variant tags with no version number as not pinned', () => {
+      expect(isTagPinned('alpine', undefined)).toBe(false);
+      expect(isTagPinned('slim', undefined)).toBe(false);
+      expect(isTagPinned('bookworm', undefined)).toBe(false);
+      expect(isTagPinned('fpm-alpine', undefined)).toBe(false);
+      expect(isTagPinned('production', undefined)).toBe(false);
+    });
   });
 });

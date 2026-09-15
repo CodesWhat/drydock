@@ -16,6 +16,46 @@ DD_NOTIFICATION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_i
 <Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
 You just need to give them different names.</Callout>
 
+## Edit notification delivery policy in the UI
+
+This editor and the action policy editor below are new in unreleased v1.8 builds and require a writable [configuration file](/docs/configuration/config-file).
+
+Open a notification provider in **Triggers**, then choose **Edit notification policy**. The editor fetches a fresh configuration snapshot only when you open it or explicitly reload it. It edits `threshold`, `once`, `mode`, `securitymode`, `digestcron`, and `resolvenotifications`, plus `securitydigesttitle` and `securitydigestbody` when the server provides them. The two boolean fields use Yes/No choices and are saved as booleans, including `false`. Older servers retain the six-field editor with template controls unavailable.
+
+The threshold selector supports `all`, `major`, `minor`, `patch`, `major-only`, `minor-only`, `digest`, `major-no-digest`, `minor-no-digest`, `patch-no-digest`, `major-only-no-digest`, and `minor-only-no-digest`. Both mode selectors support `simple`, `batch`, `digest`, and `batch+digest`.
+
+Each field shows whether it comes from the configuration file, environment, a reference, or a default. Environment-owned values, `${NAME}` and `_file` references, agent-owned triggers, and provider-forced values such as MQTT's delivery mode cannot be changed here. MQTT does not support security digest templates, so its template fields are read-only. Missing files, unsupported servers, and denied requests are reported without offering an unsafe save. Credentials, destinations, other templates, execution settings, and action providers remain outside this editor. Reference values and credentials are not round-tripped through the form.
+
+Security digest templates use a title input and multiline body. Case, whitespace, and newlines are preserved. Empty templates are invalid; use explicit removal to restore the built-in defaults used when rendering, rather than saving an empty string. Preparing a template does not change `securitymode` or enable digest delivery. Whole values such as `${NAME}` or `${NAME:-fallback}` use YAML environment interpolation and become read-only references in the editor after reload. Scan expressions such as `${scan.alertCount}`, including at the beginning of a template, remain editable. Templates are public notification text: do not put secrets in them. This form does not add template syntax, preview execution, or database-backed template overrides.
+
+**Save** sends only changed fields to `PATCH /api/v1/config/editor/triggers`, using the opaque revision from the session-only `GET` snapshot and the exact provider, instance, and agent identity. **Cancel** makes no changes. **Remove file value / use default** explicitly removes a YAML field; an empty text input is a different edit and is validated by the server. Saving policy does not run **Test Trigger** or send a notification.
+
+A stale revision produces a conflict: your draft stays visible, Save is blocked, and **Discard draft and reload** is required before another attempt. The editor never retries with a newer revision automatically. Saved-file status, live reload status, errors, reconciliation, and any restart requirements are shown separately. A saved but unapplied result is not reported as success, and audit errors remain visible even when the change was applied. After a saved result, the surrounding trigger detail and matching list row refresh once; the editor preserves its draft and outcome until you explicitly reload or close it.
+
+This editor does not change database-backed notification rules or the notification bell. Other configuration fields and per-container label overrides are not included in this slice.
+
+## Edit action policy in the UI
+
+Open an existing Docker, Docker Compose, Portainer, or Command provider in **Triggers**, then choose **Edit action policy**. The form loads `GET /api/v1/config/editor/actions` only on Edit or explicit reload. It shows `auto`, `order`, and `concurrency`, together with source ownership and the server's effective values. Credentials, commands and provider execution settings stay outside the form.
+
+Automatic dispatch uses the four named modes below. Existing boolean and mixed-case values are normalized only for display and comparison; untouched file values are not rewritten. Order accepts negative and fractional numbers. Concurrency requires a positive whole number. Blank numeric inputs are invalid, not zero or removal. **Remove file override / inherit settings** explicitly removes only that file leaf. The form does not guess hidden inherited values or replace them with `1`.
+
+**Save** sends only changed leaves with the snapshot revision and exact original-case paths. **Cancel** does not write. Environment-owned, referenced, agent-owned and ambiguous fields remain read-only. Conflicts retain the draft and require explicit reload; uncertain saves are never automatically retried. Saved-file and live-application outcomes remain separate, including reload and audit errors. A saved result refreshes only the matching surrounding detail/list row while retaining editor feedback. Saving never invokes **Test Trigger**, executes an action or sends a notification.
+
+The fields use the providers' existing validation and runtime defaults:
+
+- `auto`: boolean or case-insensitive `all`, `oninclude`, `onauto`, or `none`. Booleans normalize to `all`/`none`; an absent action value defaults to `oninclude`. Changing it does not bypass global manual mode or container eligibility.
+- `order`: a number, including negative and fractional values, with the existing default of `100`. Existing provider/group defaults and same-name sharing still apply. Saving or removing an order can also change the effective order of other same-name triggers, including notification providers that inherit it; the editor does not change that precedence.
+- `concurrency`: a positive integer override. Removing it inherits `DD_UPDATE_CONCURRENCY`, then `1` when the global value is absent. Compose concurrency remains across independent projects, not within one compose file.
+
+An administrator can send `PATCH /api/v1/config/editor/actions` with the snapshot `revision` and a `changes` array. Each change uses the exact original-case `path` returned by the snapshot, `operation: "set"` with a scalar `value`, or `operation: "remove"` without a value. Send only changed fields. Removal is distinct from an empty string, which still goes through normal provider validation. No arbitrary paths or instance creation/deletion are supported.
+
+Environment-owned values, references, agent-owned actions, ambiguous YAML identities, and unavailable files are read-only. Credentials, command text, destinations, sockets, TLS, templates, provider execution options, global settings, labels, and database-backed policy are excluded. Reference-derived values are omitted, including inherited order or concurrency; a local override can remain editable without revealing the inherited value. Untouched YAML nodes, comments, interpolation, and secret-file references stay on the server.
+
+The revision protects against stale saves, including an external edit during validation. A `409` requires an explicit fresh snapshot and a new user decision, not an automatic retry. Invalid requests or provider validation return `400` without writing. A successful atomic save returns `saved: true`; inspect `applied`, `errors`, `restartRequired`, and `reload` separately. A saved file whose reload failed is not rolled back or reported as applied. Audit errors can be present even when the live change was applied.
+
+Saving uses the same serialized write queue as watcher, notification, and whole-section configuration writes. Live reload waits for active update lifecycles before replacing changed action instances, so later dispatch uses the new settings. Validation, saving, and reloading do not dispatch an update, execute a command, or send a test notification.
+
 ## Environment variable prefixes
 
 Two prefixes are supported for trigger configuration (the legacy third was removed in v1.7.0):
@@ -238,6 +278,55 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 
 <Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Action triggers do not use the outbox. Docker and Docker Compose retries are handled by the update lifecycle; Command triggers run the configured command directly.</Callout>
 
+## Diagnosing a missed notification
+
+If a container has an update but the expected notification never arrives, turn on debug logging and read the fields drydock attaches to each cause rather than guessing -- a trigger skip, a detection failure, a provider error, or an outbox delivery state each carry different fields.
+
+### Turn on debug logging
+
+Set `DD_LOG_LEVEL=debug` (see [Logs](/docs/configuration/logs)). Every component logs through a child logger bound with a `component` field, so once debug logging is on you can narrow to the trigger you're investigating:
+
+- A trigger's own logger is `trigger.<type>.<name>` -- for example `DD_NOTIFICATION_SLACK_OPS_URL=...` logs as `trigger.slack.ops`.
+- Per-container log lines from a trigger add a `container` field carrying the container's full name. Not every skip reason below goes through that per-container child logger, though -- some embed the container name directly in the message text instead (noted in the table).
+- A watcher's own registry-check failures log as `watcher.docker.<name>`, also with a `container` field -- worth checking first if the update was never detected at all, not just never notified.
+
+With `DD_LOG_FORMAT=json`, filter with your log aggregator or `grep`, e.g. `grep '"component":"trigger.slack.ops"'`. With the default text format, use the **Configuration > Logs** page in the UI and its **Component filter** dropdown (see [Logs](/docs/configuration/logs#toolbar-controls)).
+
+### Causes
+
+Not every row below is a trigger deciding to skip. Registry-check failures are the watcher detecting nothing to report; outbox rows are what happens to a delivery *after* a trigger already tried and failed.
+
+| Kind | Cause | Log line to look for | Level | Where the container/trigger name is |
+| --- | --- | --- | --- | --- |
+| Trigger skip | Below the configured `THRESHOLD` | `Threshold not reached => ignore (threshold=..., updateKind=..., semverDiff=...)` | debug | `container` field |
+| Trigger skip | `ONCE=true` and this exact result was already sent | `Skipping update-available notification for <container> (once=..., updateAvailable=..., alreadyNotified=...)` | debug | embedded in the message |
+| Trigger skip | Excluded by a `dd.notification.include`/`dd.notification.exclude` label (or `dd.action.*` for action triggers), an agent mismatch, or the action-policy resolver | `Trigger conditions not met => ignore (category=..., triggerInclude=..., triggerExclude=..., included=..., excluded=...)` | debug | `container` field |
+| Trigger skip | The `update-available` notification rule is disabled, or this trigger isn't in that rule's trigger allow-list | `Skipping update-available notification for <container> (rule-disabled)` or `(excluded-from-allow-list)` | debug | embedded in the message |
+| Detection failure | The registry check itself failed, so no update was ever detected | `Error when processing (<message>)` | warn | `container` field; `component` is `watcher.docker.<name>` |
+| Provider error | The `update-available` send itself threw (network error, bad credentials) or a `${...}` template failed to render | `Error (<message>)`, or `Suppressed repeated error (<message>)` once the same error already logged recently | warn (debug when suppressed) | `container` field |
+| Provider error | A lifecycle event (`update-applied`, `update-failed`, `security-alert`, ...) failed delivery on the trigger's normal, non-batched dispatch path | `Error handling <ruleId> event (<message>)` | warn | not present -- neither a field nor embedded in the message; `component` names only the trigger. The failed delivery is then enqueued in the outbox (below) for retry. |
+| Provider error | The same kind of lifecycle event failed delivery through a batched `triggerBatch()` call (trigger configured for batch mode) | `Error handling <ruleId> event (<message>)` | warn | not present, same as above. Not enqueued in the outbox -- a batched failure is not retried. |
+| Outbox delivery state | Outbox retry backoff | `Outbox <id> (event=<eventName> trigger=<triggerId>) attempt <n> failed: <message>; retry at <timestamp>` | debug | embedded in the message |
+| Outbox delivery state | Outbox dead-letter after 5 attempts | `Outbox <id> (event=<eventName> trigger=<triggerId>) → dead-letter after <n> attempts: <message>` | warn | embedded in the message |
+
+The message text above is a stable log-line prefix, not a documented schema -- match on the leading words, not the whole line.
+
+### Worked example
+
+A container named `nginx` has an update available, but the `slack.ops` notification trigger never fires. With `DD_LOG_LEVEL=debug` and `DD_LOG_FORMAT=json`:
+
+```json
+{"level":20,"time":1732000000000,"component":"trigger.slack.ops","container":"nginx","msg":"Trigger conditions not met => ignore (category=notification, triggerInclude=<none>, triggerExclude=nginx, included=true, excluded=true)"}
+```
+
+`component` names the trigger and `container` names the container; the message's `triggerExclude=nginx` shows a `dd.notification.exclude` label on the container whose regex also matches its own name. The fix is to narrow that label so it only excludes what was intended.
+
+### See also
+
+- [Notification Outbox](#notification-outbox) above for retry/backoff and dead-letter behavior.
+- [Notification Rules](#notification-rules) above for the allow-list and the `rule-disabled`/`excluded-from-allow-list` reasons.
+- [Logs](/docs/configuration/logs) for `DD_LOG_LEVEL`, `DD_LOG_FORMAT`, and the UI log viewer.
+
 ## Template Variable Reference
 
 Template strings use `${expression}` placeholders. Drydock provides two sets of variables depending on the trigger mode.
@@ -246,7 +335,7 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 
 | Variable | Description | Example value |
 | --- | --- | --- |
-| `container` | The full container object | _(object)_ |
+| `container` | The full container object | *(object)* |
 | `container.id` | Container ID | `sha256:abc123...` |
 | `container.name` | Container name | `my-app` |
 | `container.displayName` | Display name (from `dd.display.name` label, defaults to name) | `My App` |
@@ -291,7 +380,7 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 
 | Variable | Description | Example value |
 | --- | --- | --- |
-| `containers` | Array of container objects (each with the same properties as above) | _(array)_ |
+| `containers` | Array of container objects (each with the same properties as above) | *(array)* |
 | `containers.length` | Number of containers in the batch | `3` |
 
 ### Expression syntax

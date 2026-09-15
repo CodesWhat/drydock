@@ -71,12 +71,14 @@ vi.mock('../store/update-operation', () => ({
   updateOperation: vi.fn(),
   markOperationTerminal: mockMarkOperationTerminal,
   getOperationById: vi.fn(),
-  getOperationsByContainerName: vi.fn(() => []),
+  getOperationsByContainerIdentity: vi.fn(() => []),
   getOperationsByContainerId: vi.fn(() => []),
-  getInProgressOperationByContainerName: vi.fn(),
+  getInProgressOperationByContainerIdentity: vi.fn(),
   getInProgressOperationByContainerId: vi.fn(),
-  getActiveOperationByContainerName: vi.fn(),
+  getActiveOperationByContainerIdentity: vi.fn(),
   getActiveOperationByContainerId: vi.fn(),
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
 }));
 
 vi.mock('../log', () => ({
@@ -1026,7 +1028,7 @@ describe('Container Actions Router', () => {
       mockGetContainer.mockReturnValue(container);
       const updateOperationStore = await import('../store/update-operation');
       (
-        updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+        updateOperationStore.getActiveOperationByContainerIdentity as ReturnType<typeof vi.fn>
       ).mockReturnValue({
         id: 'op-queued',
         containerName: 'nginx',
@@ -1041,10 +1043,11 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
-      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx', {
-        agent: undefined,
-        watcher: undefined,
-      });
+      // No identityKey on the container fixture, so the identity-scoped lookup
+      // is called with undefined — the guard inside it then never matches.
+      expect(updateOperationStore.getActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+        undefined,
+      );
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Container update already queued',
@@ -1066,7 +1069,7 @@ describe('Container Actions Router', () => {
       mockGetContainer.mockReturnValue(container);
       const updateOperationStore = await import('../store/update-operation');
       (
-        updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+        updateOperationStore.getActiveOperationByContainerIdentity as ReturnType<typeof vi.fn>
       ).mockReturnValue({
         id: 'op-stale-id',
         containerId: 'c0-pre-recreate',
@@ -1082,10 +1085,11 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
-      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx', {
-        agent: undefined,
-        watcher: undefined,
-      });
+      // No identityKey on the container fixture, so the identity-scoped lookup
+      // is called with undefined — the guard inside it then never matches.
+      expect(updateOperationStore.getActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+        undefined,
+      );
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Container update already queued',

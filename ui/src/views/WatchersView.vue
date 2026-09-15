@@ -6,11 +6,13 @@ import AppBadge from '@/components/AppBadge.vue';
 import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import WatcherScheduleEditor from '@/components/WatcherScheduleEditor.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllWatchers, getWatcher } from '../services/watcher';
-import type { ApiComponent } from '../types/api';
+import type { WatcherIdentity } from '../services/config-editor';
+import type { ApiComponentResponse } from '../types/api';
 import { ROUTES } from '../router/routes';
 import { formatAbsoluteTime, timeAgo } from '../utils/audit-helpers';
 
@@ -20,17 +22,19 @@ function watcherServerName(name: unknown): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
-const selectedWatcher = ref<Record<string, unknown> | null>(null);
+type WatcherRow = ReturnType<typeof mapWatcher>;
+
+const selectedWatcher = ref<WatcherRow | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
 let detailRequestId = 0;
 
-const watchersData = ref<Record<string, unknown>[]>([]);
+const watchersData = ref<WatcherRow[]>([]);
 const loading = ref(true);
 const error = ref('');
 
@@ -158,21 +162,28 @@ function readWatcherContainerTotal(metadata: unknown): number {
   return typeof total === 'number' ? total : 0;
 }
 
-function mapWatcher(watcher: ApiComponent, status = 'watching') {
+function mapWatcher(watcher: ApiComponentResponse, status = 'watching') {
+  const configuration = watcher.configuration ?? {};
+  const lastRunAt = watcher.metadata?.lastRunAt ? String(watcher.metadata.lastRunAt) : undefined;
   return {
     id: watcher.id,
     name: watcher.name,
     type: watcher.type,
     status,
     containers: readWatcherContainerTotal(watcher.metadata),
-    cron: watcher.configuration?.cron ?? '',
+    cron:
+      typeof configuration === 'object' && 'cron' in configuration
+        ? (configuration.cron ?? '')
+        : '',
     nextRunAt: watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined,
     nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
-    lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
+    get lastRun() {
+      return lastRunAt ? timeAgo(lastRunAt, locale.value, t) : '\u2014';
+    },
     config: Object.fromEntries(
-      Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+      Object.entries(configuration).sort(([a], [b]) => a.localeCompare(b)),
     ),
-    agent: watcher.agent,
+    agent: watcher.agent ?? undefined,
   };
 }
 
@@ -192,7 +203,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(watcher: Record<string, unknown>) {
+async function openDetail(watcher: WatcherRow, refreshRow = false) {
   selectedWatcher.value = watcher;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -203,10 +214,18 @@ async function openDetail(watcher: Record<string, unknown>) {
     const detail = await getWatcher({
       type: String(watcher.type),
       name: String(watcher.name),
-      agent: watcher.agent as string | undefined,
+      agent: watcher.agent,
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedWatcher.value = mapWatcher(detail, String(watcher.status));
+    if (refreshRow) {
+      const refreshed = selectedWatcher.value;
+      watchersData.value = watchersData.value.map((row) =>
+        row.id === watcher.id && row.name === watcher.name && row.agent === watcher.agent
+          ? refreshed
+          : row,
+      );
+    }
   } catch {
     if (requestId !== detailRequestId) return;
     detailError.value = t('watchersView.detail.loadError');
@@ -217,10 +236,23 @@ async function openDetail(watcher: Record<string, unknown>) {
   }
 }
 
+function refreshSavedWatcher(identity: WatcherIdentity) {
+  const current = selectedWatcher.value;
+  if (
+    !detailOpen.value ||
+    !current ||
+    current.id !== identity.id ||
+    current.name !== identity.name ||
+    current.agent !== identity.agent
+  )
+    return;
+  void openDetail(current, true);
+}
+
 onMounted(async () => {
   try {
     const watcherData = await getAllWatchers();
-    watchersData.value = watcherData.map((watcher: ApiComponent) => mapWatcher(watcher));
+    watchersData.value = watcherData.map((watcher) => mapWatcher(watcher));
   } catch {
     error.value = t('watchersView.loadError');
   } finally {
@@ -413,6 +445,7 @@ onMounted(async () => {
             <DetailField :label="t('watchersView.detail.schedule')" mono>{{ selectedWatcher.cron || '\u2014' }}</DetailField>
             <DetailField :label="t('watchersView.detail.nextRun')" v-tooltip.top="selectedWatcher.nextRunAt ? formatAbsoluteTime(String(selectedWatcher.nextRunAt)) : ''">{{ selectedWatcher.nextRun }}</DetailField>
             <DetailField :label="t('watchersView.detail.lastRun')">{{ selectedWatcher.lastRun }}</DetailField>
+            <WatcherScheduleEditor v-if="detailOpen" :watcher="{ id: String(selectedWatcher.id), name: String(selectedWatcher.name), agent: selectedWatcher.agent as string | undefined }" @saved="refreshSavedWatcher" />
             <DetailField v-for="(val, key) in selectedWatcher.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
           </div>
         </template>

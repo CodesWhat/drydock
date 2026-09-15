@@ -219,12 +219,9 @@ function getActiveUpdateOperationForContainer(container: Container) {
     return byId;
   }
 
-  // Fall back to name-based lookup scoped by agent+watcher so that identically-named
-  // containers on different agents do not produce a false 409 (issue #411).
-  return updateOperationStore.getActiveOperationByContainerName(container.name, {
-    agent: container.agent,
-    watcher: container.watcher,
-  });
+  // Fall back to identity-scoped lookup so that identically-named containers
+  // on different agents do not produce a false 409 (issue #411).
+  return updateOperationStore.getActiveOperationByContainerIdentity(container.identityKey);
 }
 
 // Complete map covers every UpdateBlockerReason so callers never hit a missing
@@ -260,28 +257,20 @@ function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) 
   if (operation?.status !== 'queued') {
     return;
   }
-  const operationIdentity =
-    operation.container && typeof operation.container.watcher === 'string'
-      ? {
-          agent: operation.container.agent,
-          watcher: operation.container.watcher,
-        }
-      : undefined;
 
   // Issue #410 Part B / #421: if this failure looks like a stale-container
   // 404/409 or a compose "no longer exists" AND there is a recent succeeded op
-  // for the same container name and source identity, the duplicate update
-  // already succeeded — reclassify to `expired` so no false "update failed"
-  // notification fires.  Passing operationId activates the active-op check
-  // (issue #421) for when the winner is still in flight.
+  // for the same container identity, the duplicate update already succeeded —
+  // reclassify to `expired` so no false "update failed" notification fires.
+  // Passing operationId activates the active-op check (issue #421) for when
+  // the winner is still in flight.
   if (
     isDuplicateStyleError(error) &&
     operation.containerName &&
     classifyDuplicateOpTerminalStatus(
       error,
-      operation.containerName,
+      operation.containerIdentityKey,
       undefined,
-      operationIdentity,
       operationId,
     ) === 'expired'
   ) {

@@ -1253,6 +1253,52 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(false);
     });
 
+    test.each([
+      ['a bare object', {}],
+      ['an object with a nested containers array', { containers: [] }],
+      ['a string', 'oops'],
+      ['a number', 42],
+    ])(
+      'rejects a non-array /api/containers body (%s) before deregistering triggers (DR-25)',
+      async (_label, body) => {
+        axios.get.mockResolvedValueOnce({ data: body });
+
+        await expect(client.handshake()).rejects.toThrow(/Handshake failed for agent test-agent/);
+
+        expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+        expect(registry.registerComponent).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          expect.stringContaining('non-array /api/containers body'),
+        );
+        expect(client.isConnected).toBe(false);
+      },
+    );
+
+    test('a null /api/containers body handshakes normally (DR-25 control)', async () => {
+      axios.get.mockResolvedValueOnce({ data: null });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await expect(client.handshake()).rejects.toThrow();
+
+      // `null` fails Array.isArray the same as any other non-array body; the
+      // "control" here is that it is rejected the same way and never reaches
+      // deregisterAgentComponents, not that it is somehow accepted.
+      expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+    });
+
+    test('an empty-array /api/containers body handshakes normally (DR-25 control)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
+      expect(client.isConnected).toBe(true);
+    });
+
     test('should emit agent-connected when transitioning to connected state', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] })
@@ -2399,6 +2445,26 @@ describe('AgentClient', () => {
       resolveHandshake();
       await Promise.resolve();
     });
+
+    test.each(['added', 'updated', 'removed'])(
+      'ignores additive inventory %s events without report or enrichment handling',
+      async (kind) => {
+        const process = vi.spyOn(client, 'processContainer');
+        const refresh = vi.spyOn(client as never, 'refreshControllerDockerTransportContainer');
+        const remove = vi.spyOn(storeContainer, 'deleteContainer');
+        await client.handleEvent(`dd:inventory-${kind}`, {
+          context: {
+            origin: 'inventory',
+            operationId: 'inventory-operation',
+            source: { type: 'docker', name: 'local' },
+          },
+          container: { id: 'c1', name: 'test', watcher: 'local' },
+        });
+        expect(process).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+      },
+    );
 
     test('should process container on dd:container-added', async () => {
       const spy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
@@ -8719,6 +8785,80 @@ describe('AgentClient', () => {
   });
 
   describe('handleComponentSync (edge agent public shim)', () => {
+    const ownedWatcher = {
+      type: 'docker',
+      name: 'owned',
+      configuration: { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+    };
+
+    test('an already retired sync never deregisters the replacement', async () => {
+      await client.handleComponentSync([ownedWatcher], [], () => false);
+      expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+      expect(registry.registerComponent).not.toHaveBeenCalled();
+      expect(client.isRegisteringComponents).toBe(false);
+    });
+
+    test('retirement during deregistration skips new registrations and cache publication', async () => {
+      let valid = true;
+      vi.mocked(registry.deregisterAgentComponents).mockImplementationOnce(async () => {
+        valid = false;
+      });
+      await client.handleComponentSync([ownedWatcher], [], () => valid);
+      expect(registry.registerComponent).not.toHaveBeenCalled();
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+      expect(client.isRegisteringComponents).toBe(false);
+    });
+
+    test('retirement after watcher registration skips its synthetic trigger and cache', async () => {
+      let valid = true;
+      vi.mocked(registry.registerComponent).mockImplementationOnce(async () => {
+        valid = false;
+      });
+      await client.handleComponentSync([ownedWatcher], [], () => valid);
+      expect(registry.registerComponent).toHaveBeenCalledTimes(1);
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(1);
+    });
+
+    test('retirement after a synthetic trigger skips the next watcher and cache', async () => {
+      let valid = true;
+      vi.mocked(registry.registerComponent)
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(async () => {
+          valid = false;
+        });
+      await client.handleComponentSync(
+        [ownedWatcher, { ...ownedWatcher, name: 'second' }],
+        [],
+        () => valid,
+      );
+      expect(registry.registerComponent).toHaveBeenCalledTimes(2);
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+    });
+
+    test('a current owner preserves the original registration failure and transactional rollback', async () => {
+      const failure = new Error('registration failed');
+      vi.mocked(registry.registerComponent).mockRejectedValueOnce(failure);
+      await expect(client.handleComponentSync([ownedWatcher], [], () => true)).rejects.toBe(
+        failure,
+      );
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(2);
+    });
+
+    test('a retired registration failure never rolls back the new owner by name', async () => {
+      let valid = true;
+      vi.mocked(registry.registerComponent).mockImplementationOnce(async () => {
+        valid = false;
+        throw new Error('abandoned cleanup failed');
+      });
+      await client.handleComponentSync([ownedWatcher], [], () => valid);
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(1);
+      expect(client.getWatcherSnapshot('docker', 'owned')).toBeUndefined();
+      expect(client.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('abandoned cleanup failed'),
+      );
+    });
+
     test('keeps isRegisteringComponents true through edge component replacement and resets it after success (#605)', async () => {
       const watchers = [{ type: 'docker', name: 'local', configuration: {} }];
       const triggers = [{ type: 'mock', name: 'update', configuration: {} }];
@@ -9201,6 +9341,283 @@ describe('AgentClient', () => {
           updateMaturityLevel: existing.updateMaturityLevel,
           updateEligibility: existing.updateEligibility,
         }),
+      );
+    });
+
+    test('marker-mode inventory keeps dd.watch.digest alive across a Portwing runtime-state report (DR-38)', async () => {
+      // digest.watch is derived from the dd.watch.digest label by the
+      // controller's own bridged Docker watcher, never by Portwing itself —
+      // Portwing hardcodes image.digest.watch to false on every report since
+      // it doesn't do digest watching. Without restoring the previously
+      // derived value here, a later "live runtime state" report from
+      // Portwing silently turns digest watching back off.
+      await registerAnonymousHub();
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: true, repo: 'sha256:current' },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            digest: expect.objectContaining({ watch: true }),
+          }),
+        }),
+      );
+    });
+
+    test('marker-mode inventory skips the digest.watch restore when the incoming report has no image', async () => {
+      // A malformed dd:container_sync frame (EdgeAgentAdapter casts
+      // `data.containers` straight to `Container[]` with no schema
+      // validation before this reaches preserveControllerDockerEnrichment)
+      // can omit `image` entirely. The restore must not throw trying to
+      // spread a nonexistent `merged.image`, and it must not fabricate one.
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: true, repo: 'sha256:current' },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+      const [savedContainer] = vi.mocked(storeContainer.updateContainer).mock.calls[0];
+      expect(savedContainer.id).toBe('c1');
+      expect(savedContainer.image).toBeUndefined();
+    });
+
+    test('marker-mode inventory leaves digest.watch false for a container that never carried the label', async () => {
+      await registerAnonymousHub();
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: false },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            digest: expect.objectContaining({ watch: false }),
+          }),
+        }),
+      );
+    });
+
+    test('pins dd.watch.digest=true across two Portwing reports and keeps the container eligible for digest comparison (DR-38 regression guard)', async () => {
+      // Independent confirmation of DR-38, driven end to end through two
+      // real handleContainerSync calls rather than a pre-seeded `existing`
+      // mock: report 1 is the first-ever sighting (dd.watch.digest=true,
+      // watcher-side digest.repo already resolved); report 2 is Portwing's
+      // next "live runtime state" push, which hardcodes digest.watch: false
+      // on the wire but still carries the same digest.repo. The gate
+      // `image-comparison.ts` reads before comparing a pinned digest against
+      // the registry is `container.image.digest.watch && container.image.digest.repo`
+      // (image-comparison.ts:376) — so this asserts both fields survive the
+      // second report, not just `watch` in isolation.
+      await registerAnonymousHub();
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      // buildContainerReport() and preserveControllerDockerEnrichment() each
+      // call storeContainer.getContainer() once per report, so the store
+      // stub must persist across both calls within a report rather than
+      // being consumed after the first (mockReturnValueOnce would starve
+      // the second call and silently fall through the insert path).
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementationOnce((value) => value);
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: true, repo: 'sha256:current' },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      const firstStored = vi.mocked(storeContainer.insertContainer).mock.calls[0][0];
+      expect(firstStored.image?.digest).toEqual(
+        expect.objectContaining({ watch: true, repo: 'sha256:current' }),
+      );
+
+      vi.mocked(storeContainer.getContainer).mockReturnValue(firstStored as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementationOnce((value) => value);
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false, repo: 'sha256:current' },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      const secondStored = vi.mocked(storeContainer.updateContainer).mock.calls[0][0];
+      expect(secondStored.image?.digest.watch).toBe(true);
+      expect(secondStored.image?.digest.repo).toBe('sha256:current');
+      expect(Boolean(secondStored.image?.digest.watch && secondStored.image?.digest.repo)).toBe(
+        true,
       );
     });
 
@@ -9912,6 +10329,22 @@ describe('AgentClient', () => {
       await expect(
         client.requestDockerApi('POST', '/v1.44/containers/create', {}, Buffer.from('{invalid')),
       ).rejects.toThrow('must be valid JSON');
+    });
+
+    test('capable edge agents receive the original binary and JSON bytes', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      const sendStreamRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      client.edgeAdapter = {
+        supportsRequestBodyStream: true,
+        sendRequest,
+        sendStreamRequest,
+      } as never;
+      const binary = Buffer.from([0, 255, 128]);
+      const json = Buffer.from(' { "n": 1234567890123456789 } ');
+      await client.requestDockerApi('POST', '/build', {}, binary);
+      await client.requestDockerApi('POST', '/containers/create', {}, json);
+      expect(sendStreamRequest).toHaveBeenCalledWith('POST', '/build', {}, binary);
+      expect(sendRequest).toHaveBeenCalledWith('POST', '/containers/create', {}, json);
     });
 
     test('edge mode normalizes response body and header variants', async () => {

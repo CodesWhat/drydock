@@ -1,5 +1,6 @@
 import { execFile as realExecFile } from 'node:child_process';
 import joi from 'joi';
+import { ddEnvVars } from '../../../configuration/index.js';
 import { createChildProcessCallbackMock } from '../../../test/notification-provider-mocks.js';
 
 var childProcessMockControl = vi.hoisted(() => ({
@@ -727,4 +728,97 @@ test('JSON and digest message payloads keep their spaces and quotes', async () =
   expect(capturedEnv?.dd_title).toBe('Security scan: 1 finding');
   expect(capturedEnv?.dd_body).toBe('- app1: 1 critical');
   expect(capturedEnv?.containers_json).toBe('[{"name":"c1"}]');
+});
+
+// ---- Update concurrency ----
+
+test('runCommand defaults to concurrency 1: a second call waits for the first to finish', async () => {
+  const prevConcurrency = ddEnvVars.DD_UPDATE_CONCURRENCY;
+  delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+  try {
+    const cmd = new Command();
+    await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    childProcessMockControl.execFileImpl = (
+      _file: unknown,
+      _args: unknown,
+      _options: unknown,
+      callback: (...cbArgs: unknown[]) => void,
+    ) => {
+      firstGate.then(() => callback(null, '', ''));
+      return { pid: 1 };
+    };
+
+    const first = cmd.runCommand({});
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(childProcessMockControl.execFileCalls).toBe(1);
+
+    const second = cmd.runCommand({});
+    await new Promise((resolve) => setImmediate(resolve));
+    // Second call is queued behind the semaphore; it must not have started yet.
+    expect(childProcessMockControl.execFileCalls).toBe(1);
+
+    releaseFirst();
+    await first;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(childProcessMockControl.execFileCalls).toBe(2);
+
+    await second;
+  } finally {
+    if (prevConcurrency === undefined) {
+      delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+    } else {
+      ddEnvVars.DD_UPDATE_CONCURRENCY = prevConcurrency;
+    }
+  }
+});
+
+test('a per-action concurrency override lets more than one command run at once', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test', concurrency: 2 });
+
+  let releaseBoth!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseBoth = resolve;
+  });
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    _options: unknown,
+    callback: (...cbArgs: unknown[]) => void,
+  ) => {
+    gate.then(() => callback(null, '', ''));
+    return { pid: 1 };
+  };
+
+  const first = cmd.runCommand({});
+  const second = cmd.runCommand({});
+  await new Promise((resolve) => setImmediate(resolve));
+
+  expect(childProcessMockControl.execFileCalls).toBe(2);
+
+  releaseBoth();
+  await Promise.all([first, second]);
+});
+
+test('a failing command releases its slot so a queued command still runs', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+  const warnSpy = vi.spyOn(cmd.log, 'warn');
+
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    error: new Error('command failed'),
+  });
+
+  await cmd.runCommand({});
+  expect(warnSpy).toHaveBeenCalledWith('Command execution failed');
+
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({ stdout: 'ok' });
+  await cmd.runCommand({});
+
+  expect(childProcessMockControl.execFileCalls).toBe(2);
 });

@@ -1,5 +1,15 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import AppSplitButton from '@/components/AppSplitButton.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import DataTable from '@/components/DataTable.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
+import { useToast } from '@/composables/useToast';
+import { preferences } from '@/preferences/store';
+import { getAgents } from '@/services/agent';
+import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
+import type { ApiAgent, ApiComponent } from '@/types/api';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -42,6 +52,14 @@ vi.mock('@/composables/useServerFeatures', () => ({
 }));
 
 // --- Mock all services ---
+vi.mock('@/services/agent', () => ({
+  getAgents: vi.fn().mockResolvedValue([]),
+  getAgentRoster: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('@/services/watcher', () => ({
+  getAllWatchers: vi.fn().mockResolvedValue([]),
+  refreshWatcherInventory: vi.fn(),
+}));
 vi.mock('@/services/container', () => ({
   deleteContainer: vi.fn(),
   getAllContainers: vi.fn(),
@@ -49,7 +67,9 @@ vi.mock('@/services/container', () => ({
   getContainerLogs: vi.fn(),
   getContainerUpdateOperations: vi.fn().mockResolvedValue([]),
   getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
-  getContainerTriggers: vi.fn().mockResolvedValue([]),
+  getContainerTriggersWithReasons: vi
+    .fn()
+    .mockResolvedValue({ data: [], unassociatedTriggers: [] }),
   getContainerVulnerabilities: vi.fn().mockResolvedValue({
     status: 'not-scanned',
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
@@ -76,7 +96,8 @@ vi.mock('@/services/backup', () => ({
   rollback: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@/services/preview', () => ({
+vi.mock('@/services/preview', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/preview')>()),
   previewContainer: vi.fn().mockResolvedValue({}),
 }));
 
@@ -91,6 +112,7 @@ vi.mock('@/stores/operations', () => ({
     batchSummaries: {},
     getOperationByContainerId: vi.fn().mockReturnValue(undefined),
     getBatchProgress: vi.fn().mockReturnValue(undefined),
+    getActiveBatchProgress: vi.fn().mockReturnValue([]),
     captureDisplayBatch: vi.fn(),
     clearDisplayBatch: vi.fn(),
     getDisplayBatch: vi.fn().mockReturnValue(undefined),
@@ -131,21 +153,25 @@ const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
 const mockFilterHidePinned = ref(false);
 
-vi.mock('@/composables/useContainerFilters', () => ({
-  useContainerFilters: vi.fn(() => ({
-    filterSearch: mockFilterSearch,
-    filterStatus: mockFilterStatus,
-    filterRegistry: mockFilterRegistry,
-    filterBouncer: mockFilterBouncer,
-    filterServer: mockFilterServer,
-    filterKind: mockFilterKind,
-    filterHidePinned: mockFilterHidePinned,
-    showFilters: mockShowFilters,
-    activeFilterCount: mockActiveFilterCount,
-    filteredContainers: mockFilteredContainers,
-    clearFilters: mockClearFilters,
-  })),
-}));
+vi.mock('@/composables/useContainerFilters', async () => {
+  const { useFleetDimensions } = await import('@/composables/useFleetDimensions');
+  return {
+    useContainerFilters: vi.fn((containers) => ({
+      fleet: useFleetDimensions(containers),
+      filterSearch: mockFilterSearch,
+      filterStatus: mockFilterStatus,
+      filterRegistry: mockFilterRegistry,
+      filterBouncer: mockFilterBouncer,
+      filterServer: mockFilterServer,
+      filterKind: mockFilterKind,
+      filterHidePinned: mockFilterHidePinned,
+      showFilters: mockShowFilters,
+      activeFilterCount: mockActiveFilterCount,
+      filteredContainers: mockFilteredContainers,
+      clearFilters: mockClearFilters,
+    })),
+  };
+});
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: vi.fn(() => ({
@@ -398,7 +424,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 async function mountContainersView(
   containers: Container[] = [],
   apiContainersInput?: any[],
-  options: { initialFilterKind?: string } = {},
+  options: { initialFilterKind?: string; realTable?: boolean } = {},
 ) {
   // The API returns raw objects; mapApiContainers transforms them
   const apiContainers =
@@ -428,7 +454,9 @@ async function mountContainersView(
   mockActiveDetailTab.value = 'overview';
 
   const wrapper = mountWithPlugins(ContainersView, {
-    global: { stubs: childStubs },
+    global: {
+      stubs: { ...childStubs, ...(options.realTable ? { DataTable } : {}) },
+    },
   });
   mountedWrappers.push(wrapper);
   await flushPromises();
@@ -436,8 +464,357 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  it.each(['Enter', ' '])('isolates split-button %s from the real table row', async (key) => {
+    const previous = preferences.containers.tableActions;
+    preferences.containers.tableActions = 'buttons';
+    try {
+      const wrapper = await mountContainersView(
+        [makeContainer({ newTag: '2.0.0', updateKind: 'major' })],
+        undefined,
+        { realTable: true },
+      );
+      for (const button of wrapper.getComponent(AppSplitButton).findAll('button')) {
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        button.element.dispatchEvent(event);
+        await flushPromises();
+        expect(mockSelectContainer).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(false);
+      }
+    } finally {
+      preferences.containers.tableActions = previous;
+    }
+  });
+
+  it.each([
+    ['hard', false, 'muted', true, false],
+    ['hard', true, 'muted', true, false],
+    ['soft', false, 'warning', false, false],
+    ['soft', true, 'success', true, true],
+    ['ready', false, 'success', false, false],
+    ['ready', true, 'success', true, true],
+  ] as const)(
+    'preserves %s split actions with row locked=%s',
+    async (state, locked, variant, primaryDisabled, menuDisabled) => {
+      preferences.containers.tableActions = 'buttons';
+      const dialog = useConfirmDialog();
+      dialog.dismiss();
+      const container = makeContainer({
+        newTag: '2.0.0',
+        updateKind: 'major',
+        updateEligibility: {
+          eligible: state === 'ready',
+          evaluatedAt: '2026-09-13T12:00:00Z',
+          blockers:
+            state === 'ready'
+              ? []
+              : [
+                  {
+                    reason: state === 'hard' ? 'security-scan-blocked' : 'snoozed',
+                    severity: state === 'hard' ? 'hard' : 'soft',
+                    actionable: false,
+                    message: 'Existing policy warning',
+                  },
+                ],
+        },
+        ...(locked
+          ? {
+              updateOperation: {
+                id: 'operation-c1',
+                status: 'in-progress' as const,
+                phase: 'pulling' as const,
+                updatedAt: '2026-09-13T12:00:00Z',
+              },
+            }
+          : {}),
+      });
+      const wrapper = await mountContainersView([container], undefined, { realTable: true });
+      const split = wrapper.getComponent(AppSplitButton);
+      expect(split.props('variant')).toBe(variant);
+      expect(split.classes().includes('opacity-50')).toBe(locked && state !== 'hard');
+      expect(split.classes().includes('min-w-[110px]')).toBe(state === 'hard');
+      const [primary, menu] = split.findAll('button');
+      expect(primary.element.disabled).toBe(primaryDisabled);
+      expect(menu.element.disabled).toBe(menuDisabled);
+      expect(primary.text()).toBe(state === 'hard' ? 'Blocked' : 'Update');
+      expect(primary.get('[data-icon]').attributes('data-icon')).toBe(
+        state === 'hard' ? 'lock' : 'cloud-download',
+      );
+      expect(primary.get('[data-icon]').attributes('data-size')).toBe('14');
+      vi.spyOn(menu.element, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(80, 680, 320, 20),
+      );
+      menu.element.click();
+      await flushPromises();
+      const dropdown = document.querySelector<HTMLElement>('.z-modal.min-w-\\[160px\\]');
+      if (menuDisabled) {
+        expect(dropdown).toBeNull();
+      } else {
+        expect(dropdown?.style.bottom).toBe(`${window.innerHeight - 680 + 4}px`);
+        expect(menu.classes()).toContain(state === 'hard' ? 'dd-bg-elevated' : 'brightness-125');
+        menu.element.click();
+        await flushPromises();
+        expect(document.querySelector('.z-modal.min-w-\\[160px\\]')).toBeNull();
+      }
+      expect(dialog.visible.value).toBe(false);
+      primary.element.click();
+      await flushPromises();
+      expect(dialog.visible.value).toBe(!primaryDisabled);
+      if (!primaryDisabled) {
+        expect(dialog.current.value?.message).toContain('nginx');
+        expect(dialog.current.value?.message.includes('Existing policy warning')).toBe(
+          state === 'soft',
+        );
+      }
+      expect(mockSelectContainer).not.toHaveBeenCalled();
+      expect(mockApiUpdate).not.toHaveBeenCalled();
+      dialog.dismiss();
+    },
+  );
+
+  it.each([false, true])(
+    'renders and clears the real preview API recovery link in full-page=%s',
+    async (fullPage) => {
+      const previewService = await import('@/services/preview');
+      const actualPreviewService =
+        await vi.importActual<typeof import('@/services/preview')>('@/services/preview');
+      const container = makeContainer({ newTag: '1.1.0' });
+      const wrapper = await mountContainersView([container]);
+      mockSelectedContainer.value = container;
+      mockDetailPanelOpen.value = true;
+      mockContainerFullPage.value = fullPage;
+      mockActiveDetailTab.value = 'actions';
+      await flushPromises();
+
+      const fetchSpy = vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: 'registry-auth-failed',
+            message: 'Registry credentials expired',
+            action: { code: 'open-registry-settings', href: '/registries' },
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      const previousFetch = globalThis.fetch;
+      globalThis.fetch = fetchSpy;
+      onTestFinished(() => {
+        globalThis.fetch = previousFetch;
+      });
+      vi.mocked(previewService.previewContainer).mockImplementationOnce(
+        actualPreviewService.previewContainer,
+      );
+      const previewButton = wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Preview Update');
+      expect(previewButton).toBeDefined();
+      await previewButton!.trigger('click');
+      await flushPromises();
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/containers/c1/preview', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      expect(wrapper.text()).toContain('Registry credentials expired');
+      const recovery = wrapper.get('[data-test="preview-error-action"]');
+      expect(recovery.attributes('href')).toBe('/registries');
+      expect(recovery.text()).toBe('Open registry settings');
+
+      vi.mocked(previewService.previewContainer).mockResolvedValueOnce({
+        currentImage: 'nginx:1.0.0',
+        newImage: 'nginx:1.1.0',
+        updateKind: { kind: 'tag' },
+      });
+      await previewButton!.trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-test="preview-error-action"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Registry credentials expired');
+      expect(wrapper.text()).toContain('nginx:1.1.0');
+    },
+  );
+
+  it('restores local fleet counts after a successful list retry, without treating an action error as stale inventory', async () => {
+    vi.mocked(getAllWatchers).mockResolvedValue([
+      {
+        id: 'docker.one',
+        type: 'docker',
+        name: 'one',
+        configuration: {},
+        metadata: { inventoryRefreshSupported: true },
+      } satisfies ApiComponent,
+    ]);
+    const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
+    const vm = wrapper.vm as any;
+    vm.error = 'an unrelated action failed';
+    await flushPromises();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
+    mockGetAllContainers.mockRejectedValueOnce(new Error('list unavailable'));
+    await vm.loadContainers();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('Unavailable');
+    await vm.loadContainers();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
+  });
+  it('mounts fleet-wide health above filters and reports an inventory list reload failure separately', async () => {
+    vi.mocked(getAgents).mockResolvedValue([
+      {
+        name: 'empty',
+        host: '127.0.0.1',
+        connected: true,
+        containers: { total: 0, running: 0, stopped: 0 },
+      } satisfies ApiAgent,
+    ]);
+    vi.mocked(getAllWatchers).mockResolvedValue([
+      {
+        id: 'empty.docker.one',
+        type: 'docker',
+        name: 'one',
+        agent: 'empty',
+        configuration: {},
+        metadata: { inventoryRefreshSupported: true },
+      } satisfies ApiComponent,
+    ]);
+    vi.mocked(refreshWatcherInventory).mockResolvedValueOnce({
+      context: {
+        origin: 'inventory',
+        operationId: 'op',
+        source: { type: 'docker', name: 'one', agent: 'empty' },
+      },
+      authoritative: true,
+      containers: [],
+      removedIds: [],
+      errors: [],
+    });
+    const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
+    expect(wrapper.findAll('[data-test="fleet-health-row"]')).toHaveLength(1);
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('0 containers');
+    mockFilteredContainers.value = [];
+    await flushPromises();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('0 containers');
+    mockGetAllContainers.mockRejectedValueOnce(new Error('list unavailable'));
+    await wrapper.get('[data-test="fleet-inventory-refresh"]').trigger('click');
+    await flushPromises();
+    expect(
+      (wrapper.vm as any).fleetHealth.outcomes.value?.[JSON.stringify(['agent', 'empty'])] ??
+        (wrapper.vm as any).fleetHealth.outcomes[JSON.stringify(['agent', 'empty'])],
+    ).toMatchObject({ complete: true, reloadFailed: true });
+    expect(refreshWatcherInventory).toHaveBeenCalledTimes(1);
+  });
+  it('plans fleet Update all from live filtered rows without changing selection', async () => {
+    const { useContainerSelection } = await import('@/composables/useContainerSelection');
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const ready = makeContainer({
+      id: 'ready',
+      name: 'ready',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const hidden = makeContainer({
+      id: 'hidden',
+      name: 'hidden',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const wrapper = await mountContainersView([ready, hidden]);
+    const vm = wrapper.vm as any;
+    mockFilteredContainers.value = [ready];
+    await flushPromises();
+    useContainerSelection().toggle('hidden');
+    expect(wrapper.find('[data-test="fleet-bulk-update"]').exists()).toBe(true);
+    expect(vm.fleetBulk?.canUpdate.value).toBe(true);
+    await wrapper.get('[data-test="fleet-bulk-update"]').trigger('click');
+    expect(useConfirmDialog().current.value?.message).toContain('ready');
+    expect(useConfirmDialog().current.value?.message).not.toContain('hidden');
+    expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+    mockFilteredContainers.value = [hidden];
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(mockApiUpdateBulk).toHaveBeenCalledWith(['ready']);
+    expect(useContainerSelection().selectedIds.value).toEqual(new Set(['hidden']));
+    useContainerSelection().clear();
+  });
+
+  it('confirms a frozen patch-only snooze scope and applies container-wide policies once', async () => {
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const patch = makeContainer({
+      id: 'patch',
+      name: 'patch',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const minor = makeContainer({
+      id: 'minor',
+      name: 'minor',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+    });
+    const wrapper = await mountContainersView([patch, minor]);
+    const vm = wrapper.vm as any;
+    expect(vm.fleetBulk?.patchCount.value).toBe(1);
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    expect(useConfirmDialog().current.value?.message).toContain('all updates');
+    expect(mockUpdateContainerPolicy).not.toHaveBeenCalled();
+    mockFilteredContainers.value = [minor];
+    await useConfirmDialog().accept();
+    expect(mockUpdateContainerPolicy).toHaveBeenCalledExactlyOnceWith('patch', 'snooze', {
+      days: 7,
+    });
+    expect(vm.fleetBulk.summary.value).toContain('1');
+  });
+
+  it('wires snooze duration/date controls and renders failure and success summaries', async () => {
+    const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+    const patch = makeContainer({
+      id: 'patch',
+      name: 'patch',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const wrapper = await mountContainersView([patch]);
+    expect(wrapper.get('[data-test="fleet-snooze-duration"] option[value="1"]').text()).toBe(
+      '1 day',
+    );
+    expect(wrapper.findAll('span').map((span) => span.text())).toContain('1 patch candidate');
+    await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('date');
+    expect(
+      (wrapper.get('[data-test="fleet-bulk-snooze"]').element as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await wrapper.get('[data-test="fleet-snooze-date"]').setValue('2099-04-14');
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    mockUpdateContainerPolicy.mockRejectedValueOnce(new Error('gone'));
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain('Snoozed: 0. Failed: 1.');
+    expect(wrapper.get('[role="status"]').classes()).toContain('dd-text-warning');
+    await wrapper.get('[data-test="fleet-snooze-duration"]').setValue('1');
+    await wrapper.get('[data-test="fleet-bulk-snooze"]').trigger('click');
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(mockUpdateContainerPolicy).toHaveBeenLastCalledWith('patch', 'snooze', { days: 1 });
+    expect(wrapper.get('[role="status"]').classes()).toContain('dd-text-muted');
+  });
+
+  it('exposes the live action scope before display ghosts and honors directed ids', async () => {
+    const first = makeContainer({
+      id: 'first',
+      name: 'first',
+      newTag: '1.0.1',
+      updateKind: 'patch',
+    });
+    const second = makeContainer({ id: 'second', name: 'second' });
+    const wrapper = await mountContainersView([first, second]);
+    const vm = wrapper.vm as any;
+    mockFilteredContainers.value = [first];
+    vm.actionPending = new Map([['gone', makeContainer({ id: 'gone', name: 'gone' })]]);
+    expect(vm.liveActionContainers?.map((row: Container) => row.id)).toEqual(['first']);
+    expect(vm.displayContainers.map((row: Container) => row.id)).toContain('gone');
+    vm.filterContainerIds = new Set(['second', 'missing']);
+    expect(vm.liveActionContainers.map((row: Container) => row.id)).toEqual(['second']);
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
+    useToast().toasts.value = [];
+    vi.mocked(getAgents).mockResolvedValue([]);
+    vi.mocked(getAllWatchers).mockResolvedValue([]);
     mockRouterReplace.mockResolvedValue(undefined);
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
@@ -491,9 +868,77 @@ describe('ContainersView', () => {
       const wrapper = mountedWrappers.pop();
       wrapper?.unmount();
     }
+    useToast().toasts.value = [];
   });
 
   describe('loading containers', () => {
+    it('reconciles persisted fleet grouping before loading stack groups', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.groupByStack = true;
+      preferences.containers.fleet.groupBy = 'agent';
+      const wrapper = await mountContainersView([makeContainer({ agent: 'edge' })]);
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(false);
+      expect(vm.fleet.groupBy.value).toBe('agent');
+      expect(mockGetContainerGroups).not.toHaveBeenCalled();
+      expect(vm.renderGroups[0].name).toBe('edge');
+    });
+
+    it('keeps an explicit stack route ahead of a persisted fleet grouping', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.fleet.groupBy = 'agent';
+      mockRoute.query = { groupByStack: 'true' };
+      const wrapper = await mountContainersView();
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(true);
+      expect(vm.fleet.groupBy.value).toBe('none');
+    });
+
+    it('clears fleet filters for an external search navigation', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.containers.fleet.agent = JSON.stringify(['agent', 'edge']);
+      mockRoute.query = { q: 'nginx' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).fleet.agent.value).toBe('all');
+    });
+
+    it('projects sorted fleet groups through the existing renderGroups model', async () => {
+      const rows = [
+        makeContainer({ id: 'z', name: 'zebra', agent: 'edge' }),
+        makeContainer({ id: 'a', name: 'alpha', agent: 'edge' }),
+        makeContainer({ id: 'b', name: 'beta' }),
+      ];
+      const wrapper = await mountContainersView(rows);
+      const vm = wrapper.vm as any;
+      vm.fleet.groupBy.value = 'agent';
+      await flushPromises();
+      expect(vm.renderGroups).toHaveLength(2);
+      const edge = vm.renderGroups.find((group: any) => group.name === 'edge');
+      expect(edge.containers.map((row: Container) => row.id)).toEqual(['a', 'z']);
+      expect(edge.containerCount).toBe(2);
+      vm.containerSortAsc = false;
+      await flushPromises();
+      expect(
+        vm.renderGroups
+          .find((group: any) => group.name === 'edge')
+          .containers.map((row: Container) => row.id),
+      ).toEqual(['z', 'a']);
+    });
+
+    it('renders fleet groups and switches back to the existing stack grouping', async () => {
+      const wrapper = await mountContainersView();
+      const vm = wrapper.vm as any;
+      expect(vm.fleet).toBeDefined();
+      vm.fleet.groupBy.value = 'agent';
+      await flushPromises();
+      expect(vm.groupByStack).toBe(false);
+      vm.groupByStack = true;
+      await flushPromises();
+      expect(vm.fleet.groupBy.value).toBe('none');
+      vm.fleet.groupBy.value = 'registry';
+      await flushPromises();
+      expect(vm.groupByStack).toBe(false);
+    });
     it('calls getAllContainers on mount', async () => {
       await mountContainersView([]);
       expect(mockGetAllContainers).toHaveBeenCalledOnce();
@@ -554,6 +999,26 @@ describe('ContainersView', () => {
     });
 
     describe('identical-list dedup optimisation', () => {
+      it.each([
+        { labels: { team: 'new' } },
+        { agent: 'Local' },
+        { registryUrl: 'https://other.example' },
+        { registryName: 'quay' },
+        { tagPrecision: 'specific' as const },
+        { imageTagSemver: true },
+        { isDigestPinned: true },
+      ])('refreshes fleet dimensions when only %j changes', async (patch) => {
+        const container = makeContainer({ labels: { team: 'old' } });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+        const changed = { ...container, ...patch };
+        mockGetAllContainers.mockResolvedValue([changed]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        vi.mocked(mapApiContainers).mockReturnValue([changed]);
+        await vm.loadContainers();
+        expect(vm.containers[0]).toMatchObject(patch);
+      });
+
       it('does not reassign containers.value when a reload returns identical data', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
         const wrapper = await mountContainersView([container]);
@@ -808,6 +1273,179 @@ describe('ContainersView', () => {
   });
 
   describe('route query filters', () => {
+    describe('shareable label grouping', () => {
+      it('opens an exact label deep link ahead of a saved stack preference', async () => {
+        const { preferences } = await import('@/preferences/store');
+        preferences.containers.groupByStack = true;
+        mockRoute.query = { 'group-by-label': 'com.example.team' };
+        const wrapper = await mountContainersView([
+          makeContainer({ labels: { 'com.example.team': 'operations' } }),
+        ]);
+        const vm = wrapper.vm as any;
+        expect(vm.fleet.groupBy.value).toBe('label');
+        expect(vm.fleet.groupLabel.value).toBe('com.example.team');
+        expect(vm.groupByStack).toBe(false);
+        expect(vm.renderGroups[0].name).toBe('operations');
+      });
+
+      it('follows label navigation and clears URL-driven grouping when removed', async () => {
+        mockRoute.query = reactive<Record<string, unknown>>({ 'group-by-label': 'team' });
+        const wrapper = await mountContainersView();
+        const vm = wrapper.vm as any;
+        mockRoute.query['group-by-label'] = ['environment', 'ignored'];
+        await flushPromises();
+        expect(vm.fleet.groupBy.value).toBe('label');
+        expect(vm.fleet.groupLabel.value).toBe('environment');
+        delete mockRoute.query['group-by-label'];
+        await flushPromises();
+        expect(vm.fleet.groupBy.value).toBe('none');
+        expect(vm.fleet.groupLabel.value).toBe('');
+      });
+
+      it('preserves saved label grouping on a fresh plain URL', async () => {
+        const { preferences } = await import('@/preferences/store');
+        preferences.containers.fleet.groupBy = 'label';
+        preferences.containers.fleet.groupLabel = 'saved';
+        const wrapper = await mountContainersView();
+        expect((wrapper.vm as any).fleet.groupLabel.value).toBe('saved');
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('label');
+      });
+
+      it.each([{ value: '' }, { value: null }, { value: [] }, { value: [''] }])(
+        'clears label grouping for an empty query value $value',
+        async ({ value }) => {
+          const { preferences } = await import('@/preferences/store');
+          preferences.containers.fleet.groupBy = 'label';
+          preferences.containers.fleet.groupLabel = 'saved';
+          mockRoute.query = { 'group-by-label': value };
+          const wrapper = await mountContainersView();
+          expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+          expect((wrapper.vm as any).fleet.groupLabel.value).toBe('');
+        },
+      );
+
+      it.each(['true', '1'])(
+        'gives explicit stack grouping %s precedence over a label link',
+        async (value) => {
+          mockRoute.query = { groupByStack: value, 'group-by-label': 'team' };
+          const wrapper = await mountContainersView();
+          expect((wrapper.vm as any).groupByStack).toBe(true);
+          expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        },
+      );
+
+      it('leaves a different saved fleet dimension selected for an empty label parameter', async () => {
+        const { preferences } = await import('@/preferences/store');
+        preferences.containers.fleet.groupBy = 'agent';
+        mockRoute.query = { 'group-by-label': '' };
+        const wrapper = await mountContainersView();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('agent');
+      });
+
+      it('updates the URL from label controls, preserving unrelated fields and router encoding', async () => {
+        const { parseQuery, stringifyQuery } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const label = 'com.example/team + café&role=ops%';
+        mockRoute.query = { unrelated: 'keep', sort: 'status-desc' };
+        const wrapper = await mountContainersView();
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('label');
+        await wrapper.get('[data-test="fleet-group-label"]').setValue(label);
+        await flushPromises();
+        const query = mockRouterReplace.mock.calls.at(-1)?.[0].query;
+        expect(query).toEqual({ unrelated: 'keep', sort: 'status-desc', 'group-by-label': label });
+        expect(parseQuery(stringifyQuery(query))['group-by-label']).toBe(label);
+        mockRoute.query = query;
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('agent');
+        await flushPromises();
+        expect(mockRouterReplace.mock.calls.at(-1)?.[0].query).toEqual({
+          unrelated: 'keep',
+          sort: 'status-desc',
+        });
+      });
+
+      it('keeps control changes when router replacements feed back into the mounted view', async () => {
+        const { createRouter, createMemoryHistory } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const router = createRouter({
+          history: createMemoryHistory(),
+          routes: [{ path: '/containers', component: defineComponent({ template: '<div />' }) }],
+        });
+        await router.push('/containers?unrelated=keep&group-by-label=team');
+        mockRoute.query = reactive({ ...router.currentRoute.value.query });
+        router.afterEach((to) => {
+          for (const key of Object.keys(mockRoute.query)) delete mockRoute.query[key];
+          Object.assign(mockRoute.query, to.query);
+        });
+        mockRouterReplace.mockImplementation((location) => router.replace(location));
+        const wrapper = await mountContainersView();
+        const label = 'com.example/team + café&role=ops%';
+        await wrapper.get('[data-test="fleet-group-label"]').setValue(label);
+        await flushPromises();
+        expect(router.currentRoute.value.query['group-by-label']).toBe(label);
+        expect((wrapper.vm as any).fleet.groupLabel.value).toBe(label);
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('agent');
+        await flushPromises();
+        expect(router.currentRoute.value.query).toEqual({ unrelated: 'keep' });
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('agent');
+        await router.push('/containers?group-by-label=environment');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupLabel.value).toBe('environment');
+        await router.push('/containers');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        expect(mockRouterReplace.mock.calls.length).toBeLessThan(6);
+      });
+
+      it('removes the label URL when the label input is cleared or stack grouping is enabled', async () => {
+        mockRoute.query = { 'group-by-label': 'team', unrelated: 'keep' };
+        const wrapper = await mountContainersView();
+        const vm = wrapper.vm as any;
+        vm.fleet.groupBy.value = 'label';
+        vm.fleet.groupLabel.value = '';
+        await flushPromises();
+        expect(mockRouterReplace.mock.calls.at(-1)?.[0].query).toEqual({ unrelated: 'keep' });
+        vm.fleet.groupLabel.value = 'team';
+        vm.groupByStack = true;
+        await flushPromises();
+        expect(mockRouterReplace.mock.calls.at(-1)?.[0].query).toEqual({
+          unrelated: 'keep',
+          groupByStack: 'true',
+        });
+      });
+
+      it('clears label grouping and its saved preference when an input removal feeds back through the real router', async () => {
+        const { createRouter, createMemoryHistory } =
+          await vi.importActual<typeof import('vue-router')>('vue-router');
+        const { preferences } = await import('@/preferences/store');
+        const router = createRouter({
+          history: createMemoryHistory(),
+          routes: [{ path: '/containers', component: defineComponent({ template: '<div />' }) }],
+        });
+        await router.push('/containers?unrelated=keep&sort=status-desc&group-by-label=team');
+        mockRoute.query = reactive({ ...router.currentRoute.value.query });
+        router.afterEach((to) => {
+          for (const key of Object.keys(mockRoute.query)) delete mockRoute.query[key];
+          Object.assign(mockRoute.query, to.query);
+        });
+        mockRouterReplace.mockImplementation((location) => router.replace(location));
+        const wrapper = await mountContainersView();
+        await wrapper.get('[data-test="fleet-group-label"]').setValue('');
+        await flushPromises();
+        expect(router.currentRoute.value.query).toEqual({ unrelated: 'keep', sort: 'status-desc' });
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('none');
+        expect(preferences.containers.fleet.groupBy).toBe('none');
+        expect(preferences.containers.fleet.groupLabel).toBe('');
+        expect((wrapper.vm as any).groupByStack).toBe(false);
+        expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+        await wrapper.get('[data-test="fleet-group-by"]').setValue('label');
+        await flushPromises();
+        expect((wrapper.vm as any).fleet.groupBy.value).toBe('label');
+        await wrapper.get('[data-test="fleet-group-label"]').setValue('environment');
+        await flushPromises();
+        expect(router.currentRoute.value.query['group-by-label']).toBe('environment');
+      });
+    });
+
     it('applies search query from route query', async () => {
       mockRoute.query = { q: 'nginx' };
       await mountContainersView([makeContainer()]);
@@ -2587,9 +3225,80 @@ describe('ContainersView', () => {
 
       await vm.updateAllInGroup(vm.groupedContainers[0]);
 
+      expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+      expect(useConfirmDialog().visible.value).toBe(true);
+      await useConfirmDialog().accept();
       expect(mockApiUpdateBulk).toHaveBeenCalledWith(['c1', 'c3']);
       expect(mockApiUpdate).not.toHaveBeenCalled();
     });
+
+    it('keeps renewed stack consent visible after a parent becomes blocked', async () => {
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0' });
+      const wrapper = await mountContainersView([web, db]);
+      const vm = wrapper.vm as any;
+      const dialog = useConfirmDialog();
+      dialog.dismiss();
+      const renderedDialog = mountWithPlugins(ConfirmDialog, {
+        global: { stubs: { ConfirmDialog: false, teleport: true } },
+      });
+      mountedWrappers.push(renderedDialog);
+      try {
+        useDependencyGraph().graph.value = {
+          nodes: [web, db].map(({ id, name }) => ({ id, name, displayName: name })),
+          edges: [{ from: 'web', to: 'db', action: 'update', source: 'label' }],
+          cycles: [],
+          unresolved: [],
+          crossHostIgnored: [],
+        };
+        vm.updateAllInGroup({ key: 'web-stack', containers: [web, db] });
+        await flushPromises();
+        expect(renderedDialog.get('[role="dialog"]').text()).not.toContain('depends on');
+        vm.containers.find((container: Container) => container.id === 'db').bouncer = 'blocked';
+        mockGetAllContainers.mockClear();
+
+        await renderedDialog.get('button[aria-label="Update 2 containers"]').trigger('click');
+        await flushPromises();
+
+        expect(dialog.visible.value).toBe(true);
+        expect(dialog.current.value?.header).toBe('Update 1 container');
+        expect(renderedDialog.get('[role="dialog"]').text()).toContain('web depends on db');
+        expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        expect(vm.isContainerUpdateInProgress(web)).toBe(false);
+        expect(vm.isContainerUpdateInProgress(db)).toBe(false);
+        expect(vm.actionPending.size).toBe(0);
+
+        await renderedDialog.get('button[aria-label="Update anyway"]').trigger('click');
+        await flushPromises();
+        expect(mockApiUpdateBulk).toHaveBeenCalledExactlyOnceWith(['web']);
+        expect(dialog.visible.value).toBe(false);
+        expect(dialog.current.value).toBeNull();
+        expect(renderedDialog.find('[role="dialog"]').exists()).toBe(false);
+      } finally {
+        dialog.dismiss();
+        resetDependencyGraphState();
+      }
+    });
+
+    it.each(['reject', 'dismiss'] as const)(
+      'leaves a stack untouched after dialog %s',
+      async (action) => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0' });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+        vm.updateAllInGroup({ key: 'web-stack', containers: [container] });
+        const dialog = useConfirmDialog();
+        expect(dialog.visible.value).toBe(true);
+        dialog[action]();
+        expect(dialog.visible.value).toBe(false);
+        expect(dialog.current.value).toBeNull();
+        await dialog.accept();
+        expect(mockApiUpdateBulk).not.toHaveBeenCalled();
+        expect(vm.isContainerUpdateInProgress(container)).toBe(false);
+        expect(vm.actionPending.size).toBe(0);
+      },
+    );
 
     it('marks the first grouped container as updating while the bulk request is in flight', async () => {
       const containers = [
@@ -2619,7 +3328,8 @@ describe('ContainersView', () => {
       vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack' };
       await flushPromises();
 
-      const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
+      vm.updateAllInGroup(vm.groupedContainers[0]);
+      const pending = useConfirmDialog().accept();
       expect(vm.isContainerUpdateInProgress(containers[0])).toBe(true);
 
       resolveBulkUpdate?.();
@@ -2849,6 +3559,7 @@ describe('ContainersView', () => {
       await vm.updateAllInGroup(
         vm.groupedContainers.find((group: { key: string }) => group.key === 'web-stack'),
       );
+      await useConfirmDialog().accept();
       await flushPromises();
       expect(vm.actionPending.has('c1')).toBe(true);
       expect(vm.actionPending.has('c2')).toBe(true);
@@ -3179,7 +3890,7 @@ describe('ContainersView', () => {
       vm.containers = [c];
 
       const mountedHooks = vm.$?.m as Array<() => void> | undefined;
-      mountedHooks?.[1]?.();
+      for (const hook of mountedHooks ?? []) hook();
 
       expect(vm.selectedContainer?.name).toBe('nginx');
       expect(vm.activeDetailTab).toBe('logs');

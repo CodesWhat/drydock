@@ -97,9 +97,5 @@ test('secret-scan exceptions for the immutable archive are exact and commit-inde
     'content/docs/v1.6/configuration/registries/ibmcr/index.mdx:generic-api-key:93',
     'content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:60',
     'content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:67',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:115',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:122',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:129',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:46',
   ]);
 });

@@ -10,6 +10,42 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `docker` watcher lets you configure the Docker hosts you want to watch.
 
+## Edit a watcher schedule in the UI
+
+This editor is new in unreleased v1.8 builds and requires a writable [configuration file](/docs/configuration/config-file).
+
+Open **Watchers**, select a watcher, then choose **Edit schedule** in its detail
+panel. This editor changes four settings for existing controller-local watchers:
+`cron`, `maintenancewindow`, `maintenancewindowtz`, and `maintenancewindowscope`.
+It requires a mounted configuration file and an authorized session. Agent
+watchers, environment-owned values and referenced values are read-only. The
+panel shows whether each field comes from the file, environment, a reference or
+a default. An unavailable API or file disables editing; the UI does not create
+a configuration file.
+
+**Save** sends only changed fields through `PATCH /api/v1/config/editor/watchers`.
+**Remove file value / use default** explicitly removes that setting from YAML.
+For the optional maintenance window, removal leaves no window configured. An
+empty text value is instead submitted as a value and checked by the server's
+startup Joi validation. **Cancel** or closing the panel before Save sends no
+write. There is no autosave or background snapshot polling.
+
+The editor loads a revision with its snapshot. A stale revision or a field that
+has become read-only produces a conflict, retains the draft and disables Save.
+Use **Discard draft and reload** to explicitly replace the draft with a fresh
+snapshot. The UI never retries a save with a newer revision automatically.
+After saving, it distinguishes a file saved and applied live from a saved file
+whose reload or audit reported problems. Reload counts, errors, restart fields
+and orphaned notification-rule references are shown when reported. An uncertain
+network outcome requires reloading before another change.
+
+Untouched credentials, `_file` references, interpolation expressions and YAML
+comments stay on the server. Referenced fields omit both raw and effective
+values from the editor snapshot; the browser never round-trips current secret
+values. Connection settings, sockets, credentials, TLS, registry configuration
+and agent configuration remain outside this editor. Other configuration panels
+and label-backed settings are not made editable by this four-field feature.
+
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
@@ -63,6 +99,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 - Floating semver aliases (e.g. `3.3` and `3.3.0`, which both coerce to the same semver) are excluded from the greater-than check in candidate ranking, so aliases that resolve identically are never reported as upgrades.
 - Fully-pinned specific tags (3+ numeric segments, e.g. `1.4.5`, `v1.13.3`) also compare by digest by default, the same as floating tags, so a rebuilt image republished under the same tag is detected. Version climbing across tags for a pinned image is opt-in via `dd.tag.include`, `dd.tag.family=loose`, or the actionable watcher default `DD_WATCHER_{watcher_name}_TAG_FAMILY=loose`. The watcher-wide `loose` setting can make cross-version candidates actionable and therefore eligible for configured action triggers; use it deliberately. Drydock separately computes an informational `updateInsight` — the best newer same-family tag available in the registry — which never triggers an update or notification and never changes `updateAvailable`/`updateKind`. The UI renders that insight as an informational Major/Minor/Patch state rather than **Current**, but does not expose an update action; the pinned tag itself is indicated separately by a persistent pin glyph on the Tag cell, whose tooltip names `dd.tag.family=loose` / `dd.tag.include` as the remedy. Control the informational channel with `dd.tag.pin.info`, matching-imgset `TAG_PIN_INFO`, or the watcher default `TAG_PIN_INFO`.
 - A Major insight is not automatically a mismatch: strict family matching preserves prefix, suffix/variant shape, numeric precision, and CalVer rules, but it does not impose a same-major ceiling. By contrast, a Major result shown as an actionable update means an actionable policy such as `dd.tag.family=loose` or `dd.tag.include` is in effect. The Immich `v3.0.2 Major` report in #498 was caused by `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants — for example, `v2.7.5-openvino` can climb to `v3.0.2-openvino`, never bare `v3.0.2` — and that historical cross-suffix bug is regression-covered.
+- As of v1.8 (#1133), a candidate tag has to carry the same variant suffix as the current tag, letter for letter: `-alpine` never climbs to `-alpine-perl` or `-alpine-slim`, and it doesn't climb the other way either. Digit runs inside a suffix count as precision, not identity, so `1.27-alpine3.20` can climb to `1.28-alpine3.21`, `12.1-cuda12` can climb to `12.2-cuda13`, and a bare `-alpine` can refine to `-alpine3.21` when that's the only newer build published. When both an exact-suffix and a digit-shifted candidate exist, the exact suffix ranks first. A trailing dot or other punctuation-only difference is never the same family, so `1.3.0-alpine.` is not `1.3.0-alpine`. Users who need a digit to be part of the identity, for example pinning to `-cuda12`, should use `dd.tag.include` with a regex that fixes that digit.
 
 <Callout type="warn">
 **Before you start — important watcher caveats:**
@@ -540,13 +577,15 @@ Podman works with Drydock through Podman's Docker-compatible API socket.
 
 #### Socket path mapping (`podman.sock` vs `docker.sock`)
 
-Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work.
+Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work. This is still the recommended path — it's the most predictable option and works with every Drydock release.
 
 | Runtime mode | Host socket path | Path inside Drydock container | Drydock watcher variable |
 | --- | --- | --- | --- |
 | Docker | `/var/run/docker.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
 | Podman rootful | `/run/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
 | Podman rootless | `/run/user/<uid>/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+
+<Callout type="info">**Automatic socket detection:** if you don't mount a Podman socket at `/var/run/docker.sock`, Drydock now probes for one when the local watcher's socket is left at its default and that default path doesn't exist. It checks `/run/podman/podman.sock` (rootful), then `$XDG_RUNTIME_DIR/podman/podman.sock` (rootless) when `XDG_RUNTIME_DIR` is set, and uses the first one it finds. This is a fallback, not a replacement for the mount above — an explicitly configured `DD_WATCHER_LOCAL_SOCKET` is always used as-is, with no probing.</Callout>
 
 #### Rootful vs rootless setup
 
@@ -652,6 +691,14 @@ services:
 | Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
 | SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
 | `podman-compose` networking | Pod-based networking breaks service-name DNS; use `podman compose` instead; see [FAQ](/docs/faq#podman-compose-vs-podman-compose-networking) |
+
+Drydock also detects Podman at watcher startup from the daemon's own `/version` response and logs a one-time warning naming the version and known limits, so it's obvious from the logs alone that a watcher is talking to Podman rather than Docker.
+
+**Known limits:**
+
+- **Rootless networking** — can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations)
+- **Volume driver differences** — Podman's volume drivers don't behave identically to Docker's
+- **Containers managed by a systemd unit (Quadlet) are recreated by the Docker action outside their unit** — the Docker action stops, removes, and recreates a container the same way regardless of what's managing it, so a Quadlet-managed container gets rebuilt outside its unit instead of being restarted through it; exclude systemd-managed containers from actions, or use a command action that restarts the unit instead
 
 For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-blocks-podman-socket-access-permission-denied).
 
@@ -816,11 +863,11 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag. The extracted value overwrites the image tag (for update detection) **and** is written to `image.softwareVersion` (for the Version column). Use `dd.inspect.tag.version-only=true` to route it to `image.softwareVersion` only. | Slash-separated path in `docker inspect` output | |
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
-| `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
+| `dd.link.template` | ⚪ | Browsable link associated to the container version. A matching imgset's `LINK_TEMPLATE` is used when this label is absent — see [Associate a link to the container version](#associate-a-link-to-the-container-version) | String template with placeholders `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | Matching imgset `LINK_TEMPLATE` → none |
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
-| `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
-| `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
+| `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` — see the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) | |
+| `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. Suffix variants must still match exactly, digit runs excepted. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
 | `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
@@ -855,15 +902,21 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 <Callout type="info" title="Dependency-ordered updates">
 
+Label-declared dependencies are limited to containers on the same agent and watcher; Compose-detected dependencies resolve service names within the same Compose project and agent. Cross-host dependency updates and restarts are not supported, including a controller on one host coordinating Tdarr nodes on other hosts. A matching target on another agent is reported as `crossHostIgnored` and is not dispatched; a label target outside the watcher's name scope is unresolved. The dependency UI does not extend this scope. See [discussion #219](https://github.com/CodesWhat/drydock/discussions/219) for the remaining cross-host request.
+
 `dd.depends_on` and `dd.depends_on.action` don't just record a relationship — they change dispatch order. Any bulk update (a manual multi-select, a group update, a maintenance-window batch) is partitioned into topological "waves" before dispatch: a container never starts updating until every container it depends on has finished. Dependents configured with `dd.depends_on.action=restart` are restarted (not re-pulled) once their dependency's update completes; if an earlier wave fails outright, dependents that never got a chance to run land in a `skipped-dependency` status rather than silently vanishing from the operations list. A dependency cycle is never a deadlock — cycle members are grouped into one unordered wave and dispatched together.
 
 Inspect the resolved graph with `GET /api/v1/containers/dependencies`, dry-run the wave order for one container's chain with `POST /api/v1/containers/{id}/update-chain-preview`, or bulk-accept that whole chain with `POST /api/v1/dependency-groups/{rootId}/update`. In the UI, the "Update dependency chain" action previews the same wave order — including any cycle or unresolved-target warnings — before you confirm.
+
+The container list shows the graph too. A container that depends on another, or that another depends on, gets a chevron next to its name; expanding it lists what it depends on, what requires it, a cycle marker when it sits in one, and an "Update dependency group" button that dispatches the whole connected set in wave order after the same preview. Updating a single container whose dependency also has a pending update warns you first, since updating the child on its own leaves it running against an outdated parent; you can still go ahead.
+
+Each row also gets a checkbox, and the list header has a "select all" checkbox for everything currently visible under your filters. Checking any row opens a floating bar showing how many containers are selected, with buttons to update the selection or clear it. Update selected opens a confirm dialog that sorts your selection into what will update, what's blocked or already updating and why, what has policy warnings you're overriding, what's skipped, and (the same dependency check as above, applied to the whole batch) which of the selected containers depend on a container that also has an update waiting; you can add those parents to the batch from the same dialog instead of updating the child first.
 
 </Callout>
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. By default the extracted value overwrites the image tag (enabling update detection against the embedded semver) and is also written to `image.softwareVersion` (shown in the Version column). Add `dd.inspect.tag.version-only=true` when you want the Version column populated without changing how drydock matches updates. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
-<Callout type="warn" title="dd.tag.transform is validated at startup">`dd.tag.transform` regex patterns are validated at config time. A malformed or oversized regex pattern causes drydock to throw at startup with a descriptive error rather than silently producing broken tag transformations that could generate false positive update detections.</Callout>
+<Callout type="warn" title="An invalid dd.tag.transform pattern fails that container's scan, not the app">`dd.tag.transform` regex patterns are compiled and validated every time a container's image details are refreshed — not once at process startup. A malformed pattern (fails to compile) or an oversized one (over 1024 characters) makes that refresh throw, which drydock catches per container: it logs a `Failed to fetch image detail` warning naming the pattern and the parse error, and that container's tag/update state is left stale until the label is fixed. It does not crash drydock and does not affect other containers, but it does repeat on every subsequent scan until the label is corrected. See the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) for the exact syntax rules and what counts as invalid.</Callout>
 
 <Callout type="info">**Source project link** — When an `org.opencontainers.image.source` OCI label, `dd.source.repo` label, or GHCR-derived source URL is available for a container, drydock shows a clickable "View project" link in the detail panel and container card. Set `dd.source.repo=owner/repo` on a container to override or supply the source URL when the image does not carry `org.opencontainers.image.source`.</Callout>
 
@@ -1126,7 +1179,36 @@ The capturing groups are accessible with the syntax `$1`, `$2`, `$3`....
 
 <Callout type="warn">The first capturing group is accessible as `$1`!</Callout>
 
+#### Grammar
+
+- **Regex flavor is RE2**, the same engine used by `dd.tag.include`/`dd.tag.exclude` (see [RE2 syntax](https://github.com/google/re2/wiki/Syntax)), not JavaScript regex. RE2 has no lookahead/lookbehind and no backreferences (`\1`) — those fail to compile. Inline flags like `(?i)` for case-insensitive matching are supported and are the only way to get case-insensitive matching; matching is case-sensitive by default.
+- **The separator is the first `=>` in the formula.** Everything before it (trimmed) is the pattern; everything after it (trimmed) is the replacement. Whitespace around `=>` is optional (`pattern=>replacement` works the same as `pattern => replacement`). Only one pattern/replacement pair is supported per label — there is no chaining or delimiter for multiple transforms.
+- **A formula with no `=>` is ignored.** The tag passes through unchanged; this is not treated as an error.
+- **An empty or unset `dd.tag.transform` is a no-op** — the tag passes through unchanged.
+- **Replacement placeholders are `$1`, `$2`, `$3`...** referencing capturing groups in the pattern, in the order they appear (not by name). A placeholder that references a group the pattern doesn't have, or a group that didn't participate in the match, is replaced with an empty string rather than left literal or causing an error. A replacement with no placeholders at all is a valid way to force a constant value (e.g. `^v(.+)$ => stable`).
+- **When the pattern doesn't match the tag, the original tag is returned unchanged** — the replacement is never applied partially.
+- **Anchoring is up to you.** RE2 (like most regex engines) matches anywhere in the string unless you anchor with `^`/`$`; the worked examples below all anchor explicitly, which is the recommended default for a transform since an unanchored pattern can match more of the tag than intended.
+- **Patterns are capped at 1024 characters.** Longer patterns fail to compile — see the callout above for what that does at runtime.
+
+| Input tag | `dd.tag.transform` | Result | Why |
+|---|---|---|---|
+| `v1.2.3` | `^v(.+)$ => $1` | `1.2.3` | Strips a leading `v`; `$1` is everything after it. |
+| `1.2.3-99-xyz` | `^(\d+\.\d+\.\d+-\d+)-.*$ => $1` | `1.2.3-99` | Keeps the semver-with-prerelease prefix, drops the trailing build/hash segment. |
+| `1.2-xyz-3` | `^(\d+\.\d+)-.*-(\d+) => $1.$2` | `1.2.3` | Two capturing groups recombined into a new value via `$1` and `$2`. |
+| `v1.2.3` | `^v(.+)$ => stable` | `stable` | Replacement with no placeholders — always produces the same constant. |
+| `123` | `^(\d+)$ => $2` | (empty string) | `$2` references a group that doesn't exist; missing groups become `''`. |
+| `1.2.3` | `^nomatch$ => $1` | `1.2.3` | Pattern doesn't match, so the original tag passes through unchanged. |
+| `1.2.3` | `invalid-formula` | `1.2.3` | No `=>` in the formula — ignored, original tag passes through. |
+| `v1.2.3` | `(?i)^V(.+)$ => $1` | `1.2.3` | Inline `(?i)` makes the match case-insensitive; without it, `^V` would not match a lowercase `v`. |
+
+<Callout type="warn">A pattern that fails to compile — for example `[invalid-regex => $1` (unbalanced bracket) or one using lookaround (`(?=...)`) or a backreference (`\1`), neither of which RE2 supports — is a configuration error, not a "no match": see the callout above for what happens to that container's scans until the label is fixed.</Callout>
+
+#### Interaction with include/exclude and semver comparison
+
+`dd.tag.include`/`dd.tag.exclude` are matched against the **raw tags returned by the registry**, before any transform is applied — the transform never changes which tags are considered candidates. `dd.tag.transform` is applied afterward, to both the current tag and each surviving candidate, and it's the **transformed** value that gets semver-parsed, family-matched, and compared to decide whether an update is available and what precision (`tagPrecision`) and family shape the tag has. In other words: use include/exclude to narrow down _which_ tags are in play using their real names, and transform to reshape _those_ tags into something semver-comparable. The `${transformed}` variable in [`dd.link.template`](#associate-a-link-to-the-container-version) is this same post-transform value.
+
 For example, to watch only `x.y.z-n-hash`-style tags and strip the hash suffix before comparison:
+
 <Tabs items={["Docker Compose (Tag Transform)", "Docker (Tag Transform)"]}>
 <Tab value="Docker Compose (Tag Transform)">
 
@@ -1178,19 +1260,57 @@ docker run -d --name mariadb --label 'dd.tag.include=^\d+$' --label dd.watch.dig
 
 ### Associate a link to the container version
 
-You can associate a browsable link to the container version using a templated string.
-For example, if you want to associate a mariadb version to a changelog (e.g. `https://mariadb.com/kb/en/mariadb-1064-changelog`),
+You can associate a browsable link to the container version — a GitHub release, a changelog page, a registry tag search — using a templated string. Drydock renders the template once per container, computes it onto `container.link` and `container.result.link`, and the UI's release-notes/release-link action surfaces it wherever that container is shown.
 
-you would specify a template like `https://mariadb.com/kb/en/mariadb-${major}${minor}${patch}-changelog`
+Set it with the `dd.link.template` label, or with `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_LINK_TEMPLATE` on a matching [image set preset](#image-set-presets) when many containers of the same image should share one template. A per-container `dd.link.template` label always wins over a matching imgset's `LINK_TEMPLATE` — see [Imgset precedence](#imgset-precedence).
 
-The available variables are:
+#### Placeholders
 
-- `${original}` the original unparsed tag
-- `${transformed}` the original unparsed tag transformed with the optional `dd.tag.transform` label option
-- `${major}` the major version (if tag value is semver)
-- `${minor}` the minor version (if tag value is semver)
-- `${patch}` the patch version (if tag value is semver)
-- `${prerelease}` the prerelease version (if tag value is semver)
+| Placeholder | Value | Notes |
+| --- | --- | --- |
+| `${raw}` | The tag as reported by the registry, before `dd.tag.transform` | Deprecated alias for `${original}`, kept for backward compatibility — prefer `${original}` in new templates |
+| `${original}` | The tag as reported by the registry, before `dd.tag.transform` | |
+| `${transformed}` | `${original}` after the optional `dd.tag.transform` is applied; equal to `${original}` when no transform is configured or its regex doesn't match | Same post-transform value used for semver parsing, family matching, and update comparison — see [Interaction with include/exclude and semver comparison](#interaction-with-includeexclude-and-semver-comparison) |
+| `${major}` | Major segment of `${transformed}` | Empty string unless drydock recognizes the tag as semver-shaped **and** `${transformed}` parses as valid semver |
+| `${minor}` | Minor segment of `${transformed}` | Same conditions as `${major}` |
+| `${patch}` | Patch segment of `${transformed}` | Same conditions as `${major}` |
+| `${prerelease}` | First identifier of the prerelease sequence (e.g. `2.0.0-rc.1` → `rc`) | Empty string when there's no prerelease, or the same conditions as `${major}` aren't met |
+
+A placeholder outside this set (e.g. `${bogus}`) is silently replaced with an empty string — the template is never rejected and nothing is logged.
+
+#### Worked examples
+
+**GitHub release link from `${major}.${minor}.${patch}`** — Traefik tags carry a `v` prefix (`v3.1.4`) that has to come off before the value parses as semver, so `dd.tag.transform` strips it and the template rebuilds the release URL from the parsed segments:
+
+```bash
+docker run -d --name traefik \
+  --label 'dd.tag.transform=^v(.*)$ => $1' \
+  --label 'dd.link.template=https://github.com/traefik/traefik/releases/tag/v${major}.${minor}.${patch}' \
+  traefik:v3.1.4
+```
+
+Tag `v3.1.4` renders `https://github.com/traefik/traefik/releases/tag/v3.1.4`.
+
+**Changelog link using `${transformed}`** — Postgres tags carry a variant suffix (`16.4-alpine`) the changelog URL doesn't use, so the transform trims it to `major.minor` and the template uses that value directly instead of rebuilding it from `${major}`/`${minor}`:
+
+```bash
+docker run -d --name postgres \
+  --label 'dd.tag.transform=^(\d+\.\d+).*$ => $1' \
+  --label 'dd.link.template=https://www.postgresql.org/docs/release/${transformed}/' \
+  postgres:16.4-alpine
+```
+
+Tag `16.4-alpine` renders `https://www.postgresql.org/docs/release/16.4/`.
+
+**Registry link using `${raw}`** — no transform is needed to point at a registry's own tag listing, since the raw tag is exactly what the registry expects in the query string:
+
+```bash
+docker run -d --name mariadb \
+  --label 'dd.link.template=https://hub.docker.com/_/mariadb?tab=tags&name=${raw}' \
+  mariadb:10.6.4-jammy
+```
+
+Tag `10.6.4-jammy` renders `https://hub.docker.com/_/mariadb?tab=tags&name=10.6.4-jammy`.
 
 <Tabs items={["Docker Compose (Link Template)", "Docker (Link Template)"]}>
 <Tab value="Docker Compose (Link Template)">
@@ -1211,6 +1331,11 @@ docker run -d --name mariadb --label 'dd.link.template=https://mariadb.com/kb/en
 ```
 </Tab>
 </Tabs>
+
+#### Failure behavior
+
+- **Unknown placeholder:** substituted with an empty string. The template still renders and drydock never rejects or logs it — a typo like `${majro}` quietly produces a broken-looking URL instead of an error.
+- **Invalid or non-`http(s)` URL:** drydock doesn't validate the rendered value at all — any string is accepted and stored on `container.link`/`result.link`. The UI's release-link action only renders it as a clickable link when the rendered string starts with `http://` or `https://` (case-insensitive); anything else (a bare path, a `javascript:` URL, malformed output from an unmatched transform) is silently dropped from the UI instead of shown broken.
 
 ### Customize the name and the icon to display
 
@@ -1339,7 +1464,7 @@ The container model includes additional fields useful for understanding update s
 | `result.noUpdateReason` | `string` | When no update is available, explains why (e.g. tag filtering, no newer version found) |
 | `updateDetectedAt` | `string (ISO 8601)` | Drydock's own wall-clock timestamp recorded when it **first** stored a pending update for this container. This is not the image build date or the registry push date. The value is preserved across polls and across container recreation — if a container is redeployed (e.g. via a Portainer stack redeploy or `docker compose down && up`) with the same stable identity and the same update still pending, the original timestamp is carried forward. When no trusted registry publish date is available, the maturity gate uses `updateDetectedAt` as its fallback clock to measure how long an update has been known. |
 | `maturityGatePendingSince` | `string (ISO 8601)` | Set at the moment an update starts being withheld by the [maturity gate](/docs/configuration/actions/update-eligibility) (`maturityMode: mature` and the soak window not yet elapsed); absent otherwise. Preserved across polls and container recreation like `updateDetectedAt`. Cleared silently if the pending update disappears, and cleared the moment the gate opens, which is also what triggers the `maturity-cleared` [notification](/docs/configuration/triggers#event-types). Internal bookkeeping — not something you set directly. |
-| `image.tag.tagPrecision` | `'specific' \| 'floating'` | Whether the container's tag is a mutable version alias (`floating`, e.g. `latest`, `v3`, `1.4`) or a pinned release (`specific`, e.g. `1.4.5`). Computed automatically; used by digest-watch auto-enable logic and the Hide Pinned UI filter. |
+| `image.tag.tagPrecision` | `'specific' \| 'floating'` | Whether the container's tag is a mutable version alias (`floating`, e.g. `latest`, `v3`, `1.4`) or a pinned release (`specific`, e.g. `1.4.5`). Computed automatically; drives digest-watch auto-enable logic and the floating-tag caution badge. The Hide Pinned UI filter uses the separate shape-based `tagPinned` field instead — see [Hide Pinned toggle](#hide-pinned-toggle). |
 
 ## Next-run visibility
 
@@ -1372,7 +1497,7 @@ The **Tag** column adapts based on `tagPrecision`:
 
 ### Hide Pinned toggle
 
-The **Hide Pinned** filter in the Containers toolbar hides containers whose `tagPrecision` is `specific`. This is useful for decluttering the list when you have infrastructure containers (databases, proxies) pinned to specific versions and want to focus on containers with available updates. The preference is persisted across sessions.
+The **Hide Pinned** filter in the Containers toolbar hides containers whose tag names a specific version (the shape-based `tagPinned` field, e.g. `1.4.5`, `16-alpine`, `v3`) — not containers whose `tagPrecision` is `specific`. Rolling aliases like `latest` and `stable`, and bare distro/variant tags like `alpine`, `slim`, and `bookworm`, are never considered pinned even though they contain no version number. This is useful for decluttering the list when you have infrastructure containers (databases, proxies) pinned to specific versions and want to focus on containers with available updates. The preference is persisted across sessions.
 
 ## Docker Event Stream
 

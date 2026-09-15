@@ -1,5 +1,4 @@
 import { isRollbackContainerName } from '../../../model/container.js';
-import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
@@ -22,6 +21,10 @@ type ContainerUpdateLogger = {
 
 type ContainerInspection = {
   Id?: string;
+  Config?: {
+    Image?: string;
+    [key: string]: unknown;
+  };
   State?: {
     Running?: boolean;
     [key: string]: unknown;
@@ -63,7 +66,9 @@ type ContainerSpecLike = {
 type ContainerForUpdate = {
   id: string;
   name: string;
+  identityKey?: string;
   image: {
+    name?: string;
     tag: {
       value: string;
     };
@@ -75,18 +80,50 @@ type ContainerForUpdate = {
   [key: string]: unknown;
 };
 
-function getContainerIdentityFilter(
-  container: ContainerForUpdate,
-): ContainerIdentityFilter | undefined {
-  if (typeof container.watcher !== 'string') {
-    return undefined;
-  }
+/**
+ * Drop a `@sha256:...` digest suffix so a pinned reference
+ * (`app:2.0@sha256:...`) and its unpinned form (`app:2.0`) compare equal.
+ * The operation's `targetImage` is deliberately recorded unpinned — it is a
+ * documented API field (`content/docs/current/api/container.mdx`) whose
+ * example shows a plain `repo:tag` — but `bindPulledImageIdentity` pins the
+ * replacement container's actual image to a digest, so the container found
+ * running under the original name reports the pinned form. Comparing the raw
+ * strings would treat the executor's own replacement as foreign whenever
+ * `getContainerIdBestEffort()` failed to capture `newContainerId`.
+ */
+function withoutImageDigest(imageReference: string): string {
+  return imageReference.split('@')[0];
+}
 
-  return {
-    /* v8 ignore next -- local watcher identity omits agent; agent-owned identity is covered by executor tests. */
-    ...(typeof container.agent === 'string' ? { agent: container.agent } : {}),
-    watcher: container.watcher,
-  };
+/**
+ * DR-122: a same-identity, different-id match from
+ * getInProgressOperationByContainerIdentity is ambiguous. It's either our
+ * own replacement — found by identity because getContainerIdBestEffort()
+ * never persisted newContainerId — or a genuine same-identity-key collision
+ * with an unrelated container something else recreated during the outage.
+ * The operation record has nothing else to tell the two apart with (no
+ * discriminator narrower than the image survives past the id itself), so
+ * this reuses the same targetImage-vs-running-image check
+ * reconcileWithActiveContainerOnly already applies to the equivalent
+ * ambiguity on the by-name fallback path.
+ */
+function matchesReplacementTargetImage(
+  pending: PendingContainerUpdateOperation,
+  container: ContainerForUpdate,
+): boolean {
+  if (pending.targetImage === undefined) {
+    return false;
+  }
+  const imageName = container.image?.name;
+  const imageTag = container.image?.tag?.value;
+  if (!imageName || !imageTag) {
+    return false;
+  }
+  const currentImage = `${imageName}:${imageTag}`;
+  return (
+    currentImage === pending.targetImage ||
+    withoutImageDigest(currentImage) === withoutImageDigest(pending.targetImage)
+  );
 }
 
 type ContainerUpdateContext = {
@@ -152,7 +189,7 @@ type RollbackConfig = {
 };
 
 type PendingContainerUpdateOperation = NonNullable<
-  ReturnType<typeof updateOperationStore.getInProgressOperationByContainerName>
+  ReturnType<typeof updateOperationStore.getInProgressOperationByContainerIdentity>
 >;
 
 type ContainerUpdateExecutorDependencies = {
@@ -412,18 +449,34 @@ class ContainerUpdateExecutor {
     const pendingByContainerId = updateOperationStore.getInProgressOperationByContainerId(
       container.id,
     );
-    const pendingByContainerName =
-      pendingByContainerId ??
-      updateOperationStore.getInProgressOperationByContainerName(container.name, {
-        agent: typeof container.agent === 'string' ? container.agent : undefined,
-        watcher: typeof container.watcher === 'string' ? container.watcher : undefined,
-      });
-    const pending =
-      container.id &&
-      pendingByContainerName?.containerId &&
-      pendingByContainerName.containerId !== container.id
+    // getInProgressOperationByContainerId matches on EITHER container_id or
+    // new_container_id. A new_container_id match (the post-update container,
+    // found by its own id) leaves the operation's own `containerId` pointed
+    // at the pre-update id, so it never equals `container.id` — that's the
+    // whole point of the match, not a mismatch. The identity cross-check
+    // below exists to reject a stale identity-key collision from the
+    // identity-based fallback lookup; applying it to an id-based match as
+    // well discarded every valid post-update recovery (roadmap 7-STORE
+    // slice 10 review finding 6).
+    const pendingByContainerIdentity = pendingByContainerId
+      ? undefined
+      : updateOperationStore.getInProgressOperationByContainerIdentity(container.identityKey);
+    const identityIdMismatch =
+      !!container.id &&
+      !!pendingByContainerIdentity?.containerId &&
+      pendingByContainerIdentity.containerId !== container.id;
+    // A mismatch here is ambiguous, not automatically a collision: when the
+    // update path never persisted `newContainerId` (getContainerIdBestEffort()
+    // best-effort id capture failed), the replacement container is found by
+    // identity with its own fresh id, which never equals the operation's
+    // recorded `containerId` either. Accept it anyway when the operation's
+    // target image confirms this is that replacement; otherwise it's a real
+    // same-identity-key collision and stays discarded (DR-122).
+    const pendingByIdentityChecked =
+      identityIdMismatch && !matchesReplacementTargetImage(pendingByContainerIdentity, container)
         ? undefined
-        : pendingByContainerName;
+        : pendingByContainerIdentity;
+    const pending = pendingByContainerId ?? pendingByIdentityChecked;
 
     if (!pending) {
       return;
@@ -464,6 +517,7 @@ class ContainerUpdateExecutor {
         pending,
         container,
         activeByOriginalName.inspection?.Id,
+        activeByOriginalName.inspection?.Config?.Image,
       );
       return;
     }
@@ -552,6 +606,7 @@ class ContainerUpdateExecutor {
     pending: PendingContainerUpdateOperation,
     container: ContainerForUpdate,
     activeContainerId?: string,
+    activeContainerImage?: string,
   ): void {
     const isPersistedReplacement =
       activeContainerId !== undefined && pending.newContainerId === activeContainerId;
@@ -572,6 +627,38 @@ class ContainerUpdateExecutor {
         outcome: 'error',
         reason: 'startup_reconcile_original_untouched',
         details: `Recovered interrupted update operation ${pending.id} without replacing original container ${pending.oldName}`,
+        fromVersion: pending.fromVersion,
+        toVersion: pending.toVersion,
+      });
+      return;
+    }
+
+    // The container's id under the original name doesn't match the id we
+    // recorded for our own replacement, so something else recreated it while
+    // this instance was down (e.g. a compose/Portainer recreate racing the
+    // outage). Best-effort id capture can also leave newContainerId
+    // undefined, in which case we can't tell it apart from our own
+    // replacement by id alone — fall through to an image check when we have
+    // both a target image and the found container's image to compare.
+    const imageMismatch =
+      !isPersistedReplacement &&
+      pending.targetImage !== undefined &&
+      activeContainerImage !== undefined &&
+      activeContainerImage !== pending.targetImage &&
+      withoutImageDigest(activeContainerImage) !== withoutImageDigest(pending.targetImage);
+
+    if (imageMismatch) {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: `Container found under original name ${pending.oldName} is running image ${activeContainerImage}, not the target image ${pending.targetImage}; a different recreate likely occurred during the outage`,
+        recoveredAt: new Date().toISOString(),
+      });
+      this.recordRollbackTelemetry({
+        container,
+        outcome: 'error',
+        reason: 'startup_reconcile_active_image_mismatch',
+        details: `Recovered interrupted update operation ${pending.id}: container ${pending.oldName} is running unexpected image ${activeContainerImage} (expected ${pending.targetImage})`,
         fromVersion: pending.fromVersion,
         toVersion: pending.toVersion,
       });
@@ -855,12 +942,10 @@ class ContainerUpdateExecutor {
       // not axios response.status), so the classifier's 409 lock-body branch
       // cannot fire on this path; only the 404 recent-success and other-active-op
       // branches apply.
-      const identity = getContainerIdentityFilter(container);
       const terminalStatus = classifyDuplicateOpTerminalStatus(
         tailError,
-        container.name,
+        container.identityKey,
         undefined,
-        identity,
         operation.id,
       );
       if (terminalStatus === 'expired') {

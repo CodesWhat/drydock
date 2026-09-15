@@ -83,7 +83,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: audit
 
@@ -608,7 +608,7 @@ jobs:
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
 
       - name: Log in to GHCR
         id: login_ghcr
@@ -704,6 +704,13 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
+          # docker/metadata-action defaults org.opencontainers.image.revision to
+          # github.sha, which is the workflow run's own checkout commit
+          # (main's head at RC-cut time), not SOURCE_SHA (the dev-branch commit
+          # actually built). Override it explicitly so the shipped label names
+          # the true source commit on every maintenance cut where they differ.
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}
 
       - name: Docker staging metadata
         id: staging_meta
@@ -718,6 +725,10 @@ jobs:
             latest=false
           tags: |
             type=raw,value=release-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          # Same override as the "Docker metadata" step above: pin the
+          # revision label to SOURCE_SHA, not github.sha.
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}
 
       - name: Validate GA candidate digest in every registry
         if: steps.tag.outputs.is_prerelease == 'false'
@@ -1422,13 +1433,16 @@ jobs:
           fi
 
           # Resolve the previous release for a Full Changelog compare link. The
-          # current tag is not pushed yet, so the newest existing release is the
-          # predecessor; the select() guards re-runs after a partial release.
-          prev_tag="$(gh release list --repo "${REPO}" --limit 100 \
-            --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | map(.tagName)
-                  | map(select(. != env.RELEASE_TAG)) | .[0] // empty' \
-            2>/dev/null || true)"
+          # predecessor is the newest published release on this major.minor
+          # line; exclude the current tag to support partial-release re-runs.
+          # Combine every page before filtering, including older release lines.
+          prev_tag="$(gh api --paginate "repos/${REPO}/releases?per_page=100" 2>/dev/null \
+            | jq -sr 'add | sort_by(.published_at) | reverse
+                  | map(select(.draft == false) | .tag_name)
+                  | map(select(. != env.RELEASE_TAG
+                      and startswith(env.RELEASE_TAG | split(".")[0:2] | join(".") + ".")))
+                  | .[0] // empty' \
+            2>/dev/null)" || prev_tag=""
 
           {
             echo "# ${RELEASE_TAG}"

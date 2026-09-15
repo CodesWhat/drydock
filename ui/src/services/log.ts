@@ -20,7 +20,16 @@ async function getLogEntries(
   const url = `${base}${query}`;
   const response = await fetch(url, { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to fetch log entries: ${response.statusText}`);
+    const body: unknown = await response.json().catch(() => null);
+    const message =
+      body &&
+      typeof body === 'object' &&
+      'error' in body &&
+      typeof body.error === 'string' &&
+      body.error.trim()
+        ? body.error
+        : '';
+    throw new Error(message);
   }
   return response.json();
 }

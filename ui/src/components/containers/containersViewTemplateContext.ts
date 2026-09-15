@@ -21,6 +21,8 @@ import type {
 import type { useContainerActions } from '../../views/containers/useContainerActions';
 import type { useContainerLogs } from '../../views/containers/useContainerLogs';
 import type { useContainerSecurity } from '../../views/containers/useContainerSecurity';
+import type { useFleetBulkActions } from '../../views/containers/useFleetBulkActions';
+import type { useFleetHealth } from '../../views/containers/useFleetHealth';
 
 type ContainerFiltersContext = Pick<
   ReturnType<typeof useContainerFilters>,
@@ -74,7 +76,7 @@ type ContainerSecurityContext = ReturnType<typeof useContainerSecurity>;
 
 type ContainerActionsContext = Omit<
   ReturnType<typeof useContainerActions>,
-  'actionPending' | 'executeAction' | 'skippedUpdates' | 'backupsLoading'
+  'actionPending' | 'executeAction' | 'skippedUpdates' | 'dependencyGroupPreviewLoading'
 >;
 
 interface ContainersViewDisplayContainer extends Container {
@@ -114,6 +116,9 @@ export interface ContainersViewTemplateContext
     ContainerLogsContext,
     ContainerSecurityContext,
     ContainerActionsContext {
+  fleet?: ReturnType<typeof useContainerFilters>['fleet'];
+  fleetBulk?: ReturnType<typeof useFleetBulkActions>;
+  fleetHealth?: ReturnType<typeof useFleetHealth>;
   error: Ref<string | null>;
   loading: Ref<boolean>;
   containers: Ref<Container[]>;
@@ -156,6 +161,8 @@ export interface ContainersViewTemplateContext
   filterContainerIds: Ref<Set<string>>;
   clearContainerIdsFilter: () => void;
   updateMode: Readonly<Ref<UpdateMode>>;
+  /** Resolves the stack/compose-group key a container belongs to (manual override or server-detected group). */
+  groupKeyForContainer: (container: Container) => string | undefined;
 }
 
 export const containersViewTemplateContextKey: InjectionKey<ContainersViewTemplateContext> = Symbol(

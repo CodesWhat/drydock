@@ -7,6 +7,8 @@ import {
   DASHBOARD_LAYOUT_BREAKPOINTS,
   type DashboardLayoutBreakpoint,
   DEFAULTS,
+  FLEET_GROUP_DIMENSIONS,
+  FLEET_TAG_TYPES,
   type PreferencesSchema,
   VIEW_TABLE_COLUMN_KEYS,
   VIEW_TABLE_REQUIRED_COLUMN_KEYS,
@@ -207,6 +209,18 @@ function sanitizeContainers(data: Record<string, unknown>): void {
   if (containers && typeof containers === 'object') {
     const c = containers as Record<string, unknown>;
     deleteIfInvalid(c, 'tableActions', TABLE_ACTIONS);
+    if ('fleet' in c) {
+      if (!isRecord(c.fleet)) {
+        delete c.fleet;
+      } else {
+        for (const key of ['agent', 'registry', 'labelKey', 'labelValue', 'groupLabel']) {
+          if (typeof c.fleet[key] !== 'string') delete c.fleet[key];
+        }
+        deleteIfInvalid(c.fleet, 'groupBy', new Set(FLEET_GROUP_DIMENSIONS));
+        deleteIfInvalid(c.fleet, 'tagType', new Set(FLEET_TAG_TYPES));
+        deleteIfInvalid(c.fleet, 'labelMatch', new Set(['exists', 'equals', 'missing']));
+      }
+    }
 
     if ('manualGroups' in c) {
       if (!isRecord(c.manualGroups)) {

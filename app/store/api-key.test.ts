@@ -2,7 +2,7 @@
  * Tests for the API key store.
  */
 import crypto from 'node:crypto';
-import Loki from 'lokijs';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 
 const { mockLogInfo, mockLogWarn } = vi.hoisted(() => ({
   mockLogInfo: vi.fn(),
@@ -21,13 +21,19 @@ vi.mock('../log/index.js', () => ({
 }));
 
 import * as apiKey from './api-key.js';
+import type { Database, Row } from './db/driver.js';
 
-type LokiDb = InstanceType<typeof Loki>;
+let db: Database;
 
-let db: LokiDb;
+function rawRow(keyId: string): Row | undefined {
+  return db.prepare('SELECT * FROM api_keys WHERE key_id = ?').get(keyId);
+}
 
-function collection() {
-  return db.getCollection('api-keys');
+function rawScopes(keyId: string): string[] {
+  return db
+    .prepare('SELECT scope FROM api_key_scope WHERE key_id = ? ORDER BY rowid')
+    .all(keyId)
+    .map((row) => String(row.scope));
 }
 
 function createUserKey(overrides: Partial<apiKey.CreateApiKeyInput> = {}) {
@@ -50,14 +56,17 @@ async function loadUninitializedModule() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db = new Loki('api-key.test.db');
-  apiKey.createCollections(db as never);
+  db = createMigratedMemoryDatabase();
+  apiKey.createCollections(db);
+});
+
+afterEach(() => {
+  db.close();
 });
 
 describe('credential format', () => {
   test('mints a ddk_ credential whose two halves match the documented shape', () => {
     const created = createUserKey();
-
     expect(created.apiKey.startsWith(apiKey.API_KEY_PREFIX)).toBe(true);
     expect(created.apiKey).toMatch(apiKey.API_KEY_PATTERN);
 
@@ -92,10 +101,10 @@ describe('credential format', () => {
     const created = createUserKey();
     const secret = apiKey.parseApiKey(created.apiKey)?.secret ?? '';
 
-    const stored = collection().findOne({ keyId: created.record.keyId });
-    expect(stored.secretHash).toBe(apiKey.hashApiKeySecret(secret));
+    const stored = rawRow(created.record.keyId);
+    expect(stored?.secret_hash).toBe(apiKey.hashApiKeySecret(secret));
     expect(JSON.stringify(stored)).not.toContain(secret);
-    expect(JSON.stringify(db.serialize())).not.toContain(secret);
+    expect(JSON.stringify(db.prepare('SELECT * FROM api_keys').all())).not.toContain(secret);
   });
 
   test('rejects anything that is not exactly the ddk_ shape', () => {
@@ -122,24 +131,27 @@ describe('credential format', () => {
 });
 
 describe('record shape', () => {
-  test('stores a flat, migration-ready record', () => {
+  test('stores a flat, migration-ready record with scopes in a join table', () => {
     const created = createUserKey({ name: '  release dashboard  ', scopes: ['read', 'read'] });
-    const stored = collection().findOne({ keyId: created.record.keyId });
+    const stored = rawRow(created.record.keyId);
 
-    expect(stored.schemaVersion).toBe(apiKey.API_KEY_SCHEMA_VERSION);
-    expect(stored.name).toBe('release dashboard');
-    expect(stored.scopes).toEqual(['read']);
-    expect(stored.createdBy).toBe('user:scott');
-    expect(stored.parentKeyId).toBeNull();
-    expect(stored.expiresAt).toBeNull();
-    expect(stored.lastUsedAt).toBeNull();
-    expect(stored.revokedAt).toBeNull();
-    expect(typeof stored.createdAt).toBe('string');
+    expect(stored?.schema_version).toBe(apiKey.API_KEY_SCHEMA_VERSION);
+    expect(stored?.name).toBe('release dashboard');
+    expect(rawScopes(created.record.keyId)).toEqual(['read']);
+    expect(stored?.created_by).toBe('user:scott');
+    expect(stored?.parent_key_id).toBeNull();
+    expect(stored?.expires_at).toBeNull();
+    expect(stored?.last_used_at).toBeNull();
+    expect(stored?.revoked_at).toBeNull();
+    expect(typeof stored?.created_at).toBe('string');
 
     // Every field is a scalar or an array of scalars — no nested objects.
-    for (const [field, value] of Object.entries(apiKey.findApiKeyById(created.record.keyId))) {
+    const found = apiKey.findApiKeyById(created.record.keyId);
+    for (const [field, value] of Object.entries(found as unknown as Record<string, unknown>)) {
       if (field === 'scopes') {
-        expect(value.every((entry: unknown) => typeof entry === 'string')).toBe(true);
+        expect((value as unknown[]).every((entry: unknown) => typeof entry === 'string')).toBe(
+          true,
+        );
         continue;
       }
       expect(['string', 'number', 'object']).toContain(typeof value);
@@ -149,43 +161,41 @@ describe('record shape', () => {
 
   test('persists and projects an optional per-key rate limit maximum', () => {
     const created = createUserKey({ rateLimitMax: 250 });
-    const stored = collection().findOne({ keyId: created.record.keyId });
+    const stored = rawRow(created.record.keyId);
 
-    expect(stored.rateLimitMax).toBe(250);
+    expect(stored?.rate_limit_max).toBe(250);
     expect(created.record.rateLimitMax).toBe(250);
-    expect(apiKey.findApiKeyById(created.record.keyId).rateLimitMax).toBe(250);
+    expect(apiKey.findApiKeyById(created.record.keyId)?.rateLimitMax).toBe(250);
     expect(apiKey.listApiKeys()[0].rateLimitMax).toBe(250);
   });
 
   test('leaves the optional per-key rate limit maximum absent when omitted', () => {
     const created = createUserKey();
-    const stored = collection().findOne({ keyId: created.record.keyId });
+    const stored = rawRow(created.record.keyId);
 
-    expect(stored).not.toHaveProperty('rateLimitMax');
+    expect(stored?.rate_limit_max).toBeNull();
     expect(created.record).not.toHaveProperty('rateLimitMax');
     expect(apiKey.findApiKeyById(created.record.keyId)).not.toHaveProperty('rateLimitMax');
   });
 
-  test('hands back copies rather than live LokiJS documents', () => {
+  test('hands back copies rather than live rows', () => {
     const created = createUserKey();
 
     const projected = apiKey.findApiKeyById(created.record.keyId);
     expect(projected).not.toBeNull();
-    expect(projected).not.toHaveProperty('$loki');
-    expect(projected).not.toHaveProperty('meta');
     expect(projected).not.toHaveProperty('revokedBy');
 
-    projected.name = 'tampered';
-    projected.scopes.push('admin');
-    expect(apiKey.findApiKeyById(created.record.keyId).name).toBe('ci');
-    expect(apiKey.findApiKeyById(created.record.keyId).scopes).toEqual(['read']);
+    (projected as apiKey.ApiKeyRecord).name = 'tampered';
+    (projected as apiKey.ApiKeyRecord).scopes.push('admin');
+    expect(apiKey.findApiKeyById(created.record.keyId)?.name).toBe('ci');
+    expect(apiKey.findApiKeyById(created.record.keyId)?.scopes).toEqual(['read']);
   });
 
   test('carries revokedBy once the key is revoked', () => {
     const created = createUserKey();
     apiKey.revokeApiKey(created.record.keyId, { revokedBy: 'user:scott' });
 
-    expect(apiKey.findApiKeyById(created.record.keyId).revokedBy).toBe('user:scott');
+    expect(apiKey.findApiKeyById(created.record.keyId)?.revokedBy).toBe('user:scott');
   });
 
   test('records an api-key creator as its parent', () => {
@@ -372,9 +382,10 @@ describe('verifyApiKey', () => {
 
   test('returns null when the stored digest is the wrong length', () => {
     const created = createUserKey();
-    const stored = collection().findOne({ keyId: created.record.keyId });
-    stored.secretHash = Buffer.from('short').toString('base64');
-    collection().update(stored);
+    db.prepare('UPDATE api_keys SET secret_hash = ? WHERE key_id = ?').run(
+      Buffer.from('short').toString('base64'),
+      created.record.keyId,
+    );
 
     expect(apiKey.verifyApiKey(created.apiKey)).toBeNull();
   });
@@ -390,22 +401,20 @@ describe('verifyApiKey', () => {
 describe('verifyApiKey ancestry', () => {
   /**
    * Revocation cascades, so a live key under a revoked one should not exist.
-   * It can: the cascade writes one record at a time and LokiJS persists
-   * asynchronously, so a process killed part-way through leaves exactly this
-   * on disk. Authentication has to answer for the whole chain rather than
-   * trust that the cascade finished.
+   * It can: the cascade writes one row at a time inside a single transaction,
+   * but the store file itself can be hand-edited, so authentication has to
+   * answer for the whole chain rather than trust that the cascade finished.
    */
-  function revokeWithoutCascade(keyId: string, revokedAt = '2026-09-01T00:00:00.000Z') {
-    const stored = collection().findOne({ keyId });
-    stored.revokedAt = revokedAt;
-    stored.revokedBy = 'user:scott';
-    collection().update(stored);
+  function revokeWithoutCascade(keyId: string, revokedIso = '2026-09-01T00:00:00.000Z') {
+    db.prepare('UPDATE api_keys SET revoked_at = ?, revoked_by = ? WHERE key_id = ?').run(
+      revokedIso,
+      'user:scott',
+      keyId,
+    );
   }
 
   function setStoredParent(keyId: string, parentKeyId: string | null) {
-    const stored = collection().findOne({ keyId });
-    stored.parentKeyId = parentKeyId;
-    collection().update(stored);
+    db.prepare('UPDATE api_keys SET parent_key_id = ? WHERE key_id = ?').run(parentKeyId, keyId);
   }
 
   function mintChild(parentKeyId: string, overrides: Partial<apiKey.CreateApiKeyInput> = {}) {
@@ -462,7 +471,7 @@ describe('verifyApiKey ancestry', () => {
   test('refuses a key whose parent is no longer in the store', () => {
     const root = createUserKey({ name: 'root' });
     const child = mintChild(root.record.keyId);
-    collection().remove(collection().findOne({ keyId: root.record.keyId }));
+    db.prepare('DELETE FROM api_keys WHERE key_id = ?').run(root.record.keyId);
 
     expect(apiKey.verifyApiKey(child.apiKey)).toBeNull();
   });
@@ -471,7 +480,7 @@ describe('verifyApiKey ancestry', () => {
     const root = createUserKey({ name: 'root' });
     const child = mintChild(root.record.keyId);
     // A real stored cycle, not a mutated projection: the walk has to terminate
-    // on the collection the process actually reads.
+    // on the table the process actually reads.
     setStoredParent(root.record.keyId, child.record.keyId);
 
     expect(apiKey.verifyApiKey(child.apiKey)).toBeNull();
@@ -519,8 +528,29 @@ describe('listApiKeys', () => {
 
     const listed = apiKey.listApiKeys();
     expect(listed.map((record) => record.name).sort()).toEqual(['one', 'two']);
-    expect(listed.find((record) => record.keyId === first.record.keyId).revokedAt).toBeNull();
-    expect(listed.find((record) => record.keyId === second.record.keyId).revokedAt).not.toBeNull();
+    expect(listed.find((record) => record.keyId === first.record.keyId)?.revokedAt).toBeNull();
+    expect(listed.find((record) => record.keyId === second.record.keyId)?.revokedAt).not.toBeNull();
+  });
+
+  test('returns scopes for every key, in insertion order', () => {
+    createUserKey({ name: 'multi', scopes: ['read', 'write', 'admin'] });
+
+    expect(apiKey.listApiKeys()[0].scopes).toEqual(['read', 'write', 'admin']);
+  });
+
+  test('returns an empty scopes array for a key with no api_key_scope rows', () => {
+    // createApiKey always writes at least one scope row, so the only way a
+    // real key ends up with none is the first-start importer carrying over a
+    // legacy record whose scopes array was empty or missing: it still
+    // inserts the api_keys row, it just has nothing to insert into
+    // api_key_scope. Reproduce that shape directly rather than through
+    // createApiKey, which rejects an empty scopes array.
+    db.prepare(
+      `INSERT INTO api_keys (key_id, schema_version, name, secret_hash, created_at, created_by)
+       VALUES (?, 1, ?, ?, ?, ?)`,
+    ).run('scopeless', 'imported-key', 'hash', new Date().toISOString(), 'user:unknown');
+
+    expect(apiKey.listApiKeys().find((record) => record.keyId === 'scopeless')?.scopes).toEqual([]);
   });
 });
 
@@ -549,9 +579,32 @@ describe('cascade revocation', () => {
       greatGrandchild.record.keyId,
     ]);
     for (const created of [root, child, grandchild, greatGrandchild]) {
-      expect(apiKey.findApiKeyById(created.record.keyId).revokedAt).not.toBeNull();
-      expect(apiKey.findApiKeyById(created.record.keyId).revokedBy).toBe('user:scott');
+      expect(apiKey.findApiKeyById(created.record.keyId)?.revokedAt).not.toBeNull();
+      expect(apiKey.findApiKeyById(created.record.keyId)?.revokedBy).toBe('user:scott');
     }
+  });
+
+  test('revoking a parent with siblings at every level walks in most-recently-inserted-first order', () => {
+    // Pins the order the previous LokiJS binary-index lookup on parentKeyId
+    // happened to return for a tie: most-recently-inserted sibling first at
+    // each level. A future change to this ordering must be a deliberate one.
+    const root = createUserKey({ name: 'root' });
+    const a = mintChild(root.record.keyId, 'a');
+    const b = mintChild(root.record.keyId, 'b');
+    const a1 = mintChild(a.record.keyId, 'a1');
+    const a2 = mintChild(a.record.keyId, 'a2');
+    const b1 = mintChild(b.record.keyId, 'b1');
+
+    const result = apiKey.revokeApiKey(root.record.keyId, { revokedBy: 'user:scott' });
+
+    expect(result?.revokedKeyIds).toEqual([
+      root.record.keyId,
+      b.record.keyId,
+      a.record.keyId,
+      b1.record.keyId,
+      a2.record.keyId,
+      a1.record.keyId,
+    ]);
   });
 
   test('a session-minted sibling is never cascaded', () => {
@@ -561,8 +614,8 @@ describe('cascade revocation', () => {
 
     apiKey.revokeApiKey(root.record.keyId, { revokedBy: 'user:scott' });
 
-    expect(apiKey.findApiKeyById(sibling.record.keyId).parentKeyId).toBeNull();
-    expect(apiKey.findApiKeyById(sibling.record.keyId).revokedAt).toBeNull();
+    expect(apiKey.findApiKeyById(sibling.record.keyId)?.parentKeyId).toBeNull();
+    expect(apiKey.findApiKeyById(sibling.record.keyId)?.revokedAt).toBeNull();
   });
 
   test('leaves an already-revoked descendant with its original revocation', () => {
@@ -580,20 +633,22 @@ describe('cascade revocation', () => {
 
     expect(result?.revokedKeyIds).toEqual([root.record.keyId]);
     const revokedChild = apiKey.findApiKeyById(child.record.keyId);
-    expect(revokedChild.revokedAt).toBe('2026-08-01T00:00:00.000Z');
-    expect(revokedChild.revokedBy).toBe('user:first');
+    expect(revokedChild?.revokedAt).toBe('2026-08-01T00:00:00.000Z');
+    expect(revokedChild?.revokedBy).toBe('user:first');
   });
 
   test('terminates on a corrupted parent cycle instead of looping forever', () => {
     const first = createUserKey({ name: 'first' });
     const second = createUserKey({ name: 'second' });
 
-    const firstDocument = collection().findOne({ keyId: first.record.keyId });
-    const secondDocument = collection().findOne({ keyId: second.record.keyId });
-    firstDocument.parentKeyId = second.record.keyId;
-    secondDocument.parentKeyId = first.record.keyId;
-    collection().update(firstDocument);
-    collection().update(secondDocument);
+    db.prepare('UPDATE api_keys SET parent_key_id = ? WHERE key_id = ?').run(
+      second.record.keyId,
+      first.record.keyId,
+    );
+    db.prepare('UPDATE api_keys SET parent_key_id = ? WHERE key_id = ?').run(
+      first.record.keyId,
+      second.record.keyId,
+    );
 
     const result = apiKey.revokeApiKey(first.record.keyId, { revokedBy: 'user:scott' });
 
@@ -611,7 +666,10 @@ describe('cascade revocation', () => {
 describe('lastUsedAt throttle', () => {
   test('100 requests in 10 seconds produce exactly one store mutation', () => {
     const created = createUserKey();
-    const updateSpy = vi.spyOn(collection(), 'update');
+    const updateSpy = vi.spyOn(
+      db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_id = ?'),
+      'run',
+    );
     const start = Date.parse('2026-08-29T12:00:00.000Z');
 
     let writes = 0;
@@ -623,13 +681,11 @@ describe('lastUsedAt throttle', () => {
     expect(writes).toBe(1);
     expect(updateSpy).toHaveBeenCalledTimes(1);
     // The buffered value is still what a reader sees.
-    expect(apiKey.findApiKeyById(created.record.keyId).lastUsedAt).toBe(
+    expect(apiKey.findApiKeyById(created.record.keyId)?.lastUsedAt).toBe(
       new Date(start + 99 * 100).toISOString(),
     );
     // ...while the store still holds the throttled write.
-    expect(collection().findOne({ keyId: created.record.keyId }).lastUsedAt).toBe(
-      new Date(start).toISOString(),
-    );
+    expect(rawRow(created.record.keyId)?.last_used_at).toBe(new Date(start).toISOString());
   });
 
   test('writes again once the throttle window has passed', () => {
@@ -676,22 +732,24 @@ describe('lastUsedAt throttle', () => {
     apiKey.recordApiKeyUsage(created.record.keyId, new Date(start + 5_000));
 
     expect(apiKey.flushApiKeyUsage(new Date(start + 6_000))).toBe(1);
-    expect(collection().findOne({ keyId: created.record.keyId }).lastUsedAt).toBe(
-      new Date(start + 5_000).toISOString(),
-    );
+    expect(rawRow(created.record.keyId)?.last_used_at).toBe(new Date(start + 5_000).toISOString());
     // Nothing pending any more.
     expect(apiKey.flushApiKeyUsage(new Date(start + 7_000))).toBe(0);
   });
 
   test('periodically flushes buffered timestamps at the throttle boundary', () => {
     vi.useFakeTimers();
+    let localDb: Database | undefined;
     try {
-      const localDb = new Loki('api-key.usage-timer.test.db');
-      apiKey.createCollections(localDb as never);
+      localDb = createMigratedMemoryDatabase();
+      apiKey.createCollections(localDb);
       const created = createUserKey();
       const start = Date.parse('2026-08-29T12:00:00.000Z');
       vi.setSystemTime(start);
-      const updateSpy = vi.spyOn(localDb.getCollection('api-keys'), 'update');
+      const updateSpy = vi.spyOn(
+        localDb.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_id = ?'),
+        'run',
+      );
 
       apiKey.recordApiKeyUsage(created.record.keyId, new Date(start));
       apiKey.recordApiKeyUsage(created.record.keyId, new Date(start + 5_000));
@@ -701,10 +759,13 @@ describe('lastUsedAt throttle', () => {
 
       expect(updateSpy).toHaveBeenCalledTimes(2);
       expect(
-        localDb.getCollection('api-keys').findOne({ keyId: created.record.keyId }).lastUsedAt,
+        localDb
+          .prepare('SELECT last_used_at FROM api_keys WHERE key_id = ?')
+          .get(created.record.keyId)?.last_used_at,
       ).toBe(new Date(start + 5_000).toISOString());
     } finally {
       vi.useRealTimers();
+      localDb?.close();
     }
   });
 
@@ -714,7 +775,7 @@ describe('lastUsedAt throttle', () => {
     apiKey.recordApiKeyUsage(created.record.keyId, new Date(start));
     apiKey.recordApiKeyUsage(created.record.keyId, new Date(start + 5_000));
 
-    collection().remove(collection().findOne({ keyId: created.record.keyId }));
+    db.prepare('DELETE FROM api_keys WHERE key_id = ?').run(created.record.keyId);
 
     expect(apiKey.flushApiKeyUsage(new Date(start + 6_000))).toBe(0);
   });
@@ -723,10 +784,11 @@ describe('lastUsedAt throttle', () => {
 describe('retention', () => {
   function revokedAt(name: string, revokedIso: string) {
     const created = createUserKey({ name });
-    const document = collection().findOne({ keyId: created.record.keyId });
-    document.revokedAt = revokedIso;
-    document.revokedBy = 'user:scott';
-    collection().update(document);
+    db.prepare('UPDATE api_keys SET revoked_at = ?, revoked_by = ? WHERE key_id = ?').run(
+      revokedIso,
+      'user:scott',
+      created.record.keyId,
+    );
     return created.record.keyId;
   }
 
@@ -742,6 +804,19 @@ describe('retention', () => {
     expect(apiKey.findApiKeyById(recent)).not.toBeNull();
     expect(apiKey.findApiKeyById(corrupt)).not.toBeNull();
     expect(apiKey.findApiKeyById(active)).not.toBeNull();
+  });
+
+  test('deletes scopes along with a pruned key', () => {
+    const now = new Date('2026-08-29T00:00:00.000Z');
+    const created = createUserKey({ name: 'stale', scopes: ['read', 'write'] });
+    db.prepare('UPDATE api_keys SET revoked_at = ?, revoked_by = ? WHERE key_id = ?').run(
+      '2026-01-01T00:00:00.000Z',
+      'user:scott',
+      created.record.keyId,
+    );
+
+    expect(apiKey.pruneRevokedApiKeys({ now })).toBe(1);
+    expect(rawScopes(created.record.keyId)).toEqual([]);
   });
 
   test('honours an explicit retention window', () => {
@@ -774,19 +849,21 @@ describe('retention', () => {
 
   test('prunes on the periodic timer', () => {
     vi.useFakeTimers();
+    let localDb: Database | undefined;
     try {
-      const localDb = new Loki('api-key.timer.test.db');
-      apiKey.createCollections(localDb as never);
+      localDb = createMigratedMemoryDatabase();
+      apiKey.createCollections(localDb);
       const created = createUserKey({ name: 'stale' });
-      const document = localDb.getCollection('api-keys').findOne({ keyId: created.record.keyId });
-      document.revokedAt = '2020-01-01T00:00:00.000Z';
-      localDb.getCollection('api-keys').update(document);
+      localDb
+        .prepare('UPDATE api_keys SET revoked_at = ? WHERE key_id = ?')
+        .run('2020-01-01T00:00:00.000Z', created.record.keyId);
 
       vi.advanceTimersByTime(60 * 60 * 1000);
 
       expect(apiKey.findApiKeyById(created.record.keyId)).toBeNull();
     } finally {
       vi.useRealTimers();
+      localDb?.close();
     }
   });
 
@@ -794,14 +871,15 @@ describe('retention', () => {
     const setIntervalSpy = vi
       .spyOn(globalThis, 'setInterval')
       .mockReturnValue(0 as unknown as NodeJS.Timeout);
+    let localDb: Database | undefined;
 
     try {
-      expect(() =>
-        apiKey.createCollections(new Loki('api-key.unref.test.db') as never),
-      ).not.toThrow();
+      localDb = createMigratedMemoryDatabase();
+      expect(() => apiKey.createCollections(localDb as Database)).not.toThrow();
       expect(setIntervalSpy).toHaveBeenCalled();
     } finally {
       setIntervalSpy.mockRestore();
+      localDb?.close();
     }
   });
 
@@ -812,18 +890,9 @@ describe('retention', () => {
 });
 
 describe('collection wiring', () => {
-  test('creates the api-keys collection with keyId and parentKeyId indices', () => {
-    const created = collection();
-    expect(created).not.toBeNull();
-    expect(created.name).toBe('api-keys');
-    expect(Object.keys(created.binaryIndices)).toEqual(
-      expect.arrayContaining(['keyId', 'parentKeyId']),
-    );
-  });
-
-  test('reuses an existing collection across a reload', () => {
+  test('reuses the same table across a reload', () => {
     createUserKey({ name: 'survivor' });
-    apiKey.createCollections(db as never);
+    apiKey.createCollections(db);
 
     expect(apiKey.listApiKeys().map((record) => record.name)).toEqual(['survivor']);
   });

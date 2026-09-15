@@ -2,10 +2,11 @@
  * Integration test for API key authentication and scope enforcement.
  *
  * Everything below the HTTP boundary is real: the express-session +
- * connect-loki store, the real Basic provider with a real argon2id hash, the
- * real api-keys LokiJS collection with real SHA-256 digests, the real
- * authenticator chain, the real `requireAuthentication`, and routes declared
- * with the real `scoped()`.
+ * SessionStore (roadmap 7-STORE slice 11, backed by a real SQLite database),
+ * the real Basic provider with a real argon2id hash, the real api-keys
+ * SQLite table with real SHA-256 digests, the real authenticator chain, the
+ * real `requireAuthentication`, and routes declared with the real
+ * `scoped()`.
  *
  * Three of the phase's Done-when points are proven here rather than in a unit
  * test, because each one is a claim about the whole stack:
@@ -15,13 +16,9 @@
  */
 import { argon2Sync, randomBytes } from 'node:crypto';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import ConnectLoki from 'connect-loki';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import Loki from 'lokijs';
 
 vi.mock('./audit-events.js', () => ({ recordAuditEvent: vi.fn() }));
 vi.mock('../log/index.js', () => ({
@@ -36,6 +33,9 @@ vi.mock('../log/index.js', () => ({
 
 import Basic from '../authentications/providers/basic/Basic.js';
 import * as apiKeyStore from '../store/api-key.js';
+import type { Database } from '../store/db/driver.js';
+import * as sessionModel from '../store/session.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { apiKeyAuthenticator } from './api-key-auth.js';
 import { requireAuthentication } from './auth.js';
 import type { AuthRequest } from './auth-types.js';
@@ -51,16 +51,14 @@ import {
   sessionAuthenticator,
   writeSessionPrincipal,
 } from './session-principal.js';
+import { SessionStore } from './session-store.js';
 
-const LokiStore = ConnectLoki(session);
 const TEST_USER = 'wud-card';
 const TEST_PASSWORD = 'correct-horse-battery-staple';
 const BASIC_AUTH_HEADER = `Basic ${Buffer.from(`${TEST_USER}:${TEST_PASSWORD}`).toString('base64')}`;
 const HTTPS_HEADERS = { 'X-Forwarded-Proto': 'https' };
 const IDP_CREDENTIAL = 'idp-issued-access-credential';
 const WEBHOOK_CREDENTIAL = 'webhook-issued-bearer-secret';
-
-type LokiSessionStore = InstanceType<typeof LokiStore>;
 
 interface RunningServer {
   server: http.Server;
@@ -80,21 +78,14 @@ function createArgon2Hash(password: string): string {
   return `argon2id$19456$2$4$${salt.toString('base64')}$${derived.toString('base64')}`;
 }
 
-function createStore(): LokiSessionStore {
-  return new LokiStore({
-    path: path.join(os.tmpdir(), `drydock-api-key-test-${randomBytes(8).toString('hex')}.db`),
-    autosave: false,
-    ttl: 60,
-  });
+/** A throwaway SQLite database backing its own SessionStore — real writes, no shared state across tests. */
+function createStore(): SessionStore {
+  const db = createMigratedMemoryDatabase();
+  sessionModel.createCollections(db);
+  return new SessionStore({ ttlMs: 60_000 });
 }
 
-function waitForStoreReady(store: LokiSessionStore): Promise<void> {
-  return new Promise((resolve) => {
-    store.once('connect', resolve);
-  });
-}
-
-function storeLength(store: LokiSessionStore): Promise<number> {
+function storeLength(store: SessionStore): Promise<number> {
   return new Promise((resolve, reject) => {
     store.length((error: unknown, count?: number) => {
       if (error) {
@@ -110,20 +101,39 @@ function ok(req: Request, res: ExpressResponse): void {
   res.status(200).json({ username: (req as AuthRequest).principal?.username });
 }
 
-async function createTestApp(store: LokiSessionStore): Promise<Application> {
+// Registration order is the contract: the key authenticator fronts the chain,
+// so a request carrying both a cookie and a key resolves as the key. Broken
+// out so `beforeEach` can restore it after a test that swaps in its own
+// authenticators, without paying for a fresh Basic/argon2id hash every time.
+function registerStandardAuthenticators(basic: Basic): void {
+  clearAuthenticators();
+  registerAuthenticator(apiKeyAuthenticator);
+  registerAuthenticator(basic.getAuthenticator());
+  registerAuthenticator(sessionAuthenticator);
+}
+
+async function createBasicAuthenticator(): Promise<Basic> {
   const basic = new Basic();
   await basic.register('authentication', 'basic', 'default', {
     user: TEST_USER,
     hash: createArgon2Hash(TEST_PASSWORD),
   });
+  return basic;
+}
 
-  // Registration order is the contract: the key authenticator fronts the
-  // chain, so a request carrying both a cookie and a key resolves as the key.
-  clearAuthenticators();
-  registerAuthenticator(apiKeyAuthenticator);
-  registerAuthenticator(basic.getAuthenticator());
-  registerAuthenticator(sessionAuthenticator);
+function clearSessionStore(store: SessionStore): Promise<void> {
+  return new Promise((resolve, reject) => {
+    store.clear((error: unknown) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
 
+function createTestApp(store: SessionStore): Application {
   const app = express();
   app.set('trust proxy', 1);
   app.use(
@@ -192,10 +202,25 @@ async function createTestApp(store: LokiSessionStore): Promise<Application> {
   return app;
 }
 
+/**
+ * Bind the loopback address, never the wildcard.
+ *
+ * `listen(0)` binds `::` dual-stack, and libuv sets SO_REUSEADDR, which makes
+ * the kernel's ephemeral-port picker check for an *exact* address+port conflict
+ * only. A wildcard listener can be handed a port another process already holds
+ * on `127.0.0.1` (`healthcheck.binary.test.ts` and
+ * `agent/PortwingDockerBridge.ts` both bind that address), and the more
+ * specific binding wins every connection to `127.0.0.1`, so the requests below
+ * answer from a foreign server carrying none of this app's routes or
+ * middleware. That is how the limiter case a few hundred lines down came back
+ * with an empty RateLimit header set (DR-74), and the same collision reading as
+ * a 404 is DR-57.
+ * @param app
+ */
 function startServer(app: Application): Promise<RunningServer> {
   return new Promise((resolve) => {
     const server = http.createServer(app);
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
       resolve({ server, port });
@@ -220,24 +245,46 @@ function mintKey(name: string, scopes: string[]): string {
 }
 
 describe('API key enforcement', () => {
-  const openServers: http.Server[] = [];
-  let sessionStore: LokiSessionStore;
+  // The app, its Basic authenticator (real argon2id hash) and its HTTP server
+  // are built once for the whole file rather than once per case. Building
+  // them per case (a fresh argon2id hash, a fresh LokiJS-backed session
+  // store, a fresh listening socket, for every one of ~30 cases) is cheap in
+  // isolation but pushed a single case past the 5000ms default under the CPU
+  // contention of the parallel app+ui coverage gate (DR-63). Only the mutable
+  // state a case can actually leave behind — the api-key collection, the
+  // session store's rows, and the registered authenticator chain a couple of
+  // cases deliberately swap out — gets reset per case below.
+  let sessionStore: SessionStore;
+  let server: http.Server;
+  let basic: Basic;
   let port: number;
 
-  beforeEach(async () => {
-    clearAuthenticators();
-    apiKeyStore.createCollections(new Loki('api-key-enforcement.test.db') as never);
+  let apiKeyDb: Database | undefined;
+
+  beforeAll(async () => {
+    basic = await createBasicAuthenticator();
     sessionStore = createStore();
-    await waitForStoreReady(sessionStore);
-    const app = await createTestApp(sessionStore);
+    const app = createTestApp(sessionStore);
     const running = await startServer(app);
-    openServers.push(running.server);
+    server = running.server;
     port = running.port;
   });
 
-  afterEach(async () => {
-    await Promise.all(openServers.splice(0).map((server) => closeServer(server)));
+  afterAll(async () => {
+    await closeServer(server);
+    sessionStore.stop();
+  });
+
+  beforeEach(async () => {
+    apiKeyDb = createMigratedMemoryDatabase();
+    apiKeyStore.createCollections(apiKeyDb);
+    await clearSessionStore(sessionStore);
+    registerStandardAuthenticators(basic);
+  });
+
+  afterEach(() => {
     clearAuthenticators();
+    apiKeyDb?.close();
   });
 
   function call(
@@ -510,6 +557,7 @@ describe('API key enforcement', () => {
  */
 describe('the pre-authentication limiter is not an existence oracle', () => {
   const OUTER_LIMIT = 3;
+  const WINDOW_MS = 60 * 1000;
   const openServers: http.Server[] = [];
 
   function buildLimiterApp(): Application {
@@ -517,7 +565,7 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
     app.set('trust proxy', 1);
     app.use(
       rateLimit({
-        windowMs: 60 * 1000,
+        windowMs: WINDOW_MS,
         max: OUTER_LIMIT,
         standardHeaders: true,
         legacyHeaders: false,
@@ -560,11 +608,13 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
   let knownKeyId: string;
   let validCredential: string;
   let wrongSecretCredential: string;
+  let apiKeyDb: Database | undefined;
   const unknownIdCredential = `ddk_${'f'.repeat(12)}_${'A'.repeat(43)}`;
   const otherUnknownIdCredential = `ddk_${'e'.repeat(12)}_${'A'.repeat(43)}`;
 
   beforeEach(() => {
-    apiKeyStore.createCollections(new Loki('api-key-oracle.test.db') as never);
+    apiKeyDb = createMigratedMemoryDatabase();
+    apiKeyStore.createCollections(apiKeyDb);
     validCredential = mintKey('probe-target', ['read']);
     knownKeyId = validCredential.slice('ddk_'.length, 'ddk_'.length + 12);
     wrongSecretCredential = `ddk_${knownKeyId}_${'B'.repeat(43)}`;
@@ -572,6 +622,7 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
 
   afterEach(async () => {
     await Promise.all(openServers.splice(0).map((server) => closeServer(server)));
+    apiKeyDb?.close();
   });
 
   test('an unknown id and a known id with a wrong secret get identical RateLimit headers', async () => {
@@ -586,11 +637,28 @@ describe('the pre-authentication limiter is not an existence oracle', () => {
       return rateLimitHeaders(await probe(limiterPort, credential));
     }
 
-    const unknownHeaders = await probeAfterPriming(unknownIdCredential);
-    const wrongSecretHeaders = await probeAfterPriming(wrongSecretCredential);
+    // `RateLimit-Reset` counts whole seconds down from the moment its window
+    // opened, so the two probes read 60 and 59 as soon as CPU contention puts
+    // more than a second between one pair's priming request and its probe.
+    // That is a difference in the wall clock, not in anything the limiter
+    // revealed about the credential, and comparing it as-is is DR-74. Freezing
+    // Date — and only Date, so the sockets underneath keep their real timers —
+    // pins both windows to the same reading and leaves every other header,
+    // `ratelimit-remaining` above all, doing the real work of the comparison.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const unknownHeaders = await probeAfterPriming(unknownIdCredential);
+      const wrongSecretHeaders = await probeAfterPriming(wrongSecretCredential);
 
-    expect(Object.keys(unknownHeaders).length).toBeGreaterThan(0);
-    expect(wrongSecretHeaders).toStrictEqual(unknownHeaders);
+      expect(Object.keys(unknownHeaders).length).toBeGreaterThan(0);
+      // The full window, proving the clock really is frozen: without it this
+      // reads 60 or 59 depending on load, and the freeze could stop working
+      // without the comparison below ever noticing.
+      expect(unknownHeaders['ratelimit-reset']).toBe(String(WINDOW_MS / 1000));
+      expect(wrongSecretHeaders).toStrictEqual(unknownHeaders);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('every failing credential is charged to one bucket, so probing cannot mint budgets', async () => {

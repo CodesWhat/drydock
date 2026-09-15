@@ -511,6 +511,12 @@ export const containerPaths = {
               items: { $ref: '#/components/schemas/ContainerAssociatedTrigger' },
             },
             total: { type: 'integer', minimum: 0 },
+            unassociatedTriggers: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ContainerUnassociatedTrigger' },
+              description:
+                'Triggers that do not apply to this container, each with a reason (DR-78).',
+            },
           },
           required: ['data', 'total'],
           additionalProperties: true,

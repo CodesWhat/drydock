@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Elenco degli agenti non disponibile. Alcuni agenti configurati potrebbero mancare.",
+      "title": "Stato della flotta",
+      "description": "Stato dell’intera flotta. L’inventario rileva i container senza controllare i registri o eseguire aggiornamenti.",
+      "reload": "Ricarica stato",
+      "refresh": "Aggiorna inventario",
+      "configured": "Configurato",
+      "connected": "Connesso",
+      "disconnected": "Disconnesso",
+      "unavailable": "Non disponibile",
+      "agentUnavailable": "Stato degli agenti non disponibile. I dati conservati potrebbero essere obsoleti.",
+      "watcherUnavailable": "Metadati dei watcher non disponibili. I dati conservati potrebbero essere obsoleti.",
+      "total": "{count} container",
+      "lastKnown": "Ultimo dato noto",
+      "lastSeen": "Ultimo contatto: {value}",
+      "unsupported": "Tutti i target richiedono watcher Docker compatibili con l’inventario.",
+      "complete": "Inventario completo",
+      "partial": "Inventario incompleto",
+      "reloadFailed": "Ricaricamento dell’elenco container non riuscito. I risultati dell’inventario restano visibili."
+    },
+    "fleetBulk": {
+      "label": "Azioni della flotta filtrata",
+      "updateAll": "Aggiorna tutti ({count})",
+      "snoozePatch": "Rimanda tutte le patch",
+      "patchCount": "{count} candidati patch",
+      "duration": "Durata rinvio",
+      "days": "{count} giorni",
+      "untilDate": "Fino alla data",
+      "date": "Rimanda fino a questa data",
+      "snoozeConfirm": "Rimandare {count} candidati patch?",
+      "snoozeScope": "Questi container hanno patch disponibili. Rimanda tutti i loro aggiornamenti per {duration}, non solo le patch. Si usa la lista attiva filtrata, non le caselle selezionate. Una data include la fine del giorno locale.",
+      "snoozeResult": "Rimandati: {succeeded}. Falliti: {failed}.",
+      "refreshFailed": "Politiche salvate, ma aggiornamento della lista fallito. Ricarica la lista.",
+      "disabled": "Azioni disabilitate. Nessuna politica modificata.",
+      "invalid": "Durata non valida. Nessuna politica modificata.",
+      "busy": "Un’altra azione è in corso. Nessun’altra politica modificata."
+    },
+    "fleetDimensions": {
+      "groupBy": "Raggruppa per",
+      "none": "Nessun raggruppamento",
+      "agent": "Agente",
+      "registry": "Registro",
+      "status": "Stato",
+      "tagType": "Tipo di tag",
+      "label": "Etichetta",
+      "groupLabel": "Raggruppa per chiave etichetta",
+      "allAgents": "Tutti gli agenti",
+      "allRegistries": "Tutti gli indirizzi dei registri",
+      "all": "Tutti i tipi di tag",
+      "specific": "Tag specifico",
+      "floating": "Tag mobile",
+      "digest": "Digest fissato",
+      "semver": "Tag di versione",
+      "tag": "Tag senza versione",
+      "unknown": "Sconosciuto",
+      "local": "Monitor locali",
+      "running": "In esecuzione",
+      "stopped": "Arrestato",
+      "labelKey": "Chiave etichetta",
+      "labelMatch": "Corrispondenza etichetta",
+      "labelValue": "Valore etichetta",
+      "exists": "Ha etichetta",
+      "equals": "Uguale a",
+      "missing": "Etichetta mancante",
+      "missingLabel": "Nessuna etichetta",
+      "emptyValue": "Valore vuoto"
+    },
     "fullPageActions": {
       "updateWorkflow": "Workflow aggiornamento",
       "actionsGroup": "Azioni",
@@ -58,6 +125,12 @@
       "runningButton": "In esecuzione...",
       "runButton": "Esegui",
       "noTriggersAssociated": "Nessun trigger associato a questo container",
+      "unavailableTriggers": "Trigger non disponibili",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Appartiene a un agente diverso da quello di questo container.",
+        "structuralIncompatibility": "Il progetto, il servizio o il file Compose non corrisponde a questo container.",
+        "labelScope": "Escluso dalle etichette di inclusione o esclusione dd.action/dd.notification di questo container."
+      },
       "backupsRollback": "Backup e rollback",
       "rollingBack": "Rollback in corso...",
       "rollbackLatest": "Rollback ultimo",
@@ -273,6 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "Caricamento container...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "Cerca nome o immagine...",
       "allStatuses": "Tutti gli stati",
       "running": "In esecuzione",
@@ -505,6 +581,19 @@
         "failedDetail": "Impossibile aggiornare la catena di dipendenze per {name}.",
         "staleChainTitle": "La catena di dipendenze è cambiata",
         "staleChainDetail": "La catena di dipendenze per {name} è cambiata dall'ultima anteprima. Riapri la finestra di dialogo di aggiornamento per rivedere la catena attuale prima di confermare."
+      },
+      "bulkUpdate": {
+        "header": "Aggiorna 1 container | Aggiorna {count} container",
+        "accept": "Aggiorna 1 container | Aggiorna {count} container",
+        "acceptWithParents": "Aggiungi 1 elemento principale e aggiorna | Aggiungi {count} elementi principali e aggiorna",
+        "dispatchHeading": "Verranno aggiornati",
+        "blockedHeading": "Bloccati, lasciati invariati",
+        "softOverridesHeading": "Aggiornamento nonostante gli avvisi",
+        "skippedHeading": "Saltati",
+        "staleParentsHeading": "Elementi principali con aggiornamenti in attesa, aggiunti alla conferma",
+        "agentCountInfo": "Coinvolge {count} agenti; ogni agente esegue i propri aggiornamenti.",
+        "stackCountInfo": "Coinvolge {count} stack.",
+        "successMessage": "Aggiornamento avviato per 1 container | Aggiornamento avviato per {count} container"
       }
     },
     "actionToasts": {
@@ -670,6 +759,29 @@
     },
     "logViewer": {
       "invalidRegex": "Espressione regolare non valida"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Dipende da",
+      "requiredBy": "Richiesto da",
+      "cycle": "Fa parte di un ciclo di dipendenze",
+      "toggle": "Mostra dipendenze",
+      "updateGroup": "Aggiorna gruppo di dipendenze ({count})",
+      "staleParentsWarning": "{name} dipende da {parents}, che ha anche un aggiornamento in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro un elemento principale obsoleto. | {name} dipende da {parents}, che hanno anche aggiornamenti in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro elementi principali obsoleti.",
+      "staleParentsOverflow": "e altri {count}",
+      "staleParentsAccept": "Aggiorna comunque"
+    },
+    "selection": {
+      "selectRow": "Seleziona {name}",
+      "selectAll": "Seleziona tutti i container visibili",
+      "barLabel": "Container selezionati",
+      "count": "1 container selezionato | {count} container selezionati",
+      "updateSelected": "Aggiorna selezionati",
+      "clear": "Cancella",
+      "reasons": {
+        "stale": "non è più nell'elenco",
+        "inFlight": "già in aggiornamento",
+        "noUpdate": "nessun aggiornamento disponibile"
+      }
     }
   }
 }

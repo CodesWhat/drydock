@@ -1,4 +1,4 @@
-import { Counter, register } from 'prom-client';
+import { Counter, register } from '@prometheus-io/client';
 
 interface CounterModule {
   init(): void;

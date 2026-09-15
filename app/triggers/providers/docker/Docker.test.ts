@@ -4,6 +4,7 @@ import {
   getSelfUpdateFinalizeSecret,
   SELF_UPDATE_FINALIZE_SECRET_HEADER,
 } from '../../../api/internal-self-update.js';
+import { ddEnvVars } from '../../../configuration/index.js';
 import log from '../../../log/index.js';
 import Hub from '../../../registries/providers/hub/Hub.js';
 import * as registryStore from '../../../registry';
@@ -122,15 +123,15 @@ const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
-const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
-const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
-const mockGetRecentTerminalSucceededOperationByContainerName = vi.hoisted(() =>
+const mockGetRecentTerminalSucceededOperationByContainerIdentity = vi.hoisted(() =>
   vi.fn(() => undefined),
 );
-const mockHasOtherActiveOperationByContainerName = vi.hoisted(() => vi.fn(() => false));
+const mockHasOtherActiveOperationByContainerIdentity = vi.hoisted(() => vi.fn(() => false));
 const MockOperationCancelledError = vi.hoisted(
   () =>
     class MockOperationCancelledError extends Error {
@@ -148,18 +149,18 @@ vi.mock('../../../store/update-operation.js', () => ({
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getOperationById: (...args: any[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
-  getInProgressOperationByContainerName: (...args: any[]) =>
-    mockGetInProgressOperationByContainerName(...args),
+  getInProgressOperationByContainerIdentity: (...args: any[]) =>
+    mockGetInProgressOperationByContainerIdentity(...args),
   getInProgressOperationByContainerId: (...args: any[]) =>
     mockGetInProgressOperationByContainerId(...args),
-  getActiveOperationByContainerName: (...args: any[]) =>
-    mockGetActiveOperationByContainerName(...args),
+  getActiveOperationByContainerIdentity: (...args: any[]) =>
+    mockGetActiveOperationByContainerIdentity(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
-  getRecentTerminalSucceededOperationByContainerName: (...args: any[]) =>
-    mockGetRecentTerminalSucceededOperationByContainerName(...args),
-  hasOtherActiveOperationByContainerName: (...args: any[]) =>
-    mockHasOtherActiveOperationByContainerName(...args),
+  getRecentTerminalSucceededOperationByContainerIdentity: (...args: any[]) =>
+    mockGetRecentTerminalSucceededOperationByContainerIdentity(...args),
+  hasOtherActiveOperationByContainerIdentity: (...args: any[]) =>
+    mockHasOtherActiveOperationByContainerIdentity(...args),
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -438,6 +439,12 @@ function createMockLog(...methods) {
 beforeEach(async () => {
   vi.resetAllMocks();
   docker.configuration = configurationValid;
+  // The update-concurrency semaphore is created lazily and cached per
+  // instance (so it can bound concurrency across separate trigger() calls,
+  // not just within one triggerBatch()) — reset it whenever configuration
+  // is reset so a test that sets `concurrency` doesn't inherit a semaphore
+  // sized by whatever ran before it against this shared `docker` instance.
+  docker.updateSemaphore = undefined;
   docker.log = log;
   docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
     id: '123456789',
@@ -489,7 +496,7 @@ beforeEach(async () => {
     ...operation,
   }));
   mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
-  mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+  mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined);
 });
 
 test('getSelfUpdateFinalizeUrl should keep loopback finalize callbacks on plain HTTP even when public TLS is enabled', () => {
@@ -1766,21 +1773,104 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
 });
 
-test('triggerBatch should limit concurrent container updates to 3', async () => {
+test('triggerBatch defaults to concurrency 1 (serialises) when nothing is configured', async () => {
+  const prevConcurrency = ddEnvVars.DD_UPDATE_CONCURRENCY;
+  delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+  try {
+    const containers = Array.from({ length: 4 }, (_, index) => ({ name: `c${index}` }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    // The concurrency gate lives inside trigger(), around the call to
+    // runContainerUpdateLifecycle() — spy there so the semaphore acquire/
+    // release actually runs, unlike spying on trigger() itself.
+    const lifecycleSpy = vi
+      .spyOn(docker, 'runContainerUpdateLifecycle')
+      .mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+      });
+
+    await docker.triggerBatch(containers);
+
+    expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
+    expect(maxInFlight).toBe(1);
+  } finally {
+    if (prevConcurrency === undefined) {
+      delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+    } else {
+      ddEnvVars.DD_UPDATE_CONCURRENCY = prevConcurrency;
+    }
+  }
+});
+
+test('triggerBatch runs up to the configured concurrency at once and never above it', async () => {
+  docker.configuration = { ...configurationValid, concurrency: 3 };
   const containers = Array.from({ length: 8 }, (_, index) => ({ name: `c${index}` }));
   let inFlight = 0;
   let maxInFlight = 0;
-  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
-    inFlight += 1;
-    maxInFlight = Math.max(maxInFlight, inFlight);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    inFlight -= 1;
-  });
+  const lifecycleSpy = vi
+    .spyOn(docker, 'runContainerUpdateLifecycle')
+    .mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+    });
 
   await docker.triggerBatch(containers);
 
-  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
+  expect(maxInFlight).toBe(3);
   expect(maxInFlight).toBeLessThanOrEqual(3);
+});
+
+test('triggerBatch: a per-action concurrency override wins over the global default', async () => {
+  const prevConcurrency = ddEnvVars.DD_UPDATE_CONCURRENCY;
+  ddEnvVars.DD_UPDATE_CONCURRENCY = '1';
+  try {
+    docker.configuration = { ...configurationValid, concurrency: 3 };
+
+    const containers = Array.from({ length: 6 }, (_, index) => ({ name: `c${index}` }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.spyOn(docker, 'runContainerUpdateLifecycle').mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+    });
+
+    await docker.triggerBatch(containers);
+
+    expect(maxInFlight).toBe(3);
+  } finally {
+    if (prevConcurrency === undefined) {
+      delete ddEnvVars.DD_UPDATE_CONCURRENCY;
+    } else {
+      ddEnvVars.DD_UPDATE_CONCURRENCY = prevConcurrency;
+    }
+  }
+});
+
+test('triggerBatch releases a failing container update slot so the remaining queue still runs', async () => {
+  docker.configuration = { ...configurationValid, concurrency: 1 };
+  const containers = [{ name: 'fails' }, { name: 'c1' }, { name: 'c2' }];
+  const lifecycleSpy = vi
+    .spyOn(docker, 'runContainerUpdateLifecycle')
+    .mockImplementation(async (container: { name: string }) => {
+      if (container.name === 'fails') {
+        throw new Error('update failed');
+      }
+    });
+
+  await expect(docker.triggerBatch(containers)).rejects.toThrow('update failed');
+  // Give the still-in-flight limiter callbacks (queued behind the rejected
+  // one) a turn to run and release their slot.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(lifecycleSpy).toHaveBeenCalledTimes(containers.length);
 });
 
 test('triggerBatch should forward runtimeContext when provided', async () => {
@@ -1793,6 +1883,30 @@ test('triggerBatch should forward runtimeContext when provided', async () => {
   expect(triggerSpy).toHaveBeenCalledTimes(2);
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c1' }, runtimeContext);
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' }, runtimeContext);
+});
+
+test('trigger() bounds concurrency across independent calls, not just within one triggerBatch() call', async () => {
+  // runAcceptedContainerUpdates() (manual bulk "Update All", dependency
+  // chains, startup recovery) dispatches one docker.trigger() call per
+  // container from its own wave-worker pool — there is no shared
+  // triggerBatch() call for it to fan out inside of. Simulate that by
+  // calling trigger() directly, several times concurrently, and confirm
+  // the configured concurrency still bounds how many run at once.
+  docker.configuration = { ...configurationValid, concurrency: 2 };
+  let inFlight = 0;
+  let maxInFlight = 0;
+  vi.spyOn(docker, 'runContainerUpdateLifecycle').mockImplementation(async () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight -= 1;
+  });
+
+  const containers = Array.from({ length: 5 }, (_, index) => ({ name: `c${index}` }));
+  await Promise.all(containers.map((container) => docker.trigger(container)));
+
+  expect(maxInFlight).toBeLessThanOrEqual(2);
+  expect(maxInFlight).toBeGreaterThan(0);
 });
 
 // --- pruneImages (parametric: exclusion filters) ---
@@ -2663,7 +2777,6 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     docker.configuration.prune = true;
-    const storeContainer = await import('../../../store/container.js');
     const container = {
       name: 'container-name',
       watcher: 'local',
@@ -2677,7 +2790,6 @@ describe('additional docker trigger coverage', () => {
         kind: 'tag',
       },
     };
-    vi.mocked(storeContainer.getContainers).mockReturnValueOnce([container] as any);
     vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
         imageTag: '1.0.0',
@@ -2694,7 +2806,6 @@ describe('additional docker trigger coverage', () => {
     expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
       containerName: 'container-name',
       containerIdentityKey: '::local::container-name',
-      includeLegacy: true,
     });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();
@@ -3369,7 +3480,7 @@ describe('executeContainerUpdate', () => {
     };
     const context = createContainerUpdateContext({ dockerApi });
     const logContainer = createMockLog('info', 'warn', 'debug');
-    mockGetInProgressOperationByContainerName.mockReturnValue({
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue({
       id: 'op-recover-1',
       containerName: 'container-name',
       oldName: 'container-name',
@@ -4835,7 +4946,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'prepare',
       });
       // A recent succeeded op for the same container name
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -4856,7 +4967,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -4875,7 +4986,7 @@ describe('extracted lifecycle delegation', () => {
         status: 'queued',
         phase: 'queued',
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -4892,7 +5003,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -4911,7 +5022,7 @@ describe('extracted lifecycle delegation', () => {
         status: 'in-progress',
         phase: 'prepare',
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -4928,7 +5039,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -5243,24 +5354,28 @@ describe('extracted lifecycle delegation', () => {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
-        container: { id: 'c-agent-b', name: 'web', agent: 'agent-B', watcher: 'local' },
+        containerIdentityKey: 'agent-B::local::web',
       });
-      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
-        (_containerName, _windowMs, identity) =>
-          identity?.agent === 'agent-B'
+      // With the single identityKey signature there is no filter object to branch
+      // on inside the store call; the mock instead does exact identityKey equality,
+      // the way the real SQL lookup does. A recent success recorded under agent-A's
+      // identity must not match a lookup keyed by agent-B's identity.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockImplementation(
+        (identityKey) =>
+          identityKey === 'agent-B::local::web'
             ? undefined
             : { id: 'prev-agent-a', containerName: 'web', status: 'succeeded' },
       );
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
 
       try {
         await expect(
           docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-agent-b-1' }),
         ).rejects.toThrow('No such container');
 
-        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-          'web',
+        expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+          'agent-B::local::web',
           expect.any(Number),
-          { agent: 'agent-B', watcher: 'local' },
         );
         expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
           'op-404-agent-b-1',
@@ -5272,7 +5387,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -5316,7 +5431,7 @@ describe('extracted lifecycle delegation', () => {
       }
     });
 
-    test('scopes the duplicate-update lookup by watcher alone for a controller-owned operation', async () => {
+    test('passes a controller-owned operation containerIdentityKey (no agent segment) straight through to the duplicate-update lookup', async () => {
       const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
       const docker404Error = Object.assign(new Error('No such container: web'), {
         statusCode: 404,
@@ -5329,7 +5444,7 @@ describe('extracted lifecycle delegation', () => {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
-        container: { id: 'c-controller', name: 'web', watcher: 'local' },
+        containerIdentityKey: '::local::web',
       });
 
       try {
@@ -5337,10 +5452,9 @@ describe('extracted lifecycle delegation', () => {
           docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-controller-1' }),
         ).rejects.toThrow('No such container');
 
-        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-          'web',
+        expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+          '::local::web',
           expect.any(Number),
-          { watcher: 'local' },
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
@@ -5363,7 +5477,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'prepare',
       });
       // No recent success — genuine failure
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       try {
         await expect(
@@ -5399,7 +5513,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'pulling',
       });
       // Recent success present but this is not a duplicate-style error
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'web',
         status: 'succeeded',
@@ -5420,7 +5534,7 @@ describe('extracted lifecycle delegation', () => {
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       }
     });
 
@@ -5438,12 +5552,12 @@ describe('extracted lifecycle delegation', () => {
         containerName: 'web',
         status: 'in-progress',
         phase: 'prepare',
-        container: { id: 'c-loser', name: 'web', agent: 'agent-A', watcher: 'local' },
+        containerIdentityKey: 'agent-A::local::web',
       });
       // No recent succeeded op yet — the winner is still in flight
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
       // But another active operation exists for the same container+identity
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
 
       try {
         await expect(
@@ -5459,15 +5573,14 @@ describe('extracted lifecycle delegation', () => {
           expect.objectContaining({ status: 'failed' }),
         );
         // Confirm operation.id was passed as the exclusion
-        expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
-          'web',
+        expect(mockHasOtherActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+          'agent-A::local::web',
           'op-409-race-loser',
-          { agent: 'agent-A', watcher: 'local' },
         );
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
-        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-        mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+        mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+        mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(false);
       }
     });
 
@@ -5783,6 +5896,192 @@ describe('additional direct wrapper coverage', () => {
 
     expect(startSpy).not.toHaveBeenCalled();
     expect(getCreatedContainerCandidate(createError)).toBeUndefined();
+  });
+
+  test('recreateContainer (DR-126) resolves clone options through getCloneRuntimeConfigOptions so an entrypoint the newer image materialized is dropped on rollback', async () => {
+    // Reproduces the rollback scenario: the running container is on image B,
+    // which (unlike image A) defines an Entrypoint, so the daemon materialized
+    // it onto Config with no dd.runtime.entrypoint.origin label. Rolling back
+    // to image A must not clone that Entrypoint verbatim — A has no such file.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi
+          .fn()
+          .mockResolvedValue(
+            imageRef === 'app:b'
+              ? { Config: { Entrypoint: ['/docker-entrypoint.sh'] } }
+              : { Config: { Entrypoint: null } },
+          ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toBeUndefined();
+  });
+
+  test('recreateContainer (DR-126) preserves a runtime field when the source image cannot establish inheritance, regardless of what the target defines', async () => {
+    // Origin-unknown (no label), but unlike the drop case above the source
+    // image (B, the one the container is currently on) can't be inspected —
+    // sourceImageConfig ends up undefined, so shouldDropClonedRuntimeField's
+    // inheritedFromSource check can never be true (it compares the cloned
+    // value against sourceImageConfig?.[field], which is undefined either
+    // way). isInheritedRuntimeField's own unit tests document this as
+    // "conservative keep": with no reliable source data, the field is
+    // treated as a potential explicit override and preserved outright — the
+    // target-match comparison in shouldDropClonedRuntimeField is never even
+    // reached. The rollback target (A) defining the identical Entrypoint
+    // here is therefore incidental, not the reason it's kept; the sibling
+    // test below proves that by giving the target a different value and
+    // getting the same (kept) outcome.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi.fn(() =>
+          imageRef === 'app:b'
+            ? Promise.reject(new Error('image app:b not found'))
+            : Promise.resolve({ Config: { Entrypoint: ['/docker-entrypoint.sh'] } }),
+        ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  });
+
+  test('recreateContainer (DR-126) preserves that same runtime field even when the target defines a different value', async () => {
+    // Same source-unavailable, origin-unknown shape as above, but now the
+    // rollback target (A) defines a *different* Entrypoint than the one
+    // cloned from the running container. The outcome doesn't change: with
+    // sourceImageConfig undefined, isInheritedRuntimeField never gets past
+    // the inheritedFromSource check, so the target's value — matching or
+    // not — is irrelevant here. This is what makes the two tests together
+    // prove the field is kept because the source can't vouch for it, not
+    // because it happens to match the target.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi.fn(() =>
+          imageRef === 'app:b'
+            ? Promise.reject(new Error('image app:b not found'))
+            : Promise.resolve({ Config: { Entrypoint: ['/other-entrypoint.sh'] } }),
+        ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  });
+
+  test('recreateContainer (DR-126) drops the runtime field when the rollback target defines a different value than the source', async () => {
+    // This is the scenario that actually exercises
+    // shouldDropClonedRuntimeField's target-match comparison: the source
+    // image (B) is known and defines the identical Entrypoint the container
+    // is running with, so isInheritedRuntimeField treats it as inherited —
+    // but the rollback target (A) defines a *different* Entrypoint, not
+    // merely no Entrypoint at all (that's the DR-126 test above). Dropping
+    // here proves the manager compares cloned-vs-target by value rather than
+    // just checking whether the target defines the field.
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'app:b',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Labels: {},
+      },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi
+          .fn()
+          .mockResolvedValue(
+            imageRef === 'app:b'
+              ? { Config: { Entrypoint: ['/docker-entrypoint.sh'] } }
+              : { Config: { Entrypoint: ['/other-entrypoint.sh'] } },
+          ),
+      })),
+    };
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      dockerApi as any,
+      currentContainerSpec as any,
+      'app:a',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    const createPayload = createSpy.mock.calls[0][1] as { Entrypoint?: unknown };
+    expect(createPayload.Entrypoint).toBeUndefined();
   });
 
   test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {

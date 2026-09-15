@@ -7,12 +7,13 @@
  *
  * This file deliberately does NOT mock ../store/container.js (unlike index.test.ts, which
  * mocks it wholesale and therefore cannot see this class of bug at all). It drives the real
- * store module against a real in-memory Loki collection so the stash/restore contract in
- * app/store/container.ts is actually exercised end to end.
+ * store module against a real in-memory SQLite database (roadmap 7-STORE slice 8) so the
+ * stash/restore contract in app/store/container.ts is actually exercised end to end.
  */
 
-import Loki from 'lokijs';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Database } from '../store/db/driver.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 
 const mockIsUpgrade = vi.hoisted(() => vi.fn(() => true));
 vi.mock('../store/app.js', () => ({
@@ -53,13 +54,19 @@ import * as registry from './index.js';
 const MATURITY_POLICY = { maturityMode: 'mature', maturityMinAgeDays: 5 };
 
 describe('pruneOrphanedAgentContainers identity hand-off (real store/container.js)', () => {
+  let db: Database;
+
   beforeEach(() => {
-    const db = new Loki('test.db', { autosave: false });
+    db = createMigratedMemoryDatabase();
     storeContainer.createCollections(db);
     storeContainer._resetContainerStoreStateForTests();
     for (const agentId of Object.keys(registry.getState().agent)) {
       delete registry.getState().agent[agentId];
     }
+  });
+
+  afterEach(() => {
+    db.close();
   });
 
   test('carries the update policy from an orphaned agent record to the agent that takes the container over', async () => {
