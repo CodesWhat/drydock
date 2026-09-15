@@ -1,4 +1,4 @@
-import { Counter, Gauge, register } from 'prom-client';
+import { Counter, Gauge, register } from '@prometheus-io/client';
 
 let watchContainerGauge;
 let maintenanceSkipCounter;

@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Replaced the deprecated Prometheus client with its official `@prometheus-io/client` successor and removed redundant YAML type definitions. Existing Drydock metric names, labels and values are preserved; the default Node.js metrics also include event-loop utilization.
+
 - **Container update split buttons now share one component**, keeping the existing blocked, warning and ready styles, dimensions and independent action/menu disabled states. Enter and Space on either half no longer activate the surrounding table row; native button activation and arrow-key behavior are unchanged.
 
 - **Vue SFC runtime coverage now has a measured gate.** All source SFCs, including unimported components, contribute to aggregate floors of 87.54% statements, 81.57% branches, 84.39% functions and 87.89% lines. TypeScript stays at 100%; script and generated-template coverage remain separate from type checking and mutation quality.
