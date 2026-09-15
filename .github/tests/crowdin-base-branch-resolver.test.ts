@@ -143,26 +143,40 @@ test('a genuinely failing ls-remote propagates and does not silently fall back t
   expect(result.stdout).not.toContain('main');
 });
 
-test('a push to dev/v1.6 targets dev/v1.6 directly, even when a higher dev/vX.Y branch exists on origin', () => {
+test.each(['dev/v1.6', 'dev/v1.7', 'dev/v1.8', 'main'])(
+  'a push to %s keeps the shared Crowdin project on the highest integration branch',
+  (refName) => {
+    const result = runResolver({
+      eventName: 'push',
+      refName,
+      lsRemoteOutput: [
+        'aaaaaaa\trefs/heads/dev/v1.6',
+        'bbbbbbb\trefs/heads/dev/v1.7',
+        'ccccccc\trefs/heads/dev/v1.8',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.output.name).toBe('dev/v1.8');
+  },
+);
+
+test('a manually dispatched maintenance run still uses the highest integration branch', () => {
   const result = runResolver({
-    eventName: 'push',
-    refName: 'dev/v1.6',
-    lsRemoteOutput: ['aaaaaaa\trefs/heads/dev/v1.6', 'bbbbbbb\trefs/heads/dev/v1.7'].join('\n'),
+    eventName: 'workflow_dispatch',
+    refName: 'dev/v1.7',
+    lsRemoteOutput: 'aaaaaaa\trefs/heads/dev/v1.7\nbbbbbbb\trefs/heads/dev/v1.8\n',
   });
 
   expect(result.status).toBe(0);
-  expect(result.output.name).toBe('dev/v1.6');
+  expect(result.output.name).toBe('dev/v1.8');
 });
 
-test('a push to dev/v1.7 targets dev/v1.7 directly', () => {
-  const result = runResolver({
-    eventName: 'push',
-    refName: 'dev/v1.7',
-    lsRemoteOutput: 'aaaaaaa\trefs/heads/dev/v1.6\n',
-  });
+test('a maintenance push fails closed when the remote integration branch cannot be resolved', () => {
+  const result = runResolver({ eventName: 'push', refName: 'dev/v1.7', lsRemoteExit: 128 });
 
-  expect(result.status).toBe(0);
-  expect(result.output.name).toBe('dev/v1.7');
+  expect(result.status).not.toBe(0);
+  expect(result.output.name).toBeUndefined();
 });
 
 test('a run with no branch context (schedule) still resolves highest-wins with the default-branch fallback', () => {
