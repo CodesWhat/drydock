@@ -3,7 +3,7 @@ import * as fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { validateOpenApiJsonResponse } from '../../api/openapi-contract.js';
-import { configFileSources, ddEnvVars } from '../index.js';
+import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
 import { getWatcherEditSnapshot, writeWatcherEdits } from './editor.js';
 import { resetConfigFileLayer, setConfigFileLayer } from './layer.js';
 import { writeConfigurationSection } from './write.js';
@@ -27,6 +27,7 @@ describe('watcher configuration editor', () => {
   let configPath: string;
   let current: typeof ddEnvVars;
   let sources: typeof configFileSources;
+  let interpolated: Set<string>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,6 +35,8 @@ describe('watcher configuration editor', () => {
     configPath = path.join(directory, 'drydock.yml');
     current = { ...ddEnvVars };
     sources = { ...configFileSources };
+    interpolated = new Set(configFileInterpolatedKeys);
+    configFileInterpolatedKeys.clear();
     for (const key of Object.keys(ddEnvVars)) delete ddEnvVars[key];
     for (const key of Object.keys(configFileSources)) delete configFileSources[key];
     mockState.watcher = {
@@ -62,6 +65,8 @@ describe('watcher configuration editor', () => {
     for (const key of Object.keys(configFileSources)) delete configFileSources[key];
     Object.assign(ddEnvVars, current);
     Object.assign(configFileSources, sources);
+    configFileInterpolatedKeys.clear();
+    for (const key of interpolated) configFileInterpolatedKeys.add(key);
     resetConfigFileLayer();
     fs.rmSync(directory, { recursive: true, force: true });
   });
@@ -156,6 +161,75 @@ describe('watcher configuration editor', () => {
     expect(snapshot.watchers[0].fields.cron.readOnlyReason).toBe('referenced-field');
     expect(JSON.stringify(snapshot)).not.toContain('private-sentinel');
     expect(snapshot.watchers[0].fields.cron.value).toBeUndefined();
+  });
+
+  describe.each(['layer', 'runtime'])('still-live %s interpolation', (tracking) => {
+    test.each([
+      ['cron', 'cron', '0 3 * * *', '0 6 * * *'],
+      ['maintenancewindow', 'maintenancewindow', '0 3 * * *', '0 6 * * *'],
+      ['maintenancewindow', 'maintenance_window', '0 3 * * *', '0 6 * * *'],
+      ['maintenancewindowtz', 'maintenancewindowtz', 'America/New_York', 'UTC'],
+      ['maintenancewindowtz', 'maintenance_window_tz', 'America/New_York', 'UTC'],
+      ['maintenancewindowscope', 'maintenancewindowscope', 'all', 'install'],
+      ['maintenancewindowscope', 'maintenance_window_scope', 'all', 'install'],
+    ])(
+      'omits and protects %s tracked through %s after disk replacement',
+      async (field, alias, live, replacement) => {
+        fixture(`watcher:\n  local:\n    ${alias}: \${PRIVATE_VALUE}\n`);
+        const envKey = `DD_WATCHER_LOCAL_${alias.toUpperCase()}`;
+        if (tracking === 'layer')
+          setConfigFileLayer({ [envKey]: live }, new Set([envKey]), {
+            path: configPath,
+            modifiedAt: new Date().toISOString(),
+          });
+        else configFileInterpolatedKeys.add(envKey);
+        configFileSources[envKey] = 'env';
+        (
+          mockState.watcher['docker.local'] as { configuration: Record<string, unknown> }
+        ).configuration[field] = live;
+        const raw = `watcher:\n  local:\n    ${field}: "${replacement}"\n`;
+        fs.writeFileSync(configPath, raw);
+        const snapshot = await getWatcherEditSnapshot();
+        const descriptor =
+          snapshot.watchers[0].fields[field as keyof (typeof snapshot.watchers)[number]['fields']];
+        expect(descriptor).toEqual({
+          present: true,
+          source: 'reference',
+          readOnlyReason: 'referenced-field',
+        });
+        const result = await writeWatcherEdits({
+          revision: snapshot.revision,
+          changes: [{ path: ['watcher', 'local', field], operation: 'set', value: replacement }],
+        });
+        expect(result).toMatchObject({ status: 409, saved: false });
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+        expect(mockReload).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  test.each([
+    ['section', 'original: &settings\n  local:\n    cron: "0 3 * * *"\nwatcher: *settings\n'],
+    ['instance', 'watcher:\n  original: &settings\n    cron: "0 3 * * *"\n  local: *settings\n'],
+  ])('omits and protects cron inherited through a %s alias', async (_kind, raw) => {
+    fixture(raw);
+    (
+      mockState.watcher['docker.local'] as { configuration: Record<string, unknown> }
+    ).configuration.cron = '0 3 * * *';
+    const snapshot = await getWatcherEditSnapshot();
+    const descriptor = snapshot.watchers[0].fields.cron;
+    expect(descriptor.source).toBe('reference');
+    expect(descriptor).not.toHaveProperty('value');
+    expect(descriptor).not.toHaveProperty('effectiveValue');
+    expect(descriptor.path).toBeUndefined();
+    expect(
+      await writeWatcherEdits({
+        revision: snapshot.revision,
+        changes: [{ path: ['watcher', 'local', 'cron'], operation: 'set', value: '0 6 * * *' }],
+      }),
+    ).toMatchObject({ status: 409, saved: false });
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+    expect(mockReload).not.toHaveBeenCalled();
   });
 
   test('environment maintenance aliases make the corresponding canonical field read-only', async () => {

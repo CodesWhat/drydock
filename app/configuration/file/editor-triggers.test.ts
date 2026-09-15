@@ -528,6 +528,94 @@ describe('notification policy editor', () => {
     },
   );
 
+  describe.each(['layer', 'runtime'])('still-live %s interpolation', (tracking) => {
+    test.each([
+      ['digestcron', '0 3 * * *', '0 6 * * *'],
+      ['threshold', 'all', 'minor'],
+      ['once', true, false],
+      ['mode', 'simple', 'batch'],
+      ['securitymode', 'simple', 'digest'],
+      ['resolvenotifications', true, false],
+    ])('omits and protects %s after disk replacement', async (field, live, replacement) => {
+      fixture(`notification:\n  discord:\n    private:\n      ${field}: \${PRIVATE_VALUE}\n`);
+      const envKey = `DD_NOTIFICATION_DISCORD_PRIVATE_${field.toUpperCase()}`;
+      if (tracking === 'layer')
+        setConfigFileLayer({ [envKey]: String(live) }, new Set([envKey]), {
+          path: configPath,
+          modifiedAt: new Date().toISOString(),
+        });
+      else configFileInterpolatedKeys.add(envKey);
+      configFileSources[envKey] = 'env';
+      (
+        mockState.trigger['discord.private'] as { configuration: Record<string, unknown> }
+      ).configuration[field] = live;
+      const raw = yaml.stringify({
+        notification: { discord: { private: { [field]: replacement } } },
+      });
+      fs.writeFileSync(configPath, raw);
+      const snapshot = await getNotificationTriggerEditSnapshot();
+      expect(snapshot.triggers[0].fields[field]).toEqual({
+        present: true,
+        source: 'reference',
+        readOnlyReason: 'referenced-field',
+      });
+      expect(
+        await writeNotificationTriggerEdits({
+          revision: snapshot.revision,
+          changes: [
+            {
+              path: ['notification', 'discord', 'private', field],
+              operation: 'set',
+              value: replacement,
+            },
+          ],
+        }),
+      ).toMatchObject({ status: 409, saved: false });
+      expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+      expect(mockReload).not.toHaveBeenCalled();
+    });
+  });
+
+  test.each([
+    [
+      'section',
+      'original: &settings\n  discord:\n    private:\n      digestcron: "0 3 * * *"\nnotification: *settings\n',
+    ],
+    [
+      'provider',
+      'notification:\n  original: &settings\n    private:\n      digestcron: "0 3 * * *"\n  discord: *settings\n',
+    ],
+    [
+      'instance',
+      'notification:\n  discord:\n    original: &settings\n      digestcron: "0 3 * * *"\n    private: *settings\n',
+    ],
+  ])('omits and protects digestcron inherited through a %s alias', async (_kind, raw) => {
+    fixture(raw);
+    (
+      mockState.trigger['discord.private'] as { configuration: Record<string, unknown> }
+    ).configuration.digestcron = '0 3 * * *';
+    const snapshot = await getNotificationTriggerEditSnapshot();
+    const descriptor = snapshot.triggers[0].fields.digestcron;
+    expect(descriptor.source).toBe('reference');
+    expect(descriptor).not.toHaveProperty('value');
+    expect(descriptor).not.toHaveProperty('effectiveValue');
+    expect(descriptor.path).toBeUndefined();
+    expect(
+      await writeNotificationTriggerEdits({
+        revision: snapshot.revision,
+        changes: [
+          {
+            path: ['notification', 'discord', 'private', 'digestcron'],
+            operation: 'set',
+            value: '0 6 * * *',
+          },
+        ],
+      }),
+    ).toMatchObject({ status: 409, saved: false });
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(raw);
+    expect(mockReload).not.toHaveBeenCalled();
+  });
+
   test('omits interpolated and environment secret-file values', async () => {
     fixture('notification:\n  discord:\n    private:\n      threshold: ${PRIVATE_THRESHOLD}\n');
     vi.stubEnv('DD_NOTIFICATION_DISCORD_PRIVATE_DIGESTCRON__FILE', '/private/schedule');

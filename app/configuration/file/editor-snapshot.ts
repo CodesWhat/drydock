@@ -2,8 +2,13 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import yaml, { isAlias, isMap, isScalar, type YAMLMap } from 'yaml';
 import { getState } from '../../registry/index.js';
-import { configFileSources, WATCHER_MAINTENANCE_ENV_ALIASES } from '../index.js';
-import { getConfigFileInfo, getConfigFileLayer } from './layer.js';
+import {
+  configFileInterpolatedKeys,
+  configFileSources,
+  WATCHER_MAINTENANCE_ENV_ALIASES,
+} from '../index.js';
+import { isWholeScalarReference } from './interpolate.js';
+import { getConfigFileInfo, getConfigFileInterpolatedKeys, getConfigFileLayer } from './layer.js';
 
 const revisionKey = randomBytes(32);
 const WATCHER_EDIT_FIELDS = [
@@ -64,6 +69,38 @@ export function matchingKeys(map: unknown, name: string): string[] {
   );
 }
 
+export function referencedPath(
+  document: Awaited<ReturnType<typeof readEditorDocument>>,
+  path: string[],
+  exactInterpolation = false,
+  envKeys = [`DD_${path.join('_').toUpperCase()}`],
+) {
+  if (
+    envKeys.some(
+      (envKey) =>
+        process.env[`${envKey}__FILE`] !== undefined ||
+        getConfigFileLayer()[`${envKey}__FILE`] !== undefined ||
+        getConfigFileInterpolatedKeys().has(envKey) ||
+        configFileInterpolatedKeys.has(envKey),
+    )
+  )
+    return true;
+  let node: unknown = document?.doc.contents;
+  for (const segment of path) {
+    if (isAlias(node)) return true;
+    const keys = matchingKeys(node, segment.toLowerCase());
+    if (keys.length > 1) return true;
+    node = isMap(node) && keys[0] ? node.get(keys[0], true) : undefined;
+  }
+  return (
+    isAlias(node) ||
+    isMap(node) ||
+    (isScalar(node) &&
+      typeof node.value === 'string' &&
+      (exactInterpolation ? isWholeScalarReference(node.value) : /^\$\{/.test(node.value)))
+  );
+}
+
 function fieldPaths(map: YAMLMap, prefix: string[]): Map<WatcherEditField, string[][]> {
   const result = new Map<WatcherEditField, string[][]>();
   function visit(current: YAMLMap, segments: string[]) {
@@ -108,15 +145,12 @@ export function watcherSnapshot(document: Awaited<ReturnType<typeof readEditorDo
             ([suffix]) => `DD_WATCHER_${watcher.name.toUpperCase()}${suffix}`,
           ),
         ];
-        const reference =
-          isAlias(rawNode) ||
-          isMap(rawNode) ||
-          (isScalar(rawNode) && typeof rawNode.value === 'string' && /^\$\{/.test(rawNode.value)) ||
-          relatedEnvKeys.some(
-            (key) =>
-              process.env[`${key}__FILE`] !== undefined ||
-              getConfigFileLayer()[`${key}__FILE`] !== undefined,
-          );
+        const reference = referencedPath(
+          document,
+          fieldPath ?? ['watcher', watcher.name, field],
+          false,
+          relatedEnvKeys,
+        );
         const environmentOwned = relatedEnvKeys.some(
           (key) => configFileSources[key] === 'env' || process.env[key] !== undefined,
         );
