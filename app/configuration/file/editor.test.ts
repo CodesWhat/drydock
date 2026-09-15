@@ -170,8 +170,8 @@ describe('watcher configuration editor', () => {
       ['maintenancewindow', 'maintenance_window', '0 3 * * *', '0 6 * * *'],
       ['maintenancewindowtz', 'maintenancewindowtz', 'America/New_York', 'UTC'],
       ['maintenancewindowtz', 'maintenance_window_tz', 'America/New_York', 'UTC'],
-      ['maintenancewindowscope', 'maintenancewindowscope', 'all', 'install'],
-      ['maintenancewindowscope', 'maintenance_window_scope', 'all', 'install'],
+      ['maintenancewindowscope', 'maintenancewindowscope', 'scan', 'install'],
+      ['maintenancewindowscope', 'maintenance_window_scope', 'scan', 'install'],
     ])(
       'omits and protects %s tracked through %s after disk replacement',
       async (field, alias, live, replacement) => {
