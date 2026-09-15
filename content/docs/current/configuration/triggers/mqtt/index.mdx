@@ -265,6 +265,12 @@ A few things worth knowing before you turn this on:
 - If two containers somehow sanitize down to the same state topic, drydock refuses to guess and drops the command rather than updating the wrong one.
 - Since anyone who can publish to a container's command topic can trigger an update, scope your Home Assistant broker credential tightly: publish-only access to `{topic}/+/+/cmd` and `{topic}/agent/+/+/+/cmd` is all it needs.
 
+## Unreleased v1.6 maintenance fix: agent state topic parity
+
+The backport of [#1139](https://github.com/CodesWhat/drydock/pull/1139) makes container state publish to the same topic that Home Assistant discovery advertises when both `HASS_ENABLED=true` and `HASS_AGENTTOPICSEGMENT=true`. For example, agent `edge`, watcher `local`, container `nginx` publishes to `dd/container/agent/edge/local/nginx`. Previously its state was published to `dd/container/local/nginx`, leaving the segmented entity without state. The v1.6 default stays `HASS_AGENTTOPICSEGMENT=false`; canonical container naming, controller-local topics, and topics with Home Assistant disabled stay unchanged.
+
+Old retained state on the unscoped topic is not automatically cleared. Before removing an obsolete retained payload, check whether a controller-local container or another publisher still uses that topic. Existing automations or subscribers that used the old unscoped agent state topic need to follow the segmented topic when this option is enabled.
+
 ## Attribute filtering
 
 Container MQTT payloads can include large nested fields (SBOM documents, scan vulnerability arrays, environment details, labels) that exceed Home Assistant's `json_attributes_topic` size limits or clutter entity attributes.
