@@ -35,6 +35,11 @@ export const faqItems: Array<{ question: string; answer: string }> = [
       "Yes. Drydock integrates Trivy and Grype (DD_SECURITY_SCANNER=trivy|grype|both) for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
   },
   {
+    question: "What does the 100% TypeScript coverage claim include?",
+    answer:
+      "CI enforces 100% line, branch, function, and statement coverage for the configured backend sources and UI TypeScript files. Vue single-file components have separate aggregate coverage floors: 87.54% statements, 81.57% branches, 84.39% functions, and 87.89% lines. Those floors include script and generated-template mappings, not a 100% claim for every component. A separate vue-tsc typecheck checks scripts and templates; passing it does not establish runtime coverage or mutation quality.",
+  },
+  {
     question: "Is Drydock open source, and how do I get started?",
     answer:
       "Drydock is AGPL-3.0 licensed and free to self-host. The fastest path is a single docker run mounting /var/run/docker.sock and setting DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock plus DD_ANONYMOUS_AUTH_CONFIRM=true for a quick local trial — the dashboard is available on port 3000. For production, use Docker Compose with a persistent volume at /store for the database and add a notification trigger such as DD_NOTIFICATION_SLACK_* for update alerts. Authentication (OIDC via Authelia/Auth0/Authentik, the built-in username/password, or an explicit anonymous opt-in) is required — without one configured the instance fails closed, API requests return 401, and /health returns 503. Full configuration docs are at getdrydock.com/docs.",

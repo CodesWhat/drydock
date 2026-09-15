@@ -7,7 +7,7 @@ import { SITE_CONFIG } from "@/lib/site-config";
 const stats = [
   { value: "23", label: "registries" },
   { value: "21", label: "triggers" },
-  { value: "100%", label: "coverage" },
+  { value: "100%", label: "TS coverage" },
   { value: "AGPL-3.0", label: "license" },
 ] as const;
 

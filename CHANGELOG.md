@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Images show noninteractive loading placeholders during inventory requests, matching table and card layouts with localized loading status.
 - Watcher details now offer a four-field schedule editor with explicit Save/Cancel, source and read-only explanations, conflict-safe drafts, and separate saved/live-reload feedback. Untouched credentials and references stay on the server.
 - Notification details now offer a six-field delivery policy editor with explicit Save/Cancel, typed boolean choices, source-aware read-only fields, and conflict-safe drafts. Saving never tests the trigger or sends a notification.
-- A source-aware action policy API can edit `auto`, `order`, and `concurrency` for existing local Docker, Docker Compose, Portainer, and Command actions. Revision-checked saves preserve untouched credentials and YAML references, report live reload separately, and never execute an action. Action-policy UI forms are not included yet.
+- A source-aware action policy API can edit `auto`, `order`, and `concurrency` for existing local Docker, Docker Compose, Portainer, and Command actions. Revision-checked saves preserve untouched credentials and YAML references, report live reload separately, and never execute an action. The action-policy form is available in action details.
 - **Confirmed fleet bulk actions (roadmap 7.2, slice 2).** Update all previews the filtered live list with dependency additions and eligibility warnings, without using checkbox selection or pending display rows. Snooze all patch selects current patch candidates and explicitly confirms a container-wide snooze, with duration/date controls and a single result summary for successes, failures and refresh errors.
 - **Fleet container filters and grouping (roadmap 7.2, slice 1).** The existing container list can filter by agent identity, registry endpoint, tag type and exact Docker label values, and group by agent, registry, runtime status, tag type or a label key. Local watchers stay distinct from an agent named Local. Table/cards, row selection and the existing stack grouping remain available, and filter/group choices persist across reloads.
 - **Fleet health and inventory-only refresh (roadmap 7.2).** The container list shows configured agents, including empty and disconnected agents, with a separate neutral local-watcher tile. Capability-gated refreshes target every Docker watcher for that exact source without registry scans, and report partial inventory and list-reload failures separately.
@@ -54,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shareable label grouping.** Container URLs accept `group-by-label=<exact Docker label key>`, and the existing label grouping controls keep that parameter up to date. Explicit stack grouping takes precedence when a link requests both.
 
 ### Changed
+
+- Replaced the deprecated Prometheus client with its official `@prometheus-io/client` successor and removed redundant YAML type definitions. Existing Drydock metric names, labels and values are preserved; the default Node.js metrics also include event-loop utilization.
 
 - **Container update split buttons now share one component**, keeping the existing blocked, warning and ready styles, dimensions and independent action/menu disabled states. Enter and Space on either half no longer activate the surrounding table row; native button activation and arrow-key behavior are unchanged.
 
@@ -95,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
+- Configuration editor snapshots now omit both stored and effective values for watcher and notification fields still owned by live interpolation after an external file edit, or inherited through YAML parent aliases. These fields remain read-only and reject edits with HTTP 409.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
 - Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.
 

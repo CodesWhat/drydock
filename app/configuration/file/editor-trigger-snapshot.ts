@@ -1,20 +1,15 @@
-import { isAlias, isMap, isScalar } from 'yaml';
+import { isMap, isScalar } from 'yaml';
 import { getState } from '../../registry/index.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { resolveActionConcurrency } from '../../updates/action-concurrency.js';
-import {
-  configFileInterpolatedKeys,
-  configFileSources,
-  getTriggerConfigurations,
-} from '../index.js';
+import { configFileSources, getTriggerConfigurations } from '../index.js';
 import {
   type ConfigurationEditFieldDescriptor,
   matchingKeys,
   type readEditorDocument,
+  referencedPath,
   scalar,
 } from './editor-snapshot.js';
-import { isWholeScalarReference } from './interpolate.js';
-import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './layer.js';
 
 const NOTIFICATION_POLICY_FIELDS = [
   'threshold',
@@ -26,35 +21,6 @@ const NOTIFICATION_POLICY_FIELDS = [
   'securitydigesttitle',
   'securitydigestbody',
 ] as const;
-
-function referencedPath(
-  document: Awaited<ReturnType<typeof readEditorDocument>>,
-  path: string[],
-  exactInterpolation = false,
-) {
-  const envKey = `DD_${path.join('_').toUpperCase()}`;
-  if (
-    process.env[`${envKey}__FILE`] !== undefined ||
-    getConfigFileLayer()[`${envKey}__FILE`] !== undefined ||
-    getConfigFileInterpolatedKeys().has(envKey) ||
-    configFileInterpolatedKeys.has(envKey)
-  )
-    return true;
-  let node: unknown = document?.doc.contents;
-  for (const segment of path) {
-    if (isAlias(node)) return true;
-    const keys = matchingKeys(node, segment);
-    if (keys.length > 1) return true;
-    node = isMap(node) && keys[0] ? node.get(keys[0], true) : undefined;
-  }
-  return (
-    isAlias(node) ||
-    isMap(node) ||
-    (isScalar(node) &&
-      typeof node.value === 'string' &&
-      (exactInterpolation ? isWholeScalarReference(node.value) : /^\$\{/.test(node.value)))
-  );
-}
 
 function inheritedOrderIsReferenced(
   document: Awaited<ReturnType<typeof readEditorDocument>>,
@@ -112,17 +78,11 @@ function triggerPolicySnapshot(
           const exactPath = prefix ? [...prefix, keys[0] ?? field] : undefined;
           const rawNode = exactPath ? document?.doc.getIn(exactPath, true) : undefined;
           const envKey = `DD_${category.toUpperCase()}_${trigger.type.toUpperCase()}_${trigger.name.toUpperCase()}_${field.toUpperCase()}`;
-          const reference = digestTemplate
-            ? referencedPath(document, [category, trigger.type, trigger.name, field], true)
-            : isAlias(rawNode) ||
-              isMap(rawNode) ||
-              (isScalar(rawNode) &&
-                typeof rawNode.value === 'string' &&
-                /^\$\{/.test(rawNode.value)) ||
-              process.env[`${envKey}__FILE`] !== undefined ||
-              getConfigFileLayer()[`${envKey}__FILE`] !== undefined ||
-              (category === 'action' &&
-                referencedPath(document, [category, trigger.type, trigger.name, field]));
+          const reference = referencedPath(
+            document,
+            [category, trigger.type, trigger.name, field],
+            digestTemplate,
+          );
           const environmentOwned =
             configFileSources[envKey] === 'env' || process.env[envKey] !== undefined;
           const readOnlyReason = !document
