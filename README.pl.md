@@ -532,7 +532,7 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <tr><td>Monitorowanie digestów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtrowanie progu aktualizacji (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Kolejność aktualizacji uwzględniająca zależności</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Kolejka oczekujących zatwierdzeń</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kolejka oczekujących zatwierdzeń</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Kopia i przywracanie obrazów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Hooki cyklu życia (przed/po)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Skanowanie podatności</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -575,7 +575,7 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <tr><td>Monitorowanie digestów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtrowanie progu aktualizacji (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Kolejność aktualizacji uwzględniająca zależności</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>Kolejka oczekujących zatwierdzeń</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kolejka oczekujących zatwierdzeń</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Kopia i przywracanie obrazów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Skanowanie podatności</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>

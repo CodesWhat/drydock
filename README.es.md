@@ -532,7 +532,7 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 <tr><td>Monitorización de digest</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtrado por umbral de actualización (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Orden de actualización según dependencias</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Cola de aprobaciones pendientes</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Cola de aprobaciones pendientes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Copia y reversión de imágenes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Hooks del ciclo de vida (antes/después)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Análisis de vulnerabilidades</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -575,7 +575,7 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 <tr><td>Monitorización de digest</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtrado por umbral de actualización (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Orden de actualización según dependencias</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>Cola de aprobaciones pendientes</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Cola de aprobaciones pendientes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Copia y reversión de imágenes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Análisis de vulnerabilidades</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Registro de auditoría</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>

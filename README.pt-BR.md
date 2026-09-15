@@ -532,7 +532,7 @@ A verificação de vulnerabilidades com tecnologia Trivy ou Grype bloqueia atual
 <tr><td>Monitoramento de digest</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtragem por limite de atualização (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Ordem de atualização com base em dependências</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Fila de aprovações pendentes</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Fila de aprovações pendentes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Backup e reversão de imagens</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Hooks de ciclo de vida (pré/pós)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Verificação de vulnerabilidades</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -575,7 +575,7 @@ A verificação de vulnerabilidades com tecnologia Trivy ou Grype bloqueia atual
 <tr><td>Monitoramento de digest</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtragem por limite de atualização (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Ordem de atualização com base em dependências</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>Fila de aprovações pendentes</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Fila de aprovações pendentes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Backup e reversão de imagens</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Verificação de vulnerabilidades</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Log de auditoria</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>

@@ -532,7 +532,7 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 <tr><td>Digest-Überwachung</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Update-Schwellenfilter (Major/Minor/Patch/Digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Abhängigkeitsbewusste Update-Reihenfolge</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Warteschlange für ausstehende Freigaben</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Warteschlange für ausstehende Freigaben</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Image-Sicherung und Rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Lifecycle-Hooks (vor/nach)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Schwachstellen-Scans</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -575,7 +575,7 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 <tr><td>Digest-Überwachung</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Update-Schwellenfilter (Major/Minor/Patch/Digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Abhängigkeitsbewusste Update-Reihenfolge</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>Warteschlange für ausstehende Freigaben</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Warteschlange für ausstehende Freigaben</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Image-Sicherung und Rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Schwachstellen-Scans</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Audit-Protokoll</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>

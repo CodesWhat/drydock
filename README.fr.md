@@ -532,7 +532,7 @@ L'analyse des vulnérabilités basée sur Trivy ou Grype bloque les mises à jou
 <tr><td>Surveillance des digests</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtrage par seuil de mise à jour (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Ordre de mise à jour tenant compte des dépendances</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>File d'attente d'approbations en attente</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>File d'attente d'approbations en attente</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Sauvegarde et restauration d'images</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Hooks de cycle de vie (avant/après)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Analyse des vulnérabilités</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -575,7 +575,7 @@ L'analyse des vulnérabilités basée sur Trivy ou Grype bloque les mises à jou
 <tr><td>Surveillance des digests</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Filtrage par seuil de mise à jour (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Ordre de mise à jour tenant compte des dépendances</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>File d'attente d'approbations en attente</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>File d'attente d'approbations en attente</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Sauvegarde et restauration d'images</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Analyse des vulnérabilités</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Journal d'audit</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
