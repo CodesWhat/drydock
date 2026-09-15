@@ -13,7 +13,7 @@ import {
   type HassAttributePreset,
 } from './filter.js';
 import Hass from './Hass.js';
-import { getSanitizedCanonicalContainerName } from './naming.js';
+import { getContainerStateTopic } from './topics.js';
 
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
@@ -21,17 +21,6 @@ const hassAgentTopicSegmentDefault = true;
 
 function generateClientId() {
   return `dd_${randomBytes(4).toString('hex')}`;
-}
-
-/**
- * Get container topic.
- * @param baseTopic
- * @param container
- * @return {string}
- */
-function getContainerTopic({ baseTopic, container }) {
-  const containerName = getSanitizedCanonicalContainerName(container);
-  return `${baseTopic}/${container.watcher}/${containerName}`;
 }
 
 interface MqttConfiguration extends TriggerConfiguration {
@@ -268,6 +257,12 @@ class Mqtt extends Trigger<MqttConfiguration> {
     await super.deregisterComponent();
   }
 
+  private isHassAgentTopicSegmentEnabled(): boolean {
+    return (
+      this.configuration.hass?.enabled === true && !!this.configuration.hass?.agenttopicsegment
+    );
+  }
+
   getFilterConfig(): MqttFilterConfig {
     const includePaths = splitFilterPaths(this.configuration.hass?.filter?.include);
     if (includePaths.length > 0) {
@@ -310,9 +305,11 @@ class Mqtt extends Trigger<MqttConfiguration> {
    * @returns {Promise}
    */
   async trigger(container) {
-    const containerTopic = getContainerTopic({
+    const containerTopic = getContainerStateTopic({
       baseTopic: this.configuration.topic,
       container,
+      // Match HA discovery while preserving the topic layout when HA is disabled.
+      agentTopicSegment: this.isHassAgentTopicSegmentEnabled(),
     });
 
     const filterConfig = this.getFilterConfig();
