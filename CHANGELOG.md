@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Exclude parked agent worktrees from workflow-test discovery, preserving Vitest's default exclusions and keeping the maintenance pre-push gate scoped to its own checkout.
+- Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, so image builds succeed after `2026c-r0` left the package index.
 - **Home Assistant agent entities now receive state when MQTT agent topic segmentation is explicitly enabled.** Backported [#1139](https://github.com/CodesWhat/drydock/pull/1139): the state publisher now uses the same topic builder as discovery. The v1.6 default remains `HASS_AGENTTOPICSEGMENT=false`, with canonical container names and plain MQTT topics unchanged. Old retained payloads on the unscoped topics are not automatically cleared; check for other publishers before removing obsolete retained state.
 
