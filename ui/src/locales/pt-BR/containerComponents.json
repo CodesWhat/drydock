@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
+        "overview": "Visão geral",
+        "stats": "Estatísticas",
         "logs": "Logs",
-        "environment": "Environment",
+        "environment": "Ambiente",
         "labels": "Labels",
-        "actions": "Actions"
+        "actions": "Ações"
       }
     },
     "logViewer": {
