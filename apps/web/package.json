@@ -33,19 +33,19 @@
     "fumadocs-mdx": "^15.0.12",
     "fumadocs-ui": "^16.10.5",
     "lucide-react": "^1.14.0",
-    "next": "16.3.4",
-    "posthog-js": "1.427.2",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "next": "16.3.5",
+    "posthog-js": "1.430.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "remark-custom-heading-id": "^2.0.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.13",
     "@tailwindcss/postcss": "4.3.3",
-    "@types/node": "25.9.5",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
+    "@types/node": "25.9.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "lefthook": "2.1.12",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
@@ -55,8 +55,8 @@
     "esbuild": "0.28.2",
     "js-yaml": "5.4.1",
     "sharp": "0.35.4",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "nanoid": "6.0.1"
   }
 }
