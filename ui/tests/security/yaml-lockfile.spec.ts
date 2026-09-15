@@ -18,24 +18,89 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-describe('ui yaml security', () => {
-  it('package manifest explicitly pins yaml to the patched version', () => {
-    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
-      overrides?: Record<string, string>;
-    };
+type Manifest = { overrides?: Record<string, string> };
+type Lockfile = { packages?: Record<string, { version?: string }> };
 
-    expect(packageJson.overrides?.yaml).toBe('2.9.0');
+function assertYamlDependencies(packageJson: Manifest, lockfile: Lockfile) {
+  const pin = packageJson.overrides?.yaml;
+  expect(pin).toMatch(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/u);
+  expect(compareSemver(pin, '2.9.0')).toBeGreaterThanOrEqual(0);
+
+  const yamlEntries = Object.entries(lockfile.packages ?? {}).filter(
+    ([path]) => path === 'node_modules/yaml' || path.endsWith('/node_modules/yaml'),
+  );
+  expect(yamlEntries.length).toBeGreaterThan(0);
+  for (const [path, entry] of yamlEntries) {
+    expect(entry.version, path).toBe(pin);
+  }
+}
+
+function fixture(version = '2.9.0'): { manifest: Manifest; lockfile: Lockfile } {
+  return {
+    manifest: { overrides: { yaml: version } },
+    lockfile: { packages: { 'node_modules/yaml': { version } } },
+  };
+}
+
+describe('ui yaml security', () => {
+  it('pins patched yaml consistently in the manifest and every lockfile install', () => {
+    assertYamlDependencies(
+      JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')),
+      JSON.parse(readFileSync(join(process.cwd(), 'package-lock.json'), 'utf8')),
+    );
   });
 
-  it('package lockfile does not resolve vulnerable yaml versions', () => {
-    const lockfile = JSON.parse(readFileSync(join(process.cwd(), 'package-lock.json'), 'utf8')) as {
-      packages?: Record<string, { version?: string }>;
-    };
+  it.each(['2.9.0', '2.9.1', '2.10.0', '3.0.0'])('accepts a consistent safe pin %s', (version) => {
+    const { manifest, lockfile } = fixture(version);
+    lockfile.packages['node_modules/parent/node_modules/yaml'] = { version };
+    expect(() => assertYamlDependencies(manifest, lockfile)).not.toThrow();
+  });
 
-    const vulnerableEntries = Object.entries(lockfile.packages ?? {})
-      .filter(([path, value]) => path === 'node_modules/yaml' && typeof value.version === 'string')
-      .filter(([, value]) => compareSemver(value.version, '2.9.0') < 0);
+  const invalidVersions = [
+    undefined,
+    '',
+    '2.8.3',
+    '1.99.99',
+    '^2.9.0',
+    '~2.9.0',
+    '>=2.9.0',
+    '*',
+    'latest',
+    'v2.9.0',
+    '2.9',
+    '2.9.0.1',
+    '02.9.0',
+    '2.9.0-beta.1',
+    '2.9.0+build',
+    '2.9.0\n',
+    'garbage',
+  ];
+  it.each(invalidVersions)('rejects an invalid yaml override %s', (version) => {
+    const { manifest, lockfile } = fixture();
+    manifest.overrides.yaml = version;
+    expect(() => assertYamlDependencies(manifest, lockfile)).toThrow();
+  });
 
-    expect(vulnerableEntries).toEqual([]);
+  for (const path of ['node_modules/yaml', 'node_modules/parent/node_modules/yaml']) {
+    it.each(invalidVersions)(`rejects invalid ${path} version %s`, (version) => {
+      const { manifest, lockfile } = fixture();
+      lockfile.packages[path] = { version };
+      expect(() => assertYamlDependencies(manifest, lockfile)).toThrow();
+    });
+    it(`rejects a safe but mismatched ${path} version`, () => {
+      const { manifest, lockfile } = fixture();
+      lockfile.packages[path] = { version: '2.9.1' };
+      expect(() => assertYamlDependencies(manifest, lockfile)).toThrow();
+    });
+  }
+
+  it.each([{}, { packages: {} }, { packages: { 'node_modules/not-yaml': { version: '2.9.0' } } }])(
+    'rejects a lockfile with no yaml installs: %j',
+    (lockfile) => {
+      expect(() => assertYamlDependencies(fixture().manifest, lockfile)).toThrow();
+    },
+  );
+  it('rejects a missing overrides section', () => {
+    expect(() => assertYamlDependencies({}, fixture().lockfile)).toThrow();
   });
 });
