@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
+- Backport [#1139](https://github.com/CodesWhat/drydock/pull/1139) to publish agent container state on the MQTT topic Home Assistant discovery advertises, fixing a cause of entities staying `Unknown` with v1.7's default agent segmentation. Existing retained state on the old unscoped topics is not removed automatically.
 - Restore website referral-source reporting while keeping referrer URLs and campaign parameters out of analytics.
 
 ## [1.7.0-rc.15] — 2026-09-10

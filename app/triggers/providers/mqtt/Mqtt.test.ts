@@ -7,6 +7,7 @@ import {
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { flatten, validate } from '../../../model/container.js';
+import * as containerStore from '../../../store/container.js';
 
 vi.mock('mqtt');
 vi.mock('node:fs/promises', () => ({
@@ -402,6 +403,150 @@ test('trigger should normalize recreated alias-prefixed container names to their
     JSON.stringify(flatten(container)),
     {
       retain: true,
+    },
+  );
+});
+
+describe('agent state topic parity with hass discovery (#1139)', () => {
+  const agentContainer = {
+    id: '31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816',
+    name: 'nginx',
+    watcher: 'local',
+    agent: 'ml',
+    image: { tag: { value: '1.0' } },
+    result: { tag: '1.1' },
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test.each([
+    {
+      label: 'v1.7 default',
+      agenttopicsegment: undefined,
+      agent: 'ml',
+      name: 'nginx',
+      segment: 'agent/ml/',
+    },
+    {
+      label: 'explicit segmentation',
+      agenttopicsegment: true,
+      agent: 'ml',
+      name: 'nginx',
+      segment: 'agent/ml/',
+    },
+    {
+      label: 'second agent',
+      agenttopicsegment: true,
+      agent: 'edge',
+      name: 'nginx',
+      segment: 'agent/edge/',
+    },
+    {
+      label: 'dotted name',
+      agenttopicsegment: true,
+      agent: 'ml',
+      name: 'home.assistant',
+      segment: 'agent/ml/',
+      canonicalName: 'home-assistant',
+    },
+    {
+      label: 'recreated alias',
+      agenttopicsegment: true,
+      agent: 'ml',
+      name: '31a61a8305ef_nginx',
+      segment: 'agent/ml/',
+      canonicalName: 'nginx',
+    },
+    {
+      label: 'Compose labels on v1.7',
+      agenttopicsegment: true,
+      agent: 'ml',
+      name: 'myapp_web_1',
+      segment: 'agent/ml/',
+    },
+    {
+      label: 'segmentation opt-out',
+      agenttopicsegment: false,
+      agent: 'ml',
+      name: 'nginx',
+      segment: '',
+    },
+    {
+      label: 'controller-local container',
+      agenttopicsegment: true,
+      agent: undefined,
+      name: 'nginx',
+      segment: '',
+    },
+    { label: 'empty agent', agenttopicsegment: true, agent: '', name: 'nginx', segment: '' },
+    { label: 'non-string agent', agenttopicsegment: true, agent: 42, name: 'nginx', segment: '' },
+  ])(
+    'publishes state on discovery topics for $label',
+    async ({ agenttopicsegment, agent, name, segment, canonicalName }) => {
+      const container = {
+        ...agentContainer,
+        agent,
+        name,
+        labels: { 'com.docker.compose.project': 'myapp', 'com.docker.compose.service': 'web' },
+      };
+      const configuration = mqtt.validateConfiguration({
+        url: configurationValid.url,
+        hass: {
+          enabled: true,
+          discovery: true,
+          commands: true,
+          attributes: 'full',
+          agenttopicsegment,
+        },
+      });
+      const client = {
+        publish: vi.fn(),
+        subscribeAsync: vi.fn().mockResolvedValue(undefined),
+        unsubscribeAsync: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        removeListener: vi.fn(),
+      };
+      mqtt.client = client;
+      mqtt.configuration = configuration;
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([]);
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      const hass = new Hass({ client, configuration, log, isContainerAllowed: () => true });
+
+      try {
+        await hass.initCommandSubscription();
+        await mqtt.trigger(container);
+        const [stateTopic, payload, options] = client.publish.mock.calls[0];
+        await hass.addContainerSensor(container);
+        const discoveryCall = client.publish.mock.calls.find(
+          ([topic, message]) => topic.startsWith('homeassistant/update/') && message !== '',
+        );
+        expect(discoveryCall).toBeDefined();
+        const discovery = JSON.parse(discoveryCall[1]);
+        const expectedTopic = `dd/container/${segment}local/${canonicalName ?? name}`;
+        expect(discovery.state_topic).toBe(expectedTopic);
+        expect(stateTopic).toBe(discovery.state_topic);
+        expect(stateTopic).toBe(discovery.latest_version_topic);
+        expect(stateTopic).toBe(discovery.json_attributes_topic);
+        expect(discovery.command_topic).toBe(`${stateTopic}/cmd`);
+        expect(payload).toBe(JSON.stringify(flatten(container)));
+        expect(options).toStrictEqual({ retain: true });
+      } finally {
+        await hass.deregister();
+      }
+    },
+  );
+
+  test.each([true, false])(
+    'keeps plain MQTT unscoped with segmentation=%s when hass is disabled',
+    async (agenttopicsegment) => {
+      mqtt.configuration = mqtt.validateConfiguration({
+        url: configurationValid.url,
+        hass: { enabled: false, agenttopicsegment },
+      });
+      await mqtt.trigger(agentContainer);
+      expect(mqtt.client.publish.mock.calls[0][0]).toBe('dd/container/local/nginx');
     },
   );
 });
