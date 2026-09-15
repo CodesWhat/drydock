@@ -4,6 +4,7 @@ import type { RadiusPresetId } from './radius';
 
 /** Table/cards view-mode switch. `'list'` (the old 3-way `DataListAccordion` mode) is gone for good. */
 export type ViewMode = 'table' | 'cards';
+export type TableDensity = 'normal' | 'compact';
 
 export const FLEET_GROUP_DIMENSIONS = [
   'none',
@@ -88,7 +89,13 @@ export interface PreferencesSchema {
     logs: { newestFirst: boolean };
     security: { mode: ViewMode; sortField: string; sortAsc: boolean; hiddenColumns: string[] };
     audit: { mode: ViewMode; hiddenColumns: string[] };
-    agents: { mode: ViewMode; sortKey: string; sortAsc: boolean; hiddenColumns: string[] };
+    agents: {
+      mode: ViewMode;
+      density: TableDensity;
+      sortKey: string;
+      sortAsc: boolean;
+      hiddenColumns: string[];
+    };
     triggers: { mode: ViewMode };
     watchers: { mode: ViewMode; hiddenColumns: string[] };
     servers: { mode: ViewMode; hiddenColumns: string[] };
@@ -207,7 +214,7 @@ export const DEFAULTS: PreferencesSchema = {
     logs: { newestFirst: false },
     security: { mode: 'table', sortField: 'critical', sortAsc: false, hiddenColumns: [] },
     audit: { mode: 'table', hiddenColumns: [] },
-    agents: { mode: 'table', sortKey: 'name', sortAsc: true, hiddenColumns: [] },
+    agents: { mode: 'table', density: 'normal', sortKey: 'name', sortAsc: true, hiddenColumns: [] },
     triggers: { mode: 'table' },
     watchers: { mode: 'table', hiddenColumns: [] },
     servers: { mode: 'table', hiddenColumns: [] },

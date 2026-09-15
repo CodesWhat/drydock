@@ -148,6 +148,7 @@ const agentCardDataTableStub = defineComponent({
     'hiddenColumnKeys',
     'preferCards',
     'hoistCardSort',
+    'density',
   ],
   emits: ['row-click', 'update:sortKey', 'update:sortAsc', 'update:cardReflowForced'],
   template: `
@@ -244,6 +245,26 @@ describe('AgentsView', () => {
     while (mountedWrappers.length > 0) {
       mountedWrappers.pop()?.unmount();
     }
+  });
+
+  it('persists table density independently of card mode without refetching agents', async () => {
+    const wrapper = await mountAgentsCardView();
+    const selector = 'select[aria-label="Agent table spacing"]';
+    const control = wrapper.get(selector);
+    expect((control.element as HTMLSelectElement).value).toBe('normal');
+    await control.setValue('compact');
+    expect(preferences.views.agents.density).toBe('compact');
+    expect(wrapper.findComponent(agentCardDataTableStub).props('density')).toBe('compact');
+    await wrapper.get('.mode-cards').trigger('click');
+    expect(wrapper.find(selector).exists()).toBe(false);
+    expect(preferences.views.agents.density).toBe('compact');
+    await wrapper.get('.mode-table').trigger('click');
+    expect((wrapper.get(selector).element as HTMLSelectElement).value).toBe('compact');
+    await wrapper.get('.force-card-reflow').trigger('click');
+    expect(wrapper.find(selector).exists()).toBe(false);
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    expect((wrapper.get(selector).element as HTMLSelectElement).value).toBe('compact');
+    expect(mockGetAgents).toHaveBeenCalledTimes(1);
   });
 
   describe('agentAllColumns (card-mode annotations)', () => {

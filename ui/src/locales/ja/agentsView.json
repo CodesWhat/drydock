@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "エージェントテーブルの間隔",
+        "normal": "標準の間隔",
+        "compact": "コンパクトな間隔"
+      },
       "loading": "エージェントを読み込み中...",
       "filterPlaceholder": "名前で絞り込む...",
       "clearFilter": "クリア",
