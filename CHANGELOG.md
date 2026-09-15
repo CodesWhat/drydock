@@ -94,6 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
+- Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.
+
 - Logs now use the selected language for HTTP load failures without a usable server diagnostic, while preserving server and network error details.
 
 - Starchart refreshes now open a chart-only PR through the existing GitHub App instead of pushing directly to protected dev branches. Unchanged charts remove the temporary branch without opening a PR.

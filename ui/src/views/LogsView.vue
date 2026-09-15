@@ -116,6 +116,11 @@ async function refreshAppLogs() {
   }
 }
 
+function retryAppLogs() {
+  if (streamingEnabled.value || appLogsLoading.value) return;
+  void refreshAppLogs();
+}
+
 function applyFilters() {
   if (streamingEnabled.value) {
     streamUpdateFilters(buildStreamQuery());
@@ -181,6 +186,7 @@ onMounted(() => {
       @update:component-filter="appLogComponent = $event"
       @update:streaming-enabled="streamingEnabled = $event"
       @toggle-pause="toggleStreamingPause"
+      @retry="retryAppLogs"
     />
   </div>
 </template>
