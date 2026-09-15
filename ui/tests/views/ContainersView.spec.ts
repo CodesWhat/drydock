@@ -2440,33 +2440,36 @@ describe('ContainersView', () => {
 
     it('loads and renders update operation history when opening actions tab', async () => {
       vi.useFakeTimers();
-      const c = makeContainer({ id: 'container-1', name: 'nginx' });
-      const wrapper = await mountContainersView([c]);
+      try {
+        const c = makeContainer({ id: 'container-1', name: 'nginx' });
+        const wrapper = await mountContainersView([c]);
 
-      mockGetContainerUpdateOperations.mockResolvedValue([
-        {
-          id: 'op-1',
-          status: 'rolled-back',
-          phase: 'rollback-failed',
-          rollbackReason: 'health_gate_failed',
-          updatedAt: '2026-02-28T10:00:00.000Z',
-        },
-      ]);
+        mockGetContainerUpdateOperations.mockResolvedValue([
+          {
+            id: 'op-1',
+            status: 'rolled-back',
+            phase: 'rollback-failed',
+            rollbackReason: 'health_gate_failed',
+            updatedAt: '2026-02-28T10:00:00.000Z',
+          },
+        ]);
 
-      mockSelectedContainer.value = c;
-      mockDetailPanelOpen.value = true;
-      mockActiveDetailTab.value = 'actions';
-      await flushPromises();
-      await vi.advanceTimersByTimeAsync(300);
-      await flushPromises();
+        mockSelectedContainer.value = c;
+        mockDetailPanelOpen.value = true;
+        mockActiveDetailTab.value = 'actions';
+        await flushPromises();
+        await vi.advanceTimersByTimeAsync(300);
+        await flushPromises();
 
-      expect(mockGetContainerUpdateOperations).toHaveBeenCalledWith('container-1');
-      expect(wrapper.text()).toContain('Update Operation History');
-      expect(wrapper.text()).toContain('op-1');
-      expect(wrapper.text()).toContain('rolled back');
-      expect(wrapper.text()).toContain('rollback failed');
-      expect(wrapper.text()).toContain('health gate failed');
-      vi.useRealTimers();
+        expect(mockGetContainerUpdateOperations).toHaveBeenCalledWith('container-1');
+        expect(wrapper.text()).toContain('Update Operation History');
+        expect(wrapper.text()).toContain('op-1');
+        expect(wrapper.text()).toContain('Rolled back');
+        expect(wrapper.text()).toContain('Rollback failed');
+        expect(wrapper.text()).toContain('Health check failed');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('shows registry error message when selected container has one', async () => {
