@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "{context} returned HTML instead of JSON. Check that the API server or demo mocks are running.",
+      "contentType": "{context} returned {contentType} instead of JSON.",
+      "invalidJson": "{context} returned invalid JSON."
+    },
     "loading": "Loading…",
     "back": "Back",
     "cancel": "Cancel",
