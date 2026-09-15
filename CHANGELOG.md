@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.16] — 2026-09-15
+
 ### Fixed
 
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
@@ -2755,7 +2757,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.15...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.16...HEAD
+[1.7.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.15...v1.7.0-rc.16
 [1.7.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.14...v1.7.0-rc.15
 [1.7.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.13...v1.7.0-rc.14
 [1.7.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.12...v1.7.0-rc.13

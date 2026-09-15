@@ -219,6 +219,17 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.16 亮点</strong></summary>
+
+Home Assistant 自动发现与状态发布现在为代理容器使用同一个 MQTT 主题。现有默认值 `HASS_AGENTTOPICSEGMENT=true` 保持不变，容器的规范名称及未启用 Home Assistant 集成的 MQTT 主题也不变。感谢 [@depuits](https://github.com/depuits) 在[讨论 #1201](https://github.com/CodesWhat/drydock/discussions/1201) 中提供复现细节。
+
+此候选版还更新了依赖项和 Alpine 时区软件包，恢复了保护隐私的网站来源统计，并修复了 Crowdin 分支选择及依赖项检查。运行时变更需要重新进行七天的观察测试。旧的 MQTT 保留消息不会自动删除；清除过时状态前，请先检查是否还有其他发布者在使用它。
+
+[完整发布说明](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.16/CHANGELOG.md#170-rc16--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.15 亮点</strong></summary>
 
 已断开连接的边缘代理不再能注册尚在初始化的组件，覆盖重新连接后的替代实例。

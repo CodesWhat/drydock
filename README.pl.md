@@ -219,6 +219,17 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.16</strong></summary>
+
+Wykrywanie Home Assistant i publikowanie stanu używają teraz tego samego tematu MQTT dla kontenerów agentów. Dotychczasowa wartość domyślna `HASS_AGENTTOPICSEGMENT=true` pozostaje bez zmian, podobnie jak kanoniczne nazwy kontenerów i tematy MQTT bez integracji z Home Assistant. Dziękujemy [@depuits](https://github.com/depuits) za szczegóły odtworzenia problemu w [dyskusji #1201](https://github.com/CodesWhat/drydock/discussions/1201).
+
+Ta wersja aktualizuje również zależności i pakiet stref czasowych Alpine, przywraca rejestrowanie źródeł odesłań witryny z zachowaniem prywatności oraz poprawia wybór gałęzi Crowdin i kontrole zależności. Zmiany w działaniu wymagają nowego siedmiodniowego okresu testów. Stare zachowane wiadomości MQTT nie są usuwane automatycznie; przed usunięciem nieaktualnego stanu sprawdź, czy nie korzystają z niego inni nadawcy.
+
+[Pełne informacje o wydaniu](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.16/CHANGELOG.md#170-rc16--2026-09-15)
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.15</strong></summary>
 
 Odłączony agent brzegowy nie może już zarejestrować komponentu, którego
