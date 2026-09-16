@@ -39,6 +39,62 @@ describe('approval service', () => {
     vi.resetAllMocks();
   });
 
+  describe.each([
+    ['list', () => listApprovals(), 'Failed to load approvals: Service Unavailable'],
+    ['summary', () => getApprovalSummary(), 'Failed to load approval summary: Service Unavailable'],
+    ['detail', () => getApproval('approval-1'), 'Failed to load approval: Service Unavailable'],
+    ['approve', () => approveApproval('approval-1'), 'Failed to approve update'],
+    ['reject', () => rejectApproval('approval-1'), 'Failed to reject update'],
+    ['defer', () => deferApproval('approval-1'), 'Failed to defer update'],
+  ] as const)('%s error responses', (_name, request, fallback) => {
+    it.each([
+      'null',
+      'false',
+      '42',
+      '"unavailable"',
+      '[]',
+      '{}',
+      '{"error":null}',
+      '{"error":42}',
+      '{"error":{}}',
+      '{"error":""}',
+      '{"error":"   "}',
+      '{broken',
+    ])('preserves the HTTP status and fallback for body %s', async (body) => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(body, {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const error = await request().catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(ApprovalApiError);
+      expect(error).toMatchObject({ statusCode: 503, message: fallback });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves a nonblank server diagnostic verbatim', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ error: '  Approval already decided  ' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const error = await request().catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(ApprovalApiError);
+      expect(error).toMatchObject({
+        statusCode: 409,
+        message: '  Approval already decided  ',
+      });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('listApprovals', () => {
     it('fetches /api/v1/approvals with no query string when called with no args', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
