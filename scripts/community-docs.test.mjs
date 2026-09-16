@@ -29,7 +29,7 @@ test('the current translation guide matches the UI-only Crowdin mapping', () => 
   );
   const document = readFileSync('content/docs/current/guides/translations/index.mdx', 'utf8');
   assert.match(document, /ui\/src\/locales\/en\//u);
-  assert.match(document, /https:\/\/crowdin\.com\/project\/drydock/u);
+  assert.ok(document.includes('](https://crowdin.com/project/drydock)'));
   assert.doesNotMatch(
     document,
     /UI and README files through Crowdin|Crowdin watches both|README sections retain/u,
