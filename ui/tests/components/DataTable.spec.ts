@@ -33,6 +33,30 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
 }
 
 describe('DataTable', () => {
+  it('opts into compact body spacing without changing headers or legacy compact callers', async () => {
+    const wrapper = factory({ showActions: true, compact: true });
+    try {
+      expect(wrapper.find('td').classes()).toContain('py-3');
+      expect(wrapper.find('.dd-data-table-actions-cell').classes()).toContain('py-3');
+      await wrapper.setProps({ density: 'compact' });
+      for (const cell of wrapper.findAll('tbody td')) {
+        expect(cell.classes()).toContain('py-1.5');
+        expect(cell.classes()).toContain('h-[44px]');
+        expect(cell.classes()).not.toContain('py-3');
+      }
+      expect(wrapper.find('th').classes()).toContain('py-2.5');
+      await wrapper.find('tbody tr').trigger('keydown', { key: 'Enter' });
+      expect(wrapper.emitted('row-click')?.[0]).toEqual([rows[0]]);
+      await wrapper.find('th').trigger('click');
+      expect(wrapper.emitted('update:sortKey')?.[0]).toEqual(['name']);
+      await wrapper.setProps({ density: 'normal' });
+      expect(wrapper.find('td').classes()).toContain('py-3');
+      expect(wrapper.find('td').classes()).not.toContain('h-[44px]');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it('preserves typed row, header, cell and mixed-row action contracts', async () => {
     const wrapper = mount(DataTableContract, {
       global: { stubs: { AppIcon: { template: '<span />' } } },

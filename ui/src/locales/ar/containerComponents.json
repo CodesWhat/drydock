@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "نظرة عامة",
+        "stats": "الإحصائيات",
+        "logs": "السجلات",
+        "environment": "البيئة",
+        "labels": "التسميات",
+        "actions": "الإجراءات"
       }
     },
     "logViewer": {

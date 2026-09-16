@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Agents offer a persisted normal/compact table-spacing choice, with opt-in preference sync, unchanged card layout and a 44px minimum compact row target.
+
 - Action details offer a three-field policy editor for automatic dispatch, order and concurrency, with explicit Save/Cancel, source-aware read-only fields, inherited-setting removal and separate saved/live-reload feedback. Saving does not execute actions or notifications.
 - Notification policy editing now includes security digest title and multiline body templates on supporting servers, with verbatim drafts, explicit default restoration and source-aware read-only fields. Saving does not send notifications or change the security delivery mode.
 
@@ -97,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Frontend JSON-response diagnostics use the selected language for invalid JSON, HTML and unexpected content types, preserving the API context and transport errors.
+- Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.

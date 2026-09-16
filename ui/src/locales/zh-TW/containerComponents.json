@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "概覽",
+        "stats": "統計",
+        "logs": "日誌",
+        "environment": "環境",
+        "labels": "標籤",
+        "actions": "操作"
       }
     },
     "logViewer": {

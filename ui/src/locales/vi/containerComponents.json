@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Tổng quan",
+        "stats": "Thống kê",
+        "logs": "Nhật ký",
+        "environment": "Môi trường",
+        "labels": "Nhãn",
+        "actions": "Thao tác"
       }
     },
     "logViewer": {

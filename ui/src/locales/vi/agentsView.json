@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Khoảng cách bảng tác nhân",
+        "normal": "Khoảng cách thường",
+        "compact": "Khoảng cách thu gọn"
+      },
       "loading": "Đang tải agent...",
       "filterPlaceholder": "Lọc theo tên...",
       "clearFilter": "Xóa",
