@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Огляд",
+        "stats": "Статистика",
+        "logs": "Журнали",
+        "environment": "Середовище",
+        "labels": "Мітки",
+        "actions": "Дії"
       }
     },
     "logViewer": {

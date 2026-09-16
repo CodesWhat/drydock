@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Genel bakış",
+        "stats": "İstatistikler",
+        "logs": "Günlükler",
+        "environment": "Ortam",
+        "labels": "Etiketler",
+        "actions": "Eylemler"
       }
     },
     "logViewer": {

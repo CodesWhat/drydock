@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
-
+- Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
