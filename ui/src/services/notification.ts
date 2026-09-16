@@ -1,4 +1,5 @@
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { readHttpError } from './error-response';
 
 export interface NotificationRule {
   id: string;
@@ -52,8 +53,7 @@ async function updateNotificationRule(
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
 
   return readJsonResponse<NotificationRule>(response);
@@ -71,8 +71,7 @@ async function previewNotificationTemplates(
     body: JSON.stringify({ triggerId, templates }),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
   return readJsonResponse<NotificationTemplatePreview>(response);
 }
