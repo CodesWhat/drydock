@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "Đang tải watcher...",
     "loadError": "Không thể tải watcher",
-    "soon": "soon",
+    "soon": "sắp tới",
     "filterPlaceholder": "Lọc theo tên...",
     "clear": "Xóa",
     "emptyFiltered": "Không có watcher nào khớp với bộ lọc của bạn",

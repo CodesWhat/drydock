@@ -388,7 +388,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               >
                 <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.imageAge') }}</span>
                 <span class="font-mono dd-text">
-                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created) }}
+                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created, t, locale) }}
                 </span>
                 <span class="min-w-0 truncate dd-text-muted">
                   {{ formatTimestamp(selectedContainer.imageCreated || selectedImageMetadata.created) }}
@@ -989,7 +989,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       <span class="dd-text font-mono">{{ getPreviewUpdateKind(detailPreview.updateKind) || t('common.unknown') }}</span>
                     </div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
-                      <span class="dd-text">{{ detailPreview.isRunning ? 'yes' : 'no' }}</span>
+                      <span class="dd-text">{{ detailPreview.isRunning ? t('common.yes') : t('common.no') }}</span>
                     </div>
                     <div v-if="Array.isArray(detailPreview.networks)" class="dd-text-muted">
                       {{ t('containerComponents.fullPageActions.networksLabel') }} <span class="dd-text font-mono">{{ detailPreview.networks.join(', ') || '-' }}</span>
@@ -1008,7 +1008,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     </div>
                     <div v-if="typeof detailComposePreview?.willWrite === 'boolean'" class="dd-text-muted">
                       {{ t('containerComponents.fullPageActions.writesComposeFileLabel') }}
-                      <span class="dd-text">{{ detailComposePreview.willWrite ? 'yes' : 'no' }}</span>
+                      <span class="dd-text">{{ detailComposePreview.willWrite ? t('common.yes') : t('common.no') }}</span>
                     </div>
                     <div v-if="detailComposePreview?.patch" class="dd-text-muted">
                       {{ t('containerComponents.fullPageActions.patchPreviewLabel') }}

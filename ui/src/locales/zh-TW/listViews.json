@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "正在載入監視器……",
     "loadError": "無法載入監視器",
-    "soon": "soon",
+    "soon": "即將執行",
     "filterPlaceholder": "按名稱篩選……",
     "clear": "清除",
     "emptyFiltered": "沒有監視器匹配您的篩選條件",

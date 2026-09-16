@@ -100,6 +100,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Watcher next-run countdowns use localized units and update when the language changes in tables, cards and open details, without refetching. The remaining 15 English copies of "soon" are translated; countdown rounding and timestamp tooltips are unchanged.
+- Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
+- Full-page update previews now reuse the selected language's yes/no text for running status and compose-file writes, matching the side panel.
 - The Approvals screen now also translates its remaining 14 supported languages, including confirmation prompts, hold reasons, loading and empty states, and success/error messages. Update-mode values and approval behavior are unchanged.
 
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
@@ -110,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dashboard customization reuses each widget's existing translated title, so its visibility controls follow the selected language without changing the layout or saved visibility.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
 - Frontend JSON-response diagnostics use the selected language for invalid JSON, HTML and unexpected content types, preserving the API context and transport errors.
+- Container image ages follow the selected language in full-page and side-panel details, including the future-date label. Months are spelled out to distinguish them from minutes; timestamps and age thresholds are unchanged.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.

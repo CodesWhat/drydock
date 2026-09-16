@@ -189,8 +189,21 @@ jobs:
           retry_wait_seconds: 30
           command: docker pull "$PLAYWRIGHT_IMAGE"
 
+      # Retry registry failures before starting containers. Reuse completed pulls
+      # and the exact local QA build, then keep startup outside the retry boundary.
+      - name: Pull QA fixture images
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: |
+            set -euo pipefail
+            docker image inspect drydock:dev >/dev/null
+            docker compose -p drydock-playwright -f test/qa-compose.yml pull --policy missing
+
       - name: Start QA stack
-        run: docker compose -p drydock-playwright -f test/qa-compose.yml up -d
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml up -d --pull never
 
       - name: Wait for QA health
         run: |

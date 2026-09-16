@@ -346,9 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "Container werden geladen...",
-      "fleetUpdateProgress": "Updating {done} of {total} containers",
-      "fleetUpdateProgressRunning": "Running now: {names}",
-      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
+      "fleetUpdateProgress": "Container-Aktualisierung: {done} von {total}",
+      "fleetUpdateProgressRunning": "Aktuell in Bearbeitung: {names}",
+      "fleetUpdateProgressRunningMore": "Aktuell in Bearbeitung: {names} und {more} weitere",
       "searchPlaceholder": "Name oder Image suchen...",
       "allStatuses": "Alle Status",
       "running": "Läuft",

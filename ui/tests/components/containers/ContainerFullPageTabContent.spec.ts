@@ -472,6 +472,43 @@ describe('ContainerFullPageTabContent', () => {
       expect(remainingTimers).toBe(0);
     }
   });
+  it.each([
+    ['image', -300_000, '5m', '5min'],
+    ['metadata', -90 * 86_400_000, '2 months', '2\u00a0mois'],
+    ['image', 60_000, 'now', 'maintenant'],
+  ] as const)(
+    'localizes image age from %s at offset %s without refetching',
+    async (source, offset, english, french) => {
+      const originalLocale = i18n.global.locale.value;
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-16T16:00:00Z'));
+      i18n.global.locale.value = 'en';
+      const timestamp = new Date(Date.now() + offset).toISOString();
+      activeDetailTab.value = 'overview';
+      selectedContainer.value = makeContainer({
+        imageCreated: source === 'image' ? timestamp : undefined,
+      });
+      if (source === 'metadata') selectedImageMetadata.value.created = timestamp;
+      const container = selectedContainer.value;
+      const wrapper = mountComponent();
+      try {
+        const row = wrapper.find('[data-test="container-image-age-detail"]');
+        expect(row.find('.font-mono').text()).toBe(english);
+        const originalTimestamp = row.find('.truncate').text();
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(row.find('.font-mono').text()).toBe(french);
+        expect(row.find('.truncate').text()).toBe(originalTimestamp);
+        expect(selectedContainer.value).toBe(container);
+        expect(mockRunContainerPreview).not.toHaveBeenCalled();
+        expect(mockConfirmUpdate).not.toHaveBeenCalled();
+      } finally {
+        wrapper.unmount();
+        i18n.global.locale.value = originalLocale;
+        vi.useRealTimers();
+      }
+    },
+  );
 
   afterEach(() => {
     resetState();
@@ -729,6 +766,56 @@ describe('ContainerFullPageTabContent', () => {
 
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(1, 'maturityMode');
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
+  });
+
+  it.each([
+    [true, false],
+    [false, true],
+  ])('localizes preview booleans while running=%s and writing=%s', async (isRunning, willWrite) => {
+    const originalLocale = i18n.global.locale.value;
+    i18n.global.locale.value = 'en';
+    detailPreview.value = {
+      currentImage: 'nginx:1.0',
+      newImage: 'nginx:1.1',
+      updateKind: { kind: 'tag' },
+      isRunning,
+      networks: ['bridge'],
+    };
+    detailComposePreview.value = {
+      files: ['/opt/stack/compose.yml'],
+      service: 'web',
+      writableFile: '/opt/stack/compose.yml',
+      willWrite,
+      patch: '@@ -1,3 +1,3 @@',
+    };
+    const wrapper = mountComponent();
+    const valueFor = (labelKey: string) => {
+      const row = wrapper
+        .findAll('div.dd-text-muted')
+        .find((element) => element.text().startsWith(i18n.global.t(labelKey)));
+      expect(row).toBeDefined();
+      return row?.find('span').text();
+    };
+    const runningKey = 'containerComponents.fullPageActions.runningLabel';
+    const writingKey = 'containerComponents.fullPageActions.writesComposeFileLabel';
+
+    try {
+      expect(valueFor(runningKey)).toBe(isRunning ? 'yes' : 'no');
+      expect(valueFor(writingKey)).toBe(willWrite ? 'yes' : 'no');
+
+      i18n.global.locale.value = 'fr';
+      await nextTick();
+      expect(valueFor(runningKey)).toBe(isRunning ? 'oui' : 'non');
+      expect(valueFor(writingKey)).toBe(willWrite ? 'oui' : 'non');
+      expect(detailPreview.value?.isRunning).toBe(isRunning);
+      expect(detailComposePreview.value?.willWrite).toBe(willWrite);
+      expect(mockRunContainerPreview).not.toHaveBeenCalled();
+      expect(mockConfirmUpdate).not.toHaveBeenCalled();
+      expect(mockRunAssociatedTrigger).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+      i18n.global.locale.value = originalLocale;
+    }
   });
 
   it('renders detailed preview, trigger, backups, and operation history branches', async () => {

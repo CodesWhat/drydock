@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "Загрузка наблюдателей...",
     "loadError": "Не удалось загрузить наблюдателей",
-    "soon": "soon",
+    "soon": "скоро",
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет наблюдателей, соответствующих фильтрам",

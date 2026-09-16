@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "워처 불러오는 중...",
     "loadError": "워처를 불러오지 못했습니다",
-    "soon": "soon",
+    "soon": "곧",
     "filterPlaceholder": "이름으로 필터...",
     "clear": "초기화",
     "emptyFiltered": "필터와 일치하는 워처가 없습니다",
