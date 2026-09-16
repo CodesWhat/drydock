@@ -1,11 +1,11 @@
 ---
 title: "Translating Drydock"
-description: "Help translate the Drydock UI and README files through Crowdin. No GitHub account or build setup required."
+description: "Translate the Drydock UI through Crowdin, or contribute README translations through a repository pull request."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Drydock's interface and translated README files are managed through [Crowdin](https://crowdin.com/project/drydock), and the translation project is open to everyone. English is the source language; every other locale is community-maintained.
+Drydock's interface is translated through [Crowdin](https://crowdin.com/project/drydock), and the translation project is open to everyone. English is the source language; every other locale is community-maintained. Translated README files are maintained separately in the repository.
 
 ## Languages
 
@@ -15,14 +15,14 @@ You switch language in the app under **Config > Appearance**. See [UI configurat
 
 ## How to contribute
 
-You don't need a GitHub account, a checkout, or any build tooling. Everything happens in Crowdin.
+For UI translation suggestions, you don't need a GitHub account, a checkout, or any build tooling. Use Crowdin rather than editing the per-language JSON files directly.
 
 1. Create a free account and open the [Drydock project](https://crowdin.com/project/drydock).
-2. Pick your language and start translating. UI strings include surrounding context and often a screenshot; README sections retain their Markdown context.
+2. Pick your language and start translating. Preserve interpolation placeholders such as `{name}` exactly as written in the source string.
 3. Save your suggestions. That's the whole loop.
 
 <Callout type="info">
-Translations sync back into the repository automatically. A bot opens a pull request with translated strings, so your work ships in the next release without anyone editing generated translation files by hand.
+The sync workflow opens a pull request with translated strings. After review and merge, those translations can ship in a release.
 </Callout>
 
 ## Requesting a new language
@@ -31,4 +31,14 @@ Want a language that isn't listed yet? Drop a comment on the [translations annou
 
 ## How it works under the hood
 
-The English UI source strings live in `ui/src/locales/en/`, and the English README source is `README.md`. Crowdin watches both through the [Crowdin GitHub Action](https://github.com/crowdin/github-action), which pushes new source strings and pulls completed translations back as a pull request. The UI supports all 16 non-English locales listed above. README translations currently cover German, Spanish, French, Polish, Brazilian Portuguese, and Simplified Chinese. Don't edit the per-language JSON files or translated README files directly; translate in Crowdin and let the sync handle the generated files.
+The English UI source strings live in `ui/src/locales/en/`. The UI-only mapping in `crowdin.yml` connects those JSON files to the 16 non-English locale catalogs. The [Crowdin GitHub Action](https://github.com/crowdin/github-action) uploads source strings and checked-in translations, then downloads translations into a pull request against the integration branch.
+
+## README translations
+
+Translated `README.<locale>.md` files are maintained in the repository, not through Crowdin. They currently cover German, Spanish, French, Polish, Brazilian Portuguese, and Simplified Chinese. To contribute, update the translated file against the English `README.md`, preserve its links and structure, and open a pull request following the [contribution guide](https://github.com/CodesWhat/drydock/blob/main/CONTRIBUTING.md). Repository tests check translated README structure and release information.
+
+## Maintainer feature changes
+
+When a feature adds English source keys, maintainers include matching keys in every configured locale in the same reviewed feature PR. The locale-parity tests require complete namespaces and keys. Checked-in translations are not generated Crowdin output and still need wording review; existing translations should not be replaced with English placeholders.
+
+The sync workflow checks out the highest `dev/vX.Y` integration branch before it uploads anything, so it cannot synchronize keys from an unmerged feature branch. After the feature PR merges, `upload_sources` and `upload_translations` make its checked-in source strings and translation candidates available to Crowdin. `download_translations` then brings Crowdin output back through a separate reviewed PR. Uploading a candidate does not approve it or guarantee that it replaces an existing Crowdin translation.
