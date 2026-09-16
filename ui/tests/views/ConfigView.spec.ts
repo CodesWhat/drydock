@@ -692,6 +692,37 @@ describe('ConfigView', () => {
   });
 
   describe('cache clear', () => {
+    it('renders the real cache service HTTP error for a null response', async () => {
+      const actual =
+        await vi.importActual<typeof import('@/services/settings')>('@/services/settings');
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockClearIconCache.mockImplementationOnce(actual.clearIconCache);
+      const originalFetch = globalThis.fetch;
+      const fetchSpy = vi.fn().mockResolvedValue(new Response('null', { status: 503 }));
+      globalThis.fetch = fetchSpy;
+      const wrapper = factory();
+      try {
+        await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
+        await nextTick();
+        const clearButton = wrapper
+          .findAll('button')
+          .find((button) => button.text().includes('Clear Cache'))!;
+        expect(fetchSpy).not.toHaveBeenCalled();
+        await clearButton.trigger('click');
+        await vi.waitFor(() => expect(wrapper.text()).toContain('HTTP 503'));
+        expect(wrapper.text()).not.toContain('Cannot read properties');
+        expect(clearButton.attributes('disabled')).toBeUndefined();
+        expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/api/v1/icons/cache', {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+      } finally {
+        wrapper.unmount();
+        globalThis.fetch = originalFetch;
+        mockClearIconCache.mockReset();
+      }
+    });
+
     it('calls clearIconCache and shows result', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
       mockClearIconCache.mockResolvedValue({ cleared: 42 });

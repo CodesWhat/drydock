@@ -429,6 +429,45 @@ describe('NotificationsView', () => {
     expect(wrapper.text()).not.toContain('Preview request failed');
   });
 
+  it('shows the real preview service HTTP error for a null response without saving the draft', async () => {
+    const actual =
+      await vi.importActual<typeof import('@/services/notification')>('@/services/notification');
+    mockPreviewNotificationTemplates.mockImplementationOnce(actual.previewNotificationTemplates);
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('null', { status: 503 }));
+    globalThis.fetch = fetchSpy;
+    const wrapper = await mountNotificationsView();
+    try {
+      await wrapper.find('.row-click-first').trigger('click');
+      await flushPromises();
+      const title = wrapper.get('textarea[aria-label="Simple notification title"]');
+      await title.setValue('Draft title');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('HTTP 503');
+      expect(wrapper.text()).not.toContain('Cannot read properties');
+      expect((title.element as HTMLTextAreaElement).value).toBe('Draft title');
+      expect(mockUpdateNotificationRule).not.toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/notifications/security-alert/preview',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            triggerId: 'trigger:slack-alerts',
+            templates: { simpleTitle: 'Draft title' },
+          }),
+        },
+      );
+    } finally {
+      wrapper.unmount();
+      globalThis.fetch = originalFetch;
+      mockPreviewNotificationTemplates.mockReset();
+    }
+  });
+
   it('hides bell controls for rules without audit-backed bell events', async () => {
     mockGetAllNotificationRules.mockResolvedValue([
       makeRule({
