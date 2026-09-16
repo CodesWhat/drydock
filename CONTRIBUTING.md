@@ -88,12 +88,12 @@ You don't need to run the full test suite, coverage gates, or e2e tests locally.
 Drydock is a Docker container update manager with a dynamic component registry:
 
 ```text
-app/                        # Backend (TypeScript, Express, LokiJS)
+app/                        # Backend (TypeScript, Express, SQLite)
 ├── watchers/providers/     # Monitor containers (Docker socket)
 ├── registries/providers/   # Query image registries
 ├── triggers/providers/     # Send notifications / actions
 ├── api/                    # REST API + SSE
-├── store/                  # LokiJS in-memory database
+├── store/                  # SQLite persistence
 ├── model/                  # TypeScript interfaces
 └── agent/                  # Distributed controller-agent architecture
 
@@ -107,6 +107,8 @@ ui/                         # Frontend (Vue 3, Tailwind CSS 4, Vite)
 content/docs/               # Documentation (MDX, versioned)
 e2e/                        # Cucumber API/stream contracts + Playwright browser tests
 ```
+
+On the v1.8 development line, the store persists to `dd.sqlite` (default path `/store/dd.sqlite`), with a one-time import of the legacy `dd.json` used by v1.7 and earlier. See the [storage documentation](content/docs/current/configuration/storage/index.mdx) for migration and backup details.
 
 **Component registry pattern:** Components are loaded dynamically from environment variables:
 
@@ -213,17 +215,18 @@ By contributing, you agree that your contributions will be licensed under the [G
 |---|---|---|---|
 | 1 | `clean-tree` | Rejects uncommitted changes | Fail |
 | 2 | `ts-nocheck` | Checks for `@ts-nocheck` directives | Fail |
-| 3 | `biome check` | Linting and formatting | Fail |
-| 4 | `qlty` | Static analysis (medium+ severity gate) | Fail |
-| 5 | `qlty-smells` | Code smell advisory scan (non-blocking) | Advisory |
-| 6 | `scripts-test` | Repository maintenance script tests | Fail |
-| 7 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
-| 8 | `typecheck-ui` | TypeScript and Vue SFC script/template checks via `vue-tsc` | Fail |
-| 9 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
-| 10 | `coverage` | Sharded app+ui parallel vitest with configured TS and SFC thresholds | Fail |
-| 11 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
-| 12 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
-| 13 | `zizmor` | GitHub Actions security scanning when available | Fail |
+| 3 | `biome` | Linting and formatting via `biome check` | Fail |
+| 4 | `knip` | Dead-code and unused-dependency checks across app and ui | Fail |
+| 5 | `qlty` | Static analysis (medium+ severity gate) | Fail |
+| 6 | `qlty-smells` | Code smell advisory scan (non-blocking) | Advisory |
+| 7 | `scripts-test` | Repository maintenance script tests | Fail |
+| 8 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
+| 9 | `typecheck-ui` | TypeScript and Vue SFC script/template checks via `vue-tsc` | Fail |
+| 10 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
+| 11 | `coverage` | Sharded app+ui parallel vitest with configured TS and SFC thresholds | Fail |
+| 12 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
+| 13 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
+| 14 | `zizmor` | GitHub Actions security scanning when available | Fail |
 
 The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. Coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`. This is an uncovered-source inventory; Vitest's configured aggregate thresholds determine failure, not the presence of an individual SFC in that report.
 
