@@ -64,6 +64,20 @@ test('retains portable PID liveness when no initial proc identity is available',
   assert.equal(await parentIsAlive(process.pid, null, root), true);
 });
 
+for (const state of ['Q', 'SS']) {
+  test(`stops when a captured parent identity has invalid state ${state}`, async (t) => {
+    const { root } = await parentFixture(t, state);
+    assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), false);
+  });
+}
+
+for (const state of ['R', 'S', 'D', 'T', 't', 'W', 'K', 'P', 'I']) {
+  test(`retains a matching parent in Linux state ${state}`, async (t) => {
+    const { root } = await parentFixture(t, state);
+    assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), true);
+  });
+}
+
 test('reads only numeric Linux fields and bounds the highest-RSS process list', async (t) => {
   const fixture = await mkdtemp(join(tmpdir(), 'dd-ci-resources-'));
   t.after(() => rm(fixture, { recursive: true, force: true }));

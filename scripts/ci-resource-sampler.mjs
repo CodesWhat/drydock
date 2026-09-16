@@ -60,7 +60,10 @@ async function parentIdentity(pid, procRoot) {
     .trim()
     .split(/\s+/);
   const startTime = fields[19];
-  return /^\d+$/.test(startTime ?? '') ? { state: fields[0], startTime } : null;
+  const state = fields[0];
+  return /^[RSDZTtWXxKPI]$/.test(state ?? '') && /^\d+$/.test(startTime ?? '')
+    ? { state, startTime }
+    : null;
 }
 
 export async function parentIsAlive(pid, expectedStartTime = null, procRoot = '/proc') {
