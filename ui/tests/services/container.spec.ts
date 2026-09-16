@@ -180,11 +180,12 @@ describe('Container Service', () => {
     it('throws when response is not ok', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
       } as any);
 
       await expect(getAllContainers()).rejects.toThrow(
-        'Failed to get containers: Internal Server Error',
+        'Failed to load containers (HTTP 500): Internal Server Error',
       );
     });
 
@@ -293,11 +294,12 @@ describe('Container Service', () => {
     it('throws when refresh fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 503,
         statusText: 'Service Unavailable',
       } as any);
 
       await expect(refreshAllContainers()).rejects.toThrow(
-        'Failed to refresh all containers: Service Unavailable',
+        'Failed to recheck containers (HTTP 503): Service Unavailable',
       );
     });
   });

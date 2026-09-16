@@ -89,10 +89,13 @@ describe('Agent Service', () => {
     it('throws an error when request fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
       } as any);
 
-      await expect(getAgents()).rejects.toThrow('Failed to get agents: Internal Server Error');
+      await expect(getAgents()).rejects.toThrow(
+        'Failed to load agents (HTTP 500): Internal Server Error',
+      );
     });
   });
 });
