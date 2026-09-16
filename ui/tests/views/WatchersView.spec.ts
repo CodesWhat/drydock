@@ -305,6 +305,105 @@ describe('WatchersView', () => {
     );
   });
 
+  describe.each(['table', 'cards'] as const)('localized next-run countdown in %s', (mode) => {
+    const originalLocale = i18n.global.locale.value;
+
+    afterEach(() => {
+      i18n.global.locale.value = originalLocale;
+      vi.useRealTimers();
+    });
+
+    it.each([
+      [183_600, '2d 3h', '2j 3h', '2 ي 3 س'],
+      [5_400, '1h 30m', '1h 30min', '1 س 30 د'],
+      [30, '1m', '1min', '1 د'],
+      [3_599, '1h 0m', '1h 0min', '1 س 0 د'],
+      [0, 'soon', 'bientôt', 'قريبًا'],
+      [-30, 'soon', 'bientôt', 'قريبًا'],
+    ] as const)(
+      'updates rows and open details at %s seconds without refetching',
+      async (seconds, english, french, arabic) => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-09-16T16:00:00Z'));
+        i18n.global.locale.value = 'en';
+        const nextRunAt = new Date(Date.now() + seconds * 1000).toISOString();
+        const watcher = {
+          id: 'docker.local',
+          name: 'local',
+          type: 'docker',
+          agent: 'Local',
+          configuration: {},
+          metadata: { nextRunAt },
+        };
+        mockGetAllWatchers.mockResolvedValue([watcher]);
+        mockGetWatcher.mockResolvedValue(watcher);
+        const wrapper = await (mode === 'cards' ? mountWatchersCardView() : mountWatchersView());
+        const table = wrapper.findComponent(
+          mode === 'cards' ? watcherCardDataTableStub : richDataTableStub,
+        );
+        const row = table.props('rows')[0];
+        try {
+          expect(row.nextRun).toBe(english);
+          table.vm.$emit('row-click', row);
+          await flushPromises();
+          expect(wrapper.find('.detail-panel').text()).toContain(english);
+
+          for (const [locale, expected] of [
+            ['fr', french],
+            ['ar', arabic],
+          ] as const) {
+            i18n.global.locale.value = locale;
+            await nextTick();
+            expect(
+              wrapper.find(mode === 'cards' ? '.watcher-card' : '.data-table-row').text(),
+            ).toContain(expected);
+            const field = wrapper
+              .findAllComponents({ name: 'DetailField' })
+              .find((item) => item.props('label') === i18n.global.t('watchersView.detail.nextRun'));
+            expect(field?.find('.text-2xs-plus').text()).toBe(expected);
+            expect(row.nextRun).toBe(expected);
+          }
+          expect(row.nextRunAt).toBe(nextRunAt);
+          expect(table.props('rows')[0]).toBe(row);
+          expect(table.props('selectedKey')).toBe('docker.local');
+          expect(mockGetAllWatchers).toHaveBeenCalledTimes(1);
+          expect(mockGetWatcher).toHaveBeenCalledTimes(1);
+          expect(mockGetWatcher).toHaveBeenCalledWith({
+            type: 'docker',
+            name: 'local',
+            agent: 'Local',
+          });
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+
+    it.each([undefined, 'not-a-date'])(
+      'preserves missing or invalid timestamps: %s',
+      async (nextRunAt) => {
+        i18n.global.locale.value = 'fr';
+        const watcher = {
+          id: 'docker.local',
+          name: 'local',
+          type: 'docker',
+          configuration: {},
+          metadata: { nextRunAt },
+        };
+        mockGetAllWatchers.mockResolvedValue([watcher]);
+        const wrapper = await (mode === 'cards' ? mountWatchersCardView() : mountWatchersView());
+        try {
+          const table = wrapper.findComponent(
+            mode === 'cards' ? watcherCardDataTableStub : richDataTableStub,
+          );
+          expect(table.props('rows')[0].nextRun).toBe(nextRunAt ?? '\u2014');
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+  });
+
   describe('tableColumns (card-mode annotations)', () => {
     it('demotes cron out of the card body with a negative cardPriority', async () => {
       mockGetAllWatchers.mockResolvedValue([

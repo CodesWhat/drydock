@@ -44,6 +44,12 @@ function watcherStatusColor(status: string) {
   return 'var(--dd-neutral)';
 }
 
+const nextRunFormatters = computed(() => {
+  const formatter = (unit: 'day' | 'hour' | 'minute') =>
+    new Intl.NumberFormat(locale.value, { style: 'unit', unit, unitDisplay: 'narrow' });
+  return { day: formatter('day'), hour: formatter('hour'), minute: formatter('minute') };
+});
+
 function timeUntil(isoString: string): string {
   const then = new Date(isoString).getTime();
   if (Number.isNaN(then)) return isoString;
@@ -56,9 +62,10 @@ function timeUntil(isoString: string): string {
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
   const minutes = totalMinutes % 60;
 
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  const formats = nextRunFormatters.value;
+  if (days > 0) return `${formats.day.format(days)} ${formats.hour.format(hours)}`;
+  if (hours > 0) return `${formats.hour.format(hours)} ${formats.minute.format(minutes)}`;
+  return formats.minute.format(minutes);
 }
 
 const searchQuery = ref('');
@@ -165,6 +172,7 @@ function readWatcherContainerTotal(metadata: unknown): number {
 function mapWatcher(watcher: ApiComponentResponse, status = 'watching') {
   const configuration = watcher.configuration ?? {};
   const lastRunAt = watcher.metadata?.lastRunAt ? String(watcher.metadata.lastRunAt) : undefined;
+  const nextRunAt = watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined;
   return {
     id: watcher.id,
     name: watcher.name,
@@ -175,8 +183,10 @@ function mapWatcher(watcher: ApiComponentResponse, status = 'watching') {
       typeof configuration === 'object' && 'cron' in configuration
         ? (configuration.cron ?? '')
         : '',
-    nextRunAt: watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined,
-    nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
+    nextRunAt,
+    get nextRun() {
+      return nextRunAt ? timeUntil(nextRunAt) : '\u2014';
+    },
     get lastRun() {
       return lastRunAt ? timeAgo(lastRunAt, locale.value, t) : '\u2014';
     },
