@@ -226,7 +226,7 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 11 | `coverage` | Sharded app+ui parallel vitest with configured TS and SFC thresholds | Fail |
 | 12 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
 | 13 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
-| 14 | `zizmor` | GitHub Actions security scanning when available | Fail |
+| 14 | `zizmor` | GitHub Actions security scanning when `.github/workflows/*.yml` changes; installation required | Fail |
 
 The `pre-commit` hook only runs `biome check --fix` and `biome format --write` on staged files — no tests. Coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`. This is an uncovered-source inventory; Vitest's configured aggregate thresholds determine failure, not the presence of an individual SFC in that report.
 

@@ -33,6 +33,17 @@ test('the documented pre-push sequence matches the configured hooks', () => {
   assert.deepEqual(documented, expected);
 });
 
+test('the zizmor documentation names the workflow glob and required installation', () => {
+  const config = parse(readFileSync('lefthook.yml', 'utf8'));
+  const document = readFileSync('CONTRIBUTING.md', 'utf8');
+  const row = document.split('\n').find((line) => line.includes('| `zizmor` |'));
+  assert.ok(row, 'zizmor needs a documented pre-push step');
+  assert.ok(row.includes(config['pre-push'].commands.zizmor.glob));
+  assert.match(row, /changes; installation required/u);
+  assert.match(row, /\| Fail \|$/u);
+  assert.doesNotMatch(row, /when available/u);
+});
+
 test('dependency label guidance states the supported host boundary', () => {
   const document = readFileSync('content/docs/current/configuration/watchers/index.mdx', 'utf8');
   const section = document.split('title="Dependency-ordered updates">')[1]?.split('</Callout>')[0];
