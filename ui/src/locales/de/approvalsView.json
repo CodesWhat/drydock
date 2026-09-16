@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "{count} angezeigt",
+    "refresh": "Aktualisieren",
+    "loading": "Genehmigungen werden geladen…",
+    "loadError": "Genehmigungen konnten nicht geladen werden",
+    "notifyModeBanner": "Der Aktualisierungsmodus ist notify. Genehmigungen sind deaktiviert, bis der Modus auf manual oder auto gesetzt wird.",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "Ausstehend",
+      "deferred": "Zurückgestellt",
+      "decided": "Entschieden"
     },
     "columns": {
       "container": "Container",
       "image": "Image",
       "version": "Version",
       "scan": "Scan",
-      "age": "Age"
+      "age": "Alter"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
+      "major": "Hauptversion",
+      "minor": "Nebenversion",
       "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "prerelease": "Vorabversion",
+      "unknown": "Unbekannt"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "Versionshinweise und Gründe für das Zurückhalten anzeigen",
+      "approve": "Genehmigen",
+      "approveAriaLabel": "Aktualisierung genehmigen",
+      "approveDisabledNotify": "Aktualisierungsmodus ist notify; Genehmigen ist deaktiviert",
+      "reject": "Ablehnen",
+      "rejectAriaLabel": "Aktualisierung ablehnen",
+      "defer": "Zurückstellen",
+      "deferAriaLabel": "Aktualisierung zurückstellen"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "Details werden geladen…",
+      "holdReasons": "Gründe für das Zurückhalten",
+      "viewFullNotes": "Vollständige Hinweise anzeigen",
+      "empty": "Keine Versionshinweise oder Gründe für das Zurückhalten dieser Aktualisierung"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "Keine ausstehenden Genehmigungen",
+      "deferred": "Keine zurückgestellten Genehmigungen",
+      "decided": "Noch keine entschiedenen Genehmigungen",
+      "all": "Keine Genehmigungen"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "Abbrechen",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "Aktualisierung genehmigen",
+        "message": "Aktualisierung von {name} auf {toRef} genehmigen?",
+        "softBlockerSuffix": "\n\nFür diese Aktualisierung bestehen noch Gründe für das Zurückhalten:\n{list}",
+        "acceptLabel": "Genehmigen"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "Aktualisierung ablehnen",
+        "message": "Aktualisierung von {name} auf {toRef} ablehnen? Sie wird nicht automatisch angewendet.",
+        "acceptLabel": "Ablehnen"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "Aktualisierung zurückstellen",
+        "message": "Aktualisierung für {name} um {days} Tage zurückstellen?",
+        "acceptLabel": "Zurückstellen"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "Genehmigung für {name} angefordert",
+      "approveFailed": "{name} konnte nicht genehmigt werden",
+      "rejected": "Aktualisierung für {name} abgelehnt",
+      "rejectFailed": "{name} konnte nicht abgelehnt werden",
+      "deferred": "Aktualisierung für {name} zurückgestellt",
+      "deferFailed": "{name} konnte nicht zurückgestellt werden"
     }
   }
 }
