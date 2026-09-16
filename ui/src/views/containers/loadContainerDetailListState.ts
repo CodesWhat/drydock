@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import { errorMessage } from '../../utils/error';
+import { backupErrorMessage } from '../../utils/backup-error';
 
 export async function loadContainerDetailListState(args: {
   containerId: string | undefined;
@@ -20,7 +20,7 @@ export async function loadContainerDetailListState(args: {
     args.value.value = (await args.loader(args.containerId)) as Record<string, unknown>[];
   } catch (e: unknown) {
     args.value.value = [];
-    args.error.value = errorMessage(e, args.failureMessage);
+    args.error.value = backupErrorMessage(e, args.failureMessage);
   } finally {
     args.loading.value = false;
   }

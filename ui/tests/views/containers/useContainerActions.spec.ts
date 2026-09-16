@@ -3220,6 +3220,34 @@ describe('useContainerActions', () => {
     expect(composable.previewLoading.value).toBe(false);
   });
 
+  it('localizes rollback failure context while preserving HTTP and server diagnostics', async () => {
+    setI18nLocale('fr');
+    const { composable } = await mountActionsHarness({
+      selectedContainerId: 'container-1',
+    });
+    mocks.rollback.mockRejectedValueOnce(new ApiError('Conflict (backup expired)', 409));
+
+    await composable.rollbackToBackup('backup-1');
+
+    expect(composable.rollbackError.value).toBe(
+      'Échec du rollback: HTTP 409: Conflict (backup expired)',
+    );
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      'Échec du rollback',
+      'Échec du rollback: HTTP 409: Conflict (backup expired)',
+    );
+  });
+
+  it('uses the localized rollback fallback for empty errors', async () => {
+    setI18nLocale('fr');
+    const { composable } = await mountActionsHarness({ selectedContainerId: 'container-1' });
+    mocks.rollback.mockRejectedValueOnce(new Error(''));
+
+    await composable.rollbackToBackup();
+
+    expect(composable.rollbackError.value).toBe('Échec du rollback');
+  });
+
   it('covers rollback guard and failure/latest-backup branches', async () => {
     const { composable, selectedContainerId } = await mountActionsHarness({
       selectedContainer: null,
