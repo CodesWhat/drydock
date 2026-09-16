@@ -904,11 +904,12 @@ describe('Container Service', () => {
     it('throws when fetching vulnerabilities fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
       } as any);
 
       await expect(getContainerVulnerabilities('c1')).rejects.toThrow(
-        'Failed to get vulnerabilities for container c1: Internal Server Error',
+        'Failed to load vulnerabilities (c1) (HTTP 500): Internal Server Error',
       );
     });
   });
@@ -943,11 +944,12 @@ describe('Container Service', () => {
     it('throws when fetching aggregated vulnerabilities fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
       } as any);
 
       await expect(getSecurityVulnerabilityOverview()).rejects.toThrow(
-        'Failed to get aggregated vulnerabilities: Internal Server Error',
+        'Failed to load vulnerability data (HTTP 500): Internal Server Error',
       );
     });
   });
@@ -995,11 +997,12 @@ describe('Container Service', () => {
     it('throws when fetching SBOM fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 400,
         statusText: 'Bad Request',
       } as any);
 
       await expect(getContainerSbom('c1')).rejects.toThrow(
-        'Failed to get SBOM for container c1: Bad Request',
+        'Failed to load SBOM (c1) (HTTP 400): Bad Request',
       );
     });
   });
