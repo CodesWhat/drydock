@@ -10,6 +10,64 @@ describe('images service', () => {
     vi.resetAllMocks();
   });
 
+  describe.each([
+    ['list', () => getImages(), 'Failed to load images: Service Unavailable'],
+    [
+      'preview',
+      () => getPrunePreview({ host: 'local', mode: 'dangling' }),
+      'Failed to load prune preview: Service Unavailable',
+    ],
+    [
+      'prune',
+      () => pruneImages({ host: 'local', mode: 'unused' }),
+      'Failed to prune images: Service Unavailable',
+    ],
+  ] as const)('%s error responses', (_name, request, fallback) => {
+    it.each([
+      'null',
+      'false',
+      '42',
+      '"unavailable"',
+      '[]',
+      '{}',
+      '{"error":null}',
+      '{"error":42}',
+      '{"error":{}}',
+      '{"error":""}',
+      '{"error":"   "}',
+      '{broken',
+    ])('preserves the HTTP status and fallback for body %s', async (body) => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(body, {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const error = await request().catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({ status: 503, message: fallback });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves a nonblank server diagnostic verbatim', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ error: '  Prune already in progress  ' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const error = await request().catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({ status: 409, message: '  Prune already in progress  ' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('getImages', () => {
     it('fetches /api/v1/images with no query string when called with no args', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({

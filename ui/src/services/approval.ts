@@ -106,15 +106,19 @@ export class ApprovalApiError extends Error {
   }
 }
 
-type ErrorEnvelope = { error?: unknown };
-
-function messageFromErrorEnvelope(body: ErrorEnvelope, fallback: string): string {
-  return typeof body.error === 'string' && body.error.trim() ? body.error : fallback;
+function messageFromErrorEnvelope(body: unknown, fallback: string): string {
+  return body !== null &&
+    typeof body === 'object' &&
+    'error' in body &&
+    typeof body.error === 'string' &&
+    body.error.trim()
+    ? body.error
+    : fallback;
 }
 
-async function readErrorEnvelope(response: Response, context: string): Promise<ErrorEnvelope> {
+async function readErrorEnvelope(response: Response, context: string): Promise<unknown> {
   try {
-    return await readJsonResponse<ErrorEnvelope>(response, context);
+    return await readJsonResponse(response, context);
   } catch {
     return {};
   }
