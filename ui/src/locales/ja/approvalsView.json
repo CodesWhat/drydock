@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "{count} 件表示",
+    "refresh": "再読み込み",
+    "loading": "承認を読み込み中…",
+    "loadError": "承認を読み込めませんでした",
+    "notifyModeBanner": "更新モードは notify です。モードを manual または auto に設定するまで、承認は無効です。",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "保留中",
+      "deferred": "延期済み",
+      "decided": "判断済み"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "コンテナ",
+      "image": "イメージ",
+      "version": "バージョン",
+      "scan": "スキャン",
+      "age": "経過時間"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "メジャー",
+      "minor": "マイナー",
+      "patch": "パッチ",
+      "prerelease": "プレリリース",
+      "unknown": "不明"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "リリースノートと保留理由を表示",
+      "approve": "承認",
+      "approveAriaLabel": "更新を承認",
+      "approveDisabledNotify": "更新モードが notify のため、承認は無効です",
+      "reject": "拒否",
+      "rejectAriaLabel": "更新を拒否",
+      "defer": "延期",
+      "deferAriaLabel": "更新を延期"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "詳細を読み込み中…",
+      "holdReasons": "保留理由",
+      "viewFullNotes": "すべてのリリースノートを表示",
+      "empty": "この更新のリリースノートや保留理由はありません"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "保留中の承認はありません",
+      "deferred": "延期された承認はありません",
+      "decided": "判断済みの承認はまだありません",
+      "all": "承認はありません"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "キャンセル",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "更新を承認",
+        "message": "{name} を {toRef} に更新することを承認しますか？",
+        "softBlockerSuffix": "\n\nこの更新には未解決の保留理由があります:\n{list}",
+        "acceptLabel": "承認"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "更新を拒否",
+        "message": "{name} の {toRef} への更新を拒否しますか？この更新は自動的には適用されなくなります。",
+        "acceptLabel": "拒否"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "更新を延期",
+        "message": "{name} の更新を {days} 日間延期しますか？",
+        "acceptLabel": "延期"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "{name} の承認をリクエストしました",
+      "approveFailed": "{name} を承認できませんでした",
+      "rejected": "{name} の更新を拒否しました",
+      "rejectFailed": "{name} を拒否できませんでした",
+      "deferred": "{name} の更新を延期しました",
+      "deferFailed": "{name} を延期できませんでした"
     }
   }
 }

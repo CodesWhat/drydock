@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "{count}개 표시",
+    "refresh": "새로 고침",
+    "loading": "승인 목록을 불러오는 중…",
+    "loadError": "승인 목록을 불러오지 못했습니다",
+    "notifyModeBanner": "업데이트 모드는 notify입니다. 모드를 manual 또는 auto로 설정할 때까지 승인이 비활성화됩니다.",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "대기 중",
+      "deferred": "연기됨",
+      "decided": "결정됨"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "컨테이너",
+      "image": "이미지",
+      "version": "버전",
+      "scan": "검사",
+      "age": "경과 시간"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "주 버전",
+      "minor": "부 버전",
+      "patch": "패치",
+      "prerelease": "사전 릴리스",
+      "unknown": "알 수 없음"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "릴리스 노트 및 보류 사유 표시",
+      "approve": "승인",
+      "approveAriaLabel": "업데이트 승인",
+      "approveDisabledNotify": "업데이트 모드가 notify이므로 승인이 비활성화됩니다",
+      "reject": "거부",
+      "rejectAriaLabel": "업데이트 거부",
+      "defer": "연기",
+      "deferAriaLabel": "업데이트 연기"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "세부 정보를 불러오는 중…",
+      "holdReasons": "보류 사유",
+      "viewFullNotes": "전체 릴리스 노트 보기",
+      "empty": "이 업데이트에 대한 릴리스 노트나 보류 사유가 없습니다"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "대기 중인 승인이 없습니다",
+      "deferred": "연기된 승인이 없습니다",
+      "decided": "아직 결정된 승인이 없습니다",
+      "all": "승인이 없습니다"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "취소",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "업데이트 승인",
+        "message": "{name}을(를) {toRef}(으)로 업데이트하도록 승인하시겠습니까?",
+        "softBlockerSuffix": "\n\n이 업데이트에는 해결되지 않은 보류 사유가 있습니다:\n{list}",
+        "acceptLabel": "승인"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "업데이트 거부",
+        "message": "{name}의 {toRef} 업데이트를 거부하시겠습니까? 자동으로 적용되지 않습니다.",
+        "acceptLabel": "거부"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "업데이트 연기",
+        "message": "{name}의 업데이트를 {days}일 동안 연기하시겠습니까?",
+        "acceptLabel": "연기"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "{name}에 대한 승인을 요청했습니다",
+      "approveFailed": "{name}을(를) 승인하지 못했습니다",
+      "rejected": "{name}의 업데이트를 거부했습니다",
+      "rejectFailed": "{name}을(를) 거부하지 못했습니다",
+      "deferred": "{name}의 업데이트를 연기했습니다",
+      "deferFailed": "{name}을(를) 연기하지 못했습니다"
     }
   }
 }

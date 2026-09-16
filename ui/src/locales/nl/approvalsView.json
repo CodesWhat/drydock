@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "{count} weergegeven",
+    "refresh": "Vernieuwen",
+    "loading": "Goedkeuringen laden…",
+    "loadError": "Goedkeuringen konden niet worden geladen",
+    "notifyModeBanner": "De updatemodus is notify. Goedkeuren is uitgeschakeld totdat de modus op manual of auto is ingesteld.",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "In afwachting",
+      "deferred": "Uitgesteld",
+      "decided": "Beslist"
     },
     "columns": {
       "container": "Container",
       "image": "Image",
-      "version": "Version",
+      "version": "Versie",
       "scan": "Scan",
-      "age": "Age"
+      "age": "Ouderdom"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
+      "major": "Hoofdversie",
+      "minor": "Subversie",
       "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "prerelease": "Voorlopige versie",
+      "unknown": "Onbekend"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "Uitgaveopmerkingen en redenen voor tegenhouden tonen",
+      "approve": "Goedkeuren",
+      "approveAriaLabel": "Update goedkeuren",
+      "approveDisabledNotify": "De updatemodus is notify; goedkeuren is uitgeschakeld",
+      "reject": "Afwijzen",
+      "rejectAriaLabel": "Update afwijzen",
+      "defer": "Uitstellen",
+      "deferAriaLabel": "Update uitstellen"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "Details laden…",
+      "holdReasons": "Redenen voor tegenhouden",
+      "viewFullNotes": "Volledige opmerkingen bekijken",
+      "empty": "Geen uitgaveopmerkingen of redenen voor tegenhouden voor deze update"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "Geen goedkeuringen in afwachting",
+      "deferred": "Geen uitgestelde goedkeuringen",
+      "decided": "Nog geen beslissingen over goedkeuringen",
+      "all": "Geen goedkeuringen"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "Annuleren",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "Update goedkeuren",
+        "message": "De update van {name} naar {toRef} goedkeuren?",
+        "softBlockerSuffix": "\n\nDeze update heeft nog openstaande redenen voor tegenhouden:\n{list}",
+        "acceptLabel": "Goedkeuren"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "Update afwijzen",
+        "message": "De update van {name} naar {toRef} afwijzen? Deze wordt niet automatisch toegepast.",
+        "acceptLabel": "Afwijzen"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "Update uitstellen",
+        "message": "De update voor {name} met {days} dagen uitstellen?",
+        "acceptLabel": "Uitstellen"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "Goedkeuring aangevraagd voor {name}",
+      "approveFailed": "Goedkeuren van {name} mislukt",
+      "rejected": "Update voor {name} afgewezen",
+      "rejectFailed": "Afwijzen van {name} mislukt",
+      "deferred": "Update voor {name} uitgesteld",
+      "deferFailed": "Uitstellen van {name} mislukt"
     }
   }
 }

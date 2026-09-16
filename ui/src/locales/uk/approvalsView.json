@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "Показано: {count}",
+    "refresh": "Оновити",
+    "loading": "Завантаження погоджень…",
+    "loadError": "Не вдалося завантажити погодження",
+    "notifyModeBanner": "Режим оновлення: notify. Схвалення вимкнено, доки режим не буде змінено на manual або auto.",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "Очікують",
+      "deferred": "Відкладені",
+      "decided": "Розглянуті"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "Контейнер",
+      "image": "Образ",
+      "version": "Версія",
+      "scan": "Сканування",
+      "age": "Час очікування"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "Основна версія",
+      "minor": "Додаткова версія",
+      "patch": "Виправлення",
+      "prerelease": "Попередня версія",
+      "unknown": "Невідомо"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "Показати примітки до випуску та причини призупинення",
+      "approve": "Схвалити",
+      "approveAriaLabel": "Схвалити оновлення",
+      "approveDisabledNotify": "Режим оновлення: notify; схвалення вимкнено",
+      "reject": "Відхилити",
+      "rejectAriaLabel": "Відхилити оновлення",
+      "defer": "Відкласти",
+      "deferAriaLabel": "Відкласти оновлення"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "Завантаження подробиць…",
+      "holdReasons": "Причини призупинення",
+      "viewFullNotes": "Переглянути повні примітки",
+      "empty": "Для цього оновлення немає приміток до випуску або причин призупинення"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "Немає погоджень, що очікують",
+      "deferred": "Немає відкладених погоджень",
+      "decided": "Ще немає розглянутих погоджень",
+      "all": "Немає погоджень"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "Скасувати",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "Схвалити оновлення",
+        "message": "Схвалити оновлення {name} до {toRef}?",
+        "softBlockerSuffix": "\n\nЦе оновлення має неусунені причини призупинення:\n{list}",
+        "acceptLabel": "Схвалити"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "Відхилити оновлення",
+        "message": "Відхилити оновлення {name} до {toRef}? Воно не буде застосоване автоматично.",
+        "acceptLabel": "Відхилити"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "Відкласти оновлення",
+        "message": "Відкласти оновлення {name} на {days} дн.?",
+        "acceptLabel": "Відкласти"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "Запитано схвалення для {name}",
+      "approveFailed": "Не вдалося схвалити {name}",
+      "rejected": "Оновлення {name} відхилено",
+      "rejectFailed": "Не вдалося відхилити {name}",
+      "deferred": "Оновлення {name} відкладено",
+      "deferFailed": "Не вдалося відкласти {name}"
     }
   }
 }
