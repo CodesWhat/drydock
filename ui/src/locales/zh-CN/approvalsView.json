@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "已显示 {count} 项",
+    "refresh": "刷新",
+    "loading": "正在加载审批…",
+    "loadError": "无法加载审批",
+    "notifyModeBanner": "更新模式为 notify。将模式设为 manual 或 auto 之前，批准操作不可用。",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "待处理",
+      "deferred": "已推迟",
+      "decided": "已决定"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "容器",
+      "image": "镜像",
+      "version": "版本",
+      "scan": "扫描",
+      "age": "等待时间"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "主版本",
+      "minor": "次版本",
+      "patch": "补丁版本",
+      "prerelease": "预发布版本",
+      "unknown": "未知"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "显示发布说明和暂缓原因",
+      "approve": "批准",
+      "approveAriaLabel": "批准更新",
+      "approveDisabledNotify": "更新模式为 notify；批准操作不可用",
+      "reject": "拒绝",
+      "rejectAriaLabel": "拒绝更新",
+      "defer": "推迟",
+      "deferAriaLabel": "推迟更新"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "正在加载详情…",
+      "holdReasons": "暂缓原因",
+      "viewFullNotes": "查看完整说明",
+      "empty": "此更新没有发布说明或暂缓原因"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "没有待处理的审批",
+      "deferred": "没有已推迟的审批",
+      "decided": "尚无已决定的审批",
+      "all": "没有审批"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "取消",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "批准更新",
+        "message": "批准将 {name} 更新到 {toRef}？",
+        "softBlockerSuffix": "\n\n此更新仍有未解决的暂缓原因：\n{list}",
+        "acceptLabel": "批准"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "拒绝更新",
+        "message": "拒绝将 {name} 更新到 {toRef}？此更新将不会自动应用。",
+        "acceptLabel": "拒绝"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "推迟更新",
+        "message": "将 {name} 的更新推迟 {days} 天？",
+        "acceptLabel": "推迟"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "已请求批准 {name}",
+      "approveFailed": "无法批准 {name}",
+      "rejected": "已拒绝 {name} 的更新",
+      "rejectFailed": "无法拒绝 {name}",
+      "deferred": "已推迟 {name} 的更新",
+      "deferFailed": "无法推迟 {name}"
     }
   }
 }

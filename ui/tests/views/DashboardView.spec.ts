@@ -300,6 +300,46 @@ describe('DashboardView', () => {
   });
 
   describe('layout spacing', () => {
+    it('updates the open widget picker to the existing French titles without resetting visibility', async () => {
+      const originalLocale = i18n.global.locale.value;
+      try {
+        i18n.global.locale.value = 'en';
+        const wrapper = await mountDashboard();
+        const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+        if (!(editToggle instanceof HTMLButtonElement)) throw new Error('Missing edit toggle');
+        editToggle.click();
+        await flushPromises();
+        const checkboxes = wrapper.findAll('aside input[type="checkbox"]');
+        expect(checkboxes).toHaveLength(10);
+        await checkboxes[0].setValue(false);
+        expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false);
+        const requests = mockGetAllContainers.mock.calls.length;
+
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(wrapper.findAll('aside label > span.flex-1').map((label) => label.text())).toEqual([
+          'Conteneurs',
+          'Mises à jour disponibles',
+          'Problèmes de sécurité',
+          'Registries',
+          'Approbations',
+          'Mises à jour disponibles',
+          'Vue sécurité',
+          'Utilisation des ressources',
+          'État des hôtes',
+          'Répartition des mises à jour',
+        ]);
+        expect(
+          (wrapper.find('aside input[type="checkbox"]').element as HTMLInputElement).checked,
+        ).toBe(false);
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(requests);
+        expect(mockUpdateContainer).not.toHaveBeenCalled();
+        expect(mockUpdateContainers).not.toHaveBeenCalled();
+      } finally {
+        i18n.global.locale.value = originalLocale;
+      }
+    });
+
     it('extends scroll container edge-to-edge via negative margins on root', () => {
       mockGetAllContainers.mockReturnValue(new Promise(() => {}));
       mockGetAgents.mockReturnValue(new Promise(() => {}));
