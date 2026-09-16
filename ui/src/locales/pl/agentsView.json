@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Odstępy w tabeli agentów",
+        "normal": "Normalne odstępy",
+        "compact": "Małe odstępy"
+      },
       "loading": "Ładowanie agentów...",
       "filterPlaceholder": "Filtruj według nazwy...",
       "clearFilter": "Wyczyść",

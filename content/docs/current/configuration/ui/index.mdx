@@ -128,6 +128,10 @@ Data views that expose view-mode controls toggle between table and card presenta
 
 Toggle between modes using the view mode buttons in the toolbar where they are available. The choice is persisted per view. Below ~640px the layout automatically reflows to cards and the now-redundant toggle is hidden. Utility pages with naturally tabular data may use table-only presentation. The old three-way `list` (accordion) mode was removed in v1.6 — it's table or cards.
 
+### Agent Table Spacing
+
+The Agents toolbar offers **Normal spacing** (the default) and **Compact spacing**. Compact spacing reduces table-row padding without shrinking the row's interactive target below 44px. The choice is saved per browser and participates in **Sync across devices** when enabled. It does not change other views, column visibility or card layout; the control is hidden while cards are shown, and the saved spacing returns with the table.
+
 ### Column Visibility
 
 Containers, Agents, Audit, Security, Servers, and Watchers each expose a column show/hide picker in the toolbar, letting you hide low-priority columns from the table. Hidden columns are persisted per view and have no effect in card mode.

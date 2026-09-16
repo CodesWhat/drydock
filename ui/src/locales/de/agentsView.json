@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Abstände der Agententabelle",
+        "normal": "Normale Abstände",
+        "compact": "Kompakte Abstände"
+      },
       "loading": "Agents werden geladen...",
       "filterPlaceholder": "Nach Name filtern...",
       "clearFilter": "Löschen",

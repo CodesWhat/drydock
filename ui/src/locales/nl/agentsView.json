@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Afstand in de agenttabel",
+        "normal": "Normale afstand",
+        "compact": "Compacte afstand"
+      },
       "loading": "Agenten laden...",
       "filterPlaceholder": "Filter op naam...",
       "clearFilter": "Wissen",

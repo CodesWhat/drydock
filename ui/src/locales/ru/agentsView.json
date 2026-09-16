@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Интервалы в таблице агентов",
+        "normal": "Обычные интервалы",
+        "compact": "Компактные интервалы"
+      },
       "loading": "Загрузка агентов...",
       "filterPlaceholder": "Фильтр по имени...",
       "clearFilter": "Очистить",

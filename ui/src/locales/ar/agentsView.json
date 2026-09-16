@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "تباعد جدول الوكلاء",
+        "normal": "تباعد عادي",
+        "compact": "تباعد مضغوط"
+      },
       "loading": "جارٍ تحميل الوكلاء...",
       "filterPlaceholder": "تصفية حسب الاسم...",
       "clearFilter": "مسح",

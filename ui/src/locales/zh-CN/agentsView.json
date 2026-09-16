@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "代理表格间距",
+        "normal": "标准间距",
+        "compact": "紧凑间距"
+      },
       "loading": "正在加载代理...",
       "filterPlaceholder": "按名称筛选...",
       "clearFilter": "清除",
