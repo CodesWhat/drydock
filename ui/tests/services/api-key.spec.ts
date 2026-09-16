@@ -136,13 +136,13 @@ describe('api-key service', () => {
         json: vi.fn().mockRejectedValue(new Error('not json')),
       } as unknown as Response);
 
-      await expect(listApiKeys()).rejects.toThrow('Failed to load API keys (HTTP 502)');
+      await expect(listApiKeys()).rejects.toThrow('Could not load API keys (HTTP 502)');
     });
 
     it('falls back to a status message when the error body has no error string', async () => {
       vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 5 }, { ok: false, status: 500 }));
 
-      await expect(listApiKeys()).rejects.toThrow('Failed to load API keys (HTTP 500)');
+      await expect(listApiKeys()).rejects.toThrow('Could not load API keys (HTTP 500)');
     });
   });
 

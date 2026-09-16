@@ -100,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- API-key list, create and revoke failures use the selected language when the server provides no useful error message. Blank server errors now show the translated fallback and HTTP status; nonblank server diagnostics are preserved.
+
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
 - Full-page update previews now reuse the selected language's yes/no text for running status and compose-file writes, matching the side panel.
 - The Approvals screen now also translates its remaining 14 supported languages, including confirmation prompts, hold reasons, loading and empty states, and success/error messages. Update-mode values and approval behavior are unchanged.
