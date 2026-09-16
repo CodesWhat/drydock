@@ -647,7 +647,13 @@ jobs:
         # overhead, npm, and the OS.
         env:
           NODE_OPTIONS: --max-old-space-size=1536
-        run: npm run test:unit -- --maxWorkers=1
+        run: |
+          # Emit bounded numeric resource evidence before an abrupt runner exit.
+          # No environment, command arguments or application data is collected.
+          node ../scripts/ci-resource-sampler.mjs "$$" &
+          resource_sampler_pid=$!
+          trap 'kill "$resource_sampler_pid" 2>/dev/null || true; wait "$resource_sampler_pid" 2>/dev/null || true' EXIT
+          npm run test:unit -- --maxWorkers=1
         working-directory: ui
 
       - name: Normalize coverage paths
