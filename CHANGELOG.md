@@ -105,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
+- Container uptime uses localized phrases and duration units in table, cards and full-page details. Open views follow language changes while retaining their existing tick intervals, timestamp tooltips and selection.
 - The Approvals screen now uses French and Spanish text for loading, empty states, action confirmations and notifications while preserving update-mode names and action behavior.
 - Dashboard customization reuses each widget's existing translated title, so its visibility controls follow the selected language without changing the layout or saved visibility.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.

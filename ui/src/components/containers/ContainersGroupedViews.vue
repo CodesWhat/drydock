@@ -103,7 +103,7 @@ const nowMs = useNow(
   30_000,
   () => visibleColumns.value.has('uptime') || containerViewMode.value === 'cards',
 );
-const { t, te } = useI18n();
+const { t, te, locale } = useI18n();
 const { resolveHost } = useAgentHosts();
 
 function getEnrichedPorts(c: Container) {
@@ -1002,7 +1002,7 @@ onScopeDispose(() => {
         <template #cell-uptime="{ row: c }">
           <template v-if="isContainerTableRow(c)">
           <span class="text-2xs-plus dd-text-secondary font-mono" v-tooltip.top="tt(c.details?.startedAt ?? '')">
-            {{ formatUptimeFromIso(c.details?.startedAt, nowMs) }}
+            {{ formatUptimeFromIso(c.details?.startedAt, nowMs, locale, t) }}
           </span>
           </template>
         </template>
@@ -1381,7 +1381,7 @@ onScopeDispose(() => {
               class="text-2xs-plus dd-text-muted font-mono"
               data-test="container-card-uptime"
               v-tooltip.top="tt(c.details.startedAt)"
-            >{{ formatUptimeFromIso(c.details.startedAt, nowMs) }}</span>
+            >{{ formatUptimeFromIso(c.details.startedAt, nowMs, locale, t) }}</span>
 
             <!-- Card actions: the same icon-style action row as the table's #actions slot
                  above (same buttons/handlers/conditions — stop/start/restart/scan/update/

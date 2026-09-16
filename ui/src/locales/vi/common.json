@@ -1,5 +1,6 @@
 {
   "common": {
+    "uptime": "Đã chạy {duration}",
     "apiResponse": {
       "html": "{context} trả về HTML thay vì JSON. Kiểm tra xem máy chủ API hoặc các mô phỏng demo có đang chạy không.",
       "contentType": "{context} trả về {contentType} thay vì JSON.",

@@ -1,5 +1,6 @@
 {
   "common": {
+    "uptime": "Läuft seit {duration}",
     "apiResponse": {
       "html": "{context} hat HTML statt JSON zurückgegeben. Prüfe, ob der API-Server oder die Demo-Simulationen laufen.",
       "contentType": "{context} hat {contentType} statt JSON zurückgegeben.",

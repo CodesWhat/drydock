@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 import type AppButton from '@/components/AppButton.vue';
 import ContainerFullPageTabContent from '@/components/containers/ContainerFullPageTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
@@ -434,6 +435,44 @@ function findButtonByText(wrapper: ReturnType<typeof mountComponent>, text: stri
 }
 
 describe('ContainerFullPageTabContent', () => {
+  it('localizes live uptime without changing its timestamp or starting an action', async () => {
+    const originalLocale = i18n.global.locale.value;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-16T17:00:00Z'));
+    i18n.global.locale.value = 'en';
+    const startedAt = new Date(Date.now() - 59_000).toISOString();
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+    });
+    const container = selectedContainer.value;
+    const wrapper = mountComponent();
+    try {
+      const value = wrapper.findAll('.font-mono').find((node) => node.text() === 'Up 59s');
+      expect(value).toBeDefined();
+      const initialTimers = vi.getTimerCount();
+      i18n.global.locale.value = 'fr';
+      await nextTick();
+      expect(value!.text()).toBe('Actif depuis 59s');
+      expect(vi.getTimerCount()).toBe(initialTimers);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(value!.text()).toBe('Actif depuis 1min');
+      i18n.global.locale.value = 'ar';
+      await nextTick();
+      expect(value!.text()).toBe('يعمل منذ 1 د');
+      expect(selectedContainer.value).toBe(container);
+      expect(selectedContainer.value.details).toMatchObject({ startedAt });
+      expect(mockRunContainerPreview).not.toHaveBeenCalled();
+      expect(mockConfirmUpdate).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+      i18n.global.locale.value = originalLocale;
+      const remainingTimers = vi.getTimerCount();
+      vi.useRealTimers();
+      expect(remainingTimers).toBe(0);
+    }
+  });
+
   afterEach(() => {
     resetState();
     updateMode.value = 'manual';

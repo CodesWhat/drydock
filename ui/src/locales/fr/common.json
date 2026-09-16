@@ -1,5 +1,6 @@
 {
   "common": {
+    "uptime": "Actif depuis {duration}",
     "apiResponse": {
       "html": "{context} a renvoyé du HTML au lieu de JSON. Vérifiez que le serveur API ou les simulations de démonstration fonctionnent.",
       "contentType": "{context} a renvoyé {contentType} au lieu de JSON.",
