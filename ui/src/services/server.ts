@@ -1,7 +1,11 @@
+import { i18n } from '../boot/i18n';
+
 async function getServer() {
   const response = await fetch('/api/v1/server', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get server: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('serversView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return response.json();
 }

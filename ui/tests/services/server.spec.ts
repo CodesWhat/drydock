@@ -23,11 +23,14 @@ describe('Server Service', () => {
   it('throws when fetching server configuration fails', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      status: 500,
       statusText: 'Internal Server Error',
       json: async () => ({}),
     } as any);
 
-    await expect(getServer()).rejects.toThrow('Failed to get server: Internal Server Error');
+    await expect(getServer()).rejects.toThrow(
+      'Failed to load server data (HTTP 500): Internal Server Error',
+    );
   });
 
   it('fetches security runtime status', async () => {

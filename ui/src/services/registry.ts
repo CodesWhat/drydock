@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
@@ -82,7 +83,9 @@ function getRegistryProviderColor(provider: string) {
 async function getAllRegistries() {
   const response = await fetch('/api/v1/registries', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get registries: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('registriesView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
   return extractCollectionData<ApiComponentResponse>(payload);
