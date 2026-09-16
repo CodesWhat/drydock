@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent } from 'vue';
+import { i18n } from '@/boot/i18n';
 import type { ApprovalDetailResponse, ApprovalRecord } from '@/services/approval';
 import type { ContainerReleaseNotes } from '@/types/container';
 import ApprovalsView from '@/views/ApprovalsView.vue';
@@ -211,8 +212,11 @@ function deferred<T>() {
 }
 
 describe('ApprovalsView', () => {
+  const originalLocale = i18n.global.locale.value;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    i18n.global.locale.value = 'en';
     mockRoute.query = {};
     mockRoute.path = '/approvals';
     mockUpdateMode.value = 'manual';
@@ -230,6 +234,204 @@ describe('ApprovalsView', () => {
       wrapper.unmount();
     }
     document.body.innerHTML = '';
+    i18n.global.locale.value = originalLocale;
+  });
+
+  describe.each([
+    {
+      locale: 'fr' as const,
+      loading: 'Chargement des approbations…',
+      loadError: 'Impossible de charger les approbations',
+      count: '1 affichée',
+      pending: 'En attente',
+      empty: 'Aucune approbation en attente',
+      notify:
+        'Le mode de mise à jour est notify. Les approbations sont désactivées tant que le mode est différent de manual ou auto.',
+      disabled: 'Le mode de mise à jour est notify ; les approbations sont désactivées',
+      cancel: 'Annuler',
+      holdSuffix:
+        '\n\nCette mise à jour présente des motifs de mise en attente non résolus :\n• Policy reason',
+      detailEmpty: 'Aucune note de version ni motif de mise en attente pour cette mise à jour',
+      actions: [
+        [
+          'approve',
+          'Approuver',
+          'Approuver la mise à jour',
+          'Approuver la mise à jour de app vers 1.1.0 ?',
+          'Approbation demandée pour app',
+          'Impossible d’approuver app',
+        ],
+        [
+          'reject',
+          'Rejeter',
+          'Rejeter la mise à jour',
+          'Rejeter la mise à jour de app vers 1.1.0 ? Elle ne sera pas appliquée automatiquement.',
+          'Mise à jour rejetée pour app',
+          'Impossible de rejeter app',
+        ],
+        [
+          'defer',
+          'Reporter',
+          'Reporter la mise à jour',
+          'Reporter la mise à jour de app de 7 jours ?',
+          'Mise à jour reportée pour app',
+          'Impossible de reporter app',
+        ],
+      ],
+    },
+    {
+      locale: 'es' as const,
+      loading: 'Cargando aprobaciones…',
+      loadError: 'No se pudieron cargar las aprobaciones',
+      count: '1 mostrada',
+      pending: 'Pendientes',
+      empty: 'No hay aprobaciones pendientes',
+      notify:
+        'El modo de actualización es notify. Las aprobaciones están desactivadas hasta que el modo se cambie a manual o auto.',
+      disabled: 'El modo de actualización es notify; las aprobaciones están desactivadas',
+      cancel: 'Cancelar',
+      holdSuffix: '\n\nEsta actualización tiene motivos de espera sin resolver:\n• Policy reason',
+      detailEmpty: 'No hay notas de la versión ni motivos de espera para esta actualización',
+      actions: [
+        [
+          'approve',
+          'Aprobar',
+          'Aprobar actualización',
+          '¿Aprobar la actualización de app a 1.1.0?',
+          'Aprobación solicitada para app',
+          'No se pudo aprobar app',
+        ],
+        [
+          'reject',
+          'Rechazar',
+          'Rechazar actualización',
+          '¿Rechazar la actualización de app a 1.1.0? No se aplicará automáticamente.',
+          'Actualización rechazada para app',
+          'No se pudo rechazar app',
+        ],
+        [
+          'defer',
+          'Posponer',
+          'Posponer actualización',
+          '¿Posponer la actualización de app durante 7 días?',
+          'Actualización pospuesta para app',
+          'No se pudo posponer app',
+        ],
+      ],
+    },
+  ])('$locale localization', (copy) => {
+    beforeEach(() => {
+      i18n.global.locale.value = copy.locale;
+    });
+
+    it('renders localized loading and empty states', async () => {
+      const response = deferred<ReturnType<typeof makeListResponse>>();
+      mockListApprovals.mockReturnValue(response.promise);
+      const wrapper = await mountView();
+      expect(wrapper.text()).toContain(copy.loading);
+      response.resolve(makeListResponse([]));
+      await flushPromises();
+      expect(wrapper.find('.empty-state').text()).toBe(copy.empty);
+      expect(wrapper.text()).not.toContain(copy.loading);
+    });
+
+    it('renders a localized fallback when loading fails without an error message', async () => {
+      mockListApprovals.mockRejectedValue(null);
+      const wrapper = await mountView();
+      expect(wrapper.text()).toContain(copy.loadError);
+    });
+
+    it('updates the existing view when its locale changes', async () => {
+      i18n.global.locale.value = 'en';
+      const wrapper = await mountView();
+      expect(wrapper.text()).toContain('1 shown');
+      i18n.global.locale.value = copy.locale;
+      await flushPromises();
+      expect(wrapper.text()).toContain(copy.count);
+      expect(wrapper.text()).toContain(copy.pending);
+      expect(mockListApprovals).toHaveBeenCalledTimes(1);
+    });
+
+    it('explains notify mode while keeping approval disabled', async () => {
+      mockUpdateMode.value = 'notify';
+      const wrapper = await mountView();
+      const approveButton = findButtonByText(
+        wrapper,
+        i18n.global.t('approvalsView.actions.approve'),
+      )!;
+      expect(wrapper.text()).toContain(copy.notify);
+      expect(approveButton.attributes('title')).toBe(copy.disabled);
+      expect(approveButton.attributes('disabled')).toBeDefined();
+      await approveButton.trigger('click');
+      expect(mockConfirmRequire).not.toHaveBeenCalled();
+      expect(mockApproveApproval).not.toHaveBeenCalled();
+    });
+
+    it('localizes expanded empty details', async () => {
+      mockGetContainerReleaseNotes.mockResolvedValue(null);
+      const wrapper = await mountView();
+      await wrapper.find('[data-testid="approval-expand-toggle"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-testid="approval-detail-row"]').text()).toBe(copy.detailEmpty);
+    });
+
+    it.each(copy.actions)(
+      'localizes %s confirmation and success without changing the action',
+      async (action, label, header, message, success) => {
+        mockGetApproval.mockResolvedValue(
+          makeDetail({
+            holdReasons: [{ reason: 'scan', message: 'Policy reason', actionable: false }],
+          }),
+        );
+        const wrapper = await mountView();
+        const button = findButtonByText(wrapper, i18n.global.t(`approvalsView.actions.${action}`))!;
+        await button.trigger('click');
+        await flushPromises();
+        expect(button.attributes('aria-label')).toBe(header);
+        expect(mockConfirmRequire).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            header,
+            message: action === 'approve' ? message + copy.holdSuffix : message,
+            acceptLabel: label,
+            rejectLabel: copy.cancel,
+          }),
+        );
+        const service =
+          action === 'approve'
+            ? mockApproveApproval
+            : action === 'reject'
+              ? mockRejectApproval
+              : mockDeferApproval;
+        expect(service).not.toHaveBeenCalled();
+        await mockConfirmRequire.mock.calls[0][0].accept();
+        expect(service).toHaveBeenCalledExactlyOnceWith(
+          ...(action === 'defer' ? ['approval-1', { days: 7 }] : ['approval-1']),
+        );
+        expect(mockToast.success).toHaveBeenCalledExactlyOnceWith(success);
+        expect(mockListApprovals).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each(copy.actions)(
+      'localizes the %s fallback failure',
+      async (action, _label, _header, _message, _success, failure) => {
+        const service =
+          action === 'approve'
+            ? mockApproveApproval
+            : action === 'reject'
+              ? mockRejectApproval
+              : mockDeferApproval;
+        service.mockRejectedValue(null);
+        const wrapper = await mountView();
+        await findButtonByText(wrapper, i18n.global.t(`approvalsView.actions.${action}`))!.trigger(
+          'click',
+        );
+        await flushPromises();
+        await mockConfirmRequire.mock.calls[0][0].accept();
+        expect(mockToast.error).toHaveBeenCalledExactlyOnceWith(failure);
+        expect(mockToast.success).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('initial load', () => {
