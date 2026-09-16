@@ -100,8 +100,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- API-key list, create and revoke failures use the selected language when the server provides no useful error message. Blank server errors now show the translated fallback and HTTP status; nonblank server diagnostics are preserved.
-
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
 - Full-page update previews now reuse the selected language's yes/no text for running status and compose-file writes, matching the side panel.
 - The Approvals screen now also translates its remaining 14 supported languages, including confirmation prompts, hold reasons, loading and empty states, and success/error messages. Update-mode values and approval behavior are unchanged.
@@ -118,6 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Configuration editor snapshots now omit both stored and effective values for watcher and notification fields still owned by live interpolation after an external file edit, or inherited through YAML parent aliases. These fields remain read-only and reject edits with HTTP 409.
 - Settings, preference sync and notification editing preserve HTTP error status when a response contains JSON `null` or an unusable error message, instead of showing a JavaScript exception or coerced object text.
+- API-key list, create and revoke failures use the selected language when the server provides no useful error message. Blank server errors now show the translated fallback and HTTP status; nonblank server diagnostics are preserved.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
 - Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.
 
