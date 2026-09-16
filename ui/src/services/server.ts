@@ -1,3 +1,5 @@
+import { i18n } from '../boot/i18n';
+
 async function getServer() {
   const response = await fetch('/api/v1/server', { credentials: 'include' });
   if (!response.ok) {
@@ -19,7 +21,9 @@ async function getSecurityRuntime() {
   const response = await fetch('/api/v1/server/security/runtime', { credentials: 'include' });
   if (!response.ok) {
     const details = await apiErrorDetails(response);
-    throw new Error(`Failed to get security runtime status: ${response.statusText}${details}`);
+    throw new Error(
+      `${i18n.global.t('securityView.runtimeLoadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}${details}`,
+    );
   }
   return response.json();
 }
@@ -34,7 +38,9 @@ async function manageSecurityAsset(
   });
   if (!response.ok) {
     const details = await apiErrorDetails(response);
-    throw new Error(`Scanner asset operation failed: ${response.statusText}${details}`);
+    throw new Error(
+      `${i18n.global.t('securityView.runtimeTools.assetOperationFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}${details}`,
+    );
   }
   return response.json();
 }
