@@ -339,6 +339,13 @@ function sanitizeViews(data: Record<string, unknown>): void {
         delete v[viewKey];
       } else {
         sanitizeViewHiddenColumns(v[viewKey] as Record<string, unknown>, viewKey);
+        if (viewKey === 'agents') {
+          deleteIfInvalid(
+            v[viewKey] as Record<string, unknown>,
+            'density',
+            new Set(['normal', 'compact']),
+          );
+        }
       }
     }
   }

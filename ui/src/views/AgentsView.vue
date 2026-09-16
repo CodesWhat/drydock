@@ -261,6 +261,12 @@ onUnmounted(() => {
 const searchQuery = ref('');
 const showFilters = ref(false);
 const agentViewMode = useViewMode('agents');
+const agentDensity = usePreference(
+  () => preferences.views.agents.density,
+  (value) => {
+    preferences.views.agents.density = value;
+  },
+);
 // Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
 // width has already forced cards, so the switcher isn't a dead control at that size.
 const cardReflowForced = ref(false);
@@ -567,6 +573,13 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </AppButton>
             </template>
             <template #extra-buttons>
+              <select v-if="!inCardMode"
+                      v-model="agentDensity"
+                      :aria-label="t('agentsView.list.density.label')"
+                      class="min-h-[44px] px-2 dd-rounded text-2xs-plus dd-bg dd-text border dd-border-strong cursor-pointer">
+                <option value="normal">{{ t('agentsView.list.density.normal') }}</option>
+                <option value="compact">{{ t('agentsView.list.density.compact') }}</option>
+              </select>
               <DataTableColumnPicker
                 v-if="!isCompact"
                 :columns="pickerColumns"
@@ -587,6 +600,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      :selected-key="selectedAgent?.id ?? null"
                      :hidden-column-keys="hiddenColumnKeys"
                      :prefer-cards="agentViewMode === 'cards'"
+                     :density="agentDensity"
                      :hoist-card-sort="inCardMode"
                      @update:sort-key="agentSortKey = $event"
                      @update:sort-asc="agentSortAsc = $event"

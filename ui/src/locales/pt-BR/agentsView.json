@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Espaçamento da tabela de agentes",
+        "normal": "Espaçamento normal",
+        "compact": "Espaçamento compacto"
+      },
       "loading": "Carregando agentes...",
       "filterPlaceholder": "Filtrar por nome...",
       "clearFilter": "Limpar",

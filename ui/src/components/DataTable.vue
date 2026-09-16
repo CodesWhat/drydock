@@ -44,6 +44,7 @@ export interface DataTableColumn {
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { preferences } from '../preferences/store';
+import type { TableDensity } from '../preferences/schema';
 import {
   ACTIONS_COLUMN_KEY,
   clampColumnSize,
@@ -68,6 +69,7 @@ const props = withDefaults(
     /** Optional width (e.g. '160px') for the trailing actions column. Defaults to 80px. */
     actionsWidth?: string;
     compact?: boolean;
+    density?: TableDensity;
     fixedLayout?: boolean;
     virtualScroll?: boolean;
     virtualRowHeight?: number;
@@ -117,6 +119,7 @@ const props = withDefaults(
     showActions: false,
     actionsWidth: '80px',
     compact: false,
+    density: 'normal',
     fixedLayout: false,
     virtualScroll: false,
     virtualRowHeight: 56,
@@ -1285,8 +1288,9 @@ function handleCardSortChange(event: Event): void {
             <template v-else>
               <td v-for="(col, colIndex) in resolvedColumns" :key="col.key"
                   :data-col-key="col.key"
-                  class="dd-data-table-cell py-3 align-middle"
+                  class="dd-data-table-cell align-middle"
                   :class="[
+                    density === 'compact' ? 'py-1.5 h-[44px]' : 'py-3',
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
                     col.icon ? 'relative text-center pl-5 pr-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
                     pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-10'] : '',
@@ -1307,8 +1311,8 @@ function handleCardSortChange(event: Event): void {
               <td
                 v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="dd-data-table-cell dd-data-table-actions-cell px-3 py-3 text-right whitespace-nowrap relative"
-                :class="hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-10']"
+                class="dd-data-table-cell dd-data-table-actions-cell px-3 text-right whitespace-nowrap relative"
+                :class="[density === 'compact' ? 'py-1.5 h-[44px]' : 'py-3', hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-10']]"
               >
                 <slot name="actions" :row="row" :card-mode="false" />
               </td>
