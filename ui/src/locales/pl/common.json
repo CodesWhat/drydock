@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "{context} zwrócił HTML zamiast JSON. Sprawdź, czy serwer API lub symulacje demonstracyjne są uruchomione.",
+      "contentType": "{context} zwrócił {contentType} zamiast JSON.",
+      "invalidJson": "{context} zwrócił nieprawidłowy JSON."
+    },
     "loading": "Ładowanie…",
     "back": "Wstecz",
     "cancel": "Anuluj",

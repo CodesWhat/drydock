@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "{context} 傳回了 HTML 而不是 JSON。請檢查 API 伺服器或示範模擬服務是否正在執行。",
+      "contentType": "{context} 傳回了 {contentType} 而不是 JSON。",
+      "invalidJson": "{context} 傳回了無效的 JSON。"
+    },
     "loading": "載入中…",
     "back": "返回",
     "cancel": "取消",

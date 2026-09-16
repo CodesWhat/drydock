@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "{context} trả về HTML thay vì JSON. Kiểm tra xem máy chủ API hoặc các mô phỏng demo có đang chạy không.",
+      "contentType": "{context} trả về {contentType} thay vì JSON.",
+      "invalidJson": "{context} trả về JSON không hợp lệ."
+    },
     "loading": "Đang tải…",
     "back": "Quay lại",
     "cancel": "Hủy",
