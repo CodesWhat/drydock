@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
@@ -110,7 +111,9 @@ function getTriggerProviderColor(type: string) {
 async function getAllTriggers() {
   const response = await fetch('/api/v1/triggers', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get triggers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('triggersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
   return extractCollectionData<ApiComponentResponse>(payload);

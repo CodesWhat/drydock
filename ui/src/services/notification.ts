@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import { readHttpError } from './error-response';
 
@@ -35,7 +36,9 @@ export interface NotificationRuleUpdate {
 async function getAllNotificationRules(): Promise<NotificationRule[]> {
   const response = await fetch('/api/v1/notifications', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get notifications: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('notificationsView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
   return extractCollectionData<NotificationRule>(payload);
