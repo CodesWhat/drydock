@@ -15,6 +15,18 @@ const TabLabels = defineComponent({
   },
 });
 
+const englishLabels = ['Overview', 'Stats', 'Logs', 'Environment', 'Labels', 'Actions'];
+// These locale/label pairs are valid local terms, not untranslated fallbacks.
+const sharedLabels = new Set([
+  'de:Logs',
+  'de:Labels',
+  'fr:Logs',
+  'fr:Actions',
+  'nl:Logs',
+  'pt-BR:Logs',
+  'pt-BR:Labels',
+]);
+
 describe('container detail tab translations', () => {
   const originalLocale = i18n.global.locale.value;
 
@@ -23,20 +35,20 @@ describe('container detail tab translations', () => {
   });
 
   it.each(SUPPORTED_LOCALES.filter((locale) => locale !== 'en'))(
-    'renders localized overview and environment tabs in %s',
+    'renders all six localized tabs in %s',
     (locale) => {
       i18n.global.locale.value = locale;
       const wrapper = mount(TabLabels);
       try {
         const labels = wrapper.findAll('span').map((tab) => tab.text());
         expect(labels).toHaveLength(6);
-        for (const label of labels) {
+        for (const [index, label] of labels.entries()) {
           expect(label).not.toBe('');
           expect(label).not.toContain('containerComponents.');
+          if (!sharedLabels.has(`${locale}:${englishLabels[index]}`)) {
+            expect(label).not.toBe(englishLabels[index]);
+          }
         }
-        // Technical loanwords such as Logs or Labels can legitimately match English.
-        expect(labels[0]).not.toBe('Overview');
-        expect(labels[3]).not.toBe('Environment');
       } finally {
         wrapper.unmount();
       }
