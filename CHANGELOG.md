@@ -112,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dashboard customization reuses each widget's existing translated title, so its visibility controls follow the selected language without changing the layout or saved visibility.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
 - Frontend JSON-response diagnostics use the selected language for invalid JSON, HTML and unexpected content types, preserving the API context and transport errors.
+- Container image ages follow the selected language in full-page and side-panel details, including the future-date label. Months are spelled out to distinguish them from minutes; timestamps and age thresholds are unchanged.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.

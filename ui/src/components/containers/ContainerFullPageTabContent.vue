@@ -202,7 +202,7 @@ const uptimeString = computed(() =>
   formatUptimeFromIso(selectedContainer.value?.details?.startedAt, nowMs.value),
 );
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
@@ -389,7 +389,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               >
                 <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.imageAge') }}</span>
                 <span class="font-mono dd-text">
-                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created) }}
+                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created, t, locale) }}
                 </span>
                 <span class="min-w-0 truncate dd-text-muted">
                   {{ formatTimestamp(selectedContainer.imageCreated || selectedImageMetadata.created) }}
