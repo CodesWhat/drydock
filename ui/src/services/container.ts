@@ -167,7 +167,9 @@ async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get container recent status: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('dashboardView.dataLoadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse<ContainerRecentStatusResponse>(response, 'Container recent status API');
 }

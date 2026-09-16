@@ -265,11 +265,12 @@ describe('Container Service', () => {
     it('throws when recent status response is not ok', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 503,
         statusText: 'Service Unavailable',
       } as any);
 
       await expect(getContainerRecentStatus()).rejects.toThrow(
-        'Failed to get container recent status: Service Unavailable',
+        'Failed to load dashboard data (HTTP 503): Service Unavailable',
       );
     });
   });
