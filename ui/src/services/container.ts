@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import type {
   ApiContainerTrigger,
   ApiContainerUpdateOperation,
@@ -143,7 +144,9 @@ async function getAllContainers(
     ...(options.signal ? { signal: options.signal } : {}),
   });
   if (!response.ok) {
-    throw new Error(`Failed to get containers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containersView.error.loadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response, 'Containers API');
   return extractCollectionData<ApiContainerInput>(payload);
@@ -175,7 +178,9 @@ async function refreshAllContainers() {
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to refresh all containers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containersView.error.recheckFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse(response, 'Container refresh API');
 }

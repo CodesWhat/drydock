@@ -130,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fleet health now reads a names-only agent roster independently of status data, so configured clients remain visible when the first status request fails. Unavailable rows cannot refresh inventory; successful reads reconcile identities without polling or a persistent cache.
 
 - Notification bell relative times now follow the selected language, including locale changes while the dropdown is open.
+- Container inventory loading, container rechecks and agent-list failures now use the selected language and include HTTP status codes while retaining reason phrases and network diagnostics. Request options, abort signals and scan behavior are unchanged.
 
 - **Monthly and longer watcher schedules could expire scans after 1 ms.** The scan deadline was twice the cron interval, which overflowed Node's timer limit and cleared the in-flight scan guard almost immediately. Deadlines now stop at the largest supported delay, preserving the existing ten-minute floor and shorter schedule behavior.
 - Disconnected edge agents can no longer publish in-flight components over their reconnected replacements. Retired registrations clean up only their own components, and disconnected proxy, log, delete and exec requests fail before allocating request state or sending frames.
