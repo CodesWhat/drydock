@@ -785,12 +785,12 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "개요",
+        "stats": "통계",
+        "logs": "로그",
+        "environment": "환경",
+        "labels": "레이블",
+        "actions": "작업"
       }
     },
     "logViewer": {
