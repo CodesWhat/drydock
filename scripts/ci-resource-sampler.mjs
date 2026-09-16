@@ -51,13 +51,31 @@ export async function collectResources(procRoot = '/proc', workdir = process.cwd
   return { at: new Date().toISOString(), memoryKiB, diskBytes, processes: processes.slice(0, 5) };
 }
 
-function parentIsAlive(pid) {
+async function parentIdentity(pid, procRoot) {
+  const contents = await readOptional(join(procRoot, String(pid), 'stat'));
+  const closingParen = contents.lastIndexOf(')');
+  if (closingParen < 0) return null;
+  const fields = contents
+    .slice(closingParen + 1)
+    .trim()
+    .split(/\s+/);
+  const startTime = fields[19];
+  return /^\d+$/.test(startTime ?? '') ? { state: fields[0], startTime } : null;
+}
+
+export async function parentIsAlive(pid, expectedStartTime = null, procRoot = '/proc') {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
-    return error.code === 'EPERM';
+    if (error.code !== 'EPERM') return false;
   }
+  if (expectedStartTime === null) return true;
+  const current = await parentIdentity(pid, procRoot);
+  return (
+    current !== null &&
+    !['Z', 'X', 'x'].includes(current.state) &&
+    current.startTime === expectedStartTime
+  );
 }
 
 async function main(args) {
@@ -75,7 +93,13 @@ async function main(args) {
     console.error('Usage: ci-resource-sampler.mjs parent-pid [interval-ms<=15000] [samples<=80]');
     return 2;
   }
-  for (let index = 0; index < Number(count) && parentIsAlive(Number(parent)); index++) {
+  const parentPid = Number(parent);
+  const initialParent = await parentIdentity(parentPid, '/proc');
+  for (
+    let index = 0;
+    index < Number(count) && (await parentIsAlive(parentPid, initialParent?.startTime ?? null));
+    index++
+  ) {
     console.log(`CI_RESOURCE ${JSON.stringify(await collectResources())}`);
     if (index + 1 < Number(count)) await setTimeout(Number(interval));
   }

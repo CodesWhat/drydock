@@ -6,10 +6,63 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { collectResources } from './ci-resource-sampler.mjs';
+import { collectResources, parentIsAlive } from './ci-resource-sampler.mjs';
 
 const script = fileURLToPath(new URL('./ci-resource-sampler.mjs', import.meta.url));
 const samplePrefix = 'CI_RESOURCE ';
+
+async function parentFixture(t, state, startTime = '9007199254740993') {
+  const root = await mkdtemp(join(tmpdir(), 'dd-ci-parent-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, String(process.pid)));
+  const path = join(root, String(process.pid), 'stat');
+  await writeFile(
+    path,
+    `${process.pid} (parent ) name) ${state} ${Array(18).fill('0').join(' ')} ${startTime}\n`,
+  );
+  return { root, path };
+}
+
+test('recognizes the original live parent despite spaces and parentheses in its name', async (t) => {
+  const { root } = await parentFixture(t, 'S');
+  assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), true);
+});
+
+for (const state of ['Z', 'X', 'x']) {
+  test(`stops for a ${state} parent even while its PID still exists`, async (t) => {
+    const { root } = await parentFixture(t, state);
+    assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), false);
+  });
+}
+
+test('stops when the same PID has a different start time without numeric rounding', async (t) => {
+  const { root } = await parentFixture(t, 'S', '9007199254740992');
+  assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), false);
+});
+
+test('stops when previously available parent identity disappears', async (t) => {
+  const { root, path } = await parentFixture(t, 'S');
+  await rm(path);
+  assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), false);
+});
+
+test('stops when previously available parent identity becomes malformed', async (t) => {
+  const { root, path } = await parentFixture(t, 'S');
+  for (const value of [
+    'invalid',
+    `${process.pid} (parent) S 0`,
+    `${process.pid} (parent) S ${Array(18).fill('0').join(' ')} invalid`,
+  ]) {
+    await writeFile(path, value);
+    assert.equal(await parentIsAlive(process.pid, '9007199254740993', root), false);
+  }
+});
+
+test('retains portable PID liveness when no initial proc identity is available', async (t) => {
+  const { root, path } = await parentFixture(t, 'S');
+  await rm(path);
+  assert.equal(await parentIsAlive(process.pid, null, root), true);
+});
 
 test('reads only numeric Linux fields and bounds the highest-RSS process list', async (t) => {
   const fixture = await mkdtemp(join(tmpdir(), 'dd-ci-resources-'));
