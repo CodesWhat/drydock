@@ -94,6 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- The current translation guide distinguishes Crowdin UI contributions, in-repository README translations and maintainer feature keys that enter synchronization after merge.
+
 - **The agents page's paired Gitea registry example had the controller talking HTTPS to an agent serving plain HTTP.** The controller block set `DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem`, but the agent block above it had no `DD_SERVER_TLS_*` variables or certificate mounts, so the example copied as written could never connect. The agent block now mounts `agent.pem`/`agent-key.pem` and sets `DD_SERVER_TLS_ENABLED`, `DD_SERVER_TLS_CERT`, and `DD_SERVER_TLS_KEY`, with a comment noting the certificate must be signed by the `agent-ca.pem` the controller mounts and be valid for the host the controller dials.
 
 ### Fixed
@@ -102,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
+- Frontend JSON-response diagnostics use the selected language for invalid JSON, HTML and unexpected content types, preserving the API context and transport errors.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.

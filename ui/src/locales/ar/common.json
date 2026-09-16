@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "أعاد {context} محتوى HTML بدلاً من JSON. تحقق من تشغيل خادم API أو خدمات المحاكاة التجريبية.",
+      "contentType": "أعاد {context} محتوى {contentType} بدلاً من JSON.",
+      "invalidJson": "أعاد {context} بيانات JSON غير صالحة."
+    },
     "loading": "جارٍ التحميل…",
     "back": "رجوع",
     "cancel": "إلغاء",

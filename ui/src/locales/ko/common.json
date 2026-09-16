@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "{context}에서 JSON 대신 HTML을 반환했습니다. API 서버 또는 데모 모의 서비스가 실행 중인지 확인하세요.",
+      "contentType": "{context}에서 JSON 대신 {contentType}을 반환했습니다.",
+      "invalidJson": "{context}에서 잘못된 JSON을 반환했습니다."
+    },
     "loading": "불러오는 중…",
     "back": "뒤로",
     "cancel": "취소",
