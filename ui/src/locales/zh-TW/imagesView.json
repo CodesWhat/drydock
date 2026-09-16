@@ -28,6 +28,8 @@
       "description": "沒有映像檔符合目前的篩選條件。"
     },
     "prune": {
+      "previewLoadFailed": "無法載入清理預覽",
+      "requestFailed": "無法清理映像檔",
       "dangling": "清理懸空映像檔",
       "unused": "清理未使用映像檔",
       "confirm": {

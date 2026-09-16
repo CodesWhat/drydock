@@ -28,6 +28,8 @@
       "description": "現在のフィルターに一致するイメージがありません。"
     },
     "prune": {
+      "previewLoadFailed": "クリーンアップのプレビューを読み込めませんでした",
+      "requestFailed": "イメージをクリーンアップできませんでした",
       "dangling": "danglingをプルーン",
       "unused": "未使用をプルーン",
       "confirm": {

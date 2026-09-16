@@ -28,6 +28,8 @@
       "description": "没有镜像匹配当前的过滤条件。"
     },
     "prune": {
+      "previewLoadFailed": "无法加载清理预览",
+      "requestFailed": "无法清理镜像",
       "dangling": "清理悬空镜像",
       "unused": "清理未使用镜像",
       "confirm": {

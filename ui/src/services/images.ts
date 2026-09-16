@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import { ApiError } from '../utils/error';
 
@@ -95,7 +96,11 @@ export async function getImages(params: { host?: string } = {}): Promise<ImagesR
     credentials: 'include',
   });
   if (!response.ok) {
-    await throwForResponse(response, 'Images API', `Failed to load images: ${response.statusText}`);
+    await throwForResponse(
+      response,
+      'Images API',
+      `${i18n.global.t('imagesView.loadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse<ImagesListEnvelope>(response, 'Images API');
   return {
@@ -116,7 +121,7 @@ export async function getPrunePreview(params: {
     await throwForResponse(
       response,
       'Image prune preview API',
-      `Failed to load prune preview: ${response.statusText}`,
+      `${i18n.global.t('imagesView.prune.previewLoadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   return readJsonResponse<PruneEstimate>(response, 'Image prune preview API');
@@ -139,7 +144,7 @@ export async function pruneImages(params: {
     await throwForResponse(
       response,
       'Image prune API',
-      `Failed to prune images: ${response.statusText}`,
+      `${i18n.global.t('imagesView.prune.requestFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   const payload = await readJsonResponse<ActionResultEnvelope<ImagePruneResult>>(
