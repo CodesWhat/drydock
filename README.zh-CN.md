@@ -218,7 +218,7 @@ docker run -d \
 
 <h2 align="center" id="recent-updates">最近更新</h2>
 
-**版本状态（2026 年 9 月 14 日）：** 已发布的 v1.7 候选版本是 [v1.7.0-rc.15](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.15)。当前检出的是**尚未发布的 v1.8 开发版本**；[路线图](#roadmap)中的 v1.8 功能不包含在该候选版本中。下方 RC10 亮点保留为历史发布说明。
+**版本状态（2026 年 9 月 16 日）：** 已发布的 v1.7 候选版本是 [v1.7.0-rc.16](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.16)。当前检出的是**尚未发布的 v1.8 开发版本**；[路线图](#roadmap)中的 v1.8 功能不包含在该候选版本中。下方 RC10 亮点保留为历史发布说明。
 
 <details open>
 <summary><strong>v1.7.0-rc.10 亮点</strong></summary>

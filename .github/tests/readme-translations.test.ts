@@ -332,6 +332,18 @@ describe.each(translatedReadmes)('%s', (readme) => {
   });
 });
 
+test.each(allReadmes)('%s identifies the published v1.7 candidate', (readme) => {
+  const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
+  const status = content.split('id="recent-updates">')[1]?.split('<details')[0] ?? '';
+
+  expect(status).toContain(
+    '[v1.7.0-rc.16](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.16)',
+  );
+  expect(status).not.toContain('v1.7.0-rc.15');
+  expect(status).toContain('v1.8');
+  expect(status).toContain('RC10');
+});
+
 test('English rc.7 update highlight scopes cleanup failures to the health gate', () => {
   const releaseBlock = getReleaseBlock(
     sourceReadme,

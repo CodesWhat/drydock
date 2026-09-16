@@ -218,7 +218,7 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
-**Estado de versiones (14 de septiembre de 2026):** El candidato v1.7 publicado es [v1.7.0-rc.15](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.15). Este checkout contiene el **desarrollo de v1.8, aún sin publicar**; las funciones v1.8 de la [hoja de ruta](#roadmap) no están incluidas en ese candidato. Los aspectos destacados de RC10 que siguen se conservan como notas históricas.
+**Estado de versiones (16 de septiembre de 2026):** El candidato v1.7 publicado es [v1.7.0-rc.16](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.16). Este checkout contiene el **desarrollo de v1.8, aún sin publicar**; las funciones v1.8 de la [hoja de ruta](#roadmap) no están incluidas en ese candidato. Los aspectos destacados de RC10 que siguen se conservan como notas históricas.
 
 <details open>
 <summary><strong>Aspectos destacados de v1.7.0-rc.10</strong></summary>

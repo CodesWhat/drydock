@@ -221,7 +221,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
-**Release status (September 14, 2026):** The published v1.7 candidate is [v1.7.0-rc.15](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.15). This checkout tracks **unreleased v1.8 development**; the v1.8 features in the [roadmap](#roadmap) are not included in that candidate. The RC10 highlights below remain historical release notes.
+**Release status (September 16, 2026):** The published v1.7 candidate is [v1.7.0-rc.16](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.16). This checkout tracks **unreleased v1.8 development**; the v1.8 features in the [roadmap](#roadmap) are not included in that candidate. The RC10 highlights below remain historical release notes.
 
 <details open>
 <summary><strong>v1.7.0-rc.10 highlights</strong></summary>

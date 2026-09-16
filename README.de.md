@@ -218,7 +218,7 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
-**Release-Stand (14. September 2026):** Der veröffentlichte v1.7-Kandidat ist [v1.7.0-rc.15](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.15). Dieser Checkout enthält die **noch unveröffentlichte v1.8-Entwicklung**. Die v1.8-Funktionen der [Roadmap](#roadmap) sind in diesem Kandidaten nicht enthalten. Die folgenden RC10-Highlights bleiben historische Release-Notizen.
+**Release-Stand (16. September 2026):** Der veröffentlichte v1.7-Kandidat ist [v1.7.0-rc.16](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.16). Dieser Checkout enthält die **noch unveröffentlichte v1.8-Entwicklung**. Die v1.8-Funktionen der [Roadmap](#roadmap) sind in diesem Kandidaten nicht enthalten. Die folgenden RC10-Highlights bleiben historische Release-Notizen.
 
 <details open>
 <summary><strong>Highlights von v1.7.0-rc.10</strong></summary>

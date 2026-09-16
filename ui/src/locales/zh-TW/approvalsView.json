@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "已顯示 {count} 項",
+    "refresh": "重新整理",
+    "loading": "正在載入核准項目…",
+    "loadError": "無法載入核准項目",
+    "notifyModeBanner": "更新模式為 notify。將模式設為 manual 或 auto 之前，無法進行核准。",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "待處理",
+      "deferred": "已延後",
+      "decided": "已決定"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "容器",
+      "image": "映像檔",
+      "version": "版本",
+      "scan": "掃描",
+      "age": "等待時間"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "主要版本",
+      "minor": "次要版本",
+      "patch": "修補版本",
+      "prerelease": "預先發行版本",
+      "unknown": "未知"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "顯示版本資訊和暫緩原因",
+      "approve": "核准",
+      "approveAriaLabel": "核准更新",
+      "approveDisabledNotify": "更新模式為 notify；無法進行核准",
+      "reject": "拒絕",
+      "rejectAriaLabel": "拒絕更新",
+      "defer": "延後",
+      "deferAriaLabel": "延後更新"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "正在載入詳細資料…",
+      "holdReasons": "暫緩原因",
+      "viewFullNotes": "檢視完整版本資訊",
+      "empty": "此更新沒有版本資訊或暫緩原因"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "沒有待處理的核准項目",
+      "deferred": "沒有已延後的核准項目",
+      "decided": "尚無已決定的核准項目",
+      "all": "沒有核准項目"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "取消",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "核准更新",
+        "message": "核准將 {name} 更新至 {toRef}？",
+        "softBlockerSuffix": "\n\n此更新仍有未解決的暫緩原因：\n{list}",
+        "acceptLabel": "核准"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "拒絕更新",
+        "message": "拒絕將 {name} 更新至 {toRef}？此更新將不會自動套用。",
+        "acceptLabel": "拒絕"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "延後更新",
+        "message": "將 {name} 的更新延後 {days} 天？",
+        "acceptLabel": "延後"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "已請求核准 {name}",
+      "approveFailed": "無法核准 {name}",
+      "rejected": "已拒絕 {name} 的更新",
+      "rejectFailed": "無法拒絕 {name}",
+      "deferred": "已延後 {name} 的更新",
+      "deferFailed": "無法延後 {name}"
     }
   }
 }

@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "المعروض: {count}",
+    "refresh": "تحديث",
+    "loading": "جارٍ تحميل طلبات الموافقة…",
+    "loadError": "تعذّر تحميل طلبات الموافقة",
+    "notifyModeBanner": "وضع التحديث هو notify. الموافقة معطّلة حتى يُضبط الوضع على manual أو auto.",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "قيد الانتظار",
+      "deferred": "مؤجّلة",
+      "decided": "تم البت فيها"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "الحاوية",
+      "image": "الصورة",
+      "version": "الإصدار",
+      "scan": "الفحص",
+      "age": "مدة الانتظار"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "إصدار رئيسي",
+      "minor": "إصدار فرعي",
+      "patch": "إصدار تصحيحي",
+      "prerelease": "إصدار تجريبي",
+      "unknown": "غير معروف"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "عرض ملاحظات الإصدار وأسباب التعليق",
+      "approve": "موافقة",
+      "approveAriaLabel": "الموافقة على التحديث",
+      "approveDisabledNotify": "وضع التحديث هو notify؛ الموافقة معطّلة",
+      "reject": "رفض",
+      "rejectAriaLabel": "رفض التحديث",
+      "defer": "تأجيل",
+      "deferAriaLabel": "تأجيل التحديث"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "جارٍ تحميل التفاصيل…",
+      "holdReasons": "أسباب التعليق",
+      "viewFullNotes": "عرض الملاحظات كاملة",
+      "empty": "لا توجد ملاحظات إصدار أو أسباب تعليق لهذا التحديث"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "لا توجد طلبات موافقة قيد الانتظار",
+      "deferred": "لا توجد طلبات موافقة مؤجّلة",
+      "decided": "لم يتم البت في أي طلبات موافقة بعد",
+      "all": "لا توجد طلبات موافقة"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "إلغاء",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "الموافقة على التحديث",
+        "message": "هل تريد الموافقة على تحديث {name} إلى {toRef}؟",
+        "softBlockerSuffix": "\n\nلهذا التحديث أسباب تعليق لم تُحل بعد:\n{list}",
+        "acceptLabel": "موافقة"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "رفض التحديث",
+        "message": "هل تريد رفض تحديث {name} إلى {toRef}؟ لن يُطبّق تلقائيًا.",
+        "acceptLabel": "رفض"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "تأجيل التحديث",
+        "message": "هل تريد تأجيل تحديث {name} لمدة {days} أيام؟",
+        "acceptLabel": "تأجيل"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "تم طلب الموافقة على {name}",
+      "approveFailed": "تعذّرت الموافقة على {name}",
+      "rejected": "تم رفض تحديث {name}",
+      "rejectFailed": "تعذّر رفض {name}",
+      "deferred": "تم تأجيل تحديث {name}",
+      "deferFailed": "تعذّر تأجيل {name}"
     }
   }
 }

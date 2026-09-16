@@ -102,11 +102,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
 - Full-page update previews now reuse the selected language's yes/no text for running status and compose-file writes, matching the side panel.
+- The Approvals screen now also translates its remaining 14 supported languages, including confirmation prompts, hold reasons, loading and empty states, and success/error messages. Update-mode values and approval behavior are unchanged.
 
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
 - The Approvals screen now uses French and Spanish text for loading, empty states, action confirmations and notifications while preserving update-mode names and action behavior.
+- Dashboard customization reuses each widget's existing translated title, so its visibility controls follow the selected language without changing the layout or saved visibility.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
 - Frontend JSON-response diagnostics use the selected language for invalid JSON, HTML and unexpected content types, preserving the API context and transport errors.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
