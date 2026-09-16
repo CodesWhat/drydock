@@ -100,12 +100,13 @@ describe('Trigger Service', () => {
     it('throws when fetching triggers fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
         json: async () => ({}),
       } as any);
 
       await expect(getAllTriggers()).rejects.toThrow(
-        'Failed to get triggers: Internal Server Error',
+        'Failed to load triggers (HTTP 500): Internal Server Error',
       );
     });
   });
