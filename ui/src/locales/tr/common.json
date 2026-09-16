@@ -1,5 +1,10 @@
 {
   "common": {
+    "apiResponse": {
+      "html": "{context}, JSON yerine HTML döndürdü. API sunucusunun veya demo simülasyonlarının çalıştığını kontrol edin.",
+      "contentType": "{context}, JSON yerine {contentType} döndürdü.",
+      "invalidJson": "{context} geçersiz JSON döndürdü."
+    },
     "loading": "Yükleniyor…",
     "back": "Geri",
     "cancel": "İptal",
