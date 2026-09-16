@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +20,65 @@ const getWorkflowStep = getWorkflowStepFrom.bind(undefined, workflowPath);
 
 test('required Playwright job publishes a stable plain-text check name', () => {
   expect(loadWorkflow().jobs?.playwright?.name).toBe('E2E: Playwright');
+});
+
+test('Playwright bounds fixture download retries before starting the complete QA stack', () => {
+  const steps = loadWorkflow().jobs?.playwright?.steps ?? [];
+  const pull = getWorkflowStep('playwright', 'Pull QA fixture images');
+  expect(pull).toMatchObject({
+    uses: 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60',
+    with: { timeout_minutes: 5, max_attempts: 3, retry_wait_seconds: 30 },
+  });
+  expect(pull?.['continue-on-error']).toBeUndefined();
+  expect(pull?.with?.continue_on_error).toBeUndefined();
+  expect(pull?.if).toBeUndefined();
+  const pullIndex = steps.findIndex((step) => step.name === 'Pull QA fixture images');
+  expect(pullIndex).toBeGreaterThan(
+    steps.findIndex((step) => step.name === 'Docker build (QA image)'),
+  );
+  expect(pullIndex).toBeLessThan(steps.findIndex((step) => step.name === 'Start QA stack'));
+});
+
+test('Playwright startup cannot pull outside the retry boundary or retry startup failures', () => {
+  const start = getWorkflowStep('playwright', 'Start QA stack');
+  expect(start?.run).toBe(
+    'docker compose -p drydock-playwright -f test/qa-compose.yml up -d --pull never',
+  );
+  expect(start?.uses).toBeUndefined();
+  expect(start?.['continue-on-error']).toBeUndefined();
+});
+
+test.each([
+  { inspectExit: 0, pullExit: 0, expectedExit: 0 },
+  { inspectExit: 7, pullExit: 0, expectedExit: 7 },
+  { inspectExit: 0, pullExit: 9, expectedExit: 9 },
+])('QA pull command fails closed for inspect=$inspectExit, pull=$pullExit', (scenario) => {
+  const command = getWorkflowStep('playwright', 'Pull QA fixture images')?.with?.command;
+  expect(typeof command).toBe('string');
+  // Only Docker is replaced. Execute the actual workflow shell command without
+  // contacting a registry or changing the developer's running QA containers.
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `docker() {
+      printf '%s\\n' "$*" >&2
+      if [ "$1" = image ]; then return ${scenario.inspectExit}; fi
+      return ${scenario.pullExit}
+    }
+    ${command}`,
+    ],
+    { encoding: 'utf8', timeout: 5000 },
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(scenario.expectedExit);
+  const calls = result.stderr.trim().split('\n');
+  expect(calls).toEqual([
+    'image inspect drydock:dev',
+    ...(scenario.inspectExit === 0
+      ? ['compose -p drydock-playwright -f test/qa-compose.yml pull --policy missing']
+      : []),
+  ]);
 });
 
 test('Playwright workflow disables browser downloads for host-side npm installs', () => {
