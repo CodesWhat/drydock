@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import { readJsonResponse } from '../utils/api';
 
 /** The six scopes the API enforces. Mirrors `API_SCOPES` in the backend registry. */
@@ -57,7 +58,8 @@ async function throwForResponse(response: Response, fallback: string): Promise<n
   const message =
     payload &&
     typeof payload === 'object' &&
-    typeof (payload as { error?: unknown }).error === 'string'
+    typeof (payload as { error?: unknown }).error === 'string' &&
+    (payload as { error: string }).error.trim()
       ? (payload as { error: string }).error
       : `${fallback} (HTTP ${response.status})`;
   throw new Error(message);
@@ -105,7 +107,7 @@ async function listApiKeys(options: { limit?: number; cursor?: string } = {}): P
     credentials: 'include',
   });
   if (!response.ok) {
-    return throwForResponse(response, 'Failed to load API keys');
+    return throwForResponse(response, i18n.global.t('configView.apiKeys.errors.load'));
   }
   const payload = await readJsonResponse<{
     data?: ApiKey[];
@@ -143,7 +145,7 @@ async function createApiKey(input: CreateApiKeyInput): Promise<CreatedApiKey> {
     }),
   });
   if (!response.ok) {
-    return throwForResponse(response, 'Failed to create API key');
+    return throwForResponse(response, i18n.global.t('configView.apiKeys.errors.create'));
   }
   return readJsonResponse<CreatedApiKey>(response, 'API keys');
 }
@@ -162,7 +164,7 @@ async function revokeApiKey(keyId: string): Promise<RevokeApiKeyResult> {
     credentials: 'include',
   });
   if (!response.ok) {
-    return throwForResponse(response, 'Failed to revoke API key');
+    return throwForResponse(response, i18n.global.t('configView.apiKeys.errors.revoke'));
   }
   return readJsonResponse<RevokeApiKeyResult>(response, 'API keys');
 }
