@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import { ApiError } from '../utils/error';
@@ -63,7 +64,9 @@ function getWatcherProviderColor(type: string) {
 async function getAllWatchers() {
   const response = await fetch('/api/v1/watchers', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get watchers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('watchersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
   return extractCollectionData<ApiComponentResponse>(payload);

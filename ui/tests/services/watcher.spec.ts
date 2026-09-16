@@ -148,11 +148,14 @@ describe('Watcher Service', () => {
   it('throws when fetching all watchers fails', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
+      status: 500,
       statusText: 'Internal Server Error',
       json: vi.fn().mockResolvedValue({}),
     });
 
-    await expect(getAllWatchers()).rejects.toThrow('Failed to get watchers: Internal Server Error');
+    await expect(getAllWatchers()).rejects.toThrow(
+      'Failed to load watchers (HTTP 500): Internal Server Error',
+    );
   });
 
   it('fetches a specific watcher by type and name', async () => {

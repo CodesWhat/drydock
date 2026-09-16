@@ -106,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Approvals screen now also translates its remaining 14 supported languages, including confirmation prompts, hold reasons, loading and empty states, and success/error messages. Update-mode values and approval behavior are unchanged.
 
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
+- Server, watcher-list and registry-list loading failures use the selected language and retain HTTP status and reason phrases on Dashboard and Servers. Existing retry, background refresh and static-data caching behavior is unchanged.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
 - Container uptime uses localized phrases and duration units in table, cards and full-page details. Open views follow language changes while retaining their existing tick intervals, timestamp tooltips and selection.
