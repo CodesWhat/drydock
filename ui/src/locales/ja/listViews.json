@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "ウォッチャーを読み込み中...",
     "loadError": "ウォッチャーの読み込みに失敗しました",
-    "soon": "soon",
+    "soon": "まもなく",
     "filterPlaceholder": "名前で絞り込む...",
     "clear": "クリア",
     "emptyFiltered": "フィルターに一致するウォッチャーがありません",

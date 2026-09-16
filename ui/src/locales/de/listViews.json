@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "Watcher werden geladen...",
     "loadError": "Watcher konnten nicht geladen werden",
-    "soon": "soon",
+    "soon": "bald",
     "filterPlaceholder": "Nach Name filtern...",
     "clear": "Löschen",
     "emptyFiltered": "Keine Watcher passen zu deinen Filtern",

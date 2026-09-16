@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "Caricamento watcher...",
     "loadError": "Impossibile caricare i watcher",
-    "soon": "soon",
+    "soon": "a breve",
     "filterPlaceholder": "Filtra per nome...",
     "clear": "Cancella",
     "emptyFiltered": "Nessun watcher corrisponde ai filtri",

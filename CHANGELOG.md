@@ -100,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Watcher next-run countdowns use localized units and update when the language changes in tables, cards and open details, without refetching. The remaining 15 English copies of "soon" are translated; countdown rounding and timestamp tooltips are unchanged.
+
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.

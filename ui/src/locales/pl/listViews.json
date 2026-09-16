@@ -392,7 +392,7 @@
   "watchersView": {
     "loadingWatchers": "Ładowanie obserwatorów...",
     "loadError": "Nie udało się załadować obserwatorów",
-    "soon": "soon",
+    "soon": "wkrótce",
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żaden obserwator nie pasuje do Twoich filtrów",
