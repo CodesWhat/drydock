@@ -657,6 +657,55 @@ describe('ImagesView', () => {
       expect(mockGetImages).toHaveBeenCalledTimes(2);
     });
 
+    it('preserves the still-running path for a real 504 JSON null response', async () => {
+      const actualImages =
+        await vi.importActual<typeof import('@/services/images')>('@/services/images');
+      mockGetPrunePreview.mockResolvedValue({
+        host: 'docker.local',
+        mode: 'unused',
+        images: 1,
+        reclaimable: 512,
+      });
+      mockPruneImages.mockImplementationOnce(actualImages.pruneImages);
+      const fetchResponse = vi.fn().mockResolvedValue(
+        new Response('null', {
+          status: 504,
+          statusText: 'Gateway Timeout',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchResponse);
+      const wrapper = await mountWithSelectedHost();
+      try {
+        const pruneButton = wrapper.findAll('button').find((b) => b.text() === 'Prune unused');
+        expect(pruneButton).toBeDefined();
+        await pruneButton?.trigger('click');
+        await flushPromises();
+        expect(fetchResponse).not.toHaveBeenCalled();
+
+        await mockConfirmRequire.mock.calls[0][0].accept();
+        await flushPromises();
+
+        expect(mockToast.warning).toHaveBeenCalledWith(
+          "The agent's Docker proxy returned no result for Local; the prune may still be running. Refresh the list in a moment.",
+        );
+        expect(mockToast.error).not.toHaveBeenCalled();
+        expect(mockGetImages).toHaveBeenCalledTimes(2);
+        expect(fetchResponse).toHaveBeenCalledExactlyOnceWith('/api/v1/images/prune', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-DD-Confirm-Action': 'image-prune',
+          },
+          body: JSON.stringify({ host: 'docker.local', mode: 'unused' }),
+        });
+      } finally {
+        wrapper.unmount();
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('shows an error toast on a non-504 ApiError and does not reload', async () => {
       mockGetPrunePreview.mockResolvedValue({
         host: 'docker.local',
