@@ -197,12 +197,11 @@ function openUpdateStatusTab(tab: string, section?: string) {
 }
 
 const nowMs = useNow(1_000, () => !!selectedContainer.value?.details?.startedAt);
+const { t, locale } = useI18n();
 
 const uptimeString = computed(() =>
-  formatUptimeFromIso(selectedContainer.value?.details?.startedAt, nowMs.value),
+  formatUptimeFromIso(selectedContainer.value?.details?.startedAt, nowMs.value, locale.value, t),
 );
-
-const { t, locale } = useI18n();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);

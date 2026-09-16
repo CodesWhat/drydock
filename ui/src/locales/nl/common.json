@@ -1,5 +1,6 @@
 {
   "common": {
+    "uptime": "Actief sinds {duration}",
     "apiResponse": {
       "html": "{context} heeft HTML in plaats van JSON teruggegeven. Controleer of de API-server of de demosimulaties actief zijn.",
       "contentType": "{context} heeft {contentType} in plaats van JSON teruggegeven.",

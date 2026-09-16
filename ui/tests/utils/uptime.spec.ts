@@ -1,3 +1,4 @@
+import { i18n } from '@/boot/i18n';
 import { formatUptimeFromIso } from '@/utils/uptime';
 
 // Fix "now" at a known reference point: 2024-06-15T12:00:00.000Z
@@ -5,6 +6,60 @@ import { formatUptimeFromIso } from '@/utils/uptime';
 const NOW_MS = 1718445600000;
 
 describe('formatUptimeFromIso', () => {
+  it.each([
+    [0, 'Actif depuis 0s'],
+    [59, 'Actif depuis 59s'],
+    [60, 'Actif depuis 1min'],
+    [3599, 'Actif depuis 59min'],
+    [3600, 'Actif depuis 1h 0min'],
+    [5400, 'Actif depuis 1h 30min'],
+    [86399, 'Actif depuis 23h 59min'],
+    [86400, 'Actif depuis 1j 0h'],
+    [183600, 'Actif depuis 2j 3h'],
+  ] as const)('localizes %s seconds of uptime in French', (seconds, expected) => {
+    const iso = new Date(NOW_MS - seconds * 1000).toISOString();
+    expect(
+      formatUptimeFromIso(iso, NOW_MS, 'fr', (key, named) =>
+        i18n.global.t(key, named ?? {}, { locale: 'fr' }),
+      ),
+    ).toBe(expected);
+  });
+
+  it.each([
+    [30, 'يعمل منذ 30 ث'],
+    [120, 'يعمل منذ 2 د'],
+    [7200, 'يعمل منذ 2 س 0 د'],
+    [172800, 'يعمل منذ 2 ي 0 س'],
+  ] as const)('localizes %s seconds of uptime in Arabic', (seconds, expected) => {
+    const iso = new Date(NOW_MS - seconds * 1000).toISOString();
+    expect(
+      formatUptimeFromIso(iso, NOW_MS, 'ar', (key, named) =>
+        i18n.global.t(key, named ?? {}, { locale: 'ar' }),
+      ),
+    ).toBe(expected);
+  });
+
+  it('reuses unit formatters across rows and ticks of the same locale', () => {
+    const iso = new Date(NOW_MS - 183600_000).toISOString();
+    formatUptimeFromIso(iso, NOW_MS, 'ja');
+    const NativeNumberFormat = Intl.NumberFormat;
+    let constructions = 0;
+    Intl.NumberFormat = new Proxy(NativeNumberFormat, {
+      construct(target, args) {
+        constructions++;
+        return Reflect.construct(target, args);
+      },
+    });
+    try {
+      for (let tick = 0; tick < 25; tick++) {
+        expect(formatUptimeFromIso(iso, NOW_MS + tick * 1000, 'en')).toBe('Up 2d 3h');
+      }
+      expect(constructions).toBe(4);
+    } finally {
+      Intl.NumberFormat = NativeNumberFormat;
+    }
+  });
+
   describe('undefined / missing input', () => {
     it('returns em-dash for undefined', () => {
       expect(formatUptimeFromIso(undefined, NOW_MS)).toBe('—');

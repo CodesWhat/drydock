@@ -1,5 +1,6 @@
 {
   "common": {
+    "uptime": "{duration} 稼働中",
     "apiResponse": {
       "html": "{context} が JSON ではなく HTML を返しました。API サーバーまたはデモのモックが動作しているか確認してください。",
       "contentType": "{context} が JSON ではなく {contentType} を返しました。",

@@ -1,5 +1,6 @@
 {
   "common": {
+    "uptime": "已執行 {duration}",
     "apiResponse": {
       "html": "{context} 傳回了 HTML 而不是 JSON。請檢查 API 伺服器或示範模擬服務是否正在執行。",
       "contentType": "{context} 傳回了 {contentType} 而不是 JSON。",

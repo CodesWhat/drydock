@@ -1,7 +1,9 @@
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
 import DataTable from '@/components/DataTable.vue';
+import { useColumnVisibility } from '@/composables/useColumnVisibility';
 import {
   resetContainerSelectionState,
   useContainerSelection,
@@ -466,6 +468,87 @@ function shortDigest(digest: string) {
 }
 
 describe('ContainersGroupedViews', () => {
+  it.each(['table', 'cards'] as const)(
+    'localizes ticking uptime in %s without changing rows or actions',
+    async (mode) => {
+      const originalLocale = i18n.global.locale.value;
+      const { visibleColumns } = useColumnVisibility();
+      const originalColumns = visibleColumns.value;
+      visibleColumns.value = new Set([...originalColumns, 'uptime']);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-16T17:00:00Z'));
+      i18n.global.locale.value = 'en';
+      const startedAt = new Date(Date.now() - 59_000).toISOString();
+      const container = makeContainer({
+        id: 'uptime-locale',
+        name: 'alpha',
+        status: 'running',
+        details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+      });
+      const { context, refs, spies } = makeContext();
+      refs.containerViewMode.value = mode;
+      refs.filteredContainers.value = [container];
+      refs.displayContainers.value = [container];
+      refs.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mode === 'cards' ? mountSubjectWithRealDataTable() : mountSubject();
+      try {
+        await nextTick();
+        const row = mode === 'cards' ? cardByName(wrapper, 'alpha') : rowByName(wrapper, 'alpha');
+        const value =
+          mode === 'cards'
+            ? row.get('[data-test="container-card-uptime"]')
+            : row.find('.font-mono.dd-text-secondary');
+        expect(value.text()).toBe('Up 59s');
+        const rows = refs.displayContainers.value;
+        const selected = refs.selectedContainer.value;
+        const selectCount = spies.selectContainer.mock.calls.length;
+        const selection = useContainerSelection();
+        selection.setSelected('uptime-locale', true);
+        const selectedIds = selection.selectedIds.value;
+        await nextTick();
+        const initialTimers = vi.getTimerCount();
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(value.text()).toBe('Actif depuis 59s');
+        expect(vi.getTimerCount()).toBe(initialTimers);
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(value.text()).toBe('Actif depuis 1min');
+        i18n.global.locale.value = 'ar';
+        await nextTick();
+        expect(value.text()).toBe('يعمل منذ 1 د');
+        expect(value.attributes('title')).toBe(startedAt);
+        expect(refs.displayContainers.value).toBe(rows);
+        expect(refs.selectedContainer.value).toBe(selected);
+        expect(selection.selectedIds.value).toBe(selectedIds);
+        expect(selection.isSelected('uptime-locale')).toBe(true);
+        expect(spies.selectContainer).toHaveBeenCalledTimes(selectCount);
+        expect(spies.confirmUpdate).not.toHaveBeenCalled();
+        expect(spies.scanContainer).not.toHaveBeenCalled();
+        expect(spies.updateAllInGroup).not.toHaveBeenCalled();
+      } finally {
+        wrapper.unmount();
+        activeWrapper = null;
+        visibleColumns.value = originalColumns;
+        await nextTick();
+        i18n.global.locale.value = originalLocale;
+        window.dispatchEvent(new Event('pagehide'));
+        const remainingTimers = vi.getTimerCount();
+        vi.useRealTimers();
+        expect(remainingTimers).toBe(0);
+      }
+    },
+  );
+
   afterEach(() => {
     if (activeWrapper) {
       try {
