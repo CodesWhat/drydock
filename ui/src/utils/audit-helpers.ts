@@ -117,23 +117,33 @@ export function formatAbsoluteTime(isoString: string | null | undefined): string
   });
 }
 
-/** Format an ISO timestamp as a compact relative age string (e.g. "3d", "2w", "5mo", "1y"). */
-export function imageAge(isoString: string | undefined, t?: TranslateFn): string {
+/** Format an ISO timestamp as a localized age, spelling out months to distinguish minutes. */
+export function imageAge(isoString: string | undefined, t?: TranslateFn, locale = 'en'): string {
   if (!isoString) return '\u2014';
   const then = new Date(isoString).getTime();
   if (Number.isNaN(then)) return '\u2014';
   const diffMs = Date.now() - then;
-  if (diffMs < 0) return t ? t('common.imageAge.now') : 'now';
+  if (diffMs < 0) {
+    return t
+      ? t('common.imageAge.now')
+      : new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'second');
+  }
+  const format = (count: number, unit: string) =>
+    new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit,
+      unitDisplay: unit === 'month' ? 'long' : 'narrow',
+    }).format(count);
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 60) return `${Math.max(1, diffMin)}m`;
+  if (diffMin < 60) return format(Math.max(1, diffMin), 'minute');
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
+  if (diffHr < 24) return format(diffHr, 'hour');
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 14) return `${diffDay}d`;
+  if (diffDay < 14) return format(diffDay, 'day');
   const diffWeek = Math.floor(diffDay / 7);
-  if (diffDay < 60) return `${diffWeek}w`;
+  if (diffDay < 60) return format(diffWeek, 'week');
   const diffMonth = Math.floor(diffDay / 30.44);
-  if (diffMonth < 12) return `${diffMonth}mo`;
+  if (diffMonth < 12) return format(diffMonth, 'month');
   const diffYear = Math.floor(diffDay / 365.25);
-  return `${diffYear}y`;
+  return format(diffYear, 'year');
 }

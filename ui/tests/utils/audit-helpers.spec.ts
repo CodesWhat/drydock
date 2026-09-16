@@ -283,6 +283,23 @@ describe('audit-helpers', () => {
   });
 
   describe('imageAge', () => {
+    it.each([
+      [5, '5min'],
+      [180, '3h'],
+      [10 * 1440, '10j'],
+      [30 * 1440, '4sem.'],
+      [90 * 1440, '2\u00a0mois'],
+      [730 * 1440, '1a'],
+    ])('localizes an age of %s minutes in French', (minutes, expected) => {
+      const timestamp = new Date(Date.now() - Number(minutes) * 60_000).toISOString();
+      expect(imageAge(timestamp, undefined, 'fr')).toBe(expected);
+    });
+
+    it('localizes future dates without a translation callback', () => {
+      const future = new Date(Date.now() + 60_000).toISOString();
+      expect(imageAge(future, undefined, 'fr')).toBe('maintenant');
+    });
+
     it('returns em dash for undefined', () => {
       expect(imageAge(undefined)).toBe('\u2014');
     });
@@ -318,7 +335,7 @@ describe('audit-helpers', () => {
 
     it('returns months for 60-364 days', () => {
       const ninetyDays = new Date(Date.now() - 90 * 86_400_000).toISOString();
-      expect(imageAge(ninetyDays)).toBe('2mo');
+      expect(imageAge(ninetyDays)).toBe('2 months');
     });
 
     it('returns years for 365+ days', () => {

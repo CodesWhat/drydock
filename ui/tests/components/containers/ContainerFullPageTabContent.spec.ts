@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 import type AppButton from '@/components/AppButton.vue';
 import ContainerFullPageTabContent from '@/components/containers/ContainerFullPageTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
@@ -434,6 +435,44 @@ function findButtonByText(wrapper: ReturnType<typeof mountComponent>, text: stri
 }
 
 describe('ContainerFullPageTabContent', () => {
+  it.each([
+    ['image', -300_000, '5m', '5min'],
+    ['metadata', -90 * 86_400_000, '2 months', '2\u00a0mois'],
+    ['image', 60_000, 'now', 'maintenant'],
+  ] as const)(
+    'localizes image age from %s at offset %s without refetching',
+    async (source, offset, english, french) => {
+      const originalLocale = i18n.global.locale.value;
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-16T16:00:00Z'));
+      i18n.global.locale.value = 'en';
+      const timestamp = new Date(Date.now() + offset).toISOString();
+      activeDetailTab.value = 'overview';
+      selectedContainer.value = makeContainer({
+        imageCreated: source === 'image' ? timestamp : undefined,
+      });
+      if (source === 'metadata') selectedImageMetadata.value.created = timestamp;
+      const container = selectedContainer.value;
+      const wrapper = mountComponent();
+      try {
+        const row = wrapper.find('[data-test="container-image-age-detail"]');
+        expect(row.find('.font-mono').text()).toBe(english);
+        const originalTimestamp = row.find('.truncate').text();
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(row.find('.font-mono').text()).toBe(french);
+        expect(row.find('.truncate').text()).toBe(originalTimestamp);
+        expect(selectedContainer.value).toBe(container);
+        expect(mockRunContainerPreview).not.toHaveBeenCalled();
+        expect(mockConfirmUpdate).not.toHaveBeenCalled();
+      } finally {
+        wrapper.unmount();
+        i18n.global.locale.value = originalLocale;
+        vi.useRealTimers();
+      }
+    },
+  );
+
   afterEach(() => {
     resetState();
     updateMode.value = 'manual';
