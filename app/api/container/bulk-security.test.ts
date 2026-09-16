@@ -1,3 +1,6 @@
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import express from 'express';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
 import { createBulkSecurityHandlers, MAX_CONCURRENT_BULK_SCANS } from './bulk-security.js';
@@ -628,6 +631,57 @@ describe('api/container/bulk-security', () => {
   });
 
   describe('abort on client disconnect', () => {
+    test.each([undefined, '{}'])(
+      'completes every accepted scan after a normal HTTP request closes (body %s)',
+      async (body) => {
+        const total = MAX_CONCURRENT_BULK_SCANS + 2;
+        const harness = createHarness({
+          containers: Array.from({ length: total }, (_, index) => ({
+            id: `c${index}`,
+            name: `container-${index}`,
+          })),
+        });
+        const releaseScans = Promise.withResolvers<void>();
+        harness.deps.scanImageForVulnerabilities.mockImplementation(async () => {
+          await releaseScans.promise;
+          return createScanResult();
+        });
+        const completedRequest = Promise.withResolvers<boolean>();
+        const app = express();
+        app.use(express.json());
+        app.post('/scan-all', (req, res) => {
+          req.on('close', () => completedRequest.resolve(req.complete));
+          return harness.handlers.scanAll(req, res);
+        });
+        const server = app.listen(0, '127.0.0.1');
+        try {
+          await once(server, 'listening');
+          const { port } = server.address() as AddressInfo;
+          const response = await fetch(`http://127.0.0.1:${port}/scan-all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(response.status).toBe(202);
+          const accepted = await response.json();
+          expect(accepted.scheduledCount).toBe(total);
+          expect(await completedRequest.promise).toBe(true);
+          releaseScans.resolve();
+          await waitForCycleComplete(harness.deps);
+          expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(total);
+          expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledWith(
+            expect.objectContaining({ cycleId: accepted.cycleId, scannedCount: total }),
+          );
+        } finally {
+          releaseScans.resolve();
+          server.closeAllConnections();
+          await new Promise<void>((resolve) => server.close(() => resolve()));
+          await waitForCycleComplete(harness.deps);
+        }
+      },
+    );
+
     test('registers close listener on request', async () => {
       const harness = createHarness();
 
@@ -652,6 +706,7 @@ describe('api/container/bulk-security', () => {
       );
 
       const { req } = await callScanAll(harness.handlers);
+      req.complete = false;
       const abortHandler: (() => void) | undefined = (req.on as any).mock.calls.find(
         (c: any[]) => c[0] === 'close',
       )?.[1];
@@ -667,7 +722,9 @@ describe('api/container/bulk-security', () => {
       await waitForCycleComplete(harness.deps);
 
       // Fewer than all 5 containers scanned (abort stopped queueing after first batch)
-      expect(harness.deps.scanImageForVulnerabilities.mock.calls.length).toBeLessThanOrEqual(5);
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(
+        MAX_CONCURRENT_BULK_SCANS,
+      );
       // Cycle-complete always fires
       expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
     });

@@ -302,10 +302,10 @@ export function createBulkSecurityHandlers(deps: BulkSecurityHandlerDependencies
       const cycleId = uuidv7();
       const startedAt = new Date().toISOString();
 
-      // Build AbortSignal tied to client disconnect
+      // A normal IncomingMessage close marks request completion, not cancellation.
       const abortController = new AbortController();
       req.on('close', () => {
-        abortController.abort();
+        if (!req.complete) abortController.abort();
       });
 
       // Respond immediately with 202 — work continues async
