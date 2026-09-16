@@ -731,6 +731,56 @@ describe('ContainerFullPageTabContent', () => {
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
   });
 
+  it.each([
+    [true, false],
+    [false, true],
+  ])('localizes preview booleans while running=%s and writing=%s', async (isRunning, willWrite) => {
+    const originalLocale = i18n.global.locale.value;
+    i18n.global.locale.value = 'en';
+    detailPreview.value = {
+      currentImage: 'nginx:1.0',
+      newImage: 'nginx:1.1',
+      updateKind: { kind: 'tag' },
+      isRunning,
+      networks: ['bridge'],
+    };
+    detailComposePreview.value = {
+      files: ['/opt/stack/compose.yml'],
+      service: 'web',
+      writableFile: '/opt/stack/compose.yml',
+      willWrite,
+      patch: '@@ -1,3 +1,3 @@',
+    };
+    const wrapper = mountComponent();
+    const valueFor = (labelKey: string) => {
+      const row = wrapper
+        .findAll('div.dd-text-muted')
+        .find((element) => element.text().startsWith(i18n.global.t(labelKey)));
+      expect(row).toBeDefined();
+      return row?.find('span').text();
+    };
+    const runningKey = 'containerComponents.fullPageActions.runningLabel';
+    const writingKey = 'containerComponents.fullPageActions.writesComposeFileLabel';
+
+    try {
+      expect(valueFor(runningKey)).toBe(isRunning ? 'yes' : 'no');
+      expect(valueFor(writingKey)).toBe(willWrite ? 'yes' : 'no');
+
+      i18n.global.locale.value = 'fr';
+      await nextTick();
+      expect(valueFor(runningKey)).toBe(isRunning ? 'oui' : 'non');
+      expect(valueFor(writingKey)).toBe(willWrite ? 'oui' : 'non');
+      expect(detailPreview.value?.isRunning).toBe(isRunning);
+      expect(detailComposePreview.value?.willWrite).toBe(willWrite);
+      expect(mockRunContainerPreview).not.toHaveBeenCalled();
+      expect(mockConfirmUpdate).not.toHaveBeenCalled();
+      expect(mockRunAssociatedTrigger).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+      i18n.global.locale.value = originalLocale;
+    }
+  });
+
   it('renders detailed preview, trigger, backups, and operation history branches', async () => {
     detailPreview.value = {
       currentImage: 'nginx:1.0',

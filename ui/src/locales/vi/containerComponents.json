@@ -346,9 +346,9 @@
     },
     "listContent": {
       "loadingContainers": "Đang tải container...",
-      "fleetUpdateProgress": "Updating {done} of {total} containers",
-      "fleetUpdateProgressRunning": "Running now: {names}",
-      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
+      "fleetUpdateProgress": "Cập nhật container: {done} trên {total}",
+      "fleetUpdateProgressRunning": "Đang cập nhật: {names}",
+      "fleetUpdateProgressRunningMore": "Đang cập nhật: {names} và {more} container khác",
       "searchPlaceholder": "Tìm theo tên hoặc image...",
       "allStatuses": "Tất cả trạng thái",
       "running": "Đang chạy",
