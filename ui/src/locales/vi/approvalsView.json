@@ -1,77 +1,77 @@
 {
   "approvalsView": {
-    "ofCount": "{count} shown",
-    "refresh": "Refresh",
-    "loading": "Loading approvals…",
-    "loadError": "Failed to load approvals",
-    "notifyModeBanner": "Update mode is notify. Approving is disabled until update mode is set to manual or auto.",
+    "ofCount": "Đã hiển thị: {count}",
+    "refresh": "Làm mới",
+    "loading": "Đang tải các yêu cầu phê duyệt…",
+    "loadError": "Không thể tải các yêu cầu phê duyệt",
+    "notifyModeBanner": "Chế độ cập nhật là notify. Chức năng phê duyệt bị vô hiệu hóa cho đến khi chế độ được đặt thành manual hoặc auto.",
     "tabs": {
-      "pending": "Pending",
-      "deferred": "Deferred",
-      "decided": "Decided"
+      "pending": "Đang chờ",
+      "deferred": "Đã hoãn",
+      "decided": "Đã quyết định"
     },
     "columns": {
-      "container": "Container",
-      "image": "Image",
-      "version": "Version",
-      "scan": "Scan",
-      "age": "Age"
+      "container": "Vùng chứa",
+      "image": "Ảnh",
+      "version": "Phiên bản",
+      "scan": "Quét",
+      "age": "Thời gian chờ"
     },
     "semver": {
-      "major": "Major",
-      "minor": "Minor",
-      "patch": "Patch",
-      "prerelease": "Prerelease",
-      "unknown": "Unknown"
+      "major": "Phiên bản chính",
+      "minor": "Phiên bản phụ",
+      "patch": "Bản vá",
+      "prerelease": "Bản phát hành thử",
+      "unknown": "Không xác định"
     },
     "actions": {
-      "notesAriaLabel": "Show release notes and hold reasons",
-      "approve": "Approve",
-      "approveAriaLabel": "Approve update",
-      "approveDisabledNotify": "Update mode is notify; approve is disabled",
-      "reject": "Reject",
-      "rejectAriaLabel": "Reject update",
-      "defer": "Defer",
-      "deferAriaLabel": "Defer update"
+      "notesAriaLabel": "Hiển thị ghi chú phát hành và lý do tạm giữ",
+      "approve": "Phê duyệt",
+      "approveAriaLabel": "Phê duyệt cập nhật",
+      "approveDisabledNotify": "Chế độ cập nhật là notify; chức năng phê duyệt bị vô hiệu hóa",
+      "reject": "Từ chối",
+      "rejectAriaLabel": "Từ chối cập nhật",
+      "defer": "Hoãn",
+      "deferAriaLabel": "Hoãn cập nhật"
     },
     "detail": {
-      "loading": "Loading details…",
-      "holdReasons": "Hold reasons",
-      "viewFullNotes": "View full notes",
-      "empty": "No release notes or hold reasons for this update"
+      "loading": "Đang tải chi tiết…",
+      "holdReasons": "Lý do tạm giữ",
+      "viewFullNotes": "Xem toàn bộ ghi chú",
+      "empty": "Không có ghi chú phát hành hoặc lý do tạm giữ cho bản cập nhật này"
     },
     "empty": {
-      "pending": "No pending approvals",
-      "deferred": "No deferred approvals",
-      "decided": "No decided approvals yet",
-      "all": "No approvals"
+      "pending": "Không có yêu cầu phê duyệt đang chờ",
+      "deferred": "Không có yêu cầu phê duyệt đã hoãn",
+      "decided": "Chưa có yêu cầu phê duyệt nào được quyết định",
+      "all": "Không có yêu cầu phê duyệt"
     },
     "confirm": {
-      "cancel": "Cancel",
+      "cancel": "Hủy",
       "approve": {
-        "header": "Approve update",
-        "message": "Approve updating {name} to {toRef}?",
-        "softBlockerSuffix": "\n\nThis update has open hold reasons:\n{list}",
-        "acceptLabel": "Approve"
+        "header": "Phê duyệt cập nhật",
+        "message": "Phê duyệt cập nhật {name} lên {toRef}?",
+        "softBlockerSuffix": "\n\nBản cập nhật này có các lý do tạm giữ chưa được giải quyết:\n{list}",
+        "acceptLabel": "Phê duyệt"
       },
       "reject": {
-        "header": "Reject update",
-        "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
-        "acceptLabel": "Reject"
+        "header": "Từ chối cập nhật",
+        "message": "Từ chối cập nhật {name} lên {toRef}? Bản cập nhật sẽ không được áp dụng tự động.",
+        "acceptLabel": "Từ chối"
       },
       "defer": {
-        "header": "Defer update",
-        "message": "Defer the update for {name} for {days} days?",
-        "acceptLabel": "Defer"
+        "header": "Hoãn cập nhật",
+        "message": "Hoãn cập nhật {name} trong {days} ngày?",
+        "acceptLabel": "Hoãn"
       }
     },
     "toast": {
-      "approved": "Approve requested for {name}",
-      "approveFailed": "Failed to approve {name}",
-      "rejected": "Rejected update for {name}",
-      "rejectFailed": "Failed to reject {name}",
-      "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "approved": "Đã yêu cầu phê duyệt cho {name}",
+      "approveFailed": "Không thể phê duyệt {name}",
+      "rejected": "Đã từ chối cập nhật {name}",
+      "rejectFailed": "Không thể từ chối {name}",
+      "deferred": "Đã hoãn cập nhật {name}",
+      "deferFailed": "Không thể hoãn {name}"
     }
   }
 }

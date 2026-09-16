@@ -434,6 +434,52 @@ describe('ApprovalsView', () => {
     );
   });
 
+  describe.each([
+    ['ar', 'موافقة', 'هل تريد الموافقة على تحديث app إلى 1.1.0؟'],
+    ['de', 'Genehmigen', 'Aktualisierung von app auf 1.1.0 genehmigen?'],
+    ['it', 'Approva', 'Approvare l’aggiornamento di app a 1.1.0?'],
+    ['ja', '承認', 'app を 1.1.0 に更新することを承認しますか？'],
+    ['ko', '승인', 'app을(를) 1.1.0(으)로 업데이트하도록 승인하시겠습니까?'],
+    ['nl', 'Goedkeuren', 'De update van app naar 1.1.0 goedkeuren?'],
+    ['pl', 'Zatwierdź', 'Zatwierdzić aktualizację app do 1.1.0?'],
+    ['pt-BR', 'Aprovar', 'Aprovar a atualização de app para 1.1.0?'],
+    ['ru', 'Одобрить', 'Одобрить обновление app до 1.1.0?'],
+    ['tr', 'Onayla', 'app için 1.1.0 sürümüne güncelleme onaylansın mı?'],
+    ['uk', 'Схвалити', 'Схвалити оновлення app до 1.1.0?'],
+    ['vi', 'Phê duyệt', 'Phê duyệt cập nhật app lên 1.1.0?'],
+    ['zh-CN', '批准', '批准将 app 更新到 1.1.0？'],
+    ['zh-TW', '核准', '核准將 app 更新至 1.1.0？'],
+  ] as const)('%s approval flow', (locale, label, message) => {
+    beforeEach(() => {
+      i18n.global.locale.value = locale;
+    });
+
+    it('shows the translated confirmation before requesting an update', async () => {
+      const wrapper = await mountView();
+      const button = findButtonByText(wrapper, label);
+      expect(button).toBeDefined();
+      await button!.trigger('click');
+      await flushPromises();
+      expect(mockConfirmRequire).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ message, acceptLabel: label }),
+      );
+      expect(mockApproveApproval).not.toHaveBeenCalled();
+      await mockConfirmRequire.mock.calls[0][0].accept();
+      expect(mockApproveApproval).toHaveBeenCalledExactlyOnceWith('approval-1');
+    });
+
+    it('keeps translated approval disabled in notify mode', async () => {
+      mockUpdateMode.value = 'notify';
+      const wrapper = await mountView();
+      const button = findButtonByText(wrapper, label);
+      expect(button).toBeDefined();
+      expect(button!.attributes('disabled')).toBeDefined();
+      await button!.trigger('click');
+      expect(mockConfirmRequire).not.toHaveBeenCalled();
+      expect(mockApproveApproval).not.toHaveBeenCalled();
+    });
+  });
+
   describe('initial load', () => {
     it('calls listApprovals with the pending status by default', async () => {
       await mountView();
