@@ -126,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Configuration editor snapshots now omit both stored and effective values for watcher and notification fields still owned by live interpolation after an external file edit, or inherited through YAML parent aliases. These fields remain read-only and reject edits with HTTP 409.
 - Settings, preference sync and notification editing preserve HTTP error status when a response contains JSON `null` or an unusable error message, instead of showing a JavaScript exception or coerced object text.
+- Trigger tests show a translated failure and HTTP status for JSON `null` or unusable error messages instead of a JavaScript exception. Provider diagnostics, successful responses and execution routing are unchanged; failed tests are not retried automatically.
 - API-key list, create and revoke failures use the selected language when the server provides no useful error message. Blank server errors now show the translated fallback and HTTP status; nonblank server diagnostics are preserved.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
 - Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.

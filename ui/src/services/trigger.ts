@@ -153,9 +153,14 @@ async function runTrigger({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(container),
   });
-  const json = await readJsonResponse<{ error?: string } & Record<string, unknown>>(response);
+  const json = await readJsonResponse<{ error?: unknown } & Record<string, unknown>>(response);
   if (response.status !== 200) {
-    throw new Error(json.error ? json.error : 'Unknown error');
+    const message = json?.error;
+    throw new Error(
+      typeof message === 'string' && message.trim()
+        ? message
+        : `${i18n.global.t('triggersView.test.defaultError')} (HTTP ${response.status})`,
+    );
   }
   return json;
 }
