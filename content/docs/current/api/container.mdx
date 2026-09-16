@@ -484,7 +484,7 @@ Returns 200 with the updated container on success, 400 if security scanner is no
 
 ## Run bulk security scan
 
-This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel and emits a single `security-scan-cycle-complete` event when finished. Respects client-disconnect aborts.
+This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel and emits a single `security-scan-cycle-complete` event when finished. A prematurely closed, incomplete request stops queued scans. Once the request is complete and accepted, scanning continues after the `202` response; closing the client or stopping its progress display does not cancel the accepted work.
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/scan-all
