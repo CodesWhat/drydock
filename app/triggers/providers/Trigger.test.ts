@@ -265,6 +265,126 @@ describe('notification group routing', () => {
     vi.useRealTimers();
   });
 
+  test.each(
+    ['update', 'security', 'lifecycle'].flatMap((kind) =>
+      ['group', 'excluded', 'ambiguous'].map((reason) => [kind, reason]),
+    ),
+  )('revalidates recreated %s entries when current identity is %s', async (kind, reason) => {
+    vi.useFakeTimers();
+    trigger.configuration.mode = kind === 'lifecycle' ? 'batch' : 'digest';
+    trigger.configuration.securitymode = 'digest';
+    const send = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    const container = groupedContainer();
+    if (kind === 'update') await trigger.handleContainerReportDigest({ container, changed: true });
+    else if (kind === 'security')
+      await trigger.handleSecurityAlertEvent({
+        containerName: container.name,
+        container,
+        cycleId: 'recreated-cycle',
+      });
+    else
+      await trigger.handleContainerUpdateFailedEvent({
+        containerName: container.name,
+        container,
+        error: 'failed',
+      });
+
+    const replacement = { ...container, id: 'replacement' };
+    if (reason === 'group') replacement.labels = { 'dd.group': 'media' };
+    if (reason === 'excluded') replacement.notificationTriggerExclude = 'slack.grouped';
+    storeContainer.getContainers.mockReturnValue(
+      reason === 'ambiguous'
+        ? [replacement, { ...replacement, id: 'another-replacement' }]
+        : [replacement],
+    );
+
+    if (kind === 'update') await trigger.flushDigestBuffer();
+    else if (kind === 'security')
+      await trigger.handleSecurityScanCycleCompleteEvent({
+        cycleId: 'recreated-cycle',
+        scannedCount: 1,
+      });
+    else await vi.advanceTimersByTimeAsync(250);
+    expect(send).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test.each(['agent', 'compose'])(
+    'does not let a same-named %s sibling hide an ineligible replacement',
+    async (boundary) => {
+      trigger.configuration.mode = 'digest';
+      const container = groupedContainer({
+        'dd.group': 'payments',
+        'com.docker.compose.project': 'payments',
+        'com.docker.compose.service': 'api',
+      });
+      const send = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+      await trigger.handleContainerReportDigest({ container, changed: true });
+      const replacement = {
+        ...container,
+        id: 'replacement',
+        labels: { ...container.labels, 'dd.group': 'media' },
+      };
+      const sibling = {
+        ...container,
+        id: 'sibling',
+        ...(boundary === 'agent'
+          ? { agent: 'remote' }
+          : { labels: { ...container.labels, 'com.docker.compose.project': 'other' } }),
+      };
+      storeContainer.getContainers.mockReturnValue([replacement, sibling]);
+      await trigger.flushDigestBuffer();
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  test('sends an eligible digest replacement once and retires its queued identity', async () => {
+    trigger.configuration.mode = 'digest';
+    const container = groupedContainer();
+    const send = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.handleContainerReportDigest({ container, changed: true });
+    const replacement = { ...container, id: 'replacement' };
+    storeContainer.getContainers.mockReturnValue([replacement]);
+    await trigger.flushDigestBuffer();
+    expect(send).toHaveBeenCalledExactlyOnceWith([replacement]);
+    expect(trigger.digestBuffer.size).toBe(0);
+    await trigger.flushDigestBuffer();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test('batch retry uses current reports to resolve a recreated identity', async () => {
+    trigger.configuration.mode = 'batch';
+    const container = groupedContainer();
+    vi.spyOn(trigger, 'triggerBatch').mockRejectedValueOnce(new Error('delivery failed'));
+    await trigger.handleContainerReports([{ container, changed: true }]);
+    const replacement = { ...container, id: 'replacement' };
+    expect(trigger.getBatchRetryContainers([{ container: replacement, changed: true }])).toEqual([
+      replacement,
+    ]);
+    expect(trigger.batchRetryBuffer.has(container.id)).toBe(false);
+    expect(trigger.batchRetryBuffer.get(replacement.id)).toEqual(replacement);
+  });
+
+  test('retries an eligible replacement once and clears the old retry identity', async () => {
+    trigger.configuration.mode = 'batch';
+    const container = groupedContainer();
+    const send = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockRejectedValueOnce(new Error('delivery failed'))
+      .mockResolvedValue(undefined);
+    await trigger.handleContainerReports([{ container, changed: true }]);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(trigger.batchRetryBuffer.size).toBe(1);
+    const replacement = { ...container, id: 'replacement' };
+    storeContainer.getContainers.mockReturnValue([replacement]);
+    await trigger.handleContainerReports([]);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][0]).toEqual([replacement]);
+    expect(trigger.batchRetryBuffer.size).toBe(0);
+    await trigger.handleContainerReports([]);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
   test.each(['payments', 'Payments', ' literal [a.*] ', '__ungrouped__'])(
     'validates and preserves the exact group name %j',
     (group) => {

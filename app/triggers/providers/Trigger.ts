@@ -53,6 +53,7 @@ import {
   getTriggerCategoryForType,
 } from '../trigger-category.js';
 import { BatchDispatcher } from './trigger-batch-dispatcher.js';
+import { createNotificationContainerLookup } from './trigger-current-container.js';
 import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
@@ -1066,8 +1067,8 @@ class Trigger<
     if (this.hasNotificationGroup()) {
       const currentContainers = this.getCurrentNotificationContainers();
       containers = containers.filter((container) => {
-        const current =
-          currentContainers.get(this.buildEventBatchDispatchKey(container)) ?? container;
+        const resolved = currentContainers(container);
+        const current = resolved === undefined ? container : resolved;
         if (this.isGroupRoutedNotificationEligible(current, ruleId, true)) return true;
         this.releaseEventDeliveryReservation(ruleId, container, reservationTokens.get(container));
         return false;
@@ -2200,22 +2201,24 @@ class Trigger<
     return this.getCategory() === 'notification' && this.configuration.group !== undefined;
   }
 
-  private getCurrentNotificationContainers(): Map<string, Container> {
-    return new Map(
-      storeContainer
-        .getContainersRaw()
-        .map(
-          (container) =>
-            [
-              getContainerNotificationKey(container) || fullName(container),
-              storeContainer.cloneContainer(container),
-            ] as const,
-        ),
+  private getCurrentNotificationContainers(
+    containers = storeContainer
+      .getContainersRaw()
+      .map((container) => storeContainer.cloneContainer(container)),
+  ): (container: Container) => Container | null | undefined {
+    if (this.hasNotificationGroup()) return createNotificationContainerLookup(containers);
+    const current = new Map(
+      containers.map(
+        (container) =>
+          [getContainerNotificationKey(container) || fullName(container), container] as const,
+      ),
     );
+    return (container) =>
+      current.get(getContainerNotificationKey(container) || fullName(container));
   }
 
   private isGroupRoutedNotificationEligible(
-    container: Container | undefined,
+    container: Container | null | undefined,
     ruleId: NotificationRuleId,
     skipThreshold = false,
   ): boolean {
@@ -2362,33 +2365,15 @@ class Trigger<
     const now = Date.now();
     this.pruneBatchRetryBuffer(now);
 
-    const currentReportsByBusinessId = new Map<string, ContainerReport>(
-      containerReports.map(
-        (containerReport) =>
-          [
-            getContainerNotificationKey(containerReport.container) ||
-              fullName(containerReport.container),
-            containerReport,
-          ] as const,
-      ),
+    const currentReports = this.getCurrentNotificationContainers(
+      containerReports.map((report) => report.container),
     );
-    const currentContainersByBusinessId = new Map<string, Container>(
-      storeContainer
-        .getContainersRaw()
-        .map(
-          (container) =>
-            [
-              getContainerNotificationKey(container as Container) ||
-                fullName(container as Container),
-              storeContainer.cloneContainer(container as Container),
-            ] as const,
-        ),
-    );
+    const currentContainers = this.getCurrentNotificationContainers();
 
-    for (const [containerName, bufferedContainer] of this.batchRetryBuffer.entries()) {
+    for (const [containerName, bufferedContainer] of Array.from(this.batchRetryBuffer.entries())) {
+      const reportContainer = currentReports(bufferedContainer);
       const currentContainer =
-        currentReportsByBusinessId.get(containerName)?.container ??
-        currentContainersByBusinessId.get(containerName);
+        reportContainer === undefined ? currentContainers(bufferedContainer) : reportContainer;
 
       if (!currentContainer || !this.shouldDispatchUpdateAvailableContainer(currentContainer)) {
         if (this.batchRetryBuffer.get(containerName) === bufferedContainer) {
@@ -2412,7 +2397,10 @@ class Trigger<
         continue;
       }
 
-      this.batchRetryBufferStore.set(containerName, currentContainer, now);
+      const currentKey =
+        getContainerNotificationKey(currentContainer) || fullName(currentContainer);
+      if (currentKey !== containerName) this.batchRetryBufferStore.delete(containerName);
+      this.batchRetryBufferStore.set(currentKey, currentContainer, now);
     }
 
     return Array.from(this.batchRetryBuffer.values());
@@ -2931,11 +2919,12 @@ class Trigger<
     const bufferedEntries = Array.from(this.digestBuffer.entries());
     const currentContainersByBusinessId = this.getCurrentNotificationContainers();
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
-      const currentContainer = currentContainersByBusinessId.get(containerName);
+      const currentContainer = currentContainersByBusinessId(bufferedContainer);
       const stillHasUpdate = !currentContainer || currentContainer.updateAvailable;
 
       if (stillHasUpdate) {
-        const evaluatedContainer = currentContainer ?? bufferedContainer;
+        const evaluatedContainer =
+          currentContainer === undefined ? bufferedContainer : currentContainer;
 
         // Re-check the action-policy dispatch winner at flush time, not just
         // at buffer time (handleContainerReportDigest / shouldHandleDigest-
@@ -2949,6 +2938,7 @@ class Trigger<
         // dispatch. A no-op for notification and command triggers — see
         // `isActionPolicyDispatchWinner`.
         if (
+          evaluatedContainer &&
           this.isActionPolicyDispatchWinner(evaluatedContainer) &&
           this.isGroupRoutedNotificationEligible(evaluatedContainer, 'update-available')
         ) {
@@ -3163,9 +3153,10 @@ class Trigger<
     if (cycleEntries && this.hasNotificationGroup()) {
       const currentContainers = this.getCurrentNotificationContainers();
       for (const [key, entry] of cycleEntries) {
+        const current = currentContainers(entry.container);
         if (
           !this.isGroupRoutedNotificationEligible(
-            currentContainers.get(key) ?? entry.container,
+            current === undefined ? entry.container : current,
             'security-alert',
           )
         ) {
