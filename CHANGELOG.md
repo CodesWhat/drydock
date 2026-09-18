@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Notification triggers can target one exact server-derived group with `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` or the YAML `group` field. Routing uses `dd.group`, then Compose project, then Swarm namespace, while retaining exclusions, thresholds and agent boundaries. Group-restricted queued notifications and digests recheck current membership before sending. Action providers reject this setting.
 - UI coverage CI emits bounded numeric memory, disk and process-RSS samples to help diagnose abrupt runner cancellations, without collecting environment values or command arguments or changing test gates.
 
 - Agents offer a persisted normal/compact table-spacing choice, with opt-in preference sync, unchanged card layout and a 44px minimum compact row target.

@@ -322,6 +322,9 @@ async function validateEntry(
   }
 
   try {
+    component.kind = entry.kind;
+    component.type = entry.provider;
+    component.name = entry.name;
     component.validateConfiguration(entry.configuration as object);
   } catch (error) {
     const fieldSegments = joiFieldSegments(error);

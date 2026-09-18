@@ -1,8 +1,30 @@
 import Component from '../../registry/Component.js';
 import * as configurationIndex from '../index.js';
+import { flattenConfigTree } from './flatten.js';
 import { validateConfiguration } from './validate.js';
 
 describe('validateConfiguration', () => {
+  test('validates notification group routing through the YAML configuration path', async () => {
+    const values = flattenConfigTree({
+      notification: {
+        discord: { payments: { url: 'https://discord.example/hook', group: 'Payments [EU]' } },
+      },
+    });
+    expect(values.DD_NOTIFICATION_DISCORD_PAYMENTS_GROUP).toBe('Payments [EU]');
+    const result = await validateConfiguration(values);
+    expect(result.errors).toEqual([]);
+  });
+
+  test('reports a group selector on an action as a startup configuration error', async () => {
+    const result = await validateConfiguration({ DD_ACTION_DOCKER_DEPLOY_GROUP: 'payments' });
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        path: 'action.docker.deploy.group',
+        envKey: 'DD_ACTION_DOCKER_DEPLOY_GROUP',
+      }),
+    ]);
+  });
+
   test('an empty candidate map produces no errors', async () => {
     const result = await validateConfiguration({});
     expect(result.errors).toEqual([]);
