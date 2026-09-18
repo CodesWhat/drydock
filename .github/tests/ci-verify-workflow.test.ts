@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
@@ -45,6 +48,59 @@ function getTestJobStep(name: string): WorkflowStep | undefined {
   const workflow = loadWorkflow();
   return workflow.jobs?.test?.steps?.find((step) => step.name === name);
 }
+
+test('UI coverage captures bounded resource evidence without changing the gate', () => {
+  const step = getTestJobStep('Run ui tests');
+  expect(step?.run).toContain('node ../scripts/ci-resource-sampler.mjs "$$"');
+  expect(step?.run).toContain('trap');
+  expect(step?.run).toContain('kill');
+  expect(step?.run).toContain('wait');
+  expect(step?.run).toContain('npm run test:unit -- --maxWorkers=1');
+  expect(step?.env?.NODE_OPTIONS).toBe('--max-old-space-size=1536');
+  expect(step?.['continue-on-error']).not.toBe(true);
+});
+
+test.each([0, 7])(
+  'UI resource cleanup preserves test exit %i and stops its sampler',
+  (exitCode) => {
+    const bin = mkdtempSync(join(tmpdir(), 'dd-ci-shell-'));
+    try {
+      writeFileSync(
+        join(bin, 'npm'),
+        `#!/bin/sh\nprintf 'NPM_ARGS=%s\\n' "$*"\nsleep 0.25\nexit ${exitCode}\n`,
+        { mode: 0o755 },
+      );
+      const command = getTestJobStep('Run ui tests')?.run ?? '';
+      const result = spawnSync(
+        'bash',
+        [
+          '-e',
+          '-o',
+          'pipefail',
+          '-c',
+          command.replace(
+            'npm run test:unit',
+            'printf "SAMPLER_PID=%s\\n" "$resource_sampler_pid"\nnpm run test:unit',
+          ),
+        ],
+        {
+          cwd: fileURLToPath(new URL('../../ui', import.meta.url)),
+          env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+          encoding: 'utf8',
+          timeout: 5000,
+        },
+      );
+      expect(result.status, result.stderr).toBe(exitCode);
+      expect(result.stdout).toContain('NPM_ARGS=run test:unit -- --maxWorkers=1');
+      expect(result.stdout).toContain('CI_RESOURCE ');
+      const pid = Number(result.stdout.match(/SAMPLER_PID=(\d+)/)?.[1]);
+      expect(pid).toBeGreaterThan(0);
+      expect(() => process.kill(pid, 0)).toThrow();
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  },
+);
 
 test('required ci-verify jobs publish stable plain-text check names', () => {
   const workflow = loadWorkflow();
