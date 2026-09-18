@@ -28,7 +28,7 @@ export function resolveUpdateFailureReason(
     return summarised;
   }
   if (typeof args.rollbackReason === 'string' && args.rollbackReason.trim() !== '') {
-    return formatRollbackReason(args.rollbackReason);
+    return formatRollbackReason(args.rollbackReason, t);
   }
   if (
     typeof args.lastError === 'string' &&

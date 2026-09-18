@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "Đã sao chép!",
       "clickToCopy": "Nhấn để sao chép",
-      "failed": "Copy failed"
+      "failed": "Sao chép thất bại"
     },
     "dataFilterBar": {
       "filters": "Bộ lọc",
@@ -23,8 +23,8 @@
       "viewMode": "Chế độ xem",
       "viewModeLabel": "Chế độ xem {label}",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "Bảng",
+        "cards": "Thẻ"
       }
     },
     "dataTable": {

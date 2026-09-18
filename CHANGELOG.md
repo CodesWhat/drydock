@@ -102,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Container recheck, delete, policy, dependency-chain, scan, environment-reveal and update-preview HTTP failures use the active interface language while retaining HTTP context and existing server diagnostics. Canonical rollback reasons also keep their translations in update toasts and container rows.
+- Table/card view controls and copy-failure tooltips now use translated labels across all supported interface languages, including when the language changes while feedback is visible.
+
 - Watcher next-run countdowns use localized units and update when the language changes in tables, cards and open details, without refetching. The remaining 15 English copies of "soon" are translated; countdown rounding and timestamp tooltips are unchanged.
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
 - Full-page update previews now reuse the selected language's yes/no text for running status and compose-file writes, matching the side panel.

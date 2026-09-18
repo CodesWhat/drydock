@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "Скопировано!",
       "clickToCopy": "Нажмите для копирования",
-      "failed": "Copy failed"
+      "failed": "Не удалось скопировать"
     },
     "dataFilterBar": {
       "filters": "Фильтры",
@@ -23,8 +23,8 @@
       "viewMode": "Режим просмотра",
       "viewModeLabel": "Вид {label}",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "Таблица",
+        "cards": "Карточки"
       }
     },
     "dataTable": {
