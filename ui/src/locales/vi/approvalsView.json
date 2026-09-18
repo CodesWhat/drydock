@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Không thể tải bản tóm tắt phê duyệt",
+      "detailLoadFailed": "Không thể tải phê duyệt",
+      "approveFailed": "Không thể phê duyệt bản cập nhật",
+      "rejectFailed": "Không thể từ chối bản cập nhật",
+      "deferFailed": "Không thể hoãn bản cập nhật"
+    },
     "ofCount": "Đã hiển thị: {count}",
     "refresh": "Làm mới",
     "loading": "Đang tải các yêu cầu phê duyệt…",

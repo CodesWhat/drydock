@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "無法載入核准摘要",
+      "detailLoadFailed": "無法載入核准",
+      "approveFailed": "無法核准更新",
+      "rejectFailed": "無法拒絕更新",
+      "deferFailed": "無法延後更新"
+    },
     "ofCount": "已顯示 {count} 項",
     "refresh": "重新整理",
     "loading": "正在載入核准項目…",
