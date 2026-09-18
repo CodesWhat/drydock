@@ -431,9 +431,11 @@ function createFetchVulnerabilities(
     try {
       const overview = await getSecurityVulnerabilityOverview();
       applyOverviewToState(overview, state);
+      return true;
     } catch (caught: unknown) {
       state.error.value = errorMessage(caught, t('containerComponents.vulnerabilities.loadFailed'));
       clearVulnerabilityState(state);
+      return false;
     } finally {
       state.loading.value = false;
     }

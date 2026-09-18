@@ -161,6 +161,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Não foi possível iniciar a verificação.",
+    "scanProgressUnavailable": "O progresso da verificação está indisponível. As verificações aceitas podem ainda estar em andamento. Atualize os resultados antes de iniciar outra verificação.",
     "loadingVulnerabilityData": "Carregando dados de vulnerabilidade...",
     "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Escanear agora",

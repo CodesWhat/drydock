@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep bulk scan counts and scanner results accurate when a post-scan notification fails. Each completed task is counted once, and notification delivery failures no longer replace a completed scan's status with an error.
+- Keep bulk scan progress accurate for large fleets and busy event streams while HTTP acceptance is delayed. Fresh request correlation and server-owned cumulative counts replace the 500-entry early-event buffer, with bounded client state and explicit recovery for conflicting or lost progress. Duplicate/replayed events do not overcount, and failed tasks still advance progress.
+- Track bulk vulnerability scan progress by scan cycle and container, including completions received before the request returns. Unrelated or duplicate events no longer finish another scan. Failed requests and unavailable progress now show a localized error instead of leaving an unhandled failure or a stuck progress banner; accepted backend work is not reported as cancelled. Lost progress requires a successful read-only results refresh before starting another scan; refreshing does not establish whether the original scan has finished.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 
 ## [1.6.1-rc.14] — 2026-09-15

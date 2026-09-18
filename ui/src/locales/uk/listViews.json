@@ -161,6 +161,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Не вдалося розпочати сканування.",
+    "scanProgressUnavailable": "Дані про перебіг сканування недоступні. Прийняті сканування можуть ще виконуватися. Оновіть результати перед запуском нового сканування.",
     "loadingVulnerabilityData": "Завантаження даних про вразливості...",
     "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Сканувати зараз",

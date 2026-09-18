@@ -161,6 +161,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Nie udało się rozpocząć skanowania.",
+    "scanProgressUnavailable": "Postęp skanowania jest niedostępny. Przyjęte skanowania mogą nadal trwać. Odśwież wyniki przed rozpoczęciem kolejnego skanowania.",
     "loadingVulnerabilityData": "Ładowanie danych o lukach w zabezpieczeniach...",
     "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Skanuj teraz",

@@ -161,6 +161,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "تعذّر بدء الفحص.",
+    "scanProgressUnavailable": "تقدّم الفحص غير متاح. قد تكون الفحوصات المقبولة لا تزال قيد التشغيل. حدّث النتائج قبل بدء فحص آخر.",
     "loadingVulnerabilityData": "جارٍ تحميل بيانات الثغرات...",
     "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "فحص الآن",

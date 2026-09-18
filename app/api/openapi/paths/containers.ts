@@ -175,6 +175,14 @@ export const containerPaths = {
             schema: {
               type: 'object',
               properties: {
+                requestId: {
+                  type: 'string',
+                  pattern: '^[a-f0-9]{32}$',
+                  minLength: 32,
+                  maxLength: 32,
+                  description:
+                    'Optional fresh client correlation ID, echoed in acceptance and cumulative SSE progress. Not an idempotency key.',
+                },
                 containerIds: {
                   type: 'array',
                   items: { type: 'string' },
@@ -197,6 +205,14 @@ export const containerPaths = {
         202: jsonResponse('Bulk scan accepted — work runs asynchronously', {
           type: 'object',
           properties: {
+            requestId: {
+              type: 'string',
+              pattern: '^[a-f0-9]{32}$',
+              minLength: 32,
+              maxLength: 32,
+              description:
+                'Echoed only when supplied by the client. The server-generated cycleId remains authoritative.',
+            },
             cycleId: {
               type: 'string',
               description:
