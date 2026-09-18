@@ -199,7 +199,6 @@ async function runBulkScan(
 ): Promise<void> {
   const { containers, cycleId, requestId, startedAt, severity, signal } = options;
   let alertCount = 0;
-  let scannedCount = 0;
   let completedCount = 0;
 
   try {
@@ -214,7 +213,7 @@ async function runBulkScan(
           const image = deps.getContainerImageFullName(container);
           const auth = await deps.getContainerRegistryAuth(container);
           const scanResult = await deps.scanImageForVulnerabilities({ image, auth });
-          scannedCount += 1;
+          status = scanResult.status;
 
           try {
             // Re-fetch the current store record at write-back time rather than
@@ -277,10 +276,7 @@ async function runBulkScan(
             });
             alertCount += 1;
           }
-
-          status = scanResult.status;
         } catch (err: unknown) {
-          scannedCount += 1;
           deps.log.info(
             `Bulk scan failed for container ${containerId} (${deps.getErrorMessage(err)})`,
           );
@@ -303,7 +299,7 @@ async function runBulkScan(
     const completedAt = new Date().toISOString();
     await deps.emitSecurityScanCycleComplete({
       cycleId,
-      scannedCount,
+      scannedCount: completedCount,
       alertCount,
       scope: 'on-demand-bulk',
       startedAt,
