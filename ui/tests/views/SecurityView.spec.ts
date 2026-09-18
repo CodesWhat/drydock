@@ -1,8 +1,12 @@
 import { flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { computed, defineComponent, nextTick, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
+import { useEventStreamStore } from '@/stores/eventStream';
 
 const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
+const mockScanAllContainersApi = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
 const mockManageSecurityAsset = vi.fn();
@@ -27,6 +31,7 @@ vi.mock('@/services/container', () => ({
   getSecurityVulnerabilityOverview: (...args: any[]) =>
     mockGetSecurityVulnerabilityOverview(...args),
   scanContainer: (...args: any[]) => mockScanContainer(...args),
+  scanAllContainersApi: (...args: any[]) => mockScanAllContainersApi(...args),
   getContainerSbom: (...args: any[]) => mockGetContainerSbom(...args),
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
 }));
@@ -71,6 +76,7 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 
 import { mount } from '@vue/test-utils';
 import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
+import DataFilterBar from '@/components/DataFilterBar.vue';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
@@ -496,6 +502,239 @@ function mockContainers(containers: any[]) {
 }
 
 describe('SecurityView', () => {
+  describe('bulk scan error feedback through the real service and progress composable', () => {
+    it.each(['fr', 'ar'] as const)(
+      'finishes a large early scan through the real service (%s)',
+      async (locale) => {
+        const originalLocale = i18n.global.locale.value;
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        const stream = useEventStreamStore();
+        stream.status = 'open';
+        i18n.global.locale.value = locale;
+        mockContainers([]);
+        const service =
+          await vi.importActual<typeof import('@/services/container')>('@/services/container');
+        mockScanAllContainersApi.mockImplementation(service.scanAllContainersApi);
+        const acceptance = Promise.withResolvers<Response>();
+        const request = vi.fn().mockReturnValue(acceptance.promise);
+        vi.stubGlobal('fetch', request);
+        const w = mount(SecurityView, { global: { plugins: [pinia], stubs } });
+        const progress = (await import('@/composables/useScanProgress')).useScanProgress();
+        try {
+          await flushPromises();
+          const button = w
+            .findAll('button')
+            .find((item) => item.text() === i18n.global.t('securityView.scanNow'))!;
+          await button.trigger('click');
+          const { requestId } = JSON.parse(request.mock.calls[0][1].body);
+          for (let done = 1; done <= 1200; done++) {
+            stream.publish('scan-completed', {
+              containerId: `other-${done}`,
+              cycleId: `other-${done}`,
+              requestId: 'b'.repeat(32),
+              completedCount: 1,
+              scheduledCount: 1,
+            });
+            stream.publish('scan-completed', {
+              containerId: `own-${done}`,
+              cycleId: 'accepted',
+              requestId,
+              completedCount: done,
+              scheduledCount: 1200,
+            });
+          }
+          await flushPromises();
+          expect(progress.scanning.value).toBe(true);
+          expect(w.find('[role="alert"]').exists()).toBe(false);
+          acceptance.resolve(
+            new Response(JSON.stringify({ cycleId: 'accepted', requestId, scheduledCount: 1200 }), {
+              status: 202,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+          await flushPromises();
+          expect(progress.scanning.value).toBe(false);
+          expect(progress.scanProgress.value).toEqual({ done: 1200, total: 1200 });
+          expect(w.find('[role="alert"]').exists()).toBe(false);
+          expect(button.attributes('disabled')).toBeUndefined();
+          expect(request).toHaveBeenCalledTimes(1);
+        } finally {
+          progress.cancelScan();
+          acceptance.resolve(new Response('{}', { status: 202 }));
+          w.unmount();
+          stream.$dispose();
+          i18n.global.locale.value = originalLocale;
+          vi.unstubAllGlobals();
+        }
+      },
+    );
+
+    it.each([
+      ['fr', false],
+      ['ar', true],
+    ] as const)(
+      'requires a successful read-only refresh after losing progress (%s)',
+      async (locale, compact) => {
+        const originalLocale = i18n.global.locale.value;
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        const stream = useEventStreamStore();
+        stream.status = 'open';
+        mockWindowNarrow.value = compact;
+        i18n.global.locale.value = locale;
+        mockContainers([]);
+        mockScanAllContainersApi.mockImplementation(async (_signal, requestId) => ({
+          cycleId: 'accepted',
+          requestId,
+          scheduledCount: 2,
+        }));
+        const w = mount(SecurityView, { global: { plugins: [pinia], stubs } });
+        try {
+          await flushPromises();
+          const button = w
+            .findAll('button')
+            .find((item) =>
+              compact
+                ? item.attributes('aria-label') === i18n.global.t('securityView.scanAllAriaLabel')
+                : item.text() === i18n.global.t('securityView.scanNow'),
+            )!;
+          await button.trigger('click');
+          await flushPromises();
+          stream.publish('resync-required', { reason: 'buffer-evicted' });
+          await flushPromises();
+          expect(button.attributes('disabled')).toBeDefined();
+          const emptyState = w.findComponent(stubs.SecurityEmptyState);
+          expect(emptyState.props('scannerReady')).toBe(false);
+          emptyState.vm.$emit('scan-now');
+          await flushPromises();
+          expect(mockScanAllContainersApi).toHaveBeenCalledTimes(1);
+          const warning = i18n.global.t('securityView.scanProgressUnavailable');
+          expect(w.get('[role="alert"]').text()).toContain(warning);
+          const refresh = w.get('[role="alert"] button');
+          expect(refresh.text()).toBe(
+            i18n.global.t('containerComponents.fullPageOverview.refresh'),
+          );
+          mockGetSecurityVulnerabilityOverview.mockRejectedValueOnce(
+            new Error('Results unavailable'),
+          );
+          await refresh.trigger('click');
+          await flushPromises();
+          expect(w.get('[role="alert"]').text()).toContain(warning);
+          expect(button.attributes('disabled')).toBeDefined();
+          expect(mockScanAllContainersApi).toHaveBeenCalledTimes(1);
+          const pending = Promise.withResolvers<unknown>();
+          mockGetSecurityVulnerabilityOverview.mockReturnValueOnce(pending.promise);
+          await refresh.trigger('click');
+          expect(refresh.attributes('disabled')).toBeDefined();
+          refresh.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          await flushPromises();
+          expect(button.attributes('disabled')).toBeDefined();
+          expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledTimes(3);
+          pending.resolve({
+            totalContainers: 0,
+            scannedContainers: 0,
+            latestScannedAt: null,
+            images: [],
+          });
+          await flushPromises();
+          expect(w.find('[role="alert"]').exists()).toBe(false);
+          expect(button.attributes('disabled')).toBeUndefined();
+          expect(mockScanAllContainersApi).toHaveBeenCalledTimes(1);
+          mockScanAllContainersApi.mockImplementationOnce(async (_signal, requestId) => ({
+            cycleId: 'next',
+            requestId,
+            scheduledCount: 0,
+          }));
+          await button.trigger('click');
+          await flushPromises();
+          expect(mockScanAllContainersApi).toHaveBeenCalledTimes(2);
+        } finally {
+          (await import('@/composables/useScanProgress')).useScanProgress().cancelScan();
+          w.unmount();
+          stream.$dispose();
+          i18n.global.locale.value = originalLocale;
+        }
+      },
+    );
+
+    it.each(['fr', 'ar'] as const)(
+      'renders a localized HTTP failure and allows a later scan (%s)',
+      async (locale) => {
+        const originalLocale = i18n.global.locale.value;
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        const stream = useEventStreamStore();
+        stream.status = 'open';
+        const service =
+          await vi.importActual<typeof import('@/services/container')>('@/services/container');
+        mockScanAllContainersApi.mockImplementation(service.scanAllContainersApi);
+        const request = vi
+          .fn()
+          .mockResolvedValue(
+            new Response('null', { status: 429, headers: { 'Content-Type': 'application/json' } }),
+          );
+        vi.stubGlobal('fetch', request);
+        i18n.global.locale.value = locale;
+        const unhandled: unknown[] = [];
+        const w = mount(SecurityView, {
+          global: {
+            plugins: [pinia],
+            stubs,
+            config: { errorHandler: (error) => unhandled.push(error) },
+          },
+        });
+        try {
+          await flushPromises();
+          const button = w
+            .findAll('button')
+            .find((item) => item.text() === i18n.global.t('securityView.scanNow'))!;
+          await button.trigger('click');
+          await flushPromises();
+          const errorText = i18n.global.t('securityView.scanFailed');
+          expect(w.find('[role="alert"]').exists()).toBe(true);
+          expect(w.find('[role="alert"]').text()).toBe(errorText);
+          expect(errorText).not.toBe('securityView.scanFailed');
+          expect(unhandled).toEqual([]);
+          expect(request).toHaveBeenCalledTimes(1);
+          expect(button.attributes('disabled')).toBeUndefined();
+          request.mockImplementation(
+            async (_url, init) =>
+              new Response(
+                JSON.stringify({
+                  cycleId: 'retry-cycle',
+                  requestId: JSON.parse(init.body).requestId,
+                  scheduledCount: 1,
+                }),
+                {
+                  status: 202,
+                  headers: { 'Content-Type': 'application/json' },
+                },
+              ),
+          );
+          await button.trigger('click');
+          await flushPromises();
+          expect(w.find('[role="alert"]').exists()).toBe(false);
+          stream.publish('scan-completed', {
+            containerId: 'one',
+            cycleId: 'retry-cycle',
+            requestId: JSON.parse(request.mock.calls.at(-1)![1].body).requestId,
+            completedCount: 1,
+            scheduledCount: 1,
+            status: 'passed',
+          });
+          await flushPromises();
+        } finally {
+          (await import('@/composables/useScanProgress')).useScanProgress().cancelScan();
+          w.unmount();
+          stream.$dispose();
+          i18n.global.locale.value = originalLocale;
+          vi.unstubAllGlobals();
+        }
+      },
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetPreferences();
@@ -1101,6 +1340,36 @@ describe('SecurityView', () => {
   });
 
   describe('scan coverage display', () => {
+    it('updates rendered scan and filtered-image counts when the locale changes', async () => {
+      const originalLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'en';
+      mockContainers([makeContainer(), makeContainer({ security: null })]);
+      const w = factory({ DataFilterBar, ContainerUpdateDialog: containerUpdateDialogStub });
+      try {
+        await flushPromises();
+        const counter = () =>
+          w.get('[data-test="data-filter-bar-trailing"] > span').text().replace(/\s+/g, '');
+        expect(counter()).toBe('1/2scanned');
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(counter()).toBe('1/2analysés');
+        i18n.global.locale.value = 'ar';
+        await nextTick();
+        expect(counter()).toBe('1/2تمفحصها');
+
+        (w.vm as any).secFilterSeverity = 'HIGH';
+        await nextTick();
+        expect(counter()).toBe('1/1صور');
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(counter()).toBe('1/1images');
+        expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledTimes(1);
+      } finally {
+        w.unmount();
+        i18n.global.locale.value = originalLocale;
+      }
+    });
+
     it('shows 0/N scanned when no containers have been scanned', async () => {
       mockContainers([makeContainer({ security: null }), makeContainer({ security: null })]);
       const w = factory();

@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "無法啟動掃描。",
+    "scanProgressUnavailable": "無法取得掃描進度。已接受的掃描可能仍在執行。請重新整理結果後再啟動其他掃描。",
     "loadingVulnerabilityData": "正在載入漏洞資料……",
     "runtimeLoadError": "無法載入安全執行時狀態",
     "scanNow": "立即掃描",
@@ -211,8 +213,8 @@
       "clean": "乾淨"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "映像檔",
+      "scanned": "已掃描"
     },
     "fixableBadge": "{count} 個可修復",
     "delta": {

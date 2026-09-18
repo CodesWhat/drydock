@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "De scan kon niet worden gestart.",
+    "scanProgressUnavailable": "De scanvoortgang is niet beschikbaar. Geaccepteerde scans worden mogelijk nog uitgevoerd. Vernieuw de resultaten voordat je een nieuwe scan start.",
     "loadingVulnerabilityData": "Kwetsbaarheidsgegevens laden...",
     "runtimeLoadError": "Kan beveiligingsruntimestatus niet laden",
     "scanNow": "Nu scannen",
@@ -212,7 +214,7 @@
     },
     "countLabel": {
       "images": "images",
-      "scanned": "scanned"
+      "scanned": "gescand"
     },
     "fixableBadge": "{count} oplosbaar",
     "delta": {

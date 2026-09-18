@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Failed to start the scan.",
+    "scanProgressUnavailable": "Scan progress is unavailable. Accepted scans may still be running. Refresh the results before starting another scan.",
     "loadingVulnerabilityData": "Loading vulnerability data...",
     "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Scan Now",

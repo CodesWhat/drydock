@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "No se pudo iniciar el análisis.",
+    "scanProgressUnavailable": "El progreso del análisis no está disponible. Los análisis aceptados pueden seguir en curso. Actualiza los resultados antes de iniciar otro análisis.",
     "loadingVulnerabilityData": "Cargando datos de vulnerabilidades...",
     "runtimeLoadError": "No se pudo cargar el estado runtime de seguridad",
     "scanNow": "Escanear ahora",
@@ -212,7 +214,7 @@
     },
     "countLabel": {
       "images": "imágenes",
-      "scanned": "scanned"
+      "scanned": "analizados"
     },
     "fixableBadge": "{count} corregibles",
     "delta": {

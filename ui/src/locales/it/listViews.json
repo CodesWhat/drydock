@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Impossibile avviare la scansione.",
+    "scanProgressUnavailable": "L’avanzamento della scansione non è disponibile. Le scansioni accettate potrebbero essere ancora in corso. Aggiorna i risultati prima di avviare un’altra scansione.",
     "loadingVulnerabilityData": "Caricamento dati vulnerabilità...",
     "runtimeLoadError": "Impossibile caricare lo stato runtime della sicurezza",
     "scanNow": "Scansiona ora",
@@ -211,8 +213,8 @@
       "clean": "Pulito"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "immagini",
+      "scanned": "analizzati"
     },
     "fixableBadge": "{count} risolvibili",
     "delta": {

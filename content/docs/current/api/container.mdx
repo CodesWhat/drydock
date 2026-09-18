@@ -561,7 +561,7 @@ Returns 200 with the updated container on success, 400 if security scanner is no
 
 ## Run bulk security scan
 
-This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel as `dd:scan-started` and `dd:scan-completed` events (see [Server-Sent Events](/docs/api#server-sent-events-sse)). Internally, a single `SecurityScanCycleComplete` event fires when the cycle finishes so digest-mode notification triggers can send one summary instead of one per container; this internal event is not itself delivered over the SSE channel. Respects client-disconnect aborts.
+This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel as `dd:scan-started` and `dd:scan-completed` events (see [Server-Sent Events](/docs/api#server-sent-events-sse)). Internally, a single `SecurityScanCycleComplete` event fires when the cycle finishes so digest-mode notification triggers can send one summary instead of one per container; this internal event is not itself delivered over the SSE channel. A prematurely closed, incomplete request stops queued scans. Once the request is complete and accepted, scanning continues after the `202` response; closing the client or stopping its progress display does not cancel the accepted work.
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/scan-all
@@ -570,6 +570,14 @@ curl -X POST http://drydock:3000/api/v1/containers/scan-all
 Rate-limited to 1 request per 60 seconds. There is no bypass for admins or any other role; when identity-aware rate limit keying is enabled the limit is keyed per session/user instead of per IP, but it still applies to every authenticated caller.
 
 Returns 202 Accepted when the bulk scan is started, or 429 if the rate limit is exceeded.
+
+The accepted response contains the server-generated `cycleId` and `scheduledCount`. Bulk `dd:scan-started` and `dd:scan-completed` events carry the same `cycleId` alongside `containerId`; single-container scan events may omit it.
+
+For large-fleet progress, send a fresh random `requestId` of 32 lowercase hexadecimal characters in the optional JSON body. The server echoes it in acceptance and includes `requestId`, cumulative `completedCount`, and `scheduledCount` on each completion event. Completed counts include failed tasks, not only successful scans. This is correlation, not an idempotency key: repeating the POST can start another scan.
+
+Subscribe before sending the request, ignore other request IDs, and retain only the highest valid cumulative count for your request. Validate its cycle and total against the accepted response before treating it as complete. Replayed or out-of-order counts must never decrease progress or be added together. This avoids buffering every early completion or unrelated cycle. Clients that omit `requestId` keep the original response and event fields.
+
+The Security page uses this correlated-count contract and requires a live event connection before starting a bulk scan. If acceptance takes more than 30 seconds, the connection drops, replay requires a resync, or the server returns missing/conflicting correlation data, it stops tracking and reports that progress is unavailable. This does not cancel accepted scans. Refresh results before explicitly starting another scan; failed requests are not automatically retried.
 
 ## Get SBOM for a container
 

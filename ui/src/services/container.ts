@@ -476,27 +476,31 @@ async function updateDependencyGroup(
 interface BulkScanResponse {
   cycleId: string;
   scheduledCount: number;
+  requestId?: string;
 }
 
-async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanResponse> {
+async function scanAllContainersApi(
+  signal?: AbortSignal,
+  requestId?: string,
+): Promise<BulkScanResponse> {
   const response = await fetch('/api/v1/containers/scan-all', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
+    ...(requestId ? { body: JSON.stringify({ requestId }) } : {}),
     ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
-    let details = '';
+    let message = i18n.global.t('securityView.scanFailed');
     try {
       const body = await readJsonResponse<{ error?: unknown }>(response, 'Container scan API');
-      details = body?.error ? ` (${body.error})` : '';
+      if (typeof body?.error === 'string' && body.error.trim()) {
+        message = body.error;
+      }
     } catch (e: unknown) {
       console.debug(`Unable to parse scan-all response payload: ${errorMessage(e)}`);
     }
-    throw new ApiError(
-      `Failed to scan all containers: ${response.statusText}${details}`,
-      response.status,
-    );
+    throw new ApiError(message, response.status);
   }
   return readJsonResponse<BulkScanResponse>(response, 'Container scan API');
 }

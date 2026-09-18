@@ -41,6 +41,27 @@ function collectSchemaDanglingRefs(document: unknown): string[] {
 }
 
 describe('OpenAPI document', () => {
+  test('documents optional bounded bulk-scan request correlation and its acceptance echo', () => {
+    const operation = openApiDocument.paths['/api/v1/containers/scan-all'].post;
+    const request = operation.requestBody.content['application/json'].schema;
+    const response = operation.responses[202].content['application/json'].schema;
+    expect(request.properties).toHaveProperty(
+      'requestId',
+      expect.objectContaining({
+        type: 'string',
+        pattern: '^[a-f0-9]{32}$',
+        minLength: 32,
+        maxLength: 32,
+      }),
+    );
+    expect(response.properties).toHaveProperty(
+      'requestId',
+      expect.objectContaining({ type: 'string' }),
+    );
+    expect(response.required).not.toContain('requestId');
+    expect(request.additionalProperties).toBe(false);
+  });
+
   test('should expose the same OpenAPI document through the decomposed module entrypoint', () => {
     expect(openApiDocumentFromIndex).toBe(openApiDocument);
   });
