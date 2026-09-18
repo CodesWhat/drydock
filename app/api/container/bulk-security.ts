@@ -6,6 +6,7 @@ import type { TrivyDatabaseStatus } from '../../security/runtime.js';
 import type { ContainerSecurityScan } from '../../security/scan.js';
 import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
+import type { BulkScanProgress } from '../sse.js';
 
 export const MAX_CONCURRENT_BULK_SCANS = 4;
 
@@ -45,7 +46,12 @@ interface BulkSecurityHandlerDependencies {
   emitSecurityScanCycleComplete: (payload: SecurityScanCycleCompleteEventPayload) => Promise<void>;
   fullName: (container: Container) => string;
   broadcastScanStarted: (containerId: string, cycleId?: string) => void;
-  broadcastScanCompleted: (containerId: string, status: string, cycleId?: string) => void;
+  broadcastScanCompleted: (
+    containerId: string,
+    status: string,
+    cycleId?: string,
+    progress?: BulkScanProgress,
+  ) => void;
   getContainerImageFullName: (container: Container) => string;
   getContainerRegistryAuth: (
     container: Container,
@@ -66,6 +72,7 @@ interface BulkSecurityHandlerDependencies {
 interface ParsedBulkScanBody {
   containerIds?: string[];
   severity?: SeverityFilter;
+  requestId?: string;
 }
 
 function parseBulkScanBody(
@@ -77,10 +84,20 @@ function parseBulkScanBody(
       return { parsed };
     }
     const requestBody = body as Record<string, unknown>;
-    const allowedKeys = new Set(['containerIds', 'severity']);
+    const allowedKeys = new Set(['containerIds', 'severity', 'requestId']);
     const unknownKeys = Object.keys(requestBody).filter((k) => !allowedKeys.has(k));
     if (unknownKeys.length > 0) {
       return { error: `Unknown request properties: ${unknownKeys.join(', ')}`, status: 400 };
+    }
+
+    if (requestBody.requestId !== undefined) {
+      if (
+        typeof requestBody.requestId !== 'string' ||
+        !/^[a-f0-9]{32}$/.test(requestBody.requestId)
+      ) {
+        return { error: 'requestId must be 32 lowercase hexadecimal characters', status: 400 };
+      }
+      parsed.requestId = requestBody.requestId;
     }
 
     // Validate containerIds
@@ -170,6 +187,7 @@ async function runConcurrently<T>(
 interface BulkScanOptions {
   containers: Container[];
   cycleId: string;
+  requestId?: string;
   startedAt: string;
   severity: SeverityFilter;
   signal?: AbortSignal;
@@ -179,9 +197,10 @@ async function runBulkScan(
   deps: BulkSecurityHandlerDependencies,
   options: BulkScanOptions,
 ): Promise<void> {
-  const { containers, cycleId, startedAt, severity, signal } = options;
+  const { containers, cycleId, requestId, startedAt, severity, signal } = options;
   let alertCount = 0;
   let scannedCount = 0;
+  let completedCount = 0;
 
   try {
     await runConcurrently(
@@ -190,6 +209,7 @@ async function runBulkScan(
       async (container) => {
         const containerId = container.id;
         deps.broadcastScanStarted(containerId, cycleId);
+        let status = 'error';
         try {
           const image = deps.getContainerImageFullName(container);
           const auth = await deps.getContainerRegistryAuth(container);
@@ -258,13 +278,23 @@ async function runBulkScan(
             alertCount += 1;
           }
 
-          deps.broadcastScanCompleted(containerId, scanResult.status, cycleId);
+          status = scanResult.status;
         } catch (err: unknown) {
           scannedCount += 1;
           deps.log.info(
             `Bulk scan failed for container ${containerId} (${deps.getErrorMessage(err)})`,
           );
-          deps.broadcastScanCompleted(containerId, 'error', cycleId);
+        } finally {
+          completedCount += 1;
+          if (requestId) {
+            deps.broadcastScanCompleted(containerId, status, cycleId, {
+              requestId,
+              completedCount,
+              scheduledCount: containers.length,
+            });
+          } else {
+            deps.broadcastScanCompleted(containerId, status, cycleId);
+          }
         }
       },
       signal,
@@ -297,7 +327,7 @@ export function createBulkSecurityHandlers(deps: BulkSecurityHandlerDependencies
         return;
       }
 
-      const { containerIds, severity = 'all' } = parseResult.parsed;
+      const { containerIds, severity = 'all', requestId } = parseResult.parsed;
 
       // Resolve container set server-side
       let targetContainers: Container[];
@@ -326,12 +356,17 @@ export function createBulkSecurityHandlers(deps: BulkSecurityHandlerDependencies
       });
 
       // Respond immediately with 202 — work continues async
-      res.status(202).json({ cycleId, scheduledCount: targetContainers.length });
+      res.status(202).json({
+        cycleId,
+        scheduledCount: targetContainers.length,
+        ...(requestId ? { requestId } : {}),
+      });
 
       // Run async, don't let unhandled rejections crash the process
       runBulkScan(deps, {
         containers: targetContainers,
         cycleId,
+        requestId,
         startedAt,
         severity,
         signal: abortController.signal,

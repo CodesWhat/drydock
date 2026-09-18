@@ -476,13 +476,18 @@ async function updateDependencyGroup(
 interface BulkScanResponse {
   cycleId: string;
   scheduledCount: number;
+  requestId?: string;
 }
 
-async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanResponse> {
+async function scanAllContainersApi(
+  signal?: AbortSignal,
+  requestId?: string,
+): Promise<BulkScanResponse> {
   const response = await fetch('/api/v1/containers/scan-all', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
+    ...(requestId ? { body: JSON.stringify({ requestId }) } : {}),
     ...(signal ? { signal } : {}),
   });
   if (!response.ok) {

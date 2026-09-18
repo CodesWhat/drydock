@@ -503,6 +503,73 @@ function mockContainers(containers: any[]) {
 
 describe('SecurityView', () => {
   describe('bulk scan error feedback through the real service and progress composable', () => {
+    it.each(['fr', 'ar'] as const)(
+      'finishes a large early scan through the real service (%s)',
+      async (locale) => {
+        const originalLocale = i18n.global.locale.value;
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        const stream = useEventStreamStore();
+        stream.status = 'open';
+        i18n.global.locale.value = locale;
+        mockContainers([]);
+        const service =
+          await vi.importActual<typeof import('@/services/container')>('@/services/container');
+        mockScanAllContainersApi.mockImplementation(service.scanAllContainersApi);
+        const acceptance = Promise.withResolvers<Response>();
+        const request = vi.fn().mockReturnValue(acceptance.promise);
+        vi.stubGlobal('fetch', request);
+        const w = mount(SecurityView, { global: { plugins: [pinia], stubs } });
+        const progress = (await import('@/composables/useScanProgress')).useScanProgress();
+        try {
+          await flushPromises();
+          const button = w
+            .findAll('button')
+            .find((item) => item.text() === i18n.global.t('securityView.scanNow'))!;
+          await button.trigger('click');
+          const { requestId } = JSON.parse(request.mock.calls[0][1].body);
+          for (let done = 1; done <= 1200; done++) {
+            stream.publish('scan-completed', {
+              containerId: `other-${done}`,
+              cycleId: `other-${done}`,
+              requestId: 'b'.repeat(32),
+              completedCount: 1,
+              scheduledCount: 1,
+            });
+            stream.publish('scan-completed', {
+              containerId: `own-${done}`,
+              cycleId: 'accepted',
+              requestId,
+              completedCount: done,
+              scheduledCount: 1200,
+            });
+          }
+          await flushPromises();
+          expect(progress.scanning.value).toBe(true);
+          expect(w.find('[role="alert"]').exists()).toBe(false);
+          acceptance.resolve(
+            new Response(JSON.stringify({ cycleId: 'accepted', requestId, scheduledCount: 1200 }), {
+              status: 202,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+          await flushPromises();
+          expect(progress.scanning.value).toBe(false);
+          expect(progress.scanProgress.value).toEqual({ done: 1200, total: 1200 });
+          expect(w.find('[role="alert"]').exists()).toBe(false);
+          expect(button.attributes('disabled')).toBeUndefined();
+          expect(request).toHaveBeenCalledTimes(1);
+        } finally {
+          progress.cancelScan();
+          acceptance.resolve(new Response('{}', { status: 202 }));
+          w.unmount();
+          stream.$dispose();
+          i18n.global.locale.value = originalLocale;
+          vi.unstubAllGlobals();
+        }
+      },
+    );
+
     it.each([
       ['fr', false],
       ['ar', true],
@@ -517,7 +584,11 @@ describe('SecurityView', () => {
         mockWindowNarrow.value = compact;
         i18n.global.locale.value = locale;
         mockContainers([]);
-        mockScanAllContainersApi.mockResolvedValue({ cycleId: 'accepted', scheduledCount: 2 });
+        mockScanAllContainersApi.mockImplementation(async (_signal, requestId) => ({
+          cycleId: 'accepted',
+          requestId,
+          scheduledCount: 2,
+        }));
         const w = mount(SecurityView, { global: { plugins: [pinia], stubs } });
         try {
           await flushPromises();
@@ -570,7 +641,11 @@ describe('SecurityView', () => {
           expect(w.find('[role="alert"]').exists()).toBe(false);
           expect(button.attributes('disabled')).toBeUndefined();
           expect(mockScanAllContainersApi).toHaveBeenCalledTimes(1);
-          mockScanAllContainersApi.mockResolvedValueOnce({ cycleId: 'next', scheduledCount: 0 });
+          mockScanAllContainersApi.mockImplementationOnce(async (_signal, requestId) => ({
+            cycleId: 'next',
+            requestId,
+            scheduledCount: 0,
+          }));
           await button.trigger('click');
           await flushPromises();
           expect(mockScanAllContainersApi).toHaveBeenCalledTimes(2);
@@ -623,11 +698,19 @@ describe('SecurityView', () => {
           expect(unhandled).toEqual([]);
           expect(request).toHaveBeenCalledTimes(1);
           expect(button.attributes('disabled')).toBeUndefined();
-          request.mockResolvedValue(
-            new Response(JSON.stringify({ cycleId: 'retry-cycle', scheduledCount: 1 }), {
-              status: 202,
-              headers: { 'Content-Type': 'application/json' },
-            }),
+          request.mockImplementation(
+            async (_url, init) =>
+              new Response(
+                JSON.stringify({
+                  cycleId: 'retry-cycle',
+                  requestId: JSON.parse(init.body).requestId,
+                  scheduledCount: 1,
+                }),
+                {
+                  status: 202,
+                  headers: { 'Content-Type': 'application/json' },
+                },
+              ),
           );
           await button.trigger('click');
           await flushPromises();
@@ -635,6 +718,9 @@ describe('SecurityView', () => {
           stream.publish('scan-completed', {
             containerId: 'one',
             cycleId: 'retry-cycle',
+            requestId: JSON.parse(request.mock.calls.at(-1)![1].body).requestId,
+            completedCount: 1,
+            scheduledCount: 1,
             status: 'passed',
           });
           await flushPromises();

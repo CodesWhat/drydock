@@ -135,6 +135,27 @@ describe('doConnect SSE URL construction', () => {
     },
   );
 
+  it('preserves cumulative bulk progress through the actual event parser', () => {
+    const store = useEventStreamStore();
+    const listener = vi.fn();
+    store.subscribe('scan-completed', listener);
+    store.connect();
+    const handler = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === 'dd:scan-completed',
+    )![1];
+    const payload = {
+      containerId: 'c501',
+      status: 'passed',
+      cycleId: 'cycle-1',
+      requestId: 'a'.repeat(32),
+      completedCount: 501,
+      scheduledCount: 1200,
+    };
+    handler({ data: JSON.stringify(payload) });
+    expect(listener).toHaveBeenCalledWith(payload, expect.any(Object));
+    store.disconnect();
+  });
+
   it('uses the base URL on first connect when no lastEventId is recorded', () => {
     const store = useEventStreamStore();
     store.connect();

@@ -1011,6 +1011,21 @@ describe('Container Service', () => {
   });
 
   describe('scanAllContainersApi', () => {
+    it('sends optional request correlation and preserves its acceptance echo', async () => {
+      const requestId = 'a'.repeat(32);
+      const result = { cycleId: 'accepted', requestId, scheduledCount: 1200 };
+      vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => result } as Response);
+      const controller = new AbortController();
+      expect(await scanAllContainersApi(controller.signal, requestId)).toEqual(result);
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/scan-all', {
+        method: 'POST',
+        credentials: 'include',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId }),
+      });
+    });
+
     it.each([null, {}, { error: 7 }, { error: { message: 'nested' } }, { error: '   ' }])(
       'uses a localized fallback for unusable error data %j',
       async (payload) => {

@@ -2,16 +2,23 @@ import { flushPromises } from '@vue/test-utils';
 
 const api = vi.fn();
 vi.mock('@/services/container', () => ({
-  scanAllContainersApi: (...args: unknown[]) => api(...args),
+  scanAllContainersApi: async (...args: unknown[]) => {
+    const response = await api(...args);
+    return response == null ? response : { ...response, requestId: args[1] };
+  },
 }));
 
 const options = { scannerReady: true, runtimeLoading: false };
 let progress: ReturnType<typeof import('@/composables/useScanProgress').useScanProgress>;
 let stream: ReturnType<typeof import('@/stores/eventStream').useEventStreamStore>;
+let scheduledTotal = 2;
+const emitted = new Map<string, Set<string>>();
 
 beforeEach(async () => {
   vi.resetModules();
   vi.resetAllMocks();
+  scheduledTotal = 2;
+  emitted.clear();
   const { createPinia, setActivePinia } = await import('pinia');
   setActivePinia(createPinia());
   stream = (await import('@/stores/eventStream')).useEventStreamStore();
@@ -27,7 +34,17 @@ afterEach(async () => {
 });
 
 function complete(containerId: string, cycleId = 'accepted') {
-  const payload = { containerId, cycleId, status: 'passed' };
+  const completed = emitted.get(cycleId) ?? new Set<string>();
+  completed.add(containerId);
+  emitted.set(cycleId, completed);
+  const payload = {
+    containerId,
+    cycleId,
+    status: 'passed',
+    requestId: cycleId === 'accepted' ? api.mock.calls[0]?.[1] : 'f'.repeat(32),
+    completedCount: completed.size,
+    scheduledCount: scheduledTotal,
+  };
   stream.publish('scan-completed', payload);
   // Existing AppLayout bridge. Old and new consumers see the same event.
   globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed', { detail: payload }));
@@ -50,7 +67,6 @@ it('ignores unrelated cycles, missing identity and duplicate completions', async
     expect(progress.scanning.value).toBe(true);
     expect(progress.scanProgress.value).toEqual({ done: 1, total: 2 });
     complete('two');
-    complete('extra');
     await run;
     expect(progress.scanProgress.value).toEqual({ done: 2, total: 2 });
   } finally {
@@ -138,6 +154,7 @@ it.each(['accepted', 'unrelated'])(
 );
 
 it('keeps identical container IDs from different early cycles distinct', async () => {
+  scheduledTotal = 1;
   const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
   api.mockReturnValue(response.promise);
   const outcome = progress.scanAllContainers(options).catch((error) => error);
@@ -155,7 +172,8 @@ it('keeps identical container IDs from different early cycles distinct', async (
   }
 });
 
-it('accepts duplicate replays when the unique early-event buffer is full', async () => {
+it('accepts duplicate cumulative progress replays for a large early cycle', async () => {
+  scheduledTotal = 500;
   const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
   api.mockReturnValue(response.promise);
   const outcome = progress.scanAllContainers(options).catch((error) => error);
@@ -173,15 +191,18 @@ it('accepts duplicate replays when the unique early-event buffer is full', async
   }
 });
 
-it('bounds pre-response buffering instead of losing early events silently', async () => {
+it('tracks more than 500 early completions without a per-container buffer', async () => {
+  scheduledTotal = 501;
   const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
   api.mockReturnValue(response.promise);
   const outcome = progress.scanAllContainers(options).catch((error) => error);
   for (let index = 0; index < 501; index++) complete(String(index));
+  response.resolve({ cycleId: 'accepted', scheduledCount: 501 });
   await flushPromises();
   try {
     expect(progress.scanning.value).toBe(false);
-    expect(await outcome).toBeInstanceOf(Error);
+    expect(await outcome).toBeUndefined();
+    expect(progress.scanProgress.value).toEqual({ done: 501, total: 501 });
     expect(api.mock.calls[0][0].aborted).toBe(true);
   } finally {
     progress.cancelScan();

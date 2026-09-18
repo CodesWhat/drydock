@@ -1,7 +1,10 @@
 const mockScanAllContainersApi = vi.fn();
 
 vi.mock('@/services/container', () => ({
-  scanAllContainersApi: (...args: any[]) => mockScanAllContainersApi(...args),
+  scanAllContainersApi: async (...args: any[]) => ({
+    ...(await mockScanAllContainersApi(...args)),
+    requestId: args[1],
+  }),
 }));
 
 describe('useScanProgress', () => {
@@ -35,7 +38,10 @@ describe('useScanProgress', () => {
       .then((accepted) => {
         stream?.publish('scan-completed', {
           cycleId: accepted?.cycleId,
-          containerId: `container-${containerSequence++}`,
+          containerId: `container-${++containerSequence}`,
+          requestId: mockScanAllContainersApi.mock.calls.at(-1)?.[1],
+          completedCount: containerSequence,
+          scheduledCount: accepted?.scheduledCount,
           status: 'passed',
         });
       })
@@ -105,7 +111,10 @@ describe('useScanProgress', () => {
 
     expect(scanning.value).toBe(true);
     expect(mockScanAllContainersApi).toHaveBeenCalledTimes(1);
-    expect(mockScanAllContainersApi).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(mockScanAllContainersApi).toHaveBeenCalledWith(
+      expect.any(AbortSignal),
+      expect.stringMatching(/^[a-f0-9]{32}$/),
+    );
 
     // Wait for the API call to resolve and promise to enter SSE-wait state
     await vi.waitFor(() => {

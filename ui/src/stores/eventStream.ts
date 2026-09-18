@@ -43,6 +43,9 @@ export type ScanLifecyclePayload = {
   containerId?: string;
   status?: string;
   cycleId?: string;
+  requestId?: string;
+  completedCount?: number;
+  scheduledCount?: number;
 };
 
 export type ContainerLifecycleChangedPayload = Record<string, unknown> & {
@@ -551,6 +554,9 @@ export const useEventStreamStore = defineStore('eventStream', () => {
         containerId: typeof p.containerId === 'string' ? p.containerId : undefined,
         status: typeof p.status === 'string' ? p.status : undefined,
         cycleId: typeof p.cycleId === 'string' ? p.cycleId : undefined,
+        requestId: typeof p.requestId === 'string' ? p.requestId : undefined,
+        completedCount: typeof p.completedCount === 'number' ? p.completedCount : undefined,
+        scheduledCount: typeof p.scheduledCount === 'number' ? p.scheduledCount : undefined,
       };
     } catch {
       return {};
