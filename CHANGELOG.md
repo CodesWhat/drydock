@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Correlate bulk scan progress with the accepted scan cycle, retain early completion events, and ignore duplicate or unrelated scans. The Security page now shows localized request/progress errors and supports an explicit retry without automatically repeating a scan request.
+- Correlate bulk scan progress with the accepted scan cycle, retain early completion events, and ignore duplicate or unrelated scans. The Security page now shows localized request/progress errors and supports an explicit retry without automatically repeating a scan request. Lost progress requires a successful read-only results refresh before starting another scan; refreshing does not establish whether the original scan has finished.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 
 ## [1.7.0-rc.16] — 2026-09-15

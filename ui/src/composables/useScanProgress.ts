@@ -16,8 +16,10 @@ interface ScanAllContainersOptions {
   runtimeLoading: boolean;
 }
 
+export class ScanProgressUnavailableError extends ApiError {}
+
 function progressUnavailable() {
-  return new ApiError(i18n.global.t('securityView.scanProgressUnavailable'), 0);
+  return new ScanProgressUnavailableError(i18n.global.t('securityView.scanProgressUnavailable'), 0);
 }
 
 function completionIdentity(payload: unknown): { containerId: string; cycleId: string } | null {
