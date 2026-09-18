@@ -120,6 +120,40 @@ function createState(overrides: DashboardComputedOverrides = {}) {
 }
 
 describe('useDashboardComputed servers', () => {
+  it.each([
+    { name: 'empty inventory', containers: [] },
+    { name: 'stale local inventory', containers: [makeBaseContainer()] },
+  ])(
+    'does not invent a local host without configured watchers or agents ($name)',
+    ({ containers }) => {
+      const state = createState({ containers, watchers: [], agents: [] });
+
+      expect(state.servers.value).toEqual([]);
+    },
+  );
+
+  it.each([true, false])(
+    'shows only configured agents in an agent-only fleet (connected=%s)',
+    (connected) => {
+      const state = createState({
+        watchers: [
+          { name: 'local', agent: 'edge-a', configuration: { socket: '/var/run/docker.sock' } },
+        ],
+        agents: [{ name: 'edge-a', connected, host: 'edge-a.local' }],
+        containers: [makeBaseContainer({ server: 'edge-a' })],
+      });
+
+      expect(state.servers.value).toEqual([
+        {
+          name: 'edge-a',
+          host: 'edge-a.local',
+          status: connected ? 'connected' : 'disconnected',
+          containers: { running: 1, total: 1 },
+        },
+      ]);
+    },
+  );
+
   it('builds Local and agent rows with grouped counts and normalized agent hosts', () => {
     const agents: DashboardAgent[] = [
       { name: 'edge-a', connected: true, host: '10.0.0.10', port: 2375 },
@@ -148,7 +182,7 @@ describe('useDashboardComputed servers', () => {
         status: 'running',
       }),
     ];
-    const state = createState({ agents, containers });
+    const state = createState({ agents, containers, watchers: [{ name: 'local' }] });
 
     expect(state.servers.value).toEqual([
       {
@@ -193,7 +227,7 @@ describe('useDashboardComputed servers', () => {
       );
     });
 
-    const state = createState({ agents, containers });
+    const state = createState({ agents, containers, watchers: [{ name: 'local' }] });
 
     const rows = state.servers.value;
     const totalContainers = rows.reduce((sum, row) => sum + row.containers.total, 0);
