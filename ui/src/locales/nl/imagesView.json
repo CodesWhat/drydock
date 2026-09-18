@@ -28,6 +28,8 @@
       "description": "Geen images komen overeen met de huidige filters."
     },
     "prune": {
+      "previewLoadFailed": "Voorbeeld van opschonen kon niet worden geladen",
+      "requestFailed": "Images konden niet worden opgeschoond",
       "dangling": "Loshangende opruimen",
       "unused": "Ongebruikte opruimen",
       "confirm": {

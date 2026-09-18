@@ -28,6 +28,8 @@
       "description": "현재 필터와 일치하는 이미지가 없습니다."
     },
     "prune": {
+      "previewLoadFailed": "정리 미리보기를 불러오지 못했습니다",
+      "requestFailed": "이미지를 정리하지 못했습니다",
       "dangling": "댕글링 정리",
       "unused": "미사용 정리",
       "confirm": {

@@ -28,6 +28,8 @@
       "description": "لا توجد صور مطابقة للمرشحات الحالية."
     },
     "prune": {
+      "previewLoadFailed": "فشل تحميل معاينة التنظيف",
+      "requestFailed": "فشل تنظيف الصور",
       "dangling": "تنظيف المعلّقة",
       "unused": "تنظيف غير المستخدمة",
       "confirm": {

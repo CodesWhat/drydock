@@ -28,6 +28,8 @@
       "description": "Keine Images entsprechen den aktuellen Filtern."
     },
     "prune": {
+      "previewLoadFailed": "Vorschau der Image-Bereinigung konnte nicht geladen werden",
+      "requestFailed": "Images konnten nicht bereinigt werden",
       "dangling": "Verwaiste bereinigen",
       "unused": "Ungenutzte bereinigen",
       "confirm": {
