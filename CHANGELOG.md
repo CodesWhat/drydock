@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Track bulk vulnerability scan progress by scan cycle and container, including completions received before the request returns. Unrelated or duplicate events no longer finish another scan. Failed requests and unavailable progress now show a localized error instead of leaving an unhandled failure or a stuck progress banner; accepted backend work is not reported as cancelled.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 
 ## [1.6.1-rc.14] — 2026-09-15

@@ -161,6 +161,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Không thể bắt đầu quét.",
+    "scanProgressUnavailable": "Không có thông tin tiến trình quét. Các lượt quét đã được chấp nhận có thể vẫn đang chạy. Hãy làm mới kết quả trước khi bắt đầu lượt quét khác.",
     "loadingVulnerabilityData": "Đang tải dữ liệu lỗ hổng...",
     "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Quét ngay",

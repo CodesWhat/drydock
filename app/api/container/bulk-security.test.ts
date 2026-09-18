@@ -506,11 +506,29 @@ describe('api/container/bulk-security', () => {
       await callScanAll(harness.handlers);
       await waitForCycleComplete(harness.deps);
 
-      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith(
+        'c1',
+        'error',
+        expect.any(String),
+      );
     });
   });
 
   describe('error resilience', () => {
+    test('correlates successful and failed scans with the accepted cycle', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult())
+        .mockRejectedValueOnce(new Error('scan failed'));
+      const { res } = await callScanAll(harness.handlers);
+      const { cycleId } = res.json.mock.calls[0][0];
+      await waitForCycleComplete(harness.deps);
+      expect(harness.deps.broadcastScanStarted).toHaveBeenCalledWith('c1', cycleId);
+      expect(harness.deps.broadcastScanStarted).toHaveBeenCalledWith('c2', cycleId);
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed', cycleId);
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c2', 'error', cycleId);
+    });
+
     test('other containers still complete when one scan throws', async () => {
       const harness = createHarness({
         containers: [
@@ -1003,7 +1021,11 @@ describe('api/container/bulk-security', () => {
       await waitForCycleComplete(harness.deps);
 
       expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
-      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith(
+        'c1',
+        'passed',
+        expect.any(String),
+      );
     });
   });
 

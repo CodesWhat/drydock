@@ -1574,6 +1574,16 @@ describe('SSE Router', () => {
   });
 
   describe('broadcastScanStarted', () => {
+    test('includes optional bulk cycle identity in replayable scan events', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+      sseRouter._broadcastScanStarted('container-1', 'cycle-1');
+      sseRouter._broadcastScanCompleted('container-1', 'passed', 'cycle-1');
+      const writes = res.write.mock.calls.map(([value]) => String(value));
+      expect(writes.filter((value) => value.includes('"cycleId":"cycle-1"'))).toHaveLength(2);
+      expect(writes.every((value) => value.includes('id: '))).toBe(true);
+    });
+
     test('should send dd:scan-started to all connected clients', () => {
       const res1 = createSSEResponse();
       const res2 = createSSEResponse();
