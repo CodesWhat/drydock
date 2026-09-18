@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Impossible de démarrer l’analyse.",
+    "scanProgressUnavailable": "La progression de l’analyse est indisponible. Les analyses acceptées sont peut-être encore en cours. Actualisez les résultats avant de lancer une autre analyse.",
     "loadingVulnerabilityData": "Chargement des données de vulnérabilité...",
     "runtimeLoadError": "Impossible de charger l'état runtime de la sécurité",
     "scanNow": "Scanner maintenant",

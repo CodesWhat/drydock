@@ -44,8 +44,8 @@ interface BulkSecurityHandlerDependencies {
   emitSecurityAlert: (payload: BulkSecurityAlertPayload) => Promise<void>;
   emitSecurityScanCycleComplete: (payload: SecurityScanCycleCompleteEventPayload) => Promise<void>;
   fullName: (container: Container) => string;
-  broadcastScanStarted: (containerId: string) => void;
-  broadcastScanCompleted: (containerId: string, status: string) => void;
+  broadcastScanStarted: (containerId: string, cycleId?: string) => void;
+  broadcastScanCompleted: (containerId: string, status: string, cycleId?: string) => void;
   getContainerImageFullName: (container: Container) => string;
   getContainerRegistryAuth: (
     container: Container,
@@ -189,7 +189,7 @@ async function runBulkScan(
       MAX_CONCURRENT_BULK_SCANS,
       async (container) => {
         const containerId = container.id;
-        deps.broadcastScanStarted(containerId);
+        deps.broadcastScanStarted(containerId, cycleId);
         try {
           const image = deps.getContainerImageFullName(container);
           const auth = await deps.getContainerRegistryAuth(container);
@@ -258,13 +258,13 @@ async function runBulkScan(
             alertCount += 1;
           }
 
-          deps.broadcastScanCompleted(containerId, scanResult.status);
+          deps.broadcastScanCompleted(containerId, scanResult.status, cycleId);
         } catch (err: unknown) {
           scannedCount += 1;
           deps.log.info(
             `Bulk scan failed for container ${containerId} (${deps.getErrorMessage(err)})`,
           );
-          deps.broadcastScanCompleted(containerId, 'error');
+          deps.broadcastScanCompleted(containerId, 'error', cycleId);
         }
       },
       signal,

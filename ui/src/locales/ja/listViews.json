@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "スキャンを開始できませんでした。",
+    "scanProgressUnavailable": "スキャンの進行状況を取得できません。受け付けられたスキャンはまだ実行中の可能性があります。別のスキャンを開始する前に結果を更新してください。",
     "loadingVulnerabilityData": "脆弱性データを読み込み中...",
     "runtimeLoadError": "セキュリティランタイムステータスの読み込みに失敗しました",
     "scanNow": "今すぐスキャン",

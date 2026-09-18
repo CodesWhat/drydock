@@ -786,12 +786,16 @@ function buildUpdateFailedSsePayload(
   };
 }
 
-export function broadcastScanStarted(containerId: string): void {
-  broadcastWithId('dd:scan-started', { containerId });
+export function broadcastScanStarted(containerId: string, cycleId?: string): void {
+  broadcastWithId('dd:scan-started', { containerId, ...(cycleId ? { cycleId } : {}) });
 }
 
-export function broadcastScanCompleted(containerId: string, status: string): void {
-  broadcastWithId('dd:scan-completed', { containerId, status });
+export function broadcastScanCompleted(
+  containerId: string,
+  status: string,
+  cycleId?: string,
+): void {
+  broadcastWithId('dd:scan-completed', { containerId, status, ...(cycleId ? { cycleId } : {}) });
 }
 
 // Payload is a username-free invalidation signal by design (#220 — see

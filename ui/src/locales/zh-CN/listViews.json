@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "无法启动扫描。",
+    "scanProgressUnavailable": "扫描进度不可用。已接受的扫描可能仍在运行。请刷新结果后再启动其他扫描。",
     "loadingVulnerabilityData": "正在加载漏洞数据...",
     "runtimeLoadError": "无法加载安全运行时状态",
     "scanNow": "立即扫描",

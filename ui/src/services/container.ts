@@ -486,17 +486,16 @@ async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanRespo
     ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
-    let details = '';
+    let message = i18n.global.t('securityView.scanFailed');
     try {
       const body = await readJsonResponse<{ error?: unknown }>(response, 'Container scan API');
-      details = body?.error ? ` (${body.error})` : '';
+      if (typeof body?.error === 'string' && body.error.trim()) {
+        message = body.error;
+      }
     } catch (e: unknown) {
       console.debug(`Unable to parse scan-all response payload: ${errorMessage(e)}`);
     }
-    throw new ApiError(
-      `Failed to scan all containers: ${response.statusText}${details}`,
-      response.status,
-    );
+    throw new ApiError(message, response.status);
   }
   return readJsonResponse<BulkScanResponse>(response, 'Container scan API');
 }

@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Der Scan konnte nicht gestartet werden.",
+    "scanProgressUnavailable": "Der Scanfortschritt ist nicht verfügbar. Angenommene Scans laufen möglicherweise noch. Aktualisieren Sie die Ergebnisse, bevor Sie einen weiteren Scan starten.",
     "loadingVulnerabilityData": "Schwachstellendaten werden geladen...",
     "runtimeLoadError": "Sicherheits-Runtime-Status konnte nicht geladen werden",
     "scanNow": "Jetzt scannen",
