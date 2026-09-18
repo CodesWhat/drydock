@@ -921,6 +921,22 @@ describe('Container Service', () => {
   });
 
   describe('scanAllContainersApi', () => {
+    it.each([null, {}, { error: 7 }, { error: { message: 'nested' } }, { error: '   ' }])(
+      'uses a localized fallback for unusable error data %j',
+      async (payload) => {
+        vi.mocked(fetch).mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          statusText: 'Service Unavailable',
+          json: async () => payload,
+        } as any);
+        const failure = await scanAllContainersApi().catch((error) => error);
+        expect(failure).toBeInstanceOf(ApiError);
+        expect(failure.status).toBe(503);
+        expect(failure.message).toBe('Failed to start the scan.');
+      },
+    );
+
     it('posts to scan-all and returns cycleId + scheduledCount', async () => {
       const mockResult = { cycleId: 'cycle-abc', scheduledCount: 5 };
       vi.mocked(fetch).mockResolvedValueOnce({
@@ -968,7 +984,7 @@ describe('Container Service', () => {
 
       expect(thrown).toBeInstanceOf(ApiError);
       expect(thrown.status).toBe(429);
-      expect(thrown.message).toContain('Failed to scan all containers');
+      expect(thrown.message).toBe('Failed to start the scan.');
     });
 
     it('throws with error detail when response body has error', async () => {
@@ -979,9 +995,7 @@ describe('Container Service', () => {
         json: async () => ({ error: 'Scanner not configured' }),
       } as any);
 
-      await expect(scanAllContainersApi()).rejects.toThrow(
-        'Failed to scan all containers: Bad Request (Scanner not configured)',
-      );
+      await expect(scanAllContainersApi()).rejects.toThrow('Scanner not configured');
     });
 
     it('throws without detail when response body has no error field', async () => {
@@ -992,9 +1006,7 @@ describe('Container Service', () => {
         json: async () => ({}),
       } as any);
 
-      await expect(scanAllContainersApi()).rejects.toThrow(
-        'Failed to scan all containers: Service Unavailable',
-      );
+      await expect(scanAllContainersApi()).rejects.toThrow('Failed to start the scan.');
     });
 
     it('throws without detail when response body parsing fails', async () => {
@@ -1009,9 +1021,7 @@ describe('Container Service', () => {
       } as any);
 
       try {
-        await expect(scanAllContainersApi()).rejects.toThrow(
-          'Failed to scan all containers: Internal Server Error',
-        );
+        await expect(scanAllContainersApi()).rejects.toThrow('Failed to start the scan.');
         expect(debugSpy).toHaveBeenCalledWith(
           'Unable to parse scan-all response payload: parse error',
         );
@@ -1032,9 +1042,7 @@ describe('Container Service', () => {
       } as any);
 
       try {
-        await expect(scanAllContainersApi()).rejects.toThrow(
-          'Failed to scan all containers: Internal Server Error',
-        );
+        await expect(scanAllContainersApi()).rejects.toThrow('Failed to start the scan.');
         expect(debugSpy).toHaveBeenCalledWith(
           'Unable to parse scan-all response payload: scan-all-parse-failed',
         );

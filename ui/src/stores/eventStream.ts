@@ -39,6 +39,7 @@ export type OperationChangedPayload = {
 export type ScanLifecyclePayload = {
   containerId?: string;
   status?: string;
+  cycleId?: string;
 };
 
 export type ContainerLifecycleChangedPayload = Record<string, unknown> & {
@@ -511,6 +512,7 @@ export const useEventStreamStore = defineStore('eventStream', () => {
       return {
         containerId: typeof p.containerId === 'string' ? p.containerId : undefined,
         status: typeof p.status === 'string' ? p.status : undefined,
+        cycleId: typeof p.cycleId === 'string' ? p.cycleId : undefined,
       };
     } catch {
       return {};

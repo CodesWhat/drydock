@@ -114,6 +114,27 @@ describe('doConnect SSE URL construction', () => {
     globalThis.EventSource = originalEventSource;
   });
 
+  it.each(['started', 'completed'])(
+    'preserves bulk cycle identity in parsed scan-%s events',
+    (phase) => {
+      const store = useEventStreamStore();
+      const listener = vi.fn();
+      store.subscribe(phase === 'started' ? 'scan-started' : 'scan-completed', listener);
+      store.connect();
+      const handler = MockEventSource.instances[0].addEventListener.mock.calls.find(
+        ([name]) => name === `dd:scan-${phase}`,
+      )![1];
+      handler({
+        data: JSON.stringify({ containerId: 'c1', status: 'passed', cycleId: 'cycle-1' }),
+      });
+      expect(listener).toHaveBeenCalledWith(
+        { containerId: 'c1', status: 'passed', cycleId: 'cycle-1' },
+        expect.any(Object),
+      );
+      store.disconnect();
+    },
+  );
+
   it('uses the base URL on first connect when no lastEventId is recorded', () => {
     const store = useEventStreamStore();
     store.connect();

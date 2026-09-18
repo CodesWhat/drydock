@@ -167,6 +167,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "검사를 시작하지 못했습니다.",
+    "scanProgressUnavailable": "검사 진행 상황을 확인할 수 없습니다. 접수된 검사가 아직 실행 중일 수 있습니다. 다른 검사를 시작하기 전에 결과를 새로 고치세요.",
     "loadingVulnerabilityData": "취약성 데이터 불러오는 중...",
     "runtimeLoadError": "보안 런타임 상태를 불러오지 못했습니다",
     "scanNow": "지금 스캔",

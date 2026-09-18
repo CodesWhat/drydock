@@ -24,7 +24,7 @@ import { getAllContainers } from '../services/container';
 import { getSecurityRuntime, manageSecurityAsset } from '../services/server';
 import type { Container, UpdateEligibility } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
-import { errorMessage } from '../utils/error';
+import { ApiError, errorMessage } from '../utils/error';
 import { ROUTES } from '../router/routes';
 import { getPrimaryHardBlocker } from '../utils/update-eligibility';
 import SecurityContainerChooser from './security/SecurityContainerChooser.vue';
@@ -65,6 +65,7 @@ const chooserSummary = ref<ImageSummary | null>(null);
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
+const scanError = ref<string | null>(null);
 
 const containers = ref<Container[]>([]);
 
@@ -432,12 +433,16 @@ function handleSseContainerChanged() {
 }
 
 async function scanAllContainers() {
-  await runScanAll({
-    scannerReady: scannerReady.value,
-    runtimeLoading: runtimeLoading.value,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  await fetchVulnerabilities();
+  scanError.value = null;
+  try {
+    await runScanAll({
+      scannerReady: scannerReady.value,
+      runtimeLoading: runtimeLoading.value,
+    });
+    await fetchVulnerabilities();
+  } catch (caught) {
+    scanError.value = caught instanceof ApiError ? caught.message : t('securityView.scanFailed');
+  }
 }
 
 const tableColumns = computed(() => [
@@ -571,6 +576,11 @@ onUnmounted(() => {
 
 <template>
   <DataViewLayout>
+      <div v-if="scanError" role="alert"
+           class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        {{ scanError }}
+      </div>
       <div v-if="error"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">

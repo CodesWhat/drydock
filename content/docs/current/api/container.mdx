@@ -571,6 +571,10 @@ Rate-limited to 1 request per 60 seconds. There is no bypass for admins or any o
 
 Returns 202 Accepted when the bulk scan is started, or 429 if the rate limit is exceeded.
 
+The accepted response contains `cycleId` and `scheduledCount`. Bulk `dd:scan-started` and `dd:scan-completed` events carry the same `cycleId` alongside `containerId`; single-container scan events may omit it. Subscribe before sending the request, retain early events until the response arrives, and count each matching container once. Unrelated cycles and duplicate completions must not advance progress.
+
+The Security page requires a live event connection before starting a bulk scan. If acceptance takes more than 30 seconds, the connection drops, replay requires a resync, or its bounded early-event buffer fills, it stops tracking and reports that progress is unavailable. This does not cancel accepted scans. Refresh results before explicitly starting another scan; failed requests are not automatically retried.
+
 ## Get SBOM for a container
 
 This operation returns the latest SBOM document for a container in the requested format.

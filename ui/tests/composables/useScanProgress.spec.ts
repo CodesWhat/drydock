@@ -5,13 +5,21 @@ vi.mock('@/services/container', () => ({
 }));
 
 describe('useScanProgress', () => {
+  let stream: ReturnType<typeof import('@/stores/eventStream').useEventStreamStore> | undefined;
+  let containerSequence = 0;
   beforeEach(() => {
     vi.resetAllMocks();
     vi.resetModules();
     vi.useRealTimers();
+    stream = undefined;
+    containerSequence = 0;
   });
 
   async function loadComposable() {
+    const { createPinia, setActivePinia } = await import('pinia');
+    setActivePinia(createPinia());
+    stream = (await import('@/stores/eventStream')).useEventStreamStore();
+    stream.status = 'open';
     const mod = await import('@/composables/useScanProgress');
     return mod.useScanProgress();
   }
@@ -22,7 +30,16 @@ describe('useScanProgress', () => {
   }
 
   function emitSseScanCompleted() {
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+    const result = mockScanAllContainersApi.mock.results.at(-1)?.value;
+    void Promise.resolve(result)
+      .then((accepted) => {
+        stream?.publish('scan-completed', {
+          cycleId: accepted?.cycleId,
+          containerId: `container-${containerSequence++}`,
+          status: 'passed',
+        });
+      })
+      .catch(() => {});
   }
 
   it('starts with scanning=false and progress zeroed', async () => {
@@ -308,7 +325,7 @@ describe('useScanProgress', () => {
     await scanAllContainers({ scannerReady: true, runtimeLoading: false });
 
     expect(scanProgress.value.done).toBe(0);
-    expect(scanProgress.value.total).toBe(3);
+    expect(scanProgress.value.total).toBe(0);
   });
 
   it('partial SSE events followed by abort complete with partial progress', async () => {
