@@ -1179,9 +1179,24 @@ describe('DashboardView', () => {
   });
 
   describe('server list', () => {
-    it('always includes Local server', async () => {
-      const wrapper = await mountDashboard([makeContainer()]);
+    it('includes Local when its watcher is configured', async () => {
+      const wrapper = await mountDashboard(
+        [makeContainer()],
+        [],
+        {},
+        { watchers: [{ name: 'local' }] },
+      );
       expect(wrapper.text()).toContain('Local');
+    });
+
+    it('does not render a connected local host without a configured watcher', async () => {
+      const wrapper = await mountDashboard([makeContainer()]);
+      const hostWidget = wrapper.find('[data-widget-id="host-status"]');
+
+      expect(hostWidget.exists()).toBe(true);
+      expect(hostWidget.text()).not.toContain('Local');
+      expect(hostWidget.text()).not.toContain('Connected');
+      expect(hostWidget.text()).not.toContain('docker.sock');
     });
 
     it('includes agents as remote hosts', async () => {
@@ -1206,7 +1221,7 @@ describe('DashboardView', () => {
         makeContainer({ server: 'Local' }),
         makeContainer({ id: 'c2', name: 'redis', server: 'Local' }),
       ];
-      const wrapper = await mountDashboard(containers);
+      const wrapper = await mountDashboard(containers, [], {}, { watchers: [{ name: 'local' }] });
       // "2/2 containers" for Local (both running)
       expect(wrapper.text()).toContain('2/2 containers');
     });
