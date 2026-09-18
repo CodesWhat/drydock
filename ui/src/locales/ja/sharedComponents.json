@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "コピーしました！",
       "clickToCopy": "クリックしてコピー",
-      "failed": "Copy failed"
+      "failed": "コピーに失敗しました"
     },
     "dataFilterBar": {
       "filters": "フィルター",
@@ -23,8 +23,8 @@
       "viewMode": "表示モード",
       "viewModeLabel": "{label} 表示",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "テーブル",
+        "cards": "カード"
       }
     },
     "dataTable": {

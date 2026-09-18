@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "Скопійовано!",
       "clickToCopy": "Натисніть для копіювання",
-      "failed": "Copy failed"
+      "failed": "Не вдалося скопіювати"
     },
     "dataFilterBar": {
       "filters": "Фільтри",
@@ -23,8 +23,8 @@
       "viewMode": "Вигляд",
       "viewModeLabel": "Вигляд {label}",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "Таблиця",
+        "cards": "Картки"
       }
     },
     "dataTable": {
