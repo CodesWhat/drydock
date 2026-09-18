@@ -1,3 +1,4 @@
+import { i18n } from '../boot/i18n';
 import type { UpdateEligibility } from '../types/container';
 import { readJsonResponse } from '../utils/api';
 
@@ -127,9 +128,10 @@ async function readErrorEnvelope(response: Response, context: string): Promise<u
 async function throwForResponse(
   response: Response,
   context: string,
-  fallback: string,
+  fallbackKey: string,
 ): Promise<never> {
   const body = await readErrorEnvelope(response, context);
+  const fallback = `${i18n.global.t(fallbackKey)} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`;
   throw new ApprovalApiError(messageFromErrorEnvelope(body, fallback), response.status);
 }
 
@@ -151,11 +153,7 @@ async function listApprovals(query: ApprovalListQuery = {}): Promise<ApprovalLis
     credentials: 'include',
   });
   if (!response.ok) {
-    await throwForResponse(
-      response,
-      'Approvals API',
-      `Failed to load approvals: ${response.statusText}`,
-    );
+    await throwForResponse(response, 'Approvals API', 'approvalsView.loadError');
   }
   return readJsonResponse<ApprovalListResponse>(response, 'Approvals API');
 }
@@ -166,7 +164,7 @@ async function getApprovalSummary(): Promise<ApprovalSummary> {
     await throwForResponse(
       response,
       'Approvals summary API',
-      `Failed to load approval summary: ${response.statusText}`,
+      'approvalsView.httpErrors.summaryLoadFailed',
     );
   }
   return readJsonResponse<ApprovalSummary>(response, 'Approvals summary API');
@@ -180,7 +178,7 @@ async function getApproval(id: string): Promise<ApprovalDetailResponse> {
     await throwForResponse(
       response,
       'Approval detail API',
-      `Failed to load approval: ${response.statusText}`,
+      'approvalsView.httpErrors.detailLoadFailed',
     );
   }
   return readJsonResponse<ApprovalDetailResponse>(response, 'Approval detail API');
@@ -191,7 +189,7 @@ async function postDecision<T>(
   action: 'approve' | 'reject' | 'defer',
   body: Record<string, unknown> | undefined,
   context: string,
-  fallback: string,
+  fallbackKey: string,
 ): Promise<T> {
   const response = await fetch(`${APPROVALS_API_BASE}/${encodeURIComponent(id)}/${action}`, {
     method: 'POST',
@@ -200,7 +198,7 @@ async function postDecision<T>(
     body: JSON.stringify(body ?? {}),
   });
   if (!response.ok) {
-    await throwForResponse(response, context, fallback);
+    await throwForResponse(response, context, fallbackKey);
   }
   return readJsonResponse<T>(response, context);
 }
@@ -214,7 +212,7 @@ async function approveApproval(
     'approve',
     options.note !== undefined ? { note: options.note } : undefined,
     'Approve approval API',
-    'Failed to approve update',
+    'approvalsView.httpErrors.approveFailed',
   );
 }
 
@@ -227,7 +225,7 @@ async function rejectApproval(
     'reject',
     options.note !== undefined ? { note: options.note } : undefined,
     'Reject approval API',
-    'Failed to reject update',
+    'approvalsView.httpErrors.rejectFailed',
   );
 }
 
@@ -244,7 +242,7 @@ async function deferApproval(
     'defer',
     Object.keys(body).length > 0 ? body : undefined,
     'Defer approval API',
-    'Failed to defer update',
+    'approvalsView.httpErrors.deferFailed',
   );
 }
 

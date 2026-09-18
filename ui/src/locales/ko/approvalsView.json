@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "승인 요약을 불러오지 못했습니다",
+      "detailLoadFailed": "승인을 불러오지 못했습니다",
+      "approveFailed": "업데이트를 승인하지 못했습니다",
+      "rejectFailed": "업데이트를 거부하지 못했습니다",
+      "deferFailed": "업데이트를 연기하지 못했습니다"
+    },
     "ofCount": "{count}개 표시",
     "refresh": "새로 고침",
     "loading": "승인 목록을 불러오는 중…",

@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Failed to load approval summary",
+      "detailLoadFailed": "Failed to load approval",
+      "approveFailed": "Failed to approve update",
+      "rejectFailed": "Failed to reject update",
+      "deferFailed": "Failed to defer update"
+    },
     "ofCount": "{count} shown",
     "refresh": "Refresh",
     "loading": "Loading approvals…",

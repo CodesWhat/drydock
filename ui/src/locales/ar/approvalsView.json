@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "فشل تحميل ملخص الموافقات",
+      "detailLoadFailed": "فشل تحميل الموافقة",
+      "approveFailed": "فشلت الموافقة على التحديث",
+      "rejectFailed": "فشل رفض التحديث",
+      "deferFailed": "فشل تأجيل التحديث"
+    },
     "ofCount": "المعروض: {count}",
     "refresh": "تحديث",
     "loading": "جارٍ تحميل طلبات الموافقة…",

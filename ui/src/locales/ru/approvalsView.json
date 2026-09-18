@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Не удалось загрузить сводку одобрений",
+      "detailLoadFailed": "Не удалось загрузить одобрение",
+      "approveFailed": "Не удалось одобрить обновление",
+      "rejectFailed": "Не удалось отклонить обновление",
+      "deferFailed": "Не удалось отложить обновление"
+    },
     "ofCount": "Показано: {count}",
     "refresh": "Обновить",
     "loading": "Загрузка согласований…",
