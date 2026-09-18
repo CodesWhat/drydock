@@ -47,9 +47,9 @@
       "switchTo": "Alternar para o tema {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Claro",
+        "system": "Sistema",
+        "dark": "Escuro"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "Escopo de prefixo ativo; use ",
         "typeHint": "Digite",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", ou",
         "hashSemicolon": "; use",
         "useTab": " para alterar o escopo",
         "moveHint": "mover",
@@ -126,17 +126,17 @@
         "authSubtitle": "Auth · {type}",
         "notificationSubtitle": "Regra de notificação · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Todos",
+          "pages": "Páginas",
+          "containers": "Contêineres",
+          "runtime": "Execução",
+          "config": "Configuração"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Navegação",
+          "containers": "Contêineres",
+          "runtime": "Execução",
+          "configuration": "Configuração"
         },
         "settings": {
           "appearanceTitle": "Configurações de aparência",

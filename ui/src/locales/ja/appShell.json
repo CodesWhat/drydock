@@ -47,9 +47,9 @@
       "switchTo": "{id} テーマに切替",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "ライト",
+        "system": "システム",
+        "dark": "ダーク"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "プレフィックススコープが有効です。",
         "typeHint": "入力",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "、または",
         "hashSemicolon": "；",
         "useTab": "でスコープを変更",
         "moveHint": "移動",
@@ -126,17 +126,17 @@
         "authSubtitle": "認証 · {type}",
         "notificationSubtitle": "通知ルール · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "すべて",
+          "pages": "ページ",
+          "containers": "コンテナ",
+          "runtime": "実行環境",
+          "config": "設定"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "ナビゲーション",
+          "containers": "コンテナ",
+          "runtime": "実行環境",
+          "configuration": "設定"
         },
         "settings": {
           "appearanceTitle": "外観設定",

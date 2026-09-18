@@ -47,9 +47,9 @@
       "switchTo": "{id} temasına geç",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Açık",
+        "system": "Sistem",
+        "dark": "Koyu"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "Önek kapsamı etkin; kullanmak ",
         "typeHint": "Tür",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", veya",
         "hashSemicolon": "; kullanın",
         "useTab": " kapsamı değiştirmek",
         "moveHint": "hareket etmek",
@@ -126,17 +126,17 @@
         "authSubtitle": "Kimlik doğrulama · {type}",
         "notificationSubtitle": "Bildirim kuralı · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Tümü",
+          "pages": "Sayfalar",
+          "containers": "Konteynerler",
+          "runtime": "Çalışma zamanı",
+          "config": "Yapılandırma"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Gezinme",
+          "containers": "Konteynerler",
+          "runtime": "Çalışma zamanı",
+          "configuration": "Yapılandırma"
         },
         "settings": {
           "appearanceTitle": "Görünüm Ayarları",

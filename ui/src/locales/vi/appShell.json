@@ -47,9 +47,9 @@
       "switchTo": "Chuyển sang giao diện {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Sáng",
+        "system": "Hệ thống",
+        "dark": "Tối"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "Phạm vi tiền tố đang hoạt động; dùng ",
         "typeHint": "Nhập",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", hoặc",
         "hashSemicolon": "; dùng",
         "useTab": " để đổi phạm vi",
         "moveHint": "di chuyển",
@@ -126,17 +126,17 @@
         "authSubtitle": "Xác thực · {type}",
         "notificationSubtitle": "Quy tắc thông báo · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Tất cả",
+          "pages": "Trang",
+          "containers": "Container",
+          "runtime": "Môi trường chạy",
+          "config": "Cấu hình"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Điều hướng",
+          "containers": "Container",
+          "runtime": "Môi trường chạy",
+          "configuration": "Cấu hình"
         },
         "settings": {
           "appearanceTitle": "Cài đặt giao diện",

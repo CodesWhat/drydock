@@ -47,9 +47,9 @@
       "switchTo": "切換到 {id} 主題",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "淺色",
+        "system": "系統",
+        "dark": "深色"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "前置詞作用域已啟動 ",
         "typeHint": "輸入",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "，或",
         "hashSemicolon": "；使用",
         "useTab": " 以更改作用域",
         "moveHint": "移動",
@@ -126,17 +126,17 @@
         "authSubtitle": "認證 · {type}",
         "notificationSubtitle": "通知規則 · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "全部",
+          "pages": "頁面",
+          "containers": "容器",
+          "runtime": "執行環境",
+          "config": "設定"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "導覽",
+          "containers": "容器",
+          "runtime": "執行環境",
+          "configuration": "設定"
         },
         "settings": {
           "appearanceTitle": "外觀設定",

@@ -63,7 +63,7 @@ function iconColor(id: string) {
     :class="[activeIconColor(), 'hover:dd-bg-elevated']"
     :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
     v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: t(`appShell.themeToggle.variant.${activeVariant.id}`) })"
-    :aria-label="t('appShell.themeToggle.mobileLabel', { id: activeVariant.id })"
+    :aria-label="t('appShell.themeToggle.mobileLabel', { id: t(`appShell.themeToggle.variant.${activeVariant.id}`) })"
     @click="cycle($event)"
   >
     <AppIcon :name="activeVariant.icon" :size="iconSize" />
@@ -88,7 +88,7 @@ function iconColor(id: string) {
         :class="[iconColor(v.id), 'hover:dd-bg-elevated']"
         :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
         v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: t(`appShell.themeToggle.variant.${v.id}`) })"
-        :aria-label="t('appShell.themeToggle.switchTo', { id: v.id })"
+        :aria-label="t('appShell.themeToggle.switchTo', { id: t(`appShell.themeToggle.variant.${v.id}`) })"
         :aria-pressed="v.id === themeVariant"
         @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"
       >

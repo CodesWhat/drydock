@@ -47,9 +47,9 @@
       "switchTo": "切换到 {id} 主题",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "浅色",
+        "system": "系统",
+        "dark": "深色"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "前缀作用域已激活",
         "typeHint": "输入",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "，或",
         "hashSemicolon": "；使用",
         "useTab": " 以更改作用域",
         "moveHint": "移动",
@@ -126,17 +126,17 @@
         "authSubtitle": "认证 · {type}",
         "notificationSubtitle": "通知规则 · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "全部",
+          "pages": "页面",
+          "containers": "容器",
+          "runtime": "运行环境",
+          "config": "配置"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "导航",
+          "containers": "容器",
+          "runtime": "运行环境",
+          "configuration": "配置"
         },
         "settings": {
           "appearanceTitle": "外观设置",

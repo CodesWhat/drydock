@@ -47,9 +47,9 @@
       "switchTo": "{id} 테마로 전환",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "밝게",
+        "system": "시스템",
+        "dark": "어둡게"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "접두사 범위 활성화됨; ",
         "typeHint": "탭",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", 또는",
         "hashSemicolon": "; ",
         "useTab": "을 눌러 범위 변경",
         "moveHint": "이동",
@@ -126,17 +126,17 @@
         "authSubtitle": "인증 · {type}",
         "notificationSubtitle": "알림 규칙 · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "전체",
+          "pages": "페이지",
+          "containers": "컨테이너",
+          "runtime": "실행 환경",
+          "config": "설정"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "탐색",
+          "containers": "컨테이너",
+          "runtime": "실행 환경",
+          "configuration": "설정"
         },
         "settings": {
           "appearanceTitle": "외관 설정",

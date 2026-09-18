@@ -47,7 +47,7 @@
       "switchTo": "Cambiar al tema {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
+        "light": "Claro",
         "system": "Sistema",
         "dark": "Oscuro"
       }
@@ -127,16 +127,16 @@
         "notificationSubtitle": "Regla de notificación · {id}",
         "scope": {
           "all": "Todos",
-          "pages": "Pages",
+          "pages": "Páginas",
           "containers": "Contenedores",
-          "runtime": "Runtime",
-          "config": "Config"
+          "runtime": "Ejecución",
+          "config": "Configuración"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Navegación",
+          "containers": "Contenedores",
+          "runtime": "Ejecución",
+          "configuration": "Configuración"
         },
         "settings": {
           "appearanceTitle": "Ajustes de apariencia",

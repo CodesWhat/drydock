@@ -47,9 +47,9 @@
       "switchTo": "Przełącz na motyw {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Jasny",
+        "system": "Systemowy",
+        "dark": "Ciemny"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "Zakres prefiksu aktywny; używać ",
         "typeHint": "Wpisz",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", lub",
         "hashSemicolon": "; używać",
         "useTab": " zmienić zakres",
         "moveHint": "ruszaj się",
@@ -126,17 +126,17 @@
         "authSubtitle": "Uwierzytelnianie · {type}",
         "notificationSubtitle": "Reguła powiadomienia · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Wszystko",
+          "pages": "Strony",
+          "containers": "Kontenery",
+          "runtime": "Środowisko wykonawcze",
+          "config": "Konfiguracja"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Nawigacja",
+          "containers": "Kontenery",
+          "runtime": "Środowisko wykonawcze",
+          "configuration": "Konfiguracja"
         },
         "settings": {
           "appearanceTitle": "Ustawienia wyglądu",

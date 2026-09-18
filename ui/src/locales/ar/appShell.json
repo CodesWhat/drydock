@@ -47,9 +47,9 @@
       "switchTo": "التبديل إلى سمة {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "فاتحة",
+        "system": "النظام",
+        "dark": "داكنة"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "النطاق ببادئة نشط؛ استخدم ",
         "typeHint": "اكتب",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "، أو",
         "hashSemicolon": "؛ استخدم",
         "useTab": " لتغيير النطاق",
         "moveHint": "تنقل",
@@ -126,17 +126,17 @@
         "authSubtitle": "مصادقة · {type}",
         "notificationSubtitle": "قاعدة إشعار · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "الكل",
+          "pages": "الصفحات",
+          "containers": "الحاويات",
+          "runtime": "التشغيل",
+          "config": "الإعدادات"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "التنقل",
+          "containers": "الحاويات",
+          "runtime": "التشغيل",
+          "configuration": "الإعدادات"
         },
         "settings": {
           "appearanceTitle": "إعدادات المظهر",

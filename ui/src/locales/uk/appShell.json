@@ -47,9 +47,9 @@
       "switchTo": "Переключитися на тему {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Світла",
+        "system": "Системна",
+        "dark": "Темна"
       }
     },
     "layout": {
@@ -109,7 +109,7 @@
         "prefixScopeHint": "Активний префіксний фільтр; використовуйте ",
         "typeHint": "Вводьте",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", або",
         "hashSemicolon": "; використовуйте",
         "useTab": " для зміни фільтра",
         "moveHint": "переміщення",
@@ -126,17 +126,17 @@
         "authSubtitle": "Автентифікація · {type}",
         "notificationSubtitle": "Правило сповіщення · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Усе",
+          "pages": "Сторінки",
+          "containers": "Контейнери",
+          "runtime": "Середовище виконання",
+          "config": "Конфігурація"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Навігація",
+          "containers": "Контейнери",
+          "runtime": "Середовище виконання",
+          "configuration": "Конфігурація"
         },
         "settings": {
           "appearanceTitle": "Налаштування вигляду",
