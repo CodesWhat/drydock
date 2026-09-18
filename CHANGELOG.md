@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Update Harden Runner to 2.21.1 so block-mode CI includes the GitHub runner control-plane endpoints added upstream. Existing egress policies, endpoint restrictions and workflow permissions stay unchanged.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 
 ## [1.6.1-rc.14] — 2026-09-15

@@ -7,8 +7,8 @@ import yaml from 'yaml';
 import type { WorkflowDefinition } from './workflow-test-utils';
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
-const hardenRunnerRef = 'step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920';
-const hardenRunnerVersion = 'v2.20.0';
+const hardenRunnerRef = 'step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1';
+const hardenRunnerVersion = 'v2.21.1';
 
 type EgressPolicy = 'audit' | 'block';
 
