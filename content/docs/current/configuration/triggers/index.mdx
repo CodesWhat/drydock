@@ -16,6 +16,18 @@ DD_NOTIFICATION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_i
 <Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
 You just need to give them different names.</Callout>
 
+## Route notifications to a group
+
+On the unreleased v1.8 development line, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
+
+The server resolves the container's group from `dd.group`, then `com.docker.compose.project`, then `com.docker.stack.namespace`. Names match exactly, including case, whitespace and punctuation. Empty or whitespace-only configured names are invalid. An empty higher-priority label does not fall through to a lower-priority label. Containers without a named group never match; the UI's ungrouped bucket is not a selectable routing identity. Browser grouping preferences, arbitrary label views and shared grouping URLs do not change notification routing.
+
+This selector narrows existing delivery. Notification include/exclude labels, event rules, thresholds and agent affinity still apply. Controller-owned notification instances can match containers on different agents; an agent-owned instance cannot cross its existing agent boundary. Group-restricted instances do not receive agent-connectivity events because those events have no container group. Leave the setting absent on another instance to keep those notifications.
+
+The filter covers update notifications, lifecycle/security events, batches and digests. Queued lifecycle batches and digests recheck eligibility against the latest known container before sending, falling back to the admitted snapshot if the container is no longer in the store. Entries that no longer qualify are discarded. Already accepted durable outbox deliveries retain their existing retry semantics. A security digest includes only eligible finding rows; its scanned-container count still describes the whole scan cycle.
+
+Use separate notification instances for different groups or destinations. This setting is file/environment configuration, not a new live-editor field. Action providers reject `GROUP`; it grants no action permission and defines no inherited update policy. Omitting it preserves existing notification behavior.
+
 ## Edit notification delivery policy in the UI
 
 This editor and the action policy editor below are new in unreleased v1.8 builds and require a writable [configuration file](/docs/configuration/config-file).

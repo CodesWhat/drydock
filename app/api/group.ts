@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
+import { getContainerGroup } from '../model/container-group.js';
 import * as storeContainer from '../store/container.js';
 import { scoped } from './route-scopes.js';
 
@@ -22,18 +23,12 @@ type Group = {
  */
 function getGroups(req: Request, res: Response) {
   const containers = storeContainer.getContainers();
-  const groups = new Map<string, Group>();
+  const groups = new Map<string | null, Group>();
 
   for (const container of containers) {
-    const groupName =
-      container.labels?.['dd.group'] ??
-      container.labels?.['com.docker.compose.project'] ??
-      container.labels?.['com.docker.stack.namespace'] ??
-      null;
+    const groupName = getContainerGroup(container);
 
-    const key = groupName ?? '__ungrouped__';
-
-    let group = groups.get(key);
+    let group = groups.get(groupName);
     if (!group) {
       group = {
         name: groupName,
@@ -41,7 +36,7 @@ function getGroups(req: Request, res: Response) {
         containerCount: 0,
         updatesAvailable: 0,
       };
-      groups.set(key, group);
+      groups.set(groupName, group);
     }
 
     group.containers.push({
