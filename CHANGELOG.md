@@ -102,6 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Container Stats only shows Live after its stream opens, disables Pause when no stream exists, and clears stale connection feedback during reconnect. Closing the panel or switching containers retires pending reads and old stream callbacks so they cannot reopen or overwrite the selected container's stats.
+
 - Watcher next-run countdowns use localized units and update when the language changes in tables, cards and open details, without refetching. The remaining 15 English copies of "soon" are translated; countdown rounding and timestamp tooltips are unchanged.
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
 - Full-page update previews now reuse the selected language's yes/no text for running status and compose-file writes, matching the side panel.
@@ -111,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server, watcher-list and registry-list loading failures use the selected language and retain HTTP status and reason phrases on Dashboard and Servers. Existing retry, background refresh and static-data caching behavior is unchanged.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
+- Container stats, trigger-list and update-history HTTP failures use the selected language while preserving container identity, status codes and server reason text. Stats offers a read-only Retry button after a failed load.
 - Container uptime uses localized phrases and duration units in table, cards and full-page details. Open views follow language changes while retaining their existing tick intervals, timestamp tooltips and selection.
 - The Approvals screen now uses French and Spanish text for loading, empty states, action confirmations and notifications while preserving update-mode names and action behavior.
 - Dashboard customization reuses each widget's existing translated title, so its visibility controls follow the selected language without changing the layout or saved visibility.
@@ -125,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Configuration editor snapshots now omit both stored and effective values for watcher and notification fields still owned by live interpolation after an external file edit, or inherited through YAML parent aliases. These fields remain read-only and reject edits with HTTP 409.
 - Settings, preference sync and notification editing preserve HTTP error status when a response contains JSON `null` or an unusable error message, instead of showing a JavaScript exception or coerced object text.
+- Trigger tests show a translated failure and HTTP status for JSON `null` or unusable error messages instead of a JavaScript exception. Provider diagnostics, successful responses and execution routing are unchanged; failed tests are not retried automatically.
 - API-key list, create and revoke failures use the selected language when the server provides no useful error message. Blank server errors now show the translated fallback and HTTP status; nonblank server diagnostics are preserved.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
 - Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.

@@ -1,3 +1,4 @@
+import { i18n } from '@/boot/i18n';
 import { createManagedEventSource } from '@/stores/eventStream';
 import { readJsonResponse } from '../utils/api';
 
@@ -134,7 +135,9 @@ export async function getContainerStats(containerId: string): Promise<ContainerS
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get container stats: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.stats.loadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
 
   const payload = await parseJson(response);
