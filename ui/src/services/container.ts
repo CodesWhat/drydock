@@ -167,7 +167,9 @@ async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get container recent status: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('dashboardView.dataLoadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse<ContainerRecentStatusResponse>(response, 'Container recent status API');
 }
@@ -304,7 +306,7 @@ async function getContainerVulnerabilities(containerId: string) {
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
+      `${i18n.global.t('containerComponents.security.loadVulnerabilitiesFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   return readJsonResponse<Record<string, unknown>>(response, 'Container vulnerabilities API');
@@ -315,7 +317,9 @@ async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerability
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get aggregated vulnerabilities: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.vulnerabilities.loadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse<SecurityVulnerabilityOverview>(response, 'Container vulnerabilities API');
 }
@@ -328,7 +332,9 @@ async function getContainerSbom(containerId: string, format: string = 'spdx-json
     },
   );
   if (!response.ok) {
-    throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.sbomDetail.loadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse<ContainerSbomResult>(response, 'Container SBOM API');
 }

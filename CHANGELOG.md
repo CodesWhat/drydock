@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- UI coverage CI emits bounded numeric memory, disk and process-RSS samples to help diagnose abrupt runner cancellations, without collecting environment values or command arguments or changing test gates.
+
 - Agents offer a persisted normal/compact table-spacing choice, with opt-in preference sync, unchanged card layout and a 44px minimum compact row target.
 
 - Action details offer a three-field policy editor for automatic dispatch, order and concurrency, with explicit Save/Cancel, source-aware read-only fields, inherited-setting removal and separate saved/live-reload feedback. Saving does not execute actions or notifications.
@@ -106,16 +108,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Approvals screen now also translates its remaining 14 supported languages, including confirmation prompts, hold reasons, loading and empty states, and success/error messages. Update-mode values and approval behavior are unchanged.
 
 - Approval requests preserve their HTTP status and operation-specific error message when an unsuccessful response contains JSON `null`, instead of throwing a parsing TypeError.
+- Server, watcher-list and registry-list loading failures use the selected language and retain HTTP status and reason phrases on Dashboard and Servers. Existing retry, background refresh and static-data caching behavior is unchanged.
 - Images requests preserve their HTTP status when an unsuccessful response contains JSON `null`. A prune timeout still shows the existing warning that pruning may be running and refreshes the inventory, instead of reporting a parsing TypeError.
 - Container detail tabs now use translated labels in all 16 non-English locales, including when switching languages with a panel open.
 - Container stats, trigger-list and update-history HTTP failures use the selected language while preserving container identity, status codes and server reason text. Stats offers a read-only Retry button after a failed load.
 - Container uptime uses localized phrases and duration units in table, cards and full-page details. Open views follow language changes while retaining their existing tick intervals, timestamp tooltips and selection.
 - The Approvals screen now uses French and Spanish text for loading, empty states, action confirmations and notifications while preserving update-mode names and action behavior.
 - Dashboard customization reuses each widget's existing translated title, so its visibility controls follow the selected language without changing the layout or saved visibility.
+- Dashboard recent-update status failures use the selected language and retain HTTP status and reason phrases. Explicit Retry and preservation of displayed data during background refresh failures are unchanged.
 - Backup-list and rollback HTTP failures now use localized UI context while preserving status codes and server or parser diagnostics. Empty rollback errors no longer hide the translated fallback.
 - Frontend JSON-response diagnostics use the selected language for invalid JSON, HTML and unexpected content types, preserving the API context and transport errors.
+- The Security page now displays scanner runtime and asset-operation failures with localized context, HTTP status and preserved diagnostics. Failed runtime reads offer an explicit read-only retry; scanner operations and manual-scan fallback behavior are unchanged.
 - Container image ages follow the selected language in full-page and side-panel details, including the future-date label. Months are spelled out to distinguish them from minutes; timestamps and age thresholds are unchanged.
 - Container update history translates known operation statuses, phases and rollback reasons in all 17 supported locales instead of displaying English codes. Unknown provider diagnostics remain visible.
+- Vulnerability overview, per-container vulnerability and SBOM load failures use the selected language while retaining container IDs, HTTP status and reason phrases. Existing selection, filters, response parsing and scan behavior are unchanged.
 - Keep Crowdin source uploads and translation PRs on the highest integration branch, including runs triggered by maintenance-line pushes, so the shared translation branch cannot target an older release line with newer product changes.
 - Accept newer stable YAML and PostHog pins in dependency guards while enforcing the YAML security floor and manifest/lockfile consistency, including nested YAML installs.
 - Configuration editor snapshots now omit both stored and effective values for watcher and notification fields still owned by live interpolation after an external file edit, or inherited through YAML parent aliases. These fields remain read-only and reject edits with HTTP 409.
