@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- UI coverage CI emits bounded numeric memory, disk and process-RSS samples to help diagnose abrupt runner cancellations, without collecting environment values or command arguments or changing test gates.
+
 - Agents offer a persisted normal/compact table-spacing choice, with opt-in preference sync, unchanged card layout and a 44px minimum compact row target.
 
 - Action details offer a three-field policy editor for automatic dispatch, order and concurrency, with explicit Save/Cancel, source-aware read-only fields, inherited-setting removal and separate saved/live-reload feedback. Saving does not execute actions or notifications.
