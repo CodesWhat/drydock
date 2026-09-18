@@ -40,7 +40,7 @@ async function processContainerBatch(
   const finished = Promise.withResolvers<void>();
   const cancelled = Symbol('cancelled');
   const completed = new Set<string>();
-  let early: { containerId: string; cycleId: string }[] | null = [];
+  let early: Map<string, { containerId: string; cycleId: string }> | null = new Map();
   const onAbort = () => finished.resolve();
   const unavailable = () => finished.reject(progressUnavailable());
 
@@ -48,8 +48,10 @@ async function processContainerBatch(
     const identity = completionIdentity(payload);
     if (!identity || signal.aborted) return;
     if (early !== null) {
-      if (early.length >= MAX_EARLY_COMPLETIONS) unavailable();
-      else early.push(identity);
+      const key = JSON.stringify([identity.cycleId, identity.containerId]);
+      if (early.has(key)) return;
+      if (early.size >= MAX_EARLY_COMPLETIONS) unavailable();
+      else early.set(key, identity);
       return;
     }
     if (identity.cycleId !== currentCycleId.value || completed.has(identity.containerId)) return;
@@ -91,7 +93,7 @@ async function processContainerBatch(
     scanProgress.value.total = result.scheduledCount;
     const buffered = early;
     early = null;
-    for (const payload of buffered) onCompleted(payload);
+    for (const payload of buffered.values()) onCompleted(payload);
     if (result.scheduledCount === 0) finished.resolve();
     await finished.promise;
   } finally {

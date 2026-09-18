@@ -113,6 +113,66 @@ it.each(['disconnect', 'resync'] as const)(
   },
 );
 
+it.each(['accepted', 'unrelated'])(
+  'does not exhaust early buffering with duplicate %s completions',
+  async (cycleId) => {
+    const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
+    api.mockReturnValue(response.promise);
+    const outcome = progress.scanAllContainers(options).catch((error) => error);
+    for (let index = 0; index < 501; index++) complete('one', cycleId);
+    complete('one');
+    response.resolve({ cycleId: 'accepted', scheduledCount: 2 });
+    await flushPromises();
+    try {
+      expect(progress.scanning.value).toBe(true);
+      expect(progress.scanProgress.value).toEqual({ done: 1, total: 2 });
+      complete('two');
+      expect(await outcome).toBeUndefined();
+      expect(progress.scanProgress.value).toEqual({ done: 2, total: 2 });
+      expect(api).toHaveBeenCalledTimes(1);
+    } finally {
+      progress.cancelScan();
+      await outcome;
+    }
+  },
+);
+
+it('keeps identical container IDs from different early cycles distinct', async () => {
+  const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
+  api.mockReturnValue(response.promise);
+  const outcome = progress.scanAllContainers(options).catch((error) => error);
+  complete('one', 'unrelated');
+  complete('one');
+  response.resolve({ cycleId: 'accepted', scheduledCount: 1 });
+  await flushPromises();
+  try {
+    expect(progress.scanning.value).toBe(false);
+    expect(progress.scanProgress.value).toEqual({ done: 1, total: 1 });
+    expect(await outcome).toBeUndefined();
+  } finally {
+    progress.cancelScan();
+    await outcome;
+  }
+});
+
+it('accepts duplicate replays when the unique early-event buffer is full', async () => {
+  const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
+  api.mockReturnValue(response.promise);
+  const outcome = progress.scanAllContainers(options).catch((error) => error);
+  for (let index = 0; index < 500; index++) complete(String(index));
+  for (let index = 0; index < 500; index++) complete(String(index));
+  response.resolve({ cycleId: 'accepted', scheduledCount: 500 });
+  await flushPromises();
+  try {
+    expect(await outcome).toBeUndefined();
+    expect(progress.scanning.value).toBe(false);
+    expect(progress.scanProgress.value).toEqual({ done: 500, total: 500 });
+  } finally {
+    progress.cancelScan();
+    await outcome;
+  }
+});
+
 it('bounds pre-response buffering instead of losing early events silently', async () => {
   const response = Promise.withResolvers<{ cycleId: string; scheduledCount: number }>();
   api.mockReturnValue(response.promise);
