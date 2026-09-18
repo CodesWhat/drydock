@@ -213,8 +213,8 @@
       "clean": "Temiz"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "imajlar",
+      "scanned": "tarandı"
     },
     "fixableBadge": "{count} düzeltme",
     "delta": {

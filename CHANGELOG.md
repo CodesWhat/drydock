@@ -102,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Correlate bulk security scan progress by accepted cycle and container, retaining early completions and ignoring unrelated or duplicate events. Request failures now show localized feedback. Lost progress requires an explicit successful read-only results refresh before another scan; it neither cancels accepted work nor proves the server scan has finished.
+- Correlate bulk security scan progress by accepted cycle and container, retaining early completions and ignoring unrelated or duplicate events. Request failures and scan/image counts now use localized text. Lost progress requires an explicit successful read-only results refresh before another scan; it neither cancels accepted work nor proves the server scan has finished.
 
 - Watcher next-run countdowns use localized units and update when the language changes in tables, cards and open details, without refetching. The remaining 15 English copies of "soon" are translated; countdown rounding and timestamp tooltips are unchanged.
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.

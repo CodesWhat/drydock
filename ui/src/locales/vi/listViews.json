@@ -213,8 +213,8 @@
       "clean": "Sạch"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "image",
+      "scanned": "đã quét"
     },
     "fixableBadge": "{count} có thể vá",
     "delta": {

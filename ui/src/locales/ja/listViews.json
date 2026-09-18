@@ -213,8 +213,8 @@
       "clean": "クリーン"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "イメージ",
+      "scanned": "スキャン済み"
     },
     "fixableBadge": "{count} 件修正可能",
     "delta": {

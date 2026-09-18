@@ -213,8 +213,8 @@
       "clean": "클린"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "이미지",
+      "scanned": "스캔됨"
     },
     "fixableBadge": "{count}개 수정 가능",
     "delta": {

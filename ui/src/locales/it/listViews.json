@@ -213,8 +213,8 @@
       "clean": "Pulito"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "immagini",
+      "scanned": "analizzati"
     },
     "fixableBadge": "{count} risolvibili",
     "delta": {

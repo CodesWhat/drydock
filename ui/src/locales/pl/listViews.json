@@ -213,8 +213,8 @@
       "clean": "Czysty"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "obrazy",
+      "scanned": "przeskanowano"
     },
     "fixableBadge": "{count} do naprawy",
     "delta": {

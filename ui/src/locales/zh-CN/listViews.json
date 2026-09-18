@@ -213,8 +213,8 @@
       "clean": "干净"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "镜像",
+      "scanned": "已扫描"
     },
     "fixableBadge": "{count} 个可修复",
     "delta": {

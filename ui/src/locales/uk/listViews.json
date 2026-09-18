@@ -213,8 +213,8 @@
       "clean": "Чисто"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "образи",
+      "scanned": "проскановано"
     },
     "fixableBadge": "{count} виправлення",
     "delta": {

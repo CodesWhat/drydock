@@ -213,8 +213,8 @@
       "clean": "乾淨"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "映像檔",
+      "scanned": "已掃描"
     },
     "fixableBadge": "{count} 個可修復",
     "delta": {

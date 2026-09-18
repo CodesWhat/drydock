@@ -214,7 +214,7 @@
     },
     "countLabel": {
       "images": "images",
-      "scanned": "scanned"
+      "scanned": "gescand"
     },
     "fixableBadge": "{count} oplosbaar",
     "delta": {

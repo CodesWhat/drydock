@@ -214,7 +214,7 @@
     },
     "countLabel": {
       "images": "images",
-      "scanned": "scanned"
+      "scanned": "analysés"
     },
     "fixableBadge": "{count} corrigeables",
     "delta": {

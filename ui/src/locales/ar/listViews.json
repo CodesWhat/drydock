@@ -213,8 +213,8 @@
       "clean": "نظيف"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "صور",
+      "scanned": "تم فحصها"
     },
     "fixableBadge": "{count} قابلة للإصلاح",
     "delta": {

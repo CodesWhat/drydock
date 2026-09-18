@@ -76,6 +76,7 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 
 import { mount } from '@vue/test-utils';
 import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
+import DataFilterBar from '@/components/DataFilterBar.vue';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
@@ -1253,6 +1254,36 @@ describe('SecurityView', () => {
   });
 
   describe('scan coverage display', () => {
+    it('updates rendered scan and filtered-image counts when the locale changes', async () => {
+      const originalLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'en';
+      mockContainers([makeContainer(), makeContainer({ security: null })]);
+      const w = factory({ DataFilterBar, ContainerUpdateDialog: containerUpdateDialogStub });
+      try {
+        await flushPromises();
+        const counter = () =>
+          w.get('[data-test="data-filter-bar-trailing"] > span').text().replace(/\s+/g, '');
+        expect(counter()).toBe('1/2scanned');
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(counter()).toBe('1/2analysés');
+        i18n.global.locale.value = 'ar';
+        await nextTick();
+        expect(counter()).toBe('1/2تمفحصها');
+
+        (w.vm as any).secFilterSeverity = 'HIGH';
+        await nextTick();
+        expect(counter()).toBe('1/1صور');
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(counter()).toBe('1/1images');
+        expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledTimes(1);
+      } finally {
+        w.unmount();
+        i18n.global.locale.value = originalLocale;
+      }
+    });
+
     it('shows 0/N scanned when no containers have been scanned', async () => {
       mockContainers([makeContainer({ security: null }), makeContainer({ security: null })]);
       const w = factory();
