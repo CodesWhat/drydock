@@ -47,7 +47,7 @@
       "switchTo": "Passer au thème {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Claire",
+        "light": "Clair",
         "system": "Système",
         "dark": "Sombre"
       }

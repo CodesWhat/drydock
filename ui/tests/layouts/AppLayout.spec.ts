@@ -184,7 +184,141 @@ describe('AppLayout', () => {
     vi.useRealTimers();
   });
 
-  describe('container search localization', () => {
+  describe('search localization', () => {
+    it.each(['fr', 'ar'] as const)(
+      'updates all cached resource results and recents in %s without refetching',
+      async (locale) => {
+        mockGetAgents.mockResolvedValue([
+          { name: 'remote', connected: true, host: 'server', port: 3000 },
+          { name: 'offline', connected: false },
+        ]);
+        mockGetAllTriggers.mockResolvedValue([
+          { id: 'slack.notice', name: 'notice', type: 'slack' },
+        ]);
+        mockGetAllWatchers.mockResolvedValue([
+          { id: 'docker.local', name: 'local', type: 'docker' },
+        ]);
+        mockGetAllRegistries.mockResolvedValue([{ id: 'hub.public', name: 'public', type: 'hub' }]);
+        mockGetAllAuthentications.mockResolvedValue([
+          { id: 'oidc.auth', name: 'auth', type: 'oidc' },
+        ]);
+        mockGetAllNotificationRules.mockResolvedValue([{ id: 'updates', name: 'updates' }]);
+        const wrapper = mountLayout({ teleport: true, AppButton: false });
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        const state = wrapper.vm as unknown as {
+          showSearch: boolean;
+          searchQuery: string;
+          searchResourceResults: { id: string; subtitle: string; query: { q: string } }[];
+          hydratedRecentSearchResults: { subtitle: string }[];
+          searchResults: { id: string }[];
+          recordRecentSearchResult: (result: unknown) => void;
+        };
+        state.showSearch = true;
+        await flushPromises();
+        const fetchers = [
+          mockGetAgents,
+          mockGetAllTriggers,
+          mockGetAllWatchers,
+          mockGetAllRegistries,
+          mockGetAllAuthentications,
+          mockGetAllNotificationRules,
+        ];
+        const calls = fetchers.map((fetcher) => fetcher.mock.calls.length);
+        const originalQueries = state.searchResourceResults.map((result) => result.query);
+        state.recordRecentSearchResult(state.searchResourceResults[0]);
+        setI18nLocale(locale);
+        await flushPromises();
+        const { t } = i18n.global;
+        const expected = [
+          t('appShell.layout.search.agentSubtitle', {
+            status: t('agentsView.list.status.connected'),
+            host: 'server:3000',
+          }),
+          t('appShell.layout.search.agentSubtitle', {
+            status: t('agentsView.list.status.disconnected'),
+            host: t('appShell.layout.search.unknownHost'),
+          }),
+          t('appShell.layout.search.triggerSubtitle', { type: 'slack' }),
+          t('appShell.layout.search.watcherSubtitle', { type: 'docker' }),
+          t('appShell.layout.search.registrySubtitle', { type: 'hub' }),
+          t('appShell.layout.search.authSubtitle', { type: 'oidc' }),
+          t('appShell.layout.search.notificationSubtitle', { id: 'updates' }),
+        ];
+        expect(state.searchResourceResults.map((result) => result.subtitle)).toEqual(expected);
+        expect(state.hydratedRecentSearchResults[0].subtitle).toBe(expected[0]);
+        expect(state.searchResourceResults.map((result) => result.query)).toEqual(originalQueries);
+        state.searchQuery = 'remote';
+        await flushPromises();
+        expect(wrapper.find('[role="dialog"]').text()).toContain(expected[0]);
+        for (const query of [t('agentsView.list.status.connected'), 'connected']) {
+          state.searchQuery = query;
+          await flushPromises();
+          expect(state.searchResults).toContainEqual(
+            expect.objectContaining({ id: 'agent:remote' }),
+          );
+        }
+        expect(fetchers.map((fetcher) => fetcher.mock.calls.length)).toEqual(calls);
+      },
+    );
+
+    it.each([
+      ['/', 'pages'],
+      ['@', 'runtime'],
+      ['#', 'config'],
+    ])('localizes the %s prefix badge while preserving its %s filter', async (prefix, scope) => {
+      const wrapper = mountLayout({ teleport: true, AppButton: false });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const state = wrapper.vm as unknown as {
+        showSearch: boolean;
+        searchQuery: string;
+        scopePrefixLabel: string;
+        effectiveSearchScope: string;
+      };
+      state.showSearch = true;
+      await flushPromises();
+      state.searchQuery = `${prefix} web`;
+      for (const locale of ['fr', 'ar'] as const) {
+        setI18nLocale(locale);
+        await flushPromises();
+        const expected = `${prefix} ${i18n.global.t(`appShell.layout.search.scope.${scope}`)}`;
+        expect(state.scopePrefixLabel).toBe(expected);
+        expect(state.effectiveSearchScope).toBe(scope);
+        expect(wrapper.find('[role="dialog"]').text()).toContain(expected);
+      }
+    });
+
+    it.each(['trigger', 'watcher', 'registry', 'auth'] as const)(
+      'localizes missing %s type without changing identity or a literal provider name',
+      async (kind) => {
+        setI18nLocale('fr');
+        const mock = {
+          trigger: mockGetAllTriggers,
+          watcher: mockGetAllWatchers,
+          registry: mockGetAllRegistries,
+          auth: mockGetAllAuthentications,
+        }[kind];
+        mock.mockResolvedValue([{ name: 'missing' }, { name: 'named', type: 'unknown' }]);
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        const state = wrapper.vm as unknown as {
+          searchResourceResults: { id: string; subtitle: string }[];
+        };
+        expect(state.searchResourceResults[0]).toMatchObject({
+          id: `${kind}:unknown.missing`,
+          subtitle: i18n.global.t(`appShell.layout.search.${kind}Subtitle`, {
+            type: i18n.global.t('common.unknown'),
+          }),
+        });
+        expect(state.searchResourceResults[1]).toMatchObject({
+          id: `${kind}:unknown.named`,
+          subtitle: i18n.global.t(`appShell.layout.search.${kind}Subtitle`, { type: 'unknown' }),
+        });
+      },
+    );
+
     it.each(SUPPORTED_LOCALES)('localizes status and missing metadata in %s', async (locale) => {
       setI18nLocale(locale);
       mockGetAllContainers.mockResolvedValue([

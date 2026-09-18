@@ -1,5 +1,9 @@
 import { i18n, type SupportedLocale } from '@/boot/i18n';
 
+it('uses masculine agreement for the French light theme label', () => {
+  expect(i18n.global.t('appShell.themeToggle.variant.light', {}, { locale: 'fr' })).toBe('Clair');
+});
+
 const expected = {
   ar: [
     'فاتحة',
