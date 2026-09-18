@@ -1434,14 +1434,14 @@ describe('SecurityView', () => {
       await expect(clearIconCache()).rejects.toThrow('HTTP 503');
     });
 
-    it('falls back to Unknown error when clearIconCache error body is not JSON', async () => {
+    it('retains the HTTP status with a localized clearIconCache JSON error', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: vi.fn().mockRejectedValue(new Error('not json')),
       } as any);
 
-      await expect(clearIconCache()).rejects.toThrow('Unknown error');
+      await expect(clearIconCache()).rejects.toThrow('API returned invalid JSON. (HTTP 500)');
     });
   });
 
