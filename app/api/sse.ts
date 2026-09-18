@@ -508,12 +508,24 @@ export function broadcastScanStarted(containerId: string, cycleId?: string): voi
   broadcastWithId('dd:scan-started', { containerId, ...(cycleId ? { cycleId } : {}) });
 }
 
+export interface BulkScanProgress {
+  requestId: string;
+  completedCount: number;
+  scheduledCount: number;
+}
+
 export function broadcastScanCompleted(
   containerId: string,
   status: string,
   cycleId?: string,
+  progress?: BulkScanProgress,
 ): void {
-  broadcastWithId('dd:scan-completed', { containerId, status, ...(cycleId ? { cycleId } : {}) });
+  broadcastWithId('dd:scan-completed', {
+    containerId,
+    status,
+    ...(cycleId ? { cycleId } : {}),
+    ...progress,
+  });
 }
 
 // Payload is a username-free invalidation signal by design (#220 — see

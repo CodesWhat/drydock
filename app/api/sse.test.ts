@@ -1574,6 +1574,24 @@ describe('SSE Router', () => {
   });
 
   describe('broadcastScanStarted', () => {
+    test('serializes correlated cumulative bulk progress in replayable completion events', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+      const progress = { requestId: 'a'.repeat(32), completedCount: 501, scheduledCount: 1200 };
+      sseRouter._broadcastScanCompleted('c501', 'passed', 'cycle-1', progress);
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          JSON.stringify({
+            containerId: 'c501',
+            status: 'passed',
+            cycleId: 'cycle-1',
+            ...progress,
+          }),
+        ),
+      );
+      expect(res.write.mock.calls[0][0]).toContain('id: ');
+    });
+
     test('includes optional bulk cycle identity in replayable scan events', () => {
       const res = createSSEResponse();
       sseRouter._clients.add(res);

@@ -8,7 +8,6 @@ const scanning = ref(false);
 const scanProgress = ref({ done: 0, total: 0 });
 const currentCycleId = ref<string | null>(null);
 let scanAbortController: AbortController | null = null;
-const MAX_EARLY_COMPLETIONS = 500;
 const ACCEPTANCE_TIMEOUT_MS = 30_000;
 
 interface ScanAllContainersOptions {
@@ -22,43 +21,53 @@ function progressUnavailable() {
   return new ScanProgressUnavailableError(i18n.global.t('securityView.scanProgressUnavailable'), 0);
 }
 
-function completionIdentity(payload: unknown): { containerId: string; cycleId: string } | null {
-  if (!payload || typeof payload !== 'object') return null;
-  const { containerId, cycleId } = payload as ScanLifecyclePayload;
-  return typeof containerId === 'string' &&
-    containerId.trim() !== '' &&
-    typeof cycleId === 'string' &&
-    cycleId.trim() !== ''
-    ? { containerId, cycleId }
-    : null;
-}
-
 async function processContainerBatch(
   signal: AbortSignal,
   stream: ReturnType<typeof useEventStreamStore>,
 ) {
   const finished = Promise.withResolvers<void>();
   const cancelled = Symbol('cancelled');
-  const completed = new Set<string>();
-  let early: Map<string, { containerId: string; cycleId: string }> | null = new Map();
+  const requestId = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  let latest: { cycleId: string; done: number; total: number } | null = null;
+  let accepted = false;
+  let failed = false;
   const onAbort = () => finished.resolve();
-  const unavailable = () => finished.reject(progressUnavailable());
+  const unavailable = () => {
+    failed = true;
+    finished.reject(progressUnavailable());
+  };
+
+  function applyProgress() {
+    if (!accepted || failed) return;
+    scanProgress.value.done = latest?.done ?? 0;
+    if (scanProgress.value.done === scanProgress.value.total) finished.resolve();
+  }
 
   function onCompleted(payload: unknown) {
-    const identity = completionIdentity(payload);
-    if (!identity || signal.aborted) return;
-    if (early !== null) {
-      const key = JSON.stringify([identity.cycleId, identity.containerId]);
-      if (early.has(key)) return;
-      if (early.size >= MAX_EARLY_COMPLETIONS) unavailable();
-      else early.set(key, identity);
+    if (!payload || typeof payload !== 'object' || signal.aborted || failed) return;
+    const progress = payload as ScanLifecyclePayload;
+    if (progress.requestId !== requestId) return;
+    const { cycleId, completedCount: done, scheduledCount: total } = progress;
+    if (
+      typeof cycleId !== 'string' ||
+      !cycleId.trim() ||
+      typeof done !== 'number' ||
+      !Number.isSafeInteger(done) ||
+      done < 0 ||
+      typeof total !== 'number' ||
+      !Number.isSafeInteger(total) ||
+      total < 0 ||
+      done > total ||
+      (latest && (cycleId !== latest.cycleId || total !== latest.total)) ||
+      (accepted && (cycleId !== currentCycleId.value || total !== scanProgress.value.total))
+    ) {
+      unavailable();
       return;
     }
-    if (identity.cycleId !== currentCycleId.value || completed.has(identity.containerId)) return;
-    if (completed.size >= scanProgress.value.total) return;
-    completed.add(identity.containerId);
-    scanProgress.value.done = completed.size;
-    if (completed.size === scanProgress.value.total) finished.resolve();
+    latest = { cycleId, total, done: Math.max(latest?.done ?? 0, done) };
+    applyProgress();
   }
 
   // Subscribe before POST: cached scans can finish before its response arrives.
@@ -75,26 +84,26 @@ async function processContainerBatch(
   const acceptanceDeadline = setTimeout(unavailable, ACCEPTANCE_TIMEOUT_MS);
   try {
     const result = await Promise.race([
-      scanAllContainersApi(signal),
+      scanAllContainersApi(signal, requestId),
       finished.promise.then(() => cancelled),
     ]);
     clearTimeout(acceptanceDeadline);
     if (signal.aborted || typeof result === 'symbol') return;
     if (
       !result ||
+      result.requestId !== requestId ||
       typeof result.cycleId !== 'string' ||
       !result.cycleId.trim() ||
       !Number.isSafeInteger(result.scheduledCount) ||
-      result.scheduledCount < 0
+      result.scheduledCount < 0 ||
+      (latest && (latest.cycleId !== result.cycleId || latest.total !== result.scheduledCount))
     ) {
       throw progressUnavailable();
     }
     currentCycleId.value = result.cycleId;
     scanProgress.value.total = result.scheduledCount;
-    const buffered = early;
-    early = null;
-    for (const payload of buffered.values()) onCompleted(payload);
-    if (result.scheduledCount === 0) finished.resolve();
+    accepted = true;
+    applyProgress();
     await finished.promise;
   } finally {
     clearTimeout(acceptanceDeadline);
