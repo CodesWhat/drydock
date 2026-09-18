@@ -52,7 +52,7 @@ describe('Settings Service', () => {
         json: vi.fn().mockRejectedValue(new Error('not json')),
       });
 
-      await expect(getSettings()).rejects.toThrow('Unknown error');
+      await expect(getSettings()).rejects.toThrow('API returned invalid JSON. (HTTP 502)');
     });
 
     it('should fall back to HTTP status when error body has no error field', async () => {
@@ -104,7 +104,9 @@ describe('Settings Service', () => {
         json: vi.fn().mockRejectedValue(new Error('not json')),
       });
 
-      await expect(updateSettings({ internetlessMode: true })).rejects.toThrow('Unknown error');
+      await expect(updateSettings({ internetlessMode: true })).rejects.toThrow(
+        'API returned invalid JSON. (HTTP 500)',
+      );
     });
   });
 
@@ -141,7 +143,7 @@ describe('Settings Service', () => {
         json: vi.fn().mockRejectedValue(new Error('not json')),
       });
 
-      await expect(clearIconCache()).rejects.toThrow('Unknown error');
+      await expect(clearIconCache()).rejects.toThrow('API returned invalid JSON. (HTTP 500)');
     });
   });
 });

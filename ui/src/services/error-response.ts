@@ -1,5 +1,12 @@
+import { i18n } from '../boot/i18n';
+
 export async function readHttpError(response: Response): Promise<string> {
-  const body: unknown = await response.json().catch(() => ({ error: 'Unknown error' }));
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return `${i18n.global.t('common.apiResponse.invalidJson', { context: 'API' })} (HTTP ${response.status})`;
+  }
   if (
     typeof body === 'object' &&
     body !== null &&
