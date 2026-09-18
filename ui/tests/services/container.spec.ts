@@ -341,7 +341,7 @@ describe('Container Service', () => {
       } as any);
 
       await expect(refreshContainer('c1')).rejects.toThrow(
-        'Failed to refresh container c1: Internal Server Error',
+        'Recheck failed for c1 (HTTP 500): Internal Server Error',
       );
     });
   });
@@ -365,11 +365,12 @@ describe('Container Service', () => {
     it('throws when delete fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 403,
         statusText: 'Forbidden',
       } as any);
 
       await expect(deleteContainer('c1')).rejects.toThrow(
-        'Failed to delete container c1: Forbidden',
+        'Failed to delete c1 (HTTP 403): Forbidden',
       );
     });
   });
@@ -572,30 +573,33 @@ describe('Container Service', () => {
     it('throws with error detail when response body has error', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 400,
         statusText: 'Bad Request',
         json: async () => ({ error: 'Invalid action' }),
       } as any);
 
       await expect(updateContainerPolicy('c1', 'invalid')).rejects.toThrow(
-        'Failed to update container policy invalid: Bad Request (Invalid action)',
+        'Failed to update policy (invalid) (HTTP 400): Bad Request (Invalid action)',
       );
     });
 
     it('throws without detail when response body has no error field', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 400,
         statusText: 'Bad Request',
         json: async () => ({}),
       } as any);
 
       await expect(updateContainerPolicy('c1', 'invalid')).rejects.toThrow(
-        'Failed to update container policy invalid: Bad Request',
+        'Failed to update policy (invalid) (HTTP 400): Bad Request',
       );
     });
 
     it('throws without detail when response body parsing fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
         json: async () => {
           throw new Error('parse error');
@@ -603,7 +607,7 @@ describe('Container Service', () => {
       } as any);
 
       await expect(updateContainerPolicy('c1', 'enable')).rejects.toThrow(
-        'Failed to update container policy enable: Internal Server Error',
+        'Failed to update policy (enable) (HTTP 500): Internal Server Error',
       );
     });
 
@@ -611,6 +615,7 @@ describe('Container Service', () => {
       const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
         json: async () => {
           throw 'parse-failed';
@@ -619,7 +624,7 @@ describe('Container Service', () => {
 
       try {
         await expect(updateContainerPolicy('c1', 'enable')).rejects.toThrow(
-          'Failed to update container policy enable: Internal Server Error',
+          'Failed to update policy (enable) (HTTP 500): Internal Server Error',
         );
         expect(debugSpy).toHaveBeenCalledWith(
           'Unable to parse policy update response payload: parse-failed',
@@ -655,11 +660,12 @@ describe('Container Service', () => {
     it('throws when response is not ok', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 404,
         statusText: 'Not Found',
       } as any);
 
       await expect(revealContainerEnv('missing')).rejects.toThrow(
-        'Failed to reveal env vars: Not Found',
+        'Failed to reveal value (HTTP 404): Not Found',
       );
     });
   });
@@ -708,7 +714,7 @@ describe('Container Service', () => {
       } as any);
 
       await expect(scanContainer('c1')).rejects.toThrow(
-        'Failed to scan container: Bad Request (Image not found)',
+        'Scan failed for c1 (HTTP 400): Bad Request (Image not found)',
       );
     });
 
@@ -720,7 +726,9 @@ describe('Container Service', () => {
         json: async () => ({}),
       } as any);
 
-      await expect(scanContainer('c1')).rejects.toThrow('Failed to scan container: Bad Request');
+      await expect(scanContainer('c1')).rejects.toThrow(
+        'Scan failed for c1 (HTTP 400): Bad Request',
+      );
     });
 
     it('throws without detail when response body parsing fails', async () => {
@@ -736,7 +744,7 @@ describe('Container Service', () => {
 
       try {
         await expect(scanContainer('c1')).rejects.toThrow(
-          'Failed to scan container: Internal Server Error',
+          'Scan failed for c1 (HTTP 500): Internal Server Error',
         );
         expect(debugSpy).toHaveBeenCalledWith('Unable to parse scan response payload: parse error');
       } finally {
@@ -757,7 +765,7 @@ describe('Container Service', () => {
 
       try {
         await expect(scanContainer('c1')).rejects.toThrow(
-          'Failed to scan container: Internal Server Error',
+          'Scan failed for c1 (HTTP 500): Internal Server Error',
         );
         expect(debugSpy).toHaveBeenCalledWith(
           'Unable to parse scan response payload: scan-parse-failed',
@@ -782,7 +790,7 @@ describe('Container Service', () => {
         expect.objectContaining({
           name: 'ApiError',
           status: 429,
-          message: 'Failed to scan container: Too Many Requests',
+          message: 'Scan failed for c1 (HTTP 429): Too Many Requests',
         }),
       );
     });
@@ -1402,11 +1410,12 @@ describe('Container Service', () => {
     it('throws when the update-chain preview response is not ok', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 404,
         statusText: 'Not Found',
       } as any);
 
       await expect(previewUpdateChain('c1')).rejects.toThrow(
-        'Failed to preview update chain for container c1: Not Found',
+        'Failed to load the dependency chain preview for c1. (HTTP 404): Not Found',
       );
     });
 
@@ -1501,7 +1510,9 @@ describe('Container Service', () => {
 
       expect(thrown).toBeInstanceOf(ApiError);
       expect(thrown.status).toBe(403);
-      expect(thrown.message).toBe('Failed to update dependency group c1: Forbidden');
+      expect(thrown.message).toBe(
+        'Failed to update the dependency chain for c1. (HTTP 403): Forbidden',
+      );
     });
 
     it('throws ApiError with status 409 and the chain-divergence detail on a stale preview', async () => {
@@ -1517,7 +1528,7 @@ describe('Container Service', () => {
       expect(thrown).toBeInstanceOf(ApiError);
       expect(thrown.status).toBe(409);
       expect(thrown.message).toBe(
-        'Failed to update dependency group c1: Conflict (Dependency chain has changed since it was last previewed)',
+        'Failed to update the dependency chain for c1. (HTTP 409): Conflict (Dependency chain has changed since it was last previewed)',
       );
     });
 
@@ -1533,7 +1544,7 @@ describe('Container Service', () => {
       } as any);
 
       await expect(updateDependencyGroup('c1')).rejects.toThrow(
-        'Failed to update dependency group c1: Internal Server Error',
+        'Failed to update the dependency chain for c1. (HTTP 500): Internal Server Error',
       );
       expect(debugSpy).toHaveBeenCalledWith(
         expect.stringContaining('Unable to parse dependency group update response payload'),
