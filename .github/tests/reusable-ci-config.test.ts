@@ -155,6 +155,31 @@ test('greptile summon caller only fires on the second-opinion label', () => {
   expect(job?.if).toBe("github.event.label.name == 'second-opinion'");
 });
 
+test('CodeRabbit suggests labels without automatically triggering review workflows', () => {
+  const config = yaml.parse(
+    readFileSync(new URL('../../.coderabbit.yaml', import.meta.url), 'utf8'),
+  );
+
+  expect(config.reviews.suggested_labels).toBe(true);
+  expect(config.reviews.auto_apply_labels).toBe(false);
+});
+
+test('second-opinion suggestions require reviewed high-stakes changes and explicit opt-in', () => {
+  const config = yaml.parse(
+    readFileSync(new URL('../../.coderabbit.yaml', import.meta.url), 'utf8'),
+  );
+  const instructions = config.reviews.labeling_instructions
+    .find((entry: { label: string }) => entry.label === 'second-opinion')
+    .instructions.replace(/\s+/g, ' ');
+
+  expect(instructions).toContain('genuinely high-stakes security-sensitive changes');
+  expect(instructions).toContain('after a completed CodeRabbit source review');
+  expect(instructions).toContain('explicit maintainer or agent opt-in');
+  expect(instructions).toContain('never apply it automatically');
+  expect(instructions).toContain('Routine UI changes and generated charts do not qualify');
+  expect(instructions).not.toMatch(/large refactor|tiebreaker|disagreement/);
+});
+
 test('greptile summon caller grants only pull-requests: write', () => {
   const job = reusableCallerJobs().find(
     ({ file, jobId }) => file === 'greptile.yml' && jobId === 'summon',
