@@ -31,7 +31,7 @@ import { getAllWatchers } from '@/services/watcher';
 import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
@@ -453,14 +453,20 @@ function recordRecentSearchResult(result: SearchResultItem) {
   saveRecentSearchResults(nextResults);
 }
 
+function localizeContainerStatus(status: string): string {
+  if (!status || status === 'unknown') return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
+
 const containerSearchResults = computed<SearchResultItem[]>(() =>
   searchContainers.value.map((container) => ({
     id: `container:${container.id}`,
     title: container.displayName,
     subtitle: t('appShell.layout.search.containerSubtitle', {
-      image: container.image,
-      status: container.status,
-      host: container.host,
+      image: container.image || t('appShell.layout.search.unknownImage'),
+      status: localizeContainerStatus(container.status),
+      host: container.host || t('appShell.layout.search.localHost'),
     }),
     icon: 'containers',
     containerIcon: container.icon,
@@ -1178,7 +1184,7 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
   const imageDetails = asSidebarRecord(container.image);
   const imageName = String(imageDetails?.name || '');
   const imageTag = String(asSidebarRecord(imageDetails?.tag)?.value || '');
-  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
+  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : '';
   return {
     id: String(container.id || displayName),
     name: String(container.name || displayName),
@@ -1186,7 +1192,7 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
     icon: getEffectiveDisplayIcon(displayIcon, imageName),
     image,
     status: String(container.status || 'unknown'),
-    host: String(container.agent || container.watcher || 'local'),
+    host: String(container.agent || container.watcher || ''),
     hasSecurityIssues: rawContainerHasSecurityIssues(container),
   };
 }

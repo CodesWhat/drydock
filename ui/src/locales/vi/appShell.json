@@ -116,6 +116,8 @@
         "openHint": "mở",
         "recentGroup": "Gần đây",
         "unknownHost": "máy chủ không xác định",
+        "unknownImage": "image không xác định",
+        "localHost": "cục bộ",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",

@@ -116,6 +116,8 @@
         "openHint": "otwarte",
         "recentGroup": "Ostatnie",
         "unknownHost": "nieznany host",
+        "unknownImage": "nieznany obraz",
+        "localHost": "lokalnie",
         "containerSubtitle": "Kontener · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Wyzwalacz · {type}",

@@ -116,6 +116,8 @@
         "openHint": "відкрити",
         "recentGroup": "Нещодавні",
         "unknownHost": "невідомий хост",
+        "unknownImage": "невідомий образ",
+        "localHost": "локально",
         "containerSubtitle": "Контейнер · {image} · {status} · {host}",
         "agentSubtitle": "Агент · {status} · {host}",
         "triggerSubtitle": "Тригер · {type}",

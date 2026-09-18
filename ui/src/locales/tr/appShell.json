@@ -116,6 +116,8 @@
         "openHint": "açık",
         "recentGroup": "Son kullanılanlar",
         "unknownHost": "bilinmeyen sunucu",
+        "unknownImage": "bilinmeyen imaj",
+        "localHost": "yerel",
         "containerSubtitle": "Kapsayıcı · {image} · {status} · {host}",
         "agentSubtitle": "Aracı · {status} · {host}",
         "triggerSubtitle": "Tetikleyici · {type}",

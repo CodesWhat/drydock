@@ -116,6 +116,8 @@
         "openHint": "فتح",
         "recentGroup": "الأخيرة",
         "unknownHost": "مضيف غير معروف",
+        "unknownImage": "صورة غير معروفة",
+        "localHost": "محلي",
         "containerSubtitle": "حاوية · {image} · {status} · {host}",
         "agentSubtitle": "وكيل · {status} · {host}",
         "triggerSubtitle": "مشغّل · {type}",

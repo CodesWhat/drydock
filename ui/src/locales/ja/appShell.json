@@ -116,6 +116,8 @@
         "openHint": "開く",
         "recentGroup": "最近",
         "unknownHost": "不明なホスト",
+        "unknownImage": "不明なイメージ",
+        "localHost": "ローカル",
         "containerSubtitle": "コンテナ · {image} · {status} · {host}",
         "agentSubtitle": "エージェント · {status} · {host}",
         "triggerSubtitle": "トリガー · {type}",

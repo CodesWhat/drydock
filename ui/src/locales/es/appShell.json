@@ -116,6 +116,8 @@
         "openHint": "abrir",
         "recentGroup": "Reciente",
         "unknownHost": "host desconocido",
+        "unknownImage": "imagen desconocida",
+        "localHost": "local",
         "containerSubtitle": "Contenedor · {image} · {status} · {host}",
         "agentSubtitle": "Agente · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",

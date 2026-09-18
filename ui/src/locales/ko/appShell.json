@@ -116,6 +116,8 @@
         "openHint": "열기",
         "recentGroup": "최근",
         "unknownHost": "알 수 없는 호스트",
+        "unknownImage": "알 수 없는 이미지",
+        "localHost": "로컬",
         "containerSubtitle": "컨테이너 · {image} · {status} · {host}",
         "agentSubtitle": "에이전트 · {status} · {host}",
         "triggerSubtitle": "트리거 · {type}",

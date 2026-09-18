@@ -116,6 +116,8 @@
         "openHint": "開啟",
         "recentGroup": "最近",
         "unknownHost": "未知主機",
+        "unknownImage": "未知映像",
+        "localHost": "本機",
         "containerSubtitle": "容器 · {image} · {status} · {host}",
         "agentSubtitle": "代理 · {status} · {host}",
         "triggerSubtitle": "觸發器 · {type}",
