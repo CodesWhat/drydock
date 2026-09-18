@@ -110,6 +110,56 @@ describe('api/container/bulk-security', () => {
     vi.clearAllMocks();
   });
 
+  describe('post-scan notification failures', () => {
+    test.each([
+      { status: 'passed', requestId: undefined },
+      { status: 'blocked', requestId: undefined },
+      { status: 'passed', requestId: 'a'.repeat(32) },
+      { status: 'blocked', requestId: 'a'.repeat(32) },
+    ])('preserves scan status and counts each task once (%j)', async ({ status, requestId }) => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }] });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(
+          createScanResult({
+            status,
+            summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+          }),
+        )
+        .mockRejectedValueOnce(new Error('scanner unavailable'));
+      harness.deps.emitSecurityAlert.mockRejectedValueOnce(new Error('notification unavailable'));
+
+      const { res } = await callScanAll(harness.handlers, requestId ? { requestId } : undefined);
+      await waitForCycleComplete(harness.deps);
+
+      const accepted = res.json.mock.calls[0][0];
+      const completions = harness.deps.broadcastScanCompleted.mock.calls;
+      expect
+        .soft(harness.deps.emitSecurityScanCycleComplete)
+        .toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ cycleId: accepted.cycleId, scannedCount: 3, alertCount: 0 }),
+        );
+      expect.soft(completions.find(([id]) => id === 'c1')?.[1]).toBe(status);
+      expect(completions.find(([id]) => id === 'c2')?.[1]).toBe('error');
+      expect(completions.find(([id]) => id === 'c3')?.[1]).toBe('passed');
+      expect(completions).toHaveLength(3);
+      expect(harness.storeContainer.getContainerRaw('c1')).toEqual(
+        expect.objectContaining({
+          security: expect.objectContaining({ scan: expect.objectContaining({ status }) }),
+        }),
+      );
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('notification unavailable'),
+      );
+      if (requestId) {
+        expect(completions.map((call) => call[3])).toEqual(
+          [1, 2, 3].map((completedCount) => ({ requestId, completedCount, scheduledCount: 3 })),
+        );
+      } else {
+        expect(completions.every((call) => call.length === 3)).toBe(true);
+      }
+    });
+  });
+
   describe('request validation', () => {
     test('emits one monotonic count per task for a large cached fleet', async () => {
       const total = 1200;
