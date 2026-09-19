@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Jawne",
+        "inherited": "Odziedziczone",
+        "unknown": "Nieznane"
       },
       "timeoutDefault": "60000ms (domyślnie)",
       "preAbortYes": "Przerwij aktualizację w przypadku niepowodzenia haka wstępnego",

@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "명시적",
+        "inherited": "상속됨",
+        "unknown": "알 수 없음"
       },
       "timeoutDefault": "60000ms (기본값)",
       "preAbortYes": "사전 훅 실패 시 업데이트 중단",

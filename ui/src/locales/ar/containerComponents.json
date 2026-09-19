@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "صريح",
+        "inherited": "موروث",
+        "unknown": "غير معروف"
       },
       "timeoutDefault": "60000ms (افتراضي)",
       "preAbortYes": "إلغاء التحديث عند فشل الخطاف المسبق",

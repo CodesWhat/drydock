@@ -906,6 +906,51 @@ describe('ContainersView', () => {
     );
   });
 
+  describe('runtime origin localization', () => {
+    afterEach(() => setI18nLocale('en'));
+
+    it.each([
+      { locale: 'fr', explicit: 'Explicite', inherited: 'Hérité', fullPage: false },
+      { locale: 'fr', explicit: 'Explicite', inherited: 'Hérité', fullPage: true },
+      { locale: 'ar', explicit: 'صريح', inherited: 'موروث', fullPage: false },
+      { locale: 'ar', explicit: 'صريح', inherited: 'موروث', fullPage: true },
+    ] as const)(
+      'updates open $locale origin badges (fullPage=$fullPage)',
+      async ({ locale, explicit, inherited, fullPage }) => {
+        setI18nLocale('en');
+        const container = makeContainer();
+        const wrapper = await mountContainersView(
+          [container],
+          [
+            {
+              id: container.id,
+              name: container.name,
+              labels: {
+                'dd.runtime.entrypoint.origin': 'explicit',
+                'dd.runtime.cmd.origin': 'inherited',
+              },
+            },
+          ],
+        );
+        mockSelectedContainer.value = container;
+        mockDetailPanelOpen.value = true;
+        mockContainerFullPage.value = fullPage;
+        mockActiveDetailTab.value = 'overview';
+        await flushPromises();
+        const badges = () => wrapper.findAll('.badge').map((badge) => badge.text());
+        expect(badges()).toEqual(expect.arrayContaining(['Explicit', 'Inherited']));
+        const fetches = mockGetAllContainers.mock.calls.length;
+
+        setI18nLocale(locale);
+        await flushPromises();
+
+        expect(badges()).toEqual(expect.arrayContaining([explicit, inherited]));
+        expect(badges()).not.toEqual(expect.arrayContaining(['Explicit', 'Inherited']));
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(fetches);
+      },
+    );
+  });
+
   describe('loading containers', () => {
     it('reconciles persisted fleet grouping before loading stack groups', async () => {
       const { preferences } = await import('@/preferences/store');

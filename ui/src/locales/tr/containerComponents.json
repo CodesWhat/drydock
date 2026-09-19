@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Açıkça belirtilmiş",
+        "inherited": "Devralınmış",
+        "unknown": "Bilinmiyor"
       },
       "timeoutDefault": "60000ms (varsayılan)",
       "preAbortYes": "Ön hook hatasında güncellemeyi iptal et",

@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Chỉ định rõ",
+        "inherited": "Kế thừa",
+        "unknown": "Không xác định"
       },
       "timeoutDefault": "60000ms (mặc định)",
       "preAbortYes": "Hủy cập nhật khi hook trước thất bại",

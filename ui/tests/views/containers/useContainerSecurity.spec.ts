@@ -140,6 +140,53 @@ describe('useContainerSecurity', () => {
     });
   });
 
+  it.each([
+    ['ar', 'صريح', 'موروث', 'غير معروف'],
+    ['de', 'Explizit', 'Geerbt', 'Unbekannt'],
+    ['es', 'Explícito', 'Heredado', 'Desconocido'],
+    ['fr', 'Explicite', 'Hérité', 'Inconnu'],
+    ['it', 'Esplicito', 'Ereditato', 'Sconosciuto'],
+    ['ja', '明示指定', '継承', '不明'],
+    ['ko', '명시적', '상속됨', '알 수 없음'],
+    ['nl', 'Expliciet', 'Overgenomen', 'Onbekend'],
+    ['pl', 'Jawne', 'Odziedziczone', 'Nieznane'],
+    ['pt-BR', 'Explícito', 'Herdado', 'Desconhecido'],
+    ['ru', 'Явно задано', 'Унаследовано', 'Неизвестно'],
+    ['tr', 'Açıkça belirtilmiş', 'Devralınmış', 'Bilinmiyor'],
+    ['uk', 'Явно задано', 'Успадковано', 'Невідомо'],
+    ['vi', 'Chỉ định rõ', 'Kế thừa', 'Không xác định'],
+    ['zh-CN', '显式指定', '继承', '未知'],
+    ['zh-TW', '明確指定', '繼承', '未知'],
+  ] as const)(
+    'translates runtime origin labels in %s without changing metadata',
+    async (locale, explicit, inherited, unknown) => {
+      setI18nLocale('en');
+      const labels = {
+        'dd.runtime.entrypoint.origin': 'explicit',
+        'dd.runtime.cmd.origin': 'inherited',
+      };
+      const { composable, selectedContainerMeta } = await mountSecurityHarness({
+        selectedContainerMeta: { labels },
+      });
+      const initialOrigins = { ...composable.selectedRuntimeOrigins.value };
+      const readLabels = () =>
+        (['explicit', 'inherited', 'unknown'] as const).map((origin) =>
+          composable.runtimeOriginLabel(origin),
+        );
+      expect(readLabels()).toEqual(['Explicit', 'Inherited', 'Unknown']);
+
+      setI18nLocale(locale);
+      await nextTick();
+      expect(readLabels()).toEqual([explicit, inherited, unknown]);
+      expect(composable.selectedRuntimeOrigins.value).toEqual(initialOrigins);
+      expect(selectedContainerMeta.value?.labels).toEqual(labels);
+
+      setI18nLocale('en');
+      await nextTick();
+      expect(readLabels()).toEqual(['Explicit', 'Inherited', 'Unknown']);
+    },
+  );
+
   it('returns unknown origins and no drift warning when metadata is absent', async () => {
     const { composable } = await mountSecurityHarness({
       selectedContainerMeta: undefined,

@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Явно задано",
+        "inherited": "Унаследовано",
+        "unknown": "Неизвестно"
       },
       "timeoutDefault": "60000 мс (по умолчанию)",
       "preAbortYes": "Прервать обновление при ошибке предварительного хука",

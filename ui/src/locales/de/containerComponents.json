@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explizit",
+        "inherited": "Geerbt",
+        "unknown": "Unbekannt"
       },
       "timeoutDefault": "60000ms (Standard)",
       "preAbortYes": "Update bei Pre-Hook-Fehler abbrechen",

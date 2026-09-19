@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "明確指定",
+        "inherited": "繼承",
+        "unknown": "未知"
       },
       "timeoutDefault": "60000ms（預設）",
       "preAbortYes": "前置掛鉤失敗時中止更新",

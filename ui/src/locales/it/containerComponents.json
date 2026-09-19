@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Esplicito",
+        "inherited": "Ereditato",
+        "unknown": "Sconosciuto"
       },
       "timeoutDefault": "60000ms (predefinito)",
       "preAbortYes": "Interrompi l'aggiornamento in caso di errore dell'hook pre-aggiornamento",

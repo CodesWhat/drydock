@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Expliciet",
+        "inherited": "Overgenomen",
+        "unknown": "Onbekend"
       },
       "timeoutDefault": "60000ms (standaard)",
       "preAbortYes": "Update afbreken bij een mislukte pre-hook",

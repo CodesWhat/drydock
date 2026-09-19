@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "明示指定",
+        "inherited": "継承",
+        "unknown": "不明"
       },
       "timeoutDefault": "60000ms（デフォルト）",
       "preAbortYes": "事前フック失敗時に更新を中止",
