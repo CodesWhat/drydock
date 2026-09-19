@@ -15,8 +15,8 @@
     "close": "Zamknij",
     "retry": "Spróbuj ponownie",
     "unknown": "nieznany",
-    "yes": "yes",
-    "no": "no",
+    "yes": "tak",
+    "no": "nie",
     "errorSummary": {
       "rateLimitHit": "Przekroczono limit zapytań do rejestru",
       "accessDenied": "Odmowa dostępu do rejestru",
@@ -28,7 +28,7 @@
       "signatureFailed": "Weryfikacja podpisu nie powiodła się"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Niestandardowy"
     },
     "timeAgo": {
       "justNow": "Właśnie teraz"

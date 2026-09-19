@@ -210,7 +210,7 @@
     },
     "profile": {
       "loading": "Profil yükleniyor",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Bilinmeyen kullanıcı",
       "fields": {
         "username": "Kullanıcı adı",
         "email": "E-posta",
@@ -224,8 +224,8 @@
       "loading": "Günlükler yükleniyor...",
       "emptyMessage": "Mevcut filtreler için günlük girişi bulunamadı.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Duraklatıldı",
+        "offline": "Çevrimdışı"
       },
       "toolbar": {
         "live": "Canlı",

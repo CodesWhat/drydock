@@ -210,7 +210,7 @@
     },
     "profile": {
       "loading": "Profil wird geladen",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Unbekannter Benutzer",
       "fields": {
         "username": "Benutzername",
         "email": "E-Mail",
@@ -224,8 +224,8 @@
       "loading": "Logs werden geladen...",
       "emptyMessage": "Keine Logeinträge für die aktuellen Filter gefunden.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Pausiert",
+        "offline": "Nicht verbunden"
       },
       "toolbar": {
         "live": "Live",

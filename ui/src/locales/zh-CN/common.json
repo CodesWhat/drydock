@@ -15,8 +15,8 @@
     "close": "关闭",
     "retry": "重试",
     "unknown": "未知",
-    "yes": "yes",
-    "no": "no",
+    "yes": "是",
+    "no": "否",
     "errorSummary": {
       "rateLimitHit": "仓库速率限制已触发",
       "accessDenied": "仓库访问被拒绝",
@@ -28,7 +28,7 @@
       "signatureFailed": "签名验证失败"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "自定义"
     },
     "timeAgo": {
       "justNow": "刚刚"

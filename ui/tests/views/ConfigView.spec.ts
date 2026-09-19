@@ -591,6 +591,65 @@ describe('ConfigView', () => {
     });
   });
 
+  describe('profile fallback labels', () => {
+    it.each([
+      ['ar', 'مستخدم غير معروف'],
+      ['de', 'Unbekannter Benutzer'],
+      ['it', 'Utente sconosciuto'],
+      ['ja', '不明なユーザー'],
+      ['ko', '알 수 없는 사용자'],
+      ['nl', 'Onbekende gebruiker'],
+      ['pl', 'Nieznany użytkownik'],
+      ['pt-BR', 'Usuário desconhecido'],
+      ['ru', 'Неизвестный пользователь'],
+      ['tr', 'Bilinmeyen kullanıcı'],
+      ['uk', 'Невідомий користувач'],
+      ['vi', 'Người dùng không xác định'],
+      ['zh-TW', '未知使用者'],
+    ] as const)(
+      'updates the missing identity caption in %s without reloading the profile',
+      async (locale, expected) => {
+        mockRouteQuery.value = { tab: 'profile' };
+        mockGetUser.mockResolvedValue({ username: '' });
+        mockGetServer.mockResolvedValue({ configuration: {} });
+        const wrapper = factory();
+        try {
+          await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+          await nextTick();
+          const heading = () => wrapper.get('.dd-text-heading-section.truncate').text();
+          expect(heading()).toBe('Unknown User');
+          setI18nLocale(locale);
+          await nextTick();
+          expect(heading()).toBe(expected);
+          expect(mockGetUser).toHaveBeenCalledOnce();
+          expect(mockUpdateSettings).not.toHaveBeenCalled();
+          expect(mockPushInitialSync).not.toHaveBeenCalled();
+        } finally {
+          wrapper.unmount();
+          setI18nLocale('en');
+        }
+      },
+    );
+
+    it('preserves a real username that matches the English fallback', async () => {
+      mockRouteQuery.value = { tab: 'profile' };
+      mockGetUser.mockResolvedValue({ username: 'Unknown User' });
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      const wrapper = factory();
+      try {
+        await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+        await nextTick();
+        setI18nLocale('ar');
+        await nextTick();
+        expect(wrapper.get('.dd-text-heading-section.truncate').text()).toBe('Unknown User');
+        expect(mockGetUser).toHaveBeenCalledOnce();
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    });
+  });
+
   describe('cross-device sync toggle', () => {
     async function mountAppearance(username = 'admin') {
       mockRouteQuery.value = { tab: 'appearance' };

@@ -71,7 +71,7 @@
       "agent-disconnect": "Agent verbroken",
       "notification-delivery-failed": "Melding mislukt",
       "security-alert": "Beveiligingswaarschuwing",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Wachttijd verstreken",
       "image-prune": "Image-opruiming"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "Filter op naam...",
     "clear": "Wissen",
     "emptyFiltered": "Er zijn geen triggers die overeenkomen met uw filters",
-    "testContainerName": "Test Container",
+    "testContainerName": "Testcontainer",
     "columns": {
       "trigger": "Trigger",
       "type": "Typ",

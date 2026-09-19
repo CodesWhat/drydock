@@ -107,9 +107,9 @@
       "digest": "Atualização de imagem"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Aberta agora",
+      "scheduled": "Agendada",
+      "openingSoon": "Abrirá em breve"
     },
     "dataLoadFailed": "Falha ao carregar dados do dashboard",
     "widgets": {

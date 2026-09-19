@@ -107,9 +107,9 @@
       "digest": "Cập nhật image"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Đang mở",
+      "scheduled": "Đã lên lịch",
+      "openingSoon": "Sắp mở"
     },
     "dataLoadFailed": "Không thể tải dữ liệu bảng điều khiển",
     "widgets": {

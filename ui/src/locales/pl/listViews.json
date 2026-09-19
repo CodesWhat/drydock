@@ -71,7 +71,7 @@
       "agent-disconnect": "Rozłączenie agenta",
       "notification-delivery-failed": "Dostarczenie powiadomienia nie powiodło się",
       "security-alert": "Alert bezpieczeństwa",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Okres oczekiwania zakończony",
       "image-prune": "Czyszczenie obrazu"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żadne wyzwalacze nie pasują do Twoich filtrów",
-    "testContainerName": "Test Container",
+    "testContainerName": "Kontener testowy",
     "columns": {
       "trigger": "Wyzwalacz",
       "type": "Wpisz",

@@ -107,9 +107,9 @@
       "digest": "Aktualizacja obrazu"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Otwarte teraz",
+      "scheduled": "Zaplanowane",
+      "openingSoon": "Wkrótce otwarcie"
     },
     "dataLoadFailed": "Nie udało się załadować danych panelu",
     "widgets": {

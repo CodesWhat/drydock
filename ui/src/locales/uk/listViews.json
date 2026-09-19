@@ -71,7 +71,7 @@
       "agent-disconnect": "Відключення агента",
       "notification-delivery-failed": "Помилка доставки сповіщення",
       "security-alert": "Попередження безпеки",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Період очікування завершено",
       "image-prune": "Очищення образу"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "Фільтр за назвою...",
     "clear": "Очистити",
     "emptyFiltered": "Жоден тригер не відповідає вашим фільтрам",
-    "testContainerName": "Test Container",
+    "testContainerName": "Тестовий контейнер",
     "columns": {
       "trigger": "Тригер",
       "type": "Тип",

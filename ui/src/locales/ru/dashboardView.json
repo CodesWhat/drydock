@@ -107,9 +107,9 @@
       "digest": "Обновление образа"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Открыто сейчас",
+      "scheduled": "Запланировано",
+      "openingSoon": "Скоро откроется"
     },
     "dataLoadFailed": "Не удалось загрузить данные панели управления",
     "widgets": {

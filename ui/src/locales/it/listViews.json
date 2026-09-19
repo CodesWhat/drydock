@@ -71,7 +71,7 @@
       "agent-disconnect": "Disconnessione agente",
       "notification-delivery-failed": "Invio notifica non riuscito",
       "security-alert": "Avviso di sicurezza",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Periodo di maturazione completato",
       "image-prune": "Pulizia immagine"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "Filtra per nome...",
     "clear": "Cancella",
     "emptyFiltered": "Nessun trigger corrisponde ai filtri",
-    "testContainerName": "Test Container",
+    "testContainerName": "Container di prova",
     "columns": {
       "trigger": "Trigger",
       "type": "Tipo",
