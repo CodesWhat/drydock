@@ -184,7 +184,7 @@
       "volumes": "Volume",
       "composeFiles": "Tệp Compose",
       "version": "Phiên bản",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Phiên bản phần mềm",
       "currentLabel": "Hiện tại:",
       "latestLabel": "Mới nhất:",
       "digestLabel": "Digest:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Không có cổng nào được mở",
       "notConfigured": "Chưa cấu hình",
       "noVolumesMounted": "Không có volume nào được gắn kết",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Thời gian hoạt động",
+      "uptimeAriaLabel": "Thời gian hoạt động của vùng chứa"
     },
     "containerLogs": {
       "title": "Nhật ký Container",
       "download": "Tải xuống",
       "allLevels": "Tất cả mức độ",
       "downloadError": "Không thể tải xuống nhật ký",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "{count} dòng cuối",
+      "tailAll": "Tất cả các dòng",
+      "statusPaused": "Đã tạm dừng",
+      "statusLive": "Trực tiếp",
+      "statusOffline": "Mất kết nối",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Cập nhật Container",
-      "thisContainer": "this container",
+      "thisContainer": "vùng chứa này",
       "confirmTagChange": "Cập nhật {name}? Thao tác này sẽ thay đổi tag image từ :{currentTag} thành :{newTag}{kind}.",
       "confirmDigestChange": "Cập nhật {name}? Bản build mới hơn của :{currentTag} có sẵn (digest thay đổi).",
       "confirmLatest": "Cập nhật {name} ngay bây giờ? Thao tác này sẽ áp dụng image mới nhất đã phát hiện.",
       "updating": "Đang cập nhật...",
       "update": "Cập nhật",
-      "updateFailed": "Update failed"
+      "updateFailed": "Cập nhật thất bại"
     },
     "floatingTag": {
       "badgeText": "floating tag",
@@ -522,18 +522,18 @@
       "new": "Phát hiện {duration} trước"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Hủy",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Dừng vùng chứa",
+        "message": "Dừng {name}?",
+        "acceptLabel": "Dừng",
+        "successMessage": "Đã dừng: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Khởi động lại vùng chứa",
+        "message": "Khởi động lại {name}?",
+        "acceptLabel": "Khởi động lại",
+        "successMessage": "Đã khởi động lại: {name}"
       },
       "forceUpdate": {
         "header": "Cập nhật bắt buộc",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Kiểm tra lại thất bại cho {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} mục",
+      "entryCountPlural": "{count} mục",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"

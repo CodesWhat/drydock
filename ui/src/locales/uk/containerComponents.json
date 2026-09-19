@@ -184,7 +184,7 @@
       "volumes": "Томи",
       "composeFiles": "Compose-файли",
       "version": "Версія",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Версія ПЗ",
       "currentLabel": "Поточний:",
       "latestLabel": "Останній:",
       "digestLabel": "Дайджест:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Порти не відкриті",
       "notConfigured": "Не налаштовано",
       "noVolumesMounted": "Томи не підключені",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Час роботи",
+      "uptimeAriaLabel": "Час роботи контейнера"
     },
     "containerLogs": {
       "title": "Журнали контейнера",
       "download": "Завантажити",
       "allLevels": "Всі рівні",
       "downloadError": "Не вдалося завантажити журнали",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Останні рядки: {count}",
+      "tailAll": "Усі рядки",
+      "statusPaused": "Призупинено",
+      "statusLive": "У реальному часі",
+      "statusOffline": "Немає з’єднання",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Оновити контейнер",
-      "thisContainer": "this container",
+      "thisContainer": "цей контейнер",
       "confirmTagChange": "Оновити {name}? Тег образу зміниться з :{currentTag} на :{newTag}{kind}.",
       "confirmDigestChange": "Оновити {name}? Доступна новіша збірка :{currentTag} (зміна дайджесту).",
       "confirmLatest": "Оновити {name} зараз? Буде застосовано останній виявлений образ.",
       "updating": "Оновлення...",
       "update": "Оновити",
-      "updateFailed": "Update failed"
+      "updateFailed": "Не вдалося оновити"
     },
     "floatingTag": {
       "badgeText": "плаваючий тег",
@@ -522,18 +522,18 @@
       "new": "Виявлено {duration} тому"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Скасувати",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Зупинити контейнер",
+        "message": "Зупинити {name}?",
+        "acceptLabel": "Зупинити",
+        "successMessage": "Зупинено: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Перезапустити контейнер",
+        "message": "Перезапустити {name}?",
+        "acceptLabel": "Перезапустити",
+        "successMessage": "Перезапущено: {name}"
       },
       "forceUpdate": {
         "header": "Примусово оновити",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Не вдалося виконати перевірку для {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} запис",
+      "entryCountPlural": "Кількість записів: {count}",
       "kindLabels": {
         "tag": "тег",
         "digest": "дайджест"

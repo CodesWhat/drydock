@@ -184,7 +184,7 @@
       "volumes": "卷",
       "composeFiles": "Compose 文件",
       "version": "版本",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "软件版本",
       "currentLabel": "当前：",
       "latestLabel": "最新：",
       "digestLabel": "摘要：",
@@ -228,19 +228,19 @@
       "noPortsExposed": "未暴露端口",
       "notConfigured": "未配置",
       "noVolumesMounted": "未挂载卷",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "运行时间",
+      "uptimeAriaLabel": "容器运行时间"
     },
     "containerLogs": {
       "title": "容器日志",
       "download": "下载",
       "allLevels": "所有级别",
       "downloadError": "无法下载日志",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "最后 {count} 行",
+      "tailAll": "全部行",
+      "statusPaused": "已暂停",
+      "statusLive": "实时",
+      "statusOffline": "未连接",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "更新容器",
-      "thisContainer": "this container",
+      "thisContainer": "此容器",
       "confirmTagChange": "更新 {name}？这将把镜像标签从 :{currentTag} 更改为 :{newTag}{kind}。",
       "confirmDigestChange": "更新 {name}？:{currentTag} 有更新的构建版本可用（摘要变更）。",
       "confirmLatest": "立即更新 {name}？这将应用最新发现的镜像。",
       "updating": "更新中...",
       "update": "更新",
-      "updateFailed": "Update failed"
+      "updateFailed": "更新失败"
     },
     "floatingTag": {
       "badgeText": "浮动标签",
@@ -522,18 +522,18 @@
       "new": "{duration}前检测到"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "取消",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "停止容器",
+        "message": "停止 {name}？",
+        "acceptLabel": "停止",
+        "successMessage": "已停止：{name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "重启容器",
+        "message": "重启 {name}？",
+        "acceptLabel": "重启",
+        "successMessage": "已重启：{name}"
       },
       "forceUpdate": {
         "header": "强制更新",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "重新检查 {name} 失败"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} 项",
+      "entryCountPlural": "{count} 项",
       "kindLabels": {
         "tag": "标签",
         "digest": "摘要"

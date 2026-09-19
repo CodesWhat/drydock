@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import ContainerLogs from '@/components/containers/ContainerLogs.vue';
 import { preferences, resetPreferences } from '@/preferences/store';
 
@@ -77,6 +78,51 @@ describe('ContainerLogs', () => {
       },
     });
   }
+
+  it.each([
+    {
+      locale: 'de',
+      tail: 'Letzte 100 Zeilen',
+      all: 'Alle Zeilen',
+      paused: 'Pausiert',
+      live: 'Aktiv',
+      offline: 'Nicht verbunden',
+    },
+    {
+      locale: 'ar',
+      tail: 'آخر 100 سطر',
+      all: 'كل السطور',
+      paused: 'متوقف مؤقتًا',
+      live: 'مباشر',
+      offline: 'غير متصل',
+    },
+  ] as const)(
+    'localizes log controls in %s without reconnecting',
+    async ({ locale, tail, all, paused, live, offline }) => {
+      setI18nLocale('en');
+      const wrapper = mountComponent();
+      try {
+        expect(wrapper.text()).toContain('Tail 100');
+        setI18nLocale(locale);
+        await nextTick();
+        expect(wrapper.findAll('option').map((option) => option.text())).toEqual(
+          expect.arrayContaining([tail, all]),
+        );
+        expect(wrapper.text()).toContain(offline);
+        mocks.getLatestOptions()?.onStatus?.('connected');
+        await nextTick();
+        expect(wrapper.text()).toContain(live);
+        await wrapper.find('[data-test="container-log-toggle-pause"]').trigger('click');
+        expect(wrapper.text()).toContain(paused);
+        expect(mocks.handle.pause).toHaveBeenCalledTimes(1);
+        expect(mocks.createConnection).toHaveBeenCalledTimes(1);
+        expect(mocks.handle.update).not.toHaveBeenCalled();
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    },
+  );
 
   it('creates a stream connection and renders incoming log frames', async () => {
     const wrapper = mountComponent();

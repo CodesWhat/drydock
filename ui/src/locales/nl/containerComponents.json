@@ -184,7 +184,7 @@
       "volumes": "Volumes",
       "composeFiles": "Compose-bestanden",
       "version": "Versie",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Softwareversie",
       "currentLabel": "Huidig:",
       "latestLabel": "Nieuwste:",
       "digestLabel": "Digest:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Geen poorten zichtbaar",
       "notConfigured": "Niet geconfigureerd",
       "noVolumesMounted": "Geen volumes gemonteerd",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Actieve tijd",
+      "uptimeAriaLabel": "Actieve tijd van container"
     },
     "containerLogs": {
       "title": "Containerlogboeken",
       "download": "Downloaden",
       "allLevels": "Alle niveaus",
       "downloadError": "Kan logboeken niet downloaden",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Laatste {count} regels",
+      "tailAll": "Alle regels",
+      "statusPaused": "Gepauzeerd",
+      "statusLive": "Actief",
+      "statusOffline": "Niet verbonden",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Container bijwerken",
-      "thisContainer": "this container",
+      "thisContainer": "deze container",
       "confirmTagChange": "{name} bijwerken? Hiermee wordt de imagetag gewijzigd van :{currentTag} naar :{newTag}{kind}.",
       "confirmDigestChange": "{name} bijwerken? Er is een nieuwere versie van :{currentTag} beschikbaar (digestwijziging).",
       "confirmLatest": "{name} nu bijwerken? Hiermee wordt de laatst gevonden image toegepast.",
       "updating": "Updaten...",
       "update": "Bijwerken",
-      "updateFailed": "Update failed"
+      "updateFailed": "Bijwerken mislukt"
     },
     "floatingTag": {
       "badgeText": "zwevend label",
@@ -522,18 +522,18 @@
       "new": "{duration} geleden gedetecteerd"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Annuleren",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
+        "header": "Container stoppen",
+        "message": "{name} stoppen?",
         "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "successMessage": "Gestopt: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Container herstarten",
+        "message": "{name} herstarten?",
+        "acceptLabel": "Herstarten",
+        "successMessage": "Herstart: {name}"
       },
       "forceUpdate": {
         "header": "Update forceren",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Recheck mislukt voor {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} vermelding",
+      "entryCountPlural": "{count} vermeldingen",
       "kindLabels": {
         "tag": "tag",
         "digest": "samenvatting"

@@ -184,7 +184,7 @@
       "volumes": "ボリューム",
       "composeFiles": "Compose ファイル",
       "version": "バージョン",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "ソフトウェアバージョン",
       "currentLabel": "現在：",
       "latestLabel": "最新：",
       "digestLabel": "ダイジェスト：",
@@ -228,19 +228,19 @@
       "noPortsExposed": "公開ポートがありません",
       "notConfigured": "未設定",
       "noVolumesMounted": "マウント済みボリュームがありません",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "稼働時間",
+      "uptimeAriaLabel": "コンテナの稼働時間"
     },
     "containerLogs": {
       "title": "コンテナログ",
       "download": "ダウンロード",
       "allLevels": "全レベル",
       "downloadError": "ログをダウンロードできません",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "末尾 {count} 行",
+      "tailAll": "すべての行",
+      "statusPaused": "一時停止中",
+      "statusLive": "配信中",
+      "statusOffline": "未接続",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "コンテナを更新",
-      "thisContainer": "this container",
+      "thisContainer": "このコンテナ",
       "confirmTagChange": "{name} を更新しますか？イメージタグが :{currentTag} から :{newTag}{kind} に変更されます。",
       "confirmDigestChange": "{name} を更新しますか？:{currentTag} の新しいビルドが利用可能です（ダイジェスト変更）。",
       "confirmLatest": "{name} を今すぐ更新しますか？最新のイメージが適用されます。",
       "updating": "更新中...",
       "update": "更新",
-      "updateFailed": "Update failed"
+      "updateFailed": "更新に失敗しました"
     },
     "floatingTag": {
       "badgeText": "フローティングタグ",
@@ -522,18 +522,18 @@
       "new": "{duration}前に検出"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "キャンセル",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "コンテナを停止",
+        "message": "{name} を停止しますか？",
+        "acceptLabel": "停止",
+        "successMessage": "停止しました: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "コンテナを再起動",
+        "message": "{name} を再起動しますか？",
+        "acceptLabel": "再起動",
+        "successMessage": "再起動しました: {name}"
       },
       "forceUpdate": {
         "header": "強制更新",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "{name} の再確認に失敗しました"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} 件",
+      "entryCountPlural": "{count} 件",
       "kindLabels": {
         "tag": "タグ",
         "digest": "ダイジェスト"

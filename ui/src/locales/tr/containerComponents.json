@@ -184,7 +184,7 @@
       "volumes": "Birimler",
       "composeFiles": "Compose dosyaları",
       "version": "Sürüm",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Yazılım sürümü",
       "currentLabel": "Güncel:",
       "latestLabel": "En son:",
       "digestLabel": "Özet:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Hiçbir bağlantı noktası açıkta değil",
       "notConfigured": "Yapılandırılmadı",
       "noVolumesMounted": "Hiçbir birim monte edilmedi",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Çalışma süresi",
+      "uptimeAriaLabel": "Konteyner çalışma süresi"
     },
     "containerLogs": {
       "title": "Konteyner Günlükleri",
       "download": "İndir",
       "allLevels": "Tüm Seviyeler",
       "downloadError": "Günlükler indirilemiyor",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Son {count} satır",
+      "tailAll": "Tüm satırlar",
+      "statusPaused": "Duraklatıldı",
+      "statusLive": "Canlı",
+      "statusOffline": "Bağlantı yok",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Kapsayıcıyı Güncelle",
-      "thisContainer": "this container",
+      "thisContainer": "bu konteyner",
       "confirmTagChange": "{name} güncellensin mi? Bu, imaj etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
       "confirmDigestChange": "{name} güncellensin mi? :{currentTag} imajının daha yeni bir yapısı mevcut (özet değişikliği).",
       "confirmLatest": "{name} şimdi güncellensin mi? Bu, en son bulunan imajı uygulayacaktır.",
       "updating": "Güncelleniyor...",
       "update": "Güncelle",
-      "updateFailed": "Update failed"
+      "updateFailed": "Güncelleme başarısız"
     },
     "floatingTag": {
       "badgeText": "kayan etiket",
@@ -522,18 +522,18 @@
       "new": "{duration} önce algılandı"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "İptal",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Konteyneri durdur",
+        "message": "{name} durdurulsun mu?",
+        "acceptLabel": "Durdur",
+        "successMessage": "Durduruldu: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Konteyneri yeniden başlat",
+        "message": "{name} yeniden başlatılsın mı?",
+        "acceptLabel": "Yeniden başlat",
+        "successMessage": "Yeniden başlatıldı: {name}"
       },
       "forceUpdate": {
         "header": "Güncellemeyi Zorla",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "{name} için yeniden kontrol başarısız oldu"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} kayıt",
+      "entryCountPlural": "{count} kayıt",
       "kindLabels": {
         "tag": "etiket",
         "digest": "özet"

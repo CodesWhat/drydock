@@ -184,7 +184,7 @@
       "volumes": "Volumi",
       "composeFiles": "File compose",
       "version": "Versione",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Versione del software",
       "currentLabel": "Corrente:",
       "latestLabel": "Ultima:",
       "digestLabel": "Digest:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Nessuna porta esposta",
       "notConfigured": "Non configurato",
       "noVolumesMounted": "Nessun volume montato",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Tempo di attività",
+      "uptimeAriaLabel": "Tempo di attività del container"
     },
     "containerLogs": {
       "title": "Log container",
       "download": "Scarica",
       "allLevels": "Tutti i livelli",
       "downloadError": "Impossibile scaricare i log",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Ultime {count} righe",
+      "tailAll": "Tutte le righe",
+      "statusPaused": "In pausa",
+      "statusLive": "In diretta",
+      "statusOffline": "Non connesso",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Aggiorna container",
-      "thisContainer": "this container",
+      "thisContainer": "questo container",
       "confirmTagChange": "Aggiornare {name}? Il tag immagine cambierà da :{currentTag} a :{newTag}{kind}.",
       "confirmDigestChange": "Aggiornare {name}? È disponibile una build più recente di :{currentTag} (cambio digest).",
       "confirmLatest": "Aggiornare {name} ora? Verrà applicata l'immagine più recente rilevata.",
       "updating": "Aggiornamento...",
       "update": "Aggiorna",
-      "updateFailed": "Update failed"
+      "updateFailed": "Aggiornamento non riuscito"
     },
     "floatingTag": {
       "badgeText": "tag mobile",
@@ -522,18 +522,18 @@
       "new": "Rilevato {duration} fa"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Annulla",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Arresta container",
+        "message": "Arrestare {name}?",
+        "acceptLabel": "Arresta",
+        "successMessage": "Arrestato: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Riavvia container",
+        "message": "Riavviare {name}?",
+        "acceptLabel": "Riavvia",
+        "successMessage": "Riavviato: {name}"
       },
       "forceUpdate": {
         "header": "Forza aggiornamento",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Ricontrollo non riuscito per {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} voce",
+      "entryCountPlural": "{count} voci",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
