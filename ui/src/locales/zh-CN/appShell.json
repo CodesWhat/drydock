@@ -55,7 +55,7 @@
     "layout": {
       "nav": {
         "dashboard": "仪表盘",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "仪表盘",
         "containers": "容器",
         "security": "安全",
         "approvals": "审批",
@@ -89,7 +89,7 @@
         "userMenu": "用户菜单",
         "profile": "个人资料",
         "signOut": "退出登录",
-        "userFallback": "User"
+        "userFallback": "用户"
       },
       "about": {
         "title": "Drydock",

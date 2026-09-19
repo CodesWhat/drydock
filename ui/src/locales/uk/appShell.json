@@ -55,7 +55,7 @@
     "layout": {
       "nav": {
         "dashboard": "Панель керування",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "Панель керування",
         "containers": "Контейнери",
         "security": "Безпека",
         "approvals": "Схвалення",
@@ -89,7 +89,7 @@
         "userMenu": "Меню користувача",
         "profile": "Профіль",
         "signOut": "Вийти",
-        "userFallback": "User"
+        "userFallback": "Користувач"
       },
       "about": {
         "title": "Drydock",

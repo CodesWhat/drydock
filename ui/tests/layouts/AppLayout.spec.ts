@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
 const {
+  mockRoute,
   mockRouterPush,
   mockRouterReplace,
   mockGetAgents,
@@ -23,6 +24,7 @@ const {
   mockLoadRecentItems,
   mockSaveRecentItems,
 } = vi.hoisted(() => ({
+  mockRoute: { path: '/', name: 'dashboard', query: {}, params: {} },
   mockRouterPush: vi.fn(),
   mockRouterReplace: vi.fn(),
   mockGetAgents: vi.fn(),
@@ -45,7 +47,7 @@ const {
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
-  useRoute: () => ({ path: '/', name: 'dashboard', query: {}, params: {} }),
+  useRoute: () => mockRoute,
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -147,6 +149,7 @@ describe('AppLayout', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRoute.path = '/';
     setI18nLocale('en');
     localStorage.clear();
     mockFetch = vi.fn();
@@ -416,6 +419,64 @@ describe('AppLayout', () => {
       await flushPromises();
       expect(state.containerSearchResults[0].subtitle).toContain('future-state');
       expect(state.containerSearchResults[0].subtitle).toContain('local');
+    });
+  });
+
+  describe('layout fallback localization', () => {
+    it.each([
+      ['ar', 'مستخدم'],
+      ['de', 'Benutzer'],
+      ['it', 'Utente'],
+      ['ja', 'ユーザー'],
+      ['ko', '사용자'],
+      ['nl', 'Gebruiker'],
+      ['pl', 'Użytkownik'],
+      ['pt-BR', 'Usuário'],
+      ['tr', 'Kullanıcı'],
+      ['uk', 'Користувач'],
+      ['vi', 'Người dùng'],
+      ['zh-CN', '用户'],
+      ['zh-TW', '使用者'],
+    ] as const)(
+      'updates mounted fallback labels in %s without refetching',
+      async (locale, user) => {
+        mockRoute.path = '/containers/example/logs';
+        const wrapper = mountLayout({ AppButton: false });
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        await wrapper.get('button[aria-label="User menu"]').trigger('click');
+        expect(wrapper.get('.user-menu-wrapper .truncate').text()).toBe('User');
+
+        setI18nLocale(locale);
+        await flushPromises();
+
+        expect(wrapper.get('header nav > span.font-medium').text()).toBe(
+          i18n.global.t('appShell.layout.nav.dashboard'),
+        );
+        expect(wrapper.get('.user-menu-wrapper .truncate').text()).toBe(user);
+        expect(mockGetUser).toHaveBeenCalledTimes(1);
+        expect(mockRouterPush).not.toHaveBeenCalled();
+        expect(mockLogout).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { username: 'User', displayName: 'Dashboard', expected: 'User' },
+      { displayName: 'User', expected: 'User' },
+    ])('preserves the supplied identity $expected across locale changes', async (user) => {
+      mockGetUser.mockResolvedValue(user);
+      const wrapper = mountLayout({ AppButton: false });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      await wrapper.get('button[aria-label="User menu"]').trigger('click');
+
+      for (const locale of ['fr', 'ar'] as const) {
+        setI18nLocale(locale);
+        await flushPromises();
+        expect(wrapper.get('.user-menu-wrapper .truncate').text()).toBe(user.expected);
+      }
+      expect(mockGetUser).toHaveBeenCalledTimes(1);
+      expect(mockLogout).not.toHaveBeenCalled();
     });
   });
 

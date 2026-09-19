@@ -55,7 +55,7 @@
     "layout": {
       "nav": {
         "dashboard": "Pano",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "Pano",
         "containers": "Konteynerler",
         "security": "Güvenlik",
         "approvals": "Onaylar",
@@ -89,7 +89,7 @@
         "userMenu": "Kullanıcı menüsü",
         "profile": "Profil",
         "signOut": "Oturumu kapat",
-        "userFallback": "User"
+        "userFallback": "Kullanıcı"
       },
       "about": {
         "title": "Drydock",

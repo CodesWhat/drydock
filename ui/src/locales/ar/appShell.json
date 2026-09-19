@@ -55,7 +55,7 @@
     "layout": {
       "nav": {
         "dashboard": "لوحة التحكم",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "لوحة التحكم",
         "containers": "الحاويات",
         "security": "الأمان",
         "approvals": "الموافقات",
@@ -89,7 +89,7 @@
         "userMenu": "قائمة المستخدم",
         "profile": "الملف الشخصي",
         "signOut": "تسجيل الخروج",
-        "userFallback": "User"
+        "userFallback": "مستخدم"
       },
       "about": {
         "title": "Drydock",
