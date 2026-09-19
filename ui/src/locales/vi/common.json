@@ -15,8 +15,8 @@
     "close": "Đóng",
     "retry": "Thử lại",
     "unknown": "không xác định",
-    "yes": "yes",
-    "no": "no",
+    "yes": "có",
+    "no": "không",
     "errorSummary": {
       "rateLimitHit": "Registry đã đạt giới hạn tốc độ",
       "accessDenied": "Truy cập registry bị từ chối",
@@ -28,7 +28,7 @@
       "signatureFailed": "Xác minh chữ ký thất bại"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Tùy chỉnh"
     },
     "timeAgo": {
       "justNow": "Vừa xong"

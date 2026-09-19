@@ -15,8 +15,8 @@
     "close": "關閉",
     "retry": "重試",
     "unknown": "未知",
-    "yes": "yes",
-    "no": "no",
+    "yes": "是",
+    "no": "否",
     "errorSummary": {
       "rateLimitHit": "倉庫速率限制已觸發",
       "accessDenied": "倉庫存取被拒",
@@ -28,7 +28,7 @@
       "signatureFailed": "簽名驗證失敗"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "自訂"
     },
     "timeAgo": {
       "justNow": "剛剛"

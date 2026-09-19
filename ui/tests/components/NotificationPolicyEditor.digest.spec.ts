@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { setI18nLocale } from '@/boot/i18n';
 import NotificationPolicyEditor from '@/components/NotificationPolicyEditor.vue';
 import { notificationOutcome, notificationSnapshot } from '../helpers/notification-editor';
 
@@ -29,6 +30,7 @@ describe('security digest template form', () => {
   afterEach(() => {
     for (const wrapper of wrappers.splice(0)) wrapper.unmount();
     vi.unstubAllGlobals();
+    setI18nLocale('en');
   });
   async function setup(snapshot = digestSnapshot(), outcome = notificationOutcome()) {
     const requests: Array<{ path: string; options?: RequestInit }> = [];
@@ -52,6 +54,42 @@ describe('security digest template form', () => {
     await flushPromises();
     return { wrapper, requests };
   }
+  it.each([
+    { locale: 'ar', yes: 'نعم', no: 'لا' },
+    { locale: 'de', yes: 'ja', no: 'nein' },
+  ] as const)(
+    'updates $locale boolean labels without changing the submitted value',
+    async ({ locale, yes, no }) => {
+      setI18nLocale('en');
+      const { wrapper, requests } = await setup();
+      const field = () => wrapper.get<HTMLSelectElement>('select[data-field="once"]');
+      expect(
+        field()
+          .findAll('option')
+          .map((option) => option.text()),
+      ).toEqual(['yes', 'no']);
+      setI18nLocale(locale);
+      await flushPromises();
+      expect(
+        field()
+          .findAll('option')
+          .map((option) => option.text()),
+      ).toEqual([yes, no]);
+      expect(field().element.value).toBe('true');
+      expect(requests).toHaveLength(1);
+      await field().setValue('false');
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+      expect(requests).toHaveLength(2);
+      expect(JSON.parse(String(requests[1].options?.body))).toEqual({
+        revision: 'initial',
+        changes: [
+          { path: ['Notification', 'Discord', 'Policy', 'once'], operation: 'set', value: false },
+        ],
+      });
+    },
+  );
+
   it('renders a title input and multiline body verbatim and leaves equal edits unsaved', async () => {
     const { wrapper, requests } = await setup();
     const titleInput = wrapper.get<HTMLInputElement>('input[data-field="securitydigesttitle"]');

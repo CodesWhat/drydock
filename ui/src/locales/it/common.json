@@ -15,7 +15,7 @@
     "close": "Chiudi",
     "retry": "Riprova",
     "unknown": "sconosciuto",
-    "yes": "yes",
+    "yes": "sì",
     "no": "no",
     "errorSummary": {
       "rateLimitHit": "Limite di frequenza del registry raggiunto",
@@ -28,7 +28,7 @@
       "signatureFailed": "Verifica della firma non riuscita"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Personalizzato"
     },
     "timeAgo": {
       "justNow": "Ora"
