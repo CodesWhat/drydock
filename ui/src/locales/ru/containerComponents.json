@@ -184,7 +184,7 @@
       "volumes": "Тома",
       "composeFiles": "Compose-файлы",
       "version": "Версия",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Версия ПО",
       "currentLabel": "Текущая:",
       "latestLabel": "Последняя:",
       "digestLabel": "Дайджест:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Открытых портов нет",
       "notConfigured": "Не настроено",
       "noVolumesMounted": "Тома не подключены",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Время работы",
+      "uptimeAriaLabel": "Время работы контейнера"
     },
     "containerLogs": {
       "title": "Журналы контейнера",
       "download": "Скачать",
       "allLevels": "Все уровни",
       "downloadError": "Не удалось скачать журналы",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Последние строки: {count}",
+      "tailAll": "Все строки",
+      "statusPaused": "Приостановлено",
+      "statusLive": "В реальном времени",
+      "statusOffline": "Нет подключения",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Обновить контейнер",
-      "thisContainer": "this container",
+      "thisContainer": "этот контейнер",
       "confirmTagChange": "Обновить {name}? Тег образа изменится с :{currentTag} на :{newTag}{kind}.",
       "confirmDigestChange": "Обновить {name}? Доступна новая сборка :{currentTag} (изменение дайджеста).",
       "confirmLatest": "Обновить {name} сейчас? Будет применён последний обнаруженный образ.",
       "updating": "Обновление...",
       "update": "Обновить",
-      "updateFailed": "Update failed"
+      "updateFailed": "Не удалось обновить"
     },
     "floatingTag": {
       "badgeText": "плавающий тег",
@@ -522,18 +522,18 @@
       "new": "Обнаружено {duration} назад"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Отмена",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Остановить контейнер",
+        "message": "Остановить {name}?",
+        "acceptLabel": "Остановить",
+        "successMessage": "Остановлен: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Перезапустить контейнер",
+        "message": "Перезапустить {name}?",
+        "acceptLabel": "Перезапустить",
+        "successMessage": "Перезапущен: {name}"
       },
       "forceUpdate": {
         "header": "Принудительное обновление",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Повторная проверка не удалась для {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} запись",
+      "entryCountPlural": "Количество записей: {count}",
       "kindLabels": {
         "tag": "тег",
         "digest": "дайджест"
@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Явно задано",
+        "inherited": "Унаследовано",
+        "unknown": "Неизвестно"
       },
       "timeoutDefault": "60000 мс (по умолчанию)",
       "preAbortYes": "Прервать обновление при ошибке предварительного хука",

@@ -184,7 +184,7 @@
       "volumes": "وحدات التخزين",
       "composeFiles": "ملفات Compose",
       "version": "الإصدار",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "إصدار البرنامج",
       "currentLabel": "الحالي:",
       "latestLabel": "الأحدث:",
       "digestLabel": "الملخص:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "لا توجد منافذ مكشوفة",
       "notConfigured": "غير مُعدّ",
       "noVolumesMounted": "لم تُركَّب وحدات تخزين",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "مدة التشغيل",
+      "uptimeAriaLabel": "مدة تشغيل الحاوية"
     },
     "containerLogs": {
       "title": "سجلات الحاوية",
       "download": "تنزيل",
       "allLevels": "جميع المستويات",
       "downloadError": "تعذّر تنزيل السجلات",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "آخر {count} سطر",
+      "tailAll": "كل السطور",
+      "statusPaused": "متوقف مؤقتًا",
+      "statusLive": "مباشر",
+      "statusOffline": "غير متصل",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "تحديث الحاوية",
-      "thisContainer": "this container",
+      "thisContainer": "هذه الحاوية",
       "confirmTagChange": "تحديث {name}؟ سيغيّر ذلك تسمية الصورة من :{currentTag} إلى :{newTag}{kind}.",
       "confirmDigestChange": "تحديث {name}؟ يتوفر إصدار بناء أحدث من :{currentTag} (تغيير الملخص).",
       "confirmLatest": "تحديث {name} الآن؟ سيُطبَّق آخر صورة مكتشفة.",
       "updating": "جارٍ التحديث...",
       "update": "تحديث",
-      "updateFailed": "Update failed"
+      "updateFailed": "فشل التحديث"
     },
     "floatingTag": {
       "badgeText": "تسمية متحركة",
@@ -522,18 +522,18 @@
       "new": "تم الاكتشاف منذ {duration}"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "إلغاء",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "إيقاف الحاوية",
+        "message": "إيقاف {name}؟",
+        "acceptLabel": "إيقاف",
+        "successMessage": "تم الإيقاف: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "إعادة تشغيل الحاوية",
+        "message": "إعادة تشغيل {name}؟",
+        "acceptLabel": "إعادة تشغيل",
+        "successMessage": "تمت إعادة التشغيل: {name}"
       },
       "forceUpdate": {
         "header": "فرض التحديث",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "فشلت إعادة الفحص لـ {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "إدخال واحد ({count})",
+      "entryCountPlural": "عدد الإدخالات: {count}",
       "kindLabels": {
         "tag": "تسمية",
         "digest": "ملخص"
@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "صريح",
+        "inherited": "موروث",
+        "unknown": "غير معروف"
       },
       "timeoutDefault": "60000ms (افتراضي)",
       "preAbortYes": "إلغاء التحديث عند فشل الخطاف المسبق",

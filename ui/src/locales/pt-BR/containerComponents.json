@@ -184,7 +184,7 @@
       "volumes": "Volumes",
       "composeFiles": "Arquivos compose",
       "version": "Versão",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Versão do software",
       "currentLabel": "Atual:",
       "latestLabel": "Mais recente:",
       "digestLabel": "Digest:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Nenhuma porta exposta",
       "notConfigured": "Não configurado",
       "noVolumesMounted": "Nenhum volume montado",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Tempo de atividade",
+      "uptimeAriaLabel": "Tempo de atividade do contêiner"
     },
     "containerLogs": {
       "title": "Logs do contêiner",
       "download": "Baixar",
       "allLevels": "Todos os níveis",
       "downloadError": "Não foi possível baixar os logs",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Últimas {count} linhas",
+      "tailAll": "Todas as linhas",
+      "statusPaused": "Pausado",
+      "statusLive": "Ao vivo",
+      "statusOffline": "Desconectado",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Atualizar contêiner",
-      "thisContainer": "this container",
+      "thisContainer": "este contêiner",
       "confirmTagChange": "Atualizar {name}? Isso mudará a tag da imagem de :{currentTag} para :{newTag}{kind}.",
       "confirmDigestChange": "Atualizar {name}? Uma build mais recente de :{currentTag} está disponível (mudança de digest).",
       "confirmLatest": "Atualizar {name} agora? A imagem mais recente descoberta será aplicada.",
       "updating": "Atualizando...",
       "update": "Atualizar",
-      "updateFailed": "Update failed"
+      "updateFailed": "Falha na atualização"
     },
     "floatingTag": {
       "badgeText": "tag flutuante",
@@ -522,18 +522,18 @@
       "new": "Detectado há {duration}"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Cancelar",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Parar contêiner",
+        "message": "Parar {name}?",
+        "acceptLabel": "Parar",
+        "successMessage": "Parado: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Reiniciar contêiner",
+        "message": "Reiniciar {name}?",
+        "acceptLabel": "Reiniciar",
+        "successMessage": "Reiniciado: {name}"
       },
       "forceUpdate": {
         "header": "Forçar atualização",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Falha na verificação de {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} entrada",
+      "entryCountPlural": "{count} entradas",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explícito",
+        "inherited": "Herdado",
+        "unknown": "Desconhecido"
       },
       "timeoutDefault": "60000ms (padrão)",
       "preAbortYes": "Abortar atualização em caso de falha do hook pré-execução",

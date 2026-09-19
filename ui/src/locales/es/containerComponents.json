@@ -184,7 +184,7 @@
       "volumes": "Volúmenes",
       "composeFiles": "Archivos compose",
       "version": "Versión",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Versión del software",
       "currentLabel": "Actual:",
       "latestLabel": "Última:",
       "digestLabel": "Digest:",
@@ -229,18 +229,18 @@
       "notConfigured": "No configurado",
       "noVolumesMounted": "No hay volúmenes montados",
       "uptime": "Tiempo en funcionamiento",
-      "uptimeAriaLabel": "Container uptime"
+      "uptimeAriaLabel": "Tiempo de actividad del contenedor"
     },
     "containerLogs": {
       "title": "Registros del contenedor",
       "download": "Descargar",
       "allLevels": "Todos los niveles",
       "downloadError": "No se pudieron descargar los registros",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
+      "tailCount": "Últimas {count} líneas",
+      "tailAll": "Todas las líneas",
       "statusPaused": "Pausado",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "statusLive": "En directo",
+      "statusOffline": "Sin conexión",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -522,18 +522,18 @@
       "new": "Detectado hace {duration}"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Cancelar",
       "stop": {
         "header": "Detener contenedor",
-        "message": "Stop {name}?",
+        "message": "¿Detener {name}?",
         "acceptLabel": "Detener",
-        "successMessage": "Stopped: {name}"
+        "successMessage": "Detenido: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Reiniciar contenedor",
+        "message": "¿Reiniciar {name}?",
+        "acceptLabel": "Reiniciar",
+        "successMessage": "Reiniciado: {name}"
       },
       "forceUpdate": {
         "header": "Forzar actualización",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "La comprobación falló para {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} entrada",
+      "entryCountPlural": "{count} entradas",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explícito",
+        "inherited": "Heredado",
+        "unknown": "Desconocido"
       },
       "timeoutDefault": "60000ms (predeterminado)",
       "preAbortYes": "Abortar la actualización si falla el hook previo",

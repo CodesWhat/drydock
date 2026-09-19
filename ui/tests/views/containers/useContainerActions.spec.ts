@@ -303,6 +303,67 @@ describe('useContainerActions', () => {
     vi.useRealTimers();
   });
 
+  describe('localized lifecycle confirmations', () => {
+    afterEach(() => setI18nLocale('en'));
+
+    it.each([
+      {
+        locale: 'de',
+        action: 'stop',
+        header: 'Container stoppen',
+        message: 'api-δ stoppen?',
+        acceptLabel: 'Stoppen',
+        rejectLabel: 'Abbrechen',
+        success: 'Gestoppt: api-δ',
+      },
+      {
+        locale: 'de',
+        action: 'restart',
+        header: 'Container neu starten',
+        message: 'api-δ neu starten?',
+        acceptLabel: 'Neu starten',
+        rejectLabel: 'Abbrechen',
+        success: 'Neu gestartet: api-δ',
+      },
+      {
+        locale: 'ar',
+        action: 'stop',
+        header: 'إيقاف الحاوية',
+        message: 'إيقاف api-δ؟',
+        acceptLabel: 'إيقاف',
+        rejectLabel: 'إلغاء',
+        success: 'تم الإيقاف: api-δ',
+      },
+      {
+        locale: 'ar',
+        action: 'restart',
+        header: 'إعادة تشغيل الحاوية',
+        message: 'إعادة تشغيل api-δ؟',
+        acceptLabel: 'إعادة تشغيل',
+        rejectLabel: 'إلغاء',
+        success: 'تمت إعادة التشغيل: api-δ',
+      },
+    ] as const)(
+      'translates $locale $action confirmation and result',
+      async ({ locale, action, header, message, acceptLabel, rejectLabel, success }) => {
+        setI18nLocale(locale);
+        const container = makeContainer({ id: 'container-1', name: 'api-δ' });
+        const { composable } = await mountActionsHarness({ containers: [container] });
+        if (action === 'stop') composable.confirmStop(container);
+        else composable.confirmRestart(container);
+        const dialog = mocks.confirmRequire.mock.calls.at(-1)![0];
+        expect(dialog).toMatchObject({ header, message, acceptLabel, rejectLabel });
+        expect(mocks.stopContainer).not.toHaveBeenCalled();
+        expect(mocks.restartContainer).not.toHaveBeenCalled();
+        await dialog.accept();
+        expect(
+          action === 'stop' ? mocks.stopContainer : mocks.restartContainer,
+        ).toHaveBeenCalledWith(container.id);
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(success);
+      },
+    );
+  });
+
   describe('localized real-service failures', () => {
     let previousLocale: typeof i18n.global.locale.value;
     let previousFetch: typeof fetch;

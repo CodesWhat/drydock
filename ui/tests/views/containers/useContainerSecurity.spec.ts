@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { defineComponent, h, nextTick, type Ref, ref, unref } from 'vue';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { useContainerSecurity } from '@/views/containers/useContainerSecurity';
 
 const mocks = vi.hoisted(() => ({
@@ -77,7 +78,45 @@ describe('useContainerSecurity', () => {
     for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
+    setI18nLocale('en');
   });
+
+  it.each(['fr', 'ar'] as const)(
+    'refreshes every lifecycle variable description after switching to %s',
+    async (locale) => {
+      setI18nLocale('en');
+      const { composable } = await mountSecurityHarness();
+      const initial = unref(composable.lifecycleHookTemplateVariables);
+      const names = initial.map(({ name }) => name);
+      expect(initial[0].description).toBe('Container name');
+
+      setI18nLocale(locale);
+      await nextTick();
+
+      const translated = unref(composable.lifecycleHookTemplateVariables);
+      expect(translated.map(({ name }) => name)).toEqual(names);
+      expect(translated.map(({ description }) => description)).toEqual(
+        [
+          'containerName',
+          'containerId',
+          'imageName',
+          'imageTag',
+          'updateKind',
+          'updateFrom',
+          'updateTo',
+        ].map((key) => i18n.global.t(`containerComponents.security.templateVar.${key}`)),
+      );
+      expect(
+        translated.every((variable, index) => variable.description !== initial[index].description),
+      ).toBe(true);
+
+      setI18nLocale('en');
+      await nextTick();
+      expect(unref(composable.lifecycleHookTemplateVariables)).toEqual(initial);
+      expect(mocks.getContainerSbom).not.toHaveBeenCalled();
+      expect(mocks.getContainerVulnerabilities).not.toHaveBeenCalled();
+    },
+  );
 
   it('parses runtime origins and reports drift warning for unknown metadata', async () => {
     const { composable } = await mountSecurityHarness({
@@ -100,6 +139,53 @@ describe('useContainerSecurity', () => {
       color: 'var(--dd-warning)',
     });
   });
+
+  it.each([
+    ['ar', 'صريح', 'موروث', 'غير معروف'],
+    ['de', 'Explizit', 'Geerbt', 'Unbekannt'],
+    ['es', 'Explícito', 'Heredado', 'Desconocido'],
+    ['fr', 'Explicite', 'Hérité', 'Inconnu'],
+    ['it', 'Esplicito', 'Ereditato', 'Sconosciuto'],
+    ['ja', '明示指定', '継承', '不明'],
+    ['ko', '명시적', '상속됨', '알 수 없음'],
+    ['nl', 'Expliciet', 'Overgenomen', 'Onbekend'],
+    ['pl', 'Jawne', 'Odziedziczone', 'Nieznane'],
+    ['pt-BR', 'Explícito', 'Herdado', 'Desconhecido'],
+    ['ru', 'Явно задано', 'Унаследовано', 'Неизвестно'],
+    ['tr', 'Açıkça belirtilmiş', 'Devralınmış', 'Bilinmiyor'],
+    ['uk', 'Явно задано', 'Успадковано', 'Невідомо'],
+    ['vi', 'Chỉ định rõ', 'Kế thừa', 'Không xác định'],
+    ['zh-CN', '显式指定', '继承', '未知'],
+    ['zh-TW', '明確指定', '繼承', '未知'],
+  ] as const)(
+    'translates runtime origin labels in %s without changing metadata',
+    async (locale, explicit, inherited, unknown) => {
+      setI18nLocale('en');
+      const labels = {
+        'dd.runtime.entrypoint.origin': 'explicit',
+        'dd.runtime.cmd.origin': 'inherited',
+      };
+      const { composable, selectedContainerMeta } = await mountSecurityHarness({
+        selectedContainerMeta: { labels },
+      });
+      const initialOrigins = { ...composable.selectedRuntimeOrigins.value };
+      const readLabels = () =>
+        (['explicit', 'inherited', 'unknown'] as const).map((origin) =>
+          composable.runtimeOriginLabel(origin),
+        );
+      expect(readLabels()).toEqual(['Explicit', 'Inherited', 'Unknown']);
+
+      setI18nLocale(locale);
+      await nextTick();
+      expect(readLabels()).toEqual([explicit, inherited, unknown]);
+      expect(composable.selectedRuntimeOrigins.value).toEqual(initialOrigins);
+      expect(selectedContainerMeta.value?.labels).toEqual(labels);
+
+      setI18nLocale('en');
+      await nextTick();
+      expect(readLabels()).toEqual(['Explicit', 'Inherited', 'Unknown']);
+    },
+  );
 
   it('returns unknown origins and no drift warning when metadata is absent', async () => {
     const { composable } = await mountSecurityHarness({
