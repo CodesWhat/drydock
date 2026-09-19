@@ -1,5 +1,6 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import AppSplitButton from '@/components/AppSplitButton.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import DataTable from '@/components/DataTable.vue';
@@ -869,6 +870,40 @@ describe('ContainersView', () => {
       wrapper?.unmount();
     }
     useToast().toasts.value = [];
+  });
+
+  describe('lifecycle help localization', () => {
+    afterEach(() => setI18nLocale('en'));
+
+    it.each([
+      { locale: 'fr', description: 'Nom du conteneur', fullPage: false },
+      { locale: 'fr', description: 'Nom du conteneur', fullPage: true },
+      { locale: 'ar', description: 'اسم الحاوية', fullPage: false },
+      { locale: 'ar', description: 'اسم الحاوية', fullPage: true },
+    ] as const)(
+      'updates open $locale detail help (fullPage=$fullPage)',
+      async ({ locale, description, fullPage }) => {
+        setI18nLocale('en');
+        const container = makeContainer();
+        const wrapper = await mountContainersView([container]);
+        mockSelectedContainer.value = container;
+        mockDetailPanelOpen.value = true;
+        mockContainerFullPage.value = fullPage;
+        await flushPromises();
+        const helpRow = () =>
+          wrapper.findAll('span').find((span) => span.text() === 'DD_CONTAINER_NAME')?.element
+            .parentElement;
+        expect(helpRow()?.textContent).toContain('Container name');
+        const fetches = mockGetAllContainers.mock.calls.length;
+
+        setI18nLocale(locale);
+        await flushPromises();
+
+        expect(helpRow()?.textContent).toContain(description);
+        expect(helpRow()?.textContent).not.toContain('Container name');
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(fetches);
+      },
+    );
   });
 
   describe('loading containers', () => {

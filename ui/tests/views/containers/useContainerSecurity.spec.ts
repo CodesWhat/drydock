@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { defineComponent, h, nextTick, type Ref, ref, unref } from 'vue';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { useContainerSecurity } from '@/views/containers/useContainerSecurity';
 
 const mocks = vi.hoisted(() => ({
@@ -77,7 +78,45 @@ describe('useContainerSecurity', () => {
     for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
+    setI18nLocale('en');
   });
+
+  it.each(['fr', 'ar'] as const)(
+    'refreshes every lifecycle variable description after switching to %s',
+    async (locale) => {
+      setI18nLocale('en');
+      const { composable } = await mountSecurityHarness();
+      const initial = unref(composable.lifecycleHookTemplateVariables);
+      const names = initial.map(({ name }) => name);
+      expect(initial[0].description).toBe('Container name');
+
+      setI18nLocale(locale);
+      await nextTick();
+
+      const translated = unref(composable.lifecycleHookTemplateVariables);
+      expect(translated.map(({ name }) => name)).toEqual(names);
+      expect(translated.map(({ description }) => description)).toEqual(
+        [
+          'containerName',
+          'containerId',
+          'imageName',
+          'imageTag',
+          'updateKind',
+          'updateFrom',
+          'updateTo',
+        ].map((key) => i18n.global.t(`containerComponents.security.templateVar.${key}`)),
+      );
+      expect(
+        translated.every((variable, index) => variable.description !== initial[index].description),
+      ).toBe(true);
+
+      setI18nLocale('en');
+      await nextTick();
+      expect(unref(composable.lifecycleHookTemplateVariables)).toEqual(initial);
+      expect(mocks.getContainerSbom).not.toHaveBeenCalled();
+      expect(mocks.getContainerVulnerabilities).not.toHaveBeenCalled();
+    },
+  );
 
   it('parses runtime origins and reports drift warning for unknown metadata', async () => {
     const { composable } = await mountSecurityHarness({

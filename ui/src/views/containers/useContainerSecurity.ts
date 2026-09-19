@@ -524,7 +524,7 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
     return vulnerability?.packageName || vulnerability?.package || t('common.unknown');
   }
 
-  const lifecycleHookTemplateVariables = [
+  const lifecycleHookTemplateVariables = computed(() => [
     {
       name: 'DD_CONTAINER_NAME',
       description: t('containerComponents.security.templateVar.containerName'),
@@ -544,7 +544,7 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       description: t('containerComponents.security.templateVar.updateFrom'),
     },
     { name: 'DD_UPDATE_TO', description: t('containerComponents.security.templateVar.updateTo') },
-  ];
+  ]);
 
   const selectedRuntimeOrigins = createSelectedRuntimeOrigins(input.selectedContainerMeta);
   const selectedLifecycleHooks = createSelectedLifecycleHooks(input.selectedContainerMeta, t);
