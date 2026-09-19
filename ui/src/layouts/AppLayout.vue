@@ -31,7 +31,7 @@ import { getAllWatchers } from '@/services/watcher';
 import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
@@ -91,6 +91,14 @@ interface SearchContainerIndexItem {
   // Cached flag so the sidebar security badge can update from a single-container
   // SSE patch without re-walking the raw API response's nested security.scan.summary.
   hasSecurityIssues: boolean;
+}
+interface SearchResources {
+  agents?: unknown;
+  triggers?: unknown;
+  watchers?: unknown;
+  registries?: unknown;
+  authentications?: unknown;
+  notificationRules?: unknown;
 }
 interface SearchResultItem {
   id: string;
@@ -287,7 +295,8 @@ const searchQuery = ref('');
 const searchInput = ref<HTMLInputElement | null>(null);
 const searchActiveIndex = ref(0);
 const searchContainers = ref<SearchContainerIndexItem[]>([]);
-const searchResourceResults = ref<SearchResultItem[]>([]);
+const searchResources = ref<SearchResources>({});
+const searchResourceResults = computed(() => buildSearchIndexResults(searchResources.value));
 const searchResourcesLoading = ref(false);
 interface LegacyInputSourceSummary {
   total: number;
@@ -453,14 +462,20 @@ function recordRecentSearchResult(result: SearchResultItem) {
   saveRecentSearchResults(nextResults);
 }
 
+function localizeContainerStatus(status: string): string {
+  if (!status || status === 'unknown') return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
+
 const containerSearchResults = computed<SearchResultItem[]>(() =>
   searchContainers.value.map((container) => ({
     id: `container:${container.id}`,
     title: container.displayName,
     subtitle: t('appShell.layout.search.containerSubtitle', {
-      image: container.image,
-      status: container.status,
-      host: container.host,
+      image: container.image || t('appShell.layout.search.unknownImage'),
+      status: localizeContainerStatus(container.status),
+      host: container.host || t('appShell.layout.search.localHost'),
     }),
     icon: 'containers',
     containerIcon: container.icon,
@@ -505,14 +520,7 @@ function searchScopeChipStyles(scope: SearchScope, active: boolean) {
   };
 }
 
-function buildSearchIndexResults(resources: {
-  agents?: unknown;
-  triggers?: unknown;
-  watchers?: unknown;
-  registries?: unknown;
-  authentications?: unknown;
-  notificationRules?: unknown;
-}): SearchResultItem[] {
+function buildSearchIndexResults(resources: SearchResources): SearchResultItem[] {
   const results: SearchResultItem[] = [];
 
   const agents = Array.isArray(resources.agents) ? resources.agents : [];
@@ -527,7 +535,10 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `agent:${name}`,
       title: name,
-      subtitle: t('appShell.layout.search.agentSubtitle', { status, host: hostLabel }),
+      subtitle: t('appShell.layout.search.agentSubtitle', {
+        status: t(`agentsView.list.status.${status}`),
+        host: hostLabel,
+      }),
       icon: 'agents',
       route: ROUTES.AGENTS,
       query: { q: name },
@@ -544,7 +555,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `trigger:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.triggerSubtitle', { type }),
+      subtitle: t('appShell.layout.search.triggerSubtitle', {
+        type: normalizeSearchValue(trigger.type) ? type : t('common.unknown'),
+      }),
       icon: 'triggers',
       route: ROUTES.TRIGGERS,
       query: { q: name },
@@ -561,7 +574,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `watcher:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.watcherSubtitle', { type }),
+      subtitle: t('appShell.layout.search.watcherSubtitle', {
+        type: normalizeSearchValue(watcher.type) ? type : t('common.unknown'),
+      }),
       icon: 'watchers',
       route: ROUTES.WATCHERS,
       query: { q: name },
@@ -578,7 +593,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `registry:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.registrySubtitle', { type }),
+      subtitle: t('appShell.layout.search.registrySubtitle', {
+        type: normalizeSearchValue(registry.type) ? type : t('common.unknown'),
+      }),
       icon: 'registries',
       route: ROUTES.REGISTRIES,
       query: { q: name },
@@ -595,7 +612,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `auth:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.authSubtitle', { type }),
+      subtitle: t('appShell.layout.search.authSubtitle', {
+        type: normalizeSearchValue(authentication.type) ? type : t('common.unknown'),
+      }),
       icon: 'auth',
       route: ROUTES.AUTH,
       query: { q: name },
@@ -761,14 +780,14 @@ async function refreshSearchResources() {
         getAllAuthentications().catch(() => []),
         getAllNotificationRules().catch(() => []),
       ]);
-    searchResourceResults.value = buildSearchIndexResults({
+    searchResources.value = {
       agents,
       triggers,
       watchers,
       registries,
       authentications,
       notificationRules,
-    });
+    };
   } finally {
     searchResourcesLoading.value = false;
   }
@@ -786,9 +805,12 @@ const effectiveSearchScope = computed<SearchScope>(
 );
 
 const scopePrefixLabel = computed(() => {
-  if (parsedSearchQuery.value.scopeOverride === 'pages') return '/ pages';
-  if (parsedSearchQuery.value.scopeOverride === 'runtime') return '@ runtime';
-  if (parsedSearchQuery.value.scopeOverride === 'config') return '# config';
+  if (parsedSearchQuery.value.scopeOverride === 'pages')
+    return `/ ${t('appShell.layout.search.scope.pages')}`;
+  if (parsedSearchQuery.value.scopeOverride === 'runtime')
+    return `@ ${t('appShell.layout.search.scope.runtime')}`;
+  if (parsedSearchQuery.value.scopeOverride === 'config')
+    return `# ${t('appShell.layout.search.scope.config')}`;
   return '';
 });
 
@@ -1178,7 +1200,7 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
   const imageDetails = asSidebarRecord(container.image);
   const imageName = String(imageDetails?.name || '');
   const imageTag = String(asSidebarRecord(imageDetails?.tag)?.value || '');
-  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
+  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : '';
   return {
     id: String(container.id || displayName),
     name: String(container.name || displayName),
@@ -1186,7 +1208,7 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
     icon: getEffectiveDisplayIcon(displayIcon, imageName),
     image,
     status: String(container.status || 'unknown'),
-    host: String(container.agent || container.watcher || 'local'),
+    host: String(container.agent || container.watcher || ''),
     hasSecurityIssues: rawContainerHasSecurityIssues(container),
   };
 }

@@ -47,9 +47,9 @@
       "switchTo": "Passa al tema {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Chiaro",
+        "system": "Sistema",
+        "dark": "Scuro"
       }
     },
     "layout": {
@@ -89,7 +89,7 @@
         "userMenu": "Menu utente",
         "profile": "Profilo",
         "signOut": "Esci",
-        "userFallback": "User"
+        "userFallback": "Utente"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "Prefisso ambito attivo; usa ",
         "typeHint": "Digita",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", o",
         "hashSemicolon": "; usa",
         "useTab": " per cambiare ambito",
         "moveHint": "sposta",
         "openHint": "apri",
         "recentGroup": "Recenti",
         "unknownHost": "host sconosciuto",
+        "unknownImage": "immagine sconosciuta",
+        "localHost": "locale",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "Auth · {type}",
         "notificationSubtitle": "Regola di notifica · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Tutti",
+          "pages": "Pagine",
+          "containers": "Contenitori",
+          "runtime": "Esecuzione",
+          "config": "Configurazione"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Navigazione",
+          "containers": "Contenitori",
+          "runtime": "Esecuzione",
+          "configuration": "Configurazione"
         },
         "settings": {
           "appearanceTitle": "Impostazioni aspetto",

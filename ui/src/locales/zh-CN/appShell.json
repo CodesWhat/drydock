@@ -47,15 +47,15 @@
       "switchTo": "切换到 {id} 主题",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "浅色",
+        "system": "系统",
+        "dark": "深色"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "仪表盘",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "仪表盘",
         "containers": "容器",
         "security": "安全",
         "approvals": "审批",
@@ -89,7 +89,7 @@
         "userMenu": "用户菜单",
         "profile": "个人资料",
         "signOut": "退出登录",
-        "userFallback": "User"
+        "userFallback": "用户"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "前缀作用域已激活",
         "typeHint": "输入",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "，或",
         "hashSemicolon": "；使用",
         "useTab": " 以更改作用域",
         "moveHint": "移动",
         "openHint": "打开",
         "recentGroup": "最近",
         "unknownHost": "未知主机",
+        "unknownImage": "未知镜像",
+        "localHost": "本地",
         "containerSubtitle": "容器 · {image} · {status} · {host}",
         "agentSubtitle": "代理 · {status} · {host}",
         "triggerSubtitle": "触发器 · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "认证 · {type}",
         "notificationSubtitle": "通知规则 · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "全部",
+          "pages": "页面",
+          "containers": "容器",
+          "runtime": "运行环境",
+          "config": "配置"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "导航",
+          "containers": "容器",
+          "runtime": "运行环境",
+          "configuration": "配置"
         },
         "settings": {
           "appearanceTitle": "外观设置",

@@ -47,9 +47,9 @@
       "switchTo": "Zu Theme {id} wechseln",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
+        "light": "Hell",
         "system": "System",
-        "dark": "Dark"
+        "dark": "Dunkel"
       }
     },
     "layout": {
@@ -89,7 +89,7 @@
         "userMenu": "Benutzermenü",
         "profile": "Profil",
         "signOut": "Abmelden",
-        "userFallback": "User"
+        "userFallback": "Benutzer"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "Präfix-Bereich aktiv; verwende ",
         "typeHint": "Tippe",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", oder",
         "hashSemicolon": "; verwende",
         "useTab": " zum Wechseln des Bereichs",
         "moveHint": "bewegen",
         "openHint": "öffnen",
         "recentGroup": "Kürzlich",
         "unknownHost": "unbekannter Host",
+        "unknownImage": "unbekanntes Image",
+        "localHost": "lokal",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "Auth · {type}",
         "notificationSubtitle": "Benachrichtigungsregel · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Alle",
+          "pages": "Seiten",
+          "containers": "Container",
+          "runtime": "Laufzeit",
+          "config": "Konfiguration"
         },
         "group": {
           "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "containers": "Container",
+          "runtime": "Laufzeit",
+          "configuration": "Konfiguration"
         },
         "settings": {
           "appearanceTitle": "Darstellungseinstellungen",

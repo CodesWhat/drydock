@@ -47,9 +47,9 @@
       "switchTo": "Schakel over naar het {id}-thema",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Licht",
+        "system": "Systeem",
+        "dark": "Donker"
       }
     },
     "layout": {
@@ -89,7 +89,7 @@
         "userMenu": "Gebruikersmenu",
         "profile": "Profiel",
         "signOut": "Meld u af",
-        "userFallback": "User"
+        "userFallback": "Gebruiker"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "Voorvoegselbereik actief; gebruik ",
         "typeHint": "Typ",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", of",
         "hashSemicolon": "; gebruik",
         "useTab": " om de reikwijdte te veranderen",
         "moveHint": "bewegen",
         "openHint": "geopend",
         "recentGroup": "Onlangs",
         "unknownHost": "onbekende host",
+        "unknownImage": "onbekende image",
+        "localHost": "lokaal",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "Authenticatie · {type}",
         "notificationSubtitle": "Meldingsregel · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
+          "all": "Alles",
+          "pages": "Pagina’s",
           "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "runtime": "Uitvoering",
+          "config": "Configuratie"
         },
         "group": {
-          "navigation": "Navigation",
+          "navigation": "Navigatie",
           "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "runtime": "Uitvoering",
+          "configuration": "Configuratie"
         },
         "settings": {
           "appearanceTitle": "Uiterlijkinstellingen",

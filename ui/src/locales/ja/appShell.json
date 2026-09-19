@@ -47,15 +47,15 @@
       "switchTo": "{id} テーマに切替",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "ライト",
+        "system": "システム",
+        "dark": "ダーク"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "ダッシュボード",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "ダッシュボード",
         "containers": "コンテナ",
         "security": "セキュリティ",
         "approvals": "承認",
@@ -89,7 +89,7 @@
         "userMenu": "ユーザーメニュー",
         "profile": "プロフィール",
         "signOut": "サインアウト",
-        "userFallback": "User"
+        "userFallback": "ユーザー"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "プレフィックススコープが有効です。",
         "typeHint": "入力",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "、または",
         "hashSemicolon": "；",
         "useTab": "でスコープを変更",
         "moveHint": "移動",
         "openHint": "開く",
         "recentGroup": "最近",
         "unknownHost": "不明なホスト",
+        "unknownImage": "不明なイメージ",
+        "localHost": "ローカル",
         "containerSubtitle": "コンテナ · {image} · {status} · {host}",
         "agentSubtitle": "エージェント · {status} · {host}",
         "triggerSubtitle": "トリガー · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "認証 · {type}",
         "notificationSubtitle": "通知ルール · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "すべて",
+          "pages": "ページ",
+          "containers": "コンテナ",
+          "runtime": "実行環境",
+          "config": "設定"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "ナビゲーション",
+          "containers": "コンテナ",
+          "runtime": "実行環境",
+          "configuration": "設定"
         },
         "settings": {
           "appearanceTitle": "外観設定",
