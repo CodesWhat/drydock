@@ -1655,7 +1655,7 @@ provide(containersViewTemplateContextKey, {
   parseServer,
   registryColorBg,
   registryColorText,
-  registryLabel,
+  registryLabel: (registry, url, name) => registryLabel(registry, url, name, t),
   detailPanelOpen,
   isMobile,
   panelSize,

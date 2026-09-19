@@ -1,5 +1,6 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import AppSplitButton from '@/components/AppSplitButton.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import DataTable from '@/components/DataTable.vue';
@@ -128,13 +129,13 @@ vi.mock('@/stores/operations', () => ({
   }),
 }));
 
-vi.mock('@/utils/display', () => ({
+vi.mock('@/utils/display', async (importOriginal) => ({
   bouncerColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   maturityColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   parseServer: vi.fn((s: string) => ({ name: s, env: null })),
   registryColorBg: vi.fn(() => 'bg'),
   registryColorText: vi.fn(() => 'text'),
-  registryLabel: vi.fn((r: string) => r),
+  registryLabel: (await importOriginal<typeof import('@/utils/display')>()).registryLabel,
   serverBadgeColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   suggestedTagColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   updateKindColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
@@ -464,6 +465,76 @@ async function mountContainersView(
 }
 
 describe('ContainersView', () => {
+  describe('registry display localization', () => {
+    beforeEach(() => {
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1440);
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+      setI18nLocale('en');
+    });
+
+    it.each([
+      ['fr', 'Personnalisé', 'table'],
+      ['fr', 'Personnalisé', 'cards'],
+      ['fr', 'Personnalisé', 'detail'],
+      ['ar', 'مخصص', 'table'],
+      ['ar', 'مخصص', 'cards'],
+      ['ar', 'مخصص', 'detail'],
+    ] as const)('localizes the %s fallback in %s (%s)', async (locale, label, surface) => {
+      const container = makeContainer({ registry: 'custom' });
+      const wrapper = await mountContainersView([container], undefined, { realTable: true });
+      setI18nLocale(locale);
+      if (surface === 'cards') {
+        await wrapper.find('[data-test="set-container-view-cards"]').trigger('click');
+      }
+      if (surface === 'detail') {
+        mockSelectedContainer.value = container;
+        mockDetailPanelOpen.value = true;
+        mockContainerFullPage.value = true;
+      }
+      await flushPromises();
+      if (surface === 'cards') {
+        expect(wrapper.findComponent({ name: 'DataTable' }).props('preferCards')).toBe(true);
+        expect(wrapper.find('[data-test="dd-card"]').exists()).toBe(true);
+      }
+      const selector =
+        surface === 'detail'
+          ? '[data-test="container-full-page-detail"]'
+          : surface === 'cards'
+            ? '[data-test="container-card-registry-text"]'
+            : '[data-test="container-registry-text"]';
+      expect(wrapper.find(selector).text()).toContain(label);
+      expect(wrapper.find(selector).text()).not.toContain('Custom');
+    });
+
+    it('updates the displayed fallback when the locale changes without reloading containers', async () => {
+      const wrapper = await mountContainersView([makeContainer({ registry: 'custom' })]);
+      const requests = mockGetAllContainers.mock.calls.length;
+      for (const [locale, label] of [
+        ['fr', 'Personnalisé'],
+        ['ar', 'مخصص'],
+      ] as const) {
+        setI18nLocale(locale);
+        await flushPromises();
+        expect(wrapper.find('[data-test="container-registry-text"]').text()).toBe(label);
+      }
+      expect(mockGetAllContainers).toHaveBeenCalledTimes(requests);
+    });
+
+    it.each([
+      [{ registry: 'dockerhub' }, 'Dockerhub'],
+      [{ registry: 'ghcr' }, 'GHCR'],
+      [{ registry: 'custom', registryUrl: 'https://registry.example/v2' }, 'registry.example'],
+      [{ registry: 'custom', registryName: 'Private Registry' }, 'Private Registry'],
+    ] as const)('preserves registry identity %j', async (registry, label) => {
+      const wrapper = await mountContainersView([makeContainer(registry)]);
+      setI18nLocale('fr');
+      await flushPromises();
+      expect(wrapper.find('[data-test="container-registry-text"]').text()).toBe(label);
+    });
+  });
+
   it.each(['Enter', ' '])('isolates split-button %s from the real table row', async (key) => {
     const previous = preferences.containers.tableActions;
     preferences.containers.tableActions = 'buttons';
