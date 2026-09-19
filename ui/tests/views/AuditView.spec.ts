@@ -1,10 +1,11 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
-import { i18n } from '@/boot/i18n';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { getAuditLog } from '@/services/audit';
 import AuditView from '@/views/AuditView.vue';
+import { BACKEND_AUDIT_ACTIONS } from '../helpers/audit-actions';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
 
@@ -363,6 +364,36 @@ describe('AuditView', () => {
   });
 
   describe('routing', () => {
+    it.each(BACKEND_AUDIT_ACTIONS)(
+      'retains the backend action %s from a shared URL',
+      async (action) => {
+        mockRoute.query = { action, page: '2' };
+        const wrapper = await mountAuditView();
+        try {
+          expect(mockGetAuditLog).toHaveBeenCalledExactlyOnceWith({ page: 2, limit: 50, action });
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+
+    it('retains supported mixed actions, deduplicates them and rejects unknown URL actions', async () => {
+      mockRoute.query = {
+        actions: 'maturity-cleared,container-unhealthy,maturity-cleared,unknown-action',
+        page: '3',
+      };
+      const wrapper = await mountAuditView();
+      try {
+        expect(mockGetAuditLog).toHaveBeenCalledExactlyOnceWith({
+          page: 3,
+          limit: 50,
+          actions: ['maturity-cleared', 'container-unhealthy'],
+        });
+      } finally {
+        wrapper.unmount();
+      }
+    });
+
     it('loads using route query values for view, page, action, and search', async () => {
       mockRoute.query = {
         page: '2',
@@ -553,6 +584,76 @@ describe('AuditView', () => {
   });
 
   describe('filtering', () => {
+    it.each([
+      ['fr', 'Conteneur défaillant', 'Échec d’authentification par clé API'],
+      ['ar', 'حاوية غير سليمة', 'فشلت المصادقة بمفتاح API'],
+    ] as const)(
+      'changes filter captions in %s without changing the request identities',
+      async (locale, unhealthy, authFailed) => {
+        setI18nLocale('en');
+        mockRoute.query = { action: 'container-unhealthy', page: '2' };
+        const entry = makeEntry({
+          action: 'container-unhealthy',
+          containerName: 'Container Unhealthy',
+          details: 'upstream diagnostic stays verbatim',
+        });
+        mockGetAuditLog.mockResolvedValue({ entries: [entry], total: 120, page: 2, limit: 50 });
+        const wrapper = await mountAuditView();
+        try {
+          expect
+            .soft(mockGetAuditLog)
+            .toHaveBeenCalledExactlyOnceWith({ page: 2, limit: 50, action: 'container-unhealthy' });
+          await wrapper.get('.row-click-first').trigger('click');
+          setI18nLocale(locale);
+          await nextTick();
+          expect.soft(wrapper.get('[aria-haspopup="listbox"]').text()).toContain(unhealthy);
+          expect.soft(wrapper.get('.detail-header .truncate').text()).toBe(unhealthy);
+          expect(wrapper.get('.detail-content').text()).toContain(entry.details);
+          expect(wrapper.text()).toContain(entry.containerName);
+          expect(mockGetAuditLog).toHaveBeenCalledOnce();
+          await wrapper.get('[aria-haspopup="listbox"]').trigger('click');
+          const option = wrapper
+            .findAll('[role="option"]')
+            .find((item) => item.text() === authFailed);
+          expect(option).toBeDefined();
+          await option!.trigger('click');
+          await flushPromises();
+          expect(mockGetAuditLog).toHaveBeenLastCalledWith({
+            page: 1,
+            limit: 50,
+            actions: ['container-unhealthy', 'api-key-auth-failed'],
+          });
+        } finally {
+          wrapper.unmount();
+          setI18nLocale('en');
+        }
+      },
+    );
+
+    it.each(BACKEND_AUDIT_ACTIONS)(
+      'offers the backend action %s and sends its untranslated identity',
+      async (action) => {
+        const wrapper = await mountAuditView();
+        try {
+          await wrapper.get('[aria-haspopup="listbox"]').trigger('click');
+          const label = i18n.global.te(`auditView.actions.${action}`)
+            ? i18n.global.t(`auditView.actions.${action}`)
+            : action
+                .split('-')
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(' ');
+          const option = wrapper.findAll('[role="option"]').find((item) => item.text() === label);
+          expect(option, action).toBeDefined();
+          await option!.trigger('click');
+          await flushPromises();
+          expect(mockGetAuditLog).toHaveBeenLastCalledWith({ page: 1, limit: 50, action });
+          expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+
     it('filters table rows by search query', async () => {
       mockGetAuditLog.mockResolvedValue({
         entries: [
