@@ -8,8 +8,8 @@
     "password": {
       "label": "Пароль",
       "placeholder": "Введіть пароль",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "Показати пароль",
+      "hide": "Приховати пароль"
     },
     "submit": {
       "signIn": "Увійти",

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { ref } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import LoginView from '@/views/LoginView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
@@ -220,6 +221,55 @@ describe('LoginView', () => {
   });
 
   describe('password reveal toggle', () => {
+    afterEach(() => setI18nLocale('en'));
+
+    it.each([
+      ['en', 'Show password', 'Hide password'],
+      ['ar', 'إظهار كلمة المرور', 'إخفاء كلمة المرور'],
+      ['de', 'Passwort anzeigen', 'Passwort ausblenden'],
+      ['es', 'Mostrar contraseña', 'Ocultar contraseña'],
+      ['fr', 'Afficher le mot de passe', 'Masquer le mot de passe'],
+      ['it', 'Mostra password', 'Nascondi password'],
+      ['ja', 'パスワードを表示', 'パスワードを非表示'],
+      ['ko', '비밀번호 표시', '비밀번호 숨기기'],
+      ['nl', 'Wachtwoord tonen', 'Wachtwoord verbergen'],
+      ['pl', 'Pokaż hasło', 'Ukryj hasło'],
+      ['pt-BR', 'Mostrar senha', 'Ocultar senha'],
+      ['ru', 'Показать пароль', 'Скрыть пароль'],
+      ['tr', 'Şifreyi göster', 'Şifreyi gizle'],
+      ['uk', 'Показати пароль', 'Приховати пароль'],
+      ['vi', 'Hiện mật khẩu', 'Ẩn mật khẩu'],
+      ['zh-CN', '显示密码', '隐藏密码'],
+      ['zh-TW', '顯示密碼', '隱藏密碼'],
+    ] as const)(
+      'localizes the open %s reveal control without submitting or clearing input',
+      async (locale, show, hide) => {
+        setI18nLocale('en');
+        const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+        const field = wrapper.get<HTMLInputElement>('input#password');
+        await field.setValue('test input retained');
+        const button = wrapper.get('button[aria-label="Show password"]');
+        setI18nLocale(locale);
+        await flushPromises();
+        expect(button.attributes('aria-label')).toBe(show);
+        expect(field.attributes('type')).toBe('password');
+
+        await button.trigger('click');
+        expect(button.attributes('aria-label')).toBe(hide);
+        expect(field.attributes('type')).toBe('text');
+        expect(field.element.value).toBe('test input retained');
+
+        setI18nLocale('en');
+        await flushPromises();
+        expect(button.attributes('aria-label')).toBe('Hide password');
+        await button.trigger('click');
+        expect(field.attributes('type')).toBe('password');
+        expect(field.element.value).toBe('test input retained');
+        expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+        expect(mockLoginBasic).not.toHaveBeenCalled();
+      },
+    );
+
     it('password input defaults to type="password" and toggle button exists', async () => {
       const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
       expect(wrapper.find('input#password').attributes('type')).toBe('password');

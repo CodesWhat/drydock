@@ -8,8 +8,8 @@
     "password": {
       "label": "Passwort",
       "placeholder": "Passwort eingeben",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "Passwort anzeigen",
+      "hide": "Passwort ausblenden"
     },
     "submit": {
       "signIn": "Anmelden",
