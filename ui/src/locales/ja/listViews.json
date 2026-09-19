@@ -71,7 +71,7 @@
       "agent-disconnect": "エージェント切断",
       "notification-delivery-failed": "通知送信失敗",
       "security-alert": "セキュリティアラート",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "待機期間が終了",
       "image-prune": "イメージプルーン"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "名前で絞り込む...",
     "clear": "クリア",
     "emptyFiltered": "フィルターに一致するトリガーがありません",
-    "testContainerName": "Test Container",
+    "testContainerName": "テスト用コンテナ",
     "columns": {
       "trigger": "トリガー",
       "type": "種別",

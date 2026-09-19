@@ -107,9 +107,9 @@
       "digest": "Image-update"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Nu geopend",
+      "scheduled": "Gepland",
+      "openingSoon": "Opent binnenkort"
     },
     "dataLoadFailed": "Kan dashboardgegevens niet laden",
     "widgets": {

@@ -107,9 +107,9 @@
       "digest": "映像檔更新"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "目前已開放",
+      "scheduled": "已排程",
+      "openingSoon": "即將開放"
     },
     "dataLoadFailed": "無法載入儀表板資料",
     "widgets": {

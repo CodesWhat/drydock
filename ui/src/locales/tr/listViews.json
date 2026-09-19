@@ -71,7 +71,7 @@
       "agent-disconnect": "Ajan Bağlantı Kesimi",
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
       "security-alert": "Güvenlik Uyarısı",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Bekleme süresi doldu",
       "image-prune": "İmaj Temizleme"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "Ada göre filtrele...",
     "clear": "Temizle",
     "emptyFiltered": "Filtrelerinizle eşleşen tetikleyici yok",
-    "testContainerName": "Test Container",
+    "testContainerName": "Test konteyneri",
     "columns": {
       "trigger": "Tetikleyici",
       "type": "Tür",

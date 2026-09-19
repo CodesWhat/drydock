@@ -71,7 +71,7 @@
       "agent-disconnect": "قطع اتصال الوكيل",
       "notification-delivery-failed": "فشل تسليم الإشعار",
       "security-alert": "تنبيه أمني",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "انتهت فترة الانتظار",
       "image-prune": "تنظيف الصورة"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "تصفية حسب الاسم...",
     "clear": "مسح",
     "emptyFiltered": "لا توجد مشغّلات تطابق عوامل التصفية",
-    "testContainerName": "Test Container",
+    "testContainerName": "حاوية اختبار",
     "columns": {
       "trigger": "المشغّل",
       "type": "النوع",

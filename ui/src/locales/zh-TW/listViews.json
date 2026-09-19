@@ -71,7 +71,7 @@
       "agent-disconnect": "代理已斷線",
       "notification-delivery-failed": "通知傳送失敗",
       "security-alert": "安全警報",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "等待期已結束",
       "image-prune": "映像檔清理"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "按名稱篩選……",
     "clear": "清除",
     "emptyFiltered": "沒有觸發器匹配您的篩選條件",
-    "testContainerName": "Test Container",
+    "testContainerName": "測試容器",
     "columns": {
       "trigger": "觸發器",
       "type": "類型",

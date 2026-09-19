@@ -107,9 +107,9 @@
       "digest": "İmaj güncellemesi"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Şu anda açık",
+      "scheduled": "Planlandı",
+      "openingSoon": "Yakında açılacak"
     },
     "dataLoadFailed": "Kontrol paneli verileri yüklenemedi",
     "widgets": {

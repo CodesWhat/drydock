@@ -71,7 +71,7 @@
       "agent-disconnect": "Отключение агента",
       "notification-delivery-failed": "Ошибка доставки уведомления",
       "security-alert": "Предупреждение безопасности",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Период ожидания завершён",
       "image-prune": "Очистка образа"
     },
     "target": {
@@ -357,7 +357,7 @@
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет триггеров, соответствующих фильтрам",
-    "testContainerName": "Test Container",
+    "testContainerName": "Тестовый контейнер",
     "columns": {
       "trigger": "Триггер",
       "type": "Тип",

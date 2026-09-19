@@ -107,9 +107,9 @@
       "digest": "Mise à jour d'image"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Ouverte maintenant",
+      "scheduled": "Planifiée",
+      "openingSoon": "Ouverture prochaine"
     },
     "dataLoadFailed": "Impossible de charger les données du tableau de bord",
     "widgets": {
