@@ -1,5 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
+import { getRegistryRequestTimeoutMs } from '../../configuration.js';
 import { withRetry } from '../../http-retry.js';
 import { acquireToken, getBucketForUrl } from '../../token-bucket.js';
 import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
@@ -122,6 +123,7 @@ class Hub extends Custom<HubRegistryConfiguration> {
       method: 'GET',
       url: metadataUrl,
       maxRedirects: 0,
+      timeout: getRegistryRequestTimeoutMs(),
       headers: {
         Accept: 'application/json',
       },
