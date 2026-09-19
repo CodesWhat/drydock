@@ -8,8 +8,8 @@
     "password": {
       "label": "Şifre",
       "placeholder": "Şifrenizi girin",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "Şifreyi göster",
+      "hide": "Şifreyi gizle"
     },
     "submit": {
       "signIn": "Oturum aç",

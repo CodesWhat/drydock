@@ -8,8 +8,8 @@
     "password": {
       "label": "Mật khẩu",
       "placeholder": "Nhập mật khẩu",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "Hiện mật khẩu",
+      "hide": "Ẩn mật khẩu"
     },
     "submit": {
       "signIn": "Đăng nhập",

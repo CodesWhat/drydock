@@ -8,8 +8,8 @@
     "password": {
       "label": "パスワード",
       "placeholder": "パスワードを入力",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "パスワードを表示",
+      "hide": "パスワードを非表示"
     },
     "submit": {
       "signIn": "サインイン",
