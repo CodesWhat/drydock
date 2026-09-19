@@ -210,7 +210,7 @@
     },
     "profile": {
       "loading": "Ładowanie profilu",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Nieznany użytkownik",
       "fields": {
         "username": "Nazwa użytkownika",
         "email": "E-mail",
@@ -224,8 +224,8 @@
       "loading": "Ładowanie dzienników...",
       "emptyMessage": "Nie znaleziono wpisów dziennika dla bieżących filtrów.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Wstrzymano",
+        "offline": "Brak połączenia"
       },
       "toolbar": {
         "live": "Na żywo",

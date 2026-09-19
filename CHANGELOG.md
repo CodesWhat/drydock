@@ -102,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Shared yes/no options and unnamed custom-registry labels now translate in the remaining 13 languages, without changing submitted boolean values or registry identities.
+- Shared yes/no options, unnamed custom-registry labels, the missing-profile caption and paused/offline log states now translate in the remaining 13 languages, without changing submitted boolean values, registry or user identities, or raw log messages.
 
 - Watcher next-run countdowns use localized units and update when the language changes in tables, cards and open details, without refetching. The remaining 15 English copies of "soon" are translated; countdown rounding and timestamp tooltips are unchanged.
 - Fleet-update progress now uses localized count and running-container messages in all 16 non-English languages, preserving the live counts and three-name limit.
