@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Cucumber test containers retain debug-level registry diagnostics for startup failures. The reliability report now includes a 100-attempt reassessment, with unresolved readiness failures separated from missing build artifacts.
+
 - UI coverage CI emits bounded numeric memory, disk and process-RSS samples to help diagnose abrupt runner cancellations, without collecting environment values or command arguments or changing test gates.
 
 - Agents offer a persisted normal/compact table-spacing choice, with opt-in preference sync, unchanged card layout and a 44px minimum compact row target.

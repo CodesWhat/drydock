@@ -159,6 +159,31 @@ test('prebuilt-image mode starts the requested image without rebuilding source',
   assert.match(result.dockerCalls, / drydock:dev$/mu);
 });
 
+test('the Cucumber container captures debug diagnostics for registry readiness failures', async () => {
+  const result = await runStartScript({ skipBuild: true });
+
+  assert.equal(result.exitCode, 0, result.stderr || result.stdout);
+  const runCall = result.dockerCalls.split('\n').find((line) => line.startsWith('run '));
+  assert.ok(runCall?.includes('--env DD_LOG_LEVEL=debug '), 'test container needs debug logs');
+});
+
+test('the log API scenario expects the log level configured on the Cucumber container', async () => {
+  const result = await runStartScript({ skipBuild: true });
+  assert.equal(result.exitCode, 0, result.stderr || result.stdout);
+  const runCall = result.dockerCalls.split('\n').find((line) => line.startsWith('run '));
+  const configuredLevel = runCall?.match(/--env DD_LOG_LEVEL=(\w+) /u)?.[1];
+  assert.ok(configuredLevel, 'test container must configure its log level explicitly');
+
+  const feature = await readFile(
+    new URL('../e2e/features/api-log.feature', import.meta.url),
+    'utf8',
+  );
+  const expectedLevels = [
+    ...feature.matchAll(/response body path \$\.level should be (\w+)/gu),
+  ].map((match) => match[1]);
+  assert.deepEqual(expectedLevels, [configuredLevel]);
+});
+
 test('the config file fixture is mounted read-only at /config/drydock.yml', async () => {
   const result = await runStartScript({ skipBuild: true });
 
