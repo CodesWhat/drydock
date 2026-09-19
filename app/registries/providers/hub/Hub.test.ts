@@ -1,3 +1,6 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { getRegistryRequestTimeoutMs } from '../../configuration.js';
 import Hub from './Hub.js';
 
 // Mock axios
@@ -209,6 +212,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
       maxRedirects: 0,
+      timeout: getRegistryRequestTimeoutMs(),
       headers: {
         Accept: 'application/json',
       },
@@ -222,6 +226,56 @@ describe('Docker Hub Registry', () => {
       expect.objectContaining({ requestLabel: expect.stringContaining('Docker Hub metadata') }),
     );
     expect(publishedAt).toBe('2026-03-01T12:34:56.000Z');
+  });
+
+  test.each([
+    [undefined, 30_000],
+    ['2345', 2345],
+    ['invalid', 30_000],
+  ])('should bound metadata requests with configured timeout %s', async (configured, expected) => {
+    const { default: axios } = await import('axios');
+    vi.stubEnv('DD_OUTBOUND_HTTP_TIMEOUT_MS', configured);
+    try {
+      axios.mockResolvedValueOnce({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+
+      await hub.getImagePublishedAt({ name: 'library/nginx', tag: { value: 'latest' } });
+
+      expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: expected }));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test('should abort a stalled metadata response with the real HTTP transport', async () => {
+    const { default: axios } = await import('axios');
+    const { default: realAxios } = await vi.importActual<typeof import('axios')>('axios');
+    let responseTimer: ReturnType<typeof setTimeout> | undefined;
+    const server = createServer((_request, response) => {
+      responseTimer = setTimeout(() => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ last_updated: '2026-03-01T12:34:56.000Z' }));
+      }, 1000);
+    });
+    vi.stubEnv('DD_OUTBOUND_HTTP_TIMEOUT_MS', '100');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+      });
+      const { port } = server.address() as AddressInfo;
+      axios.mockImplementationOnce((request) =>
+        realAxios({ ...request, url: `http://127.0.0.1:${port}`, proxy: false, adapter: 'http' }),
+      );
+
+      await expect(
+        hub.getImagePublishedAt({ name: 'library/nginx', tag: { value: 'latest' } }),
+      ).rejects.toMatchObject({ code: 'ECONNABORTED' });
+    } finally {
+      clearTimeout(responseTimer);
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      vi.unstubAllEnvs();
+    }
   });
 
   test('should acquire a rate-limit token for every metadata retry attempt', async () => {

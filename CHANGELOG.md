@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Apply the configured outbound HTTP timeout to Docker Hub publish-date metadata requests, so a stalled response cannot indefinitely hold up container discovery. Existing bounded retries and publish-date failure handling are unchanged.
+
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 
 ## [1.6.1-rc.14] — 2026-09-15
