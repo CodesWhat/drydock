@@ -159,6 +159,14 @@ test('prebuilt-image mode starts the requested image without rebuilding source',
   assert.match(result.dockerCalls, / drydock:dev$/mu);
 });
 
+test('the Cucumber container captures debug diagnostics for registry readiness failures', async () => {
+  const result = await runStartScript({ skipBuild: true });
+
+  assert.equal(result.exitCode, 0, result.stderr || result.stdout);
+  const runCall = result.dockerCalls.split('\n').find((line) => line.startsWith('run '));
+  assert.ok(runCall?.includes('--env DD_LOG_LEVEL=debug '), 'test container needs debug logs');
+});
+
 test('the config file fixture is mounted read-only at /config/drydock.yml', async () => {
   const result = await runStartScript({ skipBuild: true });
 
