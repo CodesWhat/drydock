@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Patch Alpine zlib 1.3.2 with the upstream fix for CVE-2026-85091 and update libexpat to 2.8.5-r0 for CVE-2026-93990. The temporary zlib APK retains its upstream version and records a unique local revision; its exact backport is documented in the image scanner's VEX evidence.
+
 ### Fixed
 
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
