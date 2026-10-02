@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -173,6 +173,15 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">🆕 Atualizações recentes</h2>
 
 <details open>
+<summary><strong>v1.6.1 highlights</strong></summary>
+
+Esta versão consolida as pré-versões `1.6.1-rc.1` … `1.6.1-rc.15`. Ela corrige verificações de atualização que indicavam "Atualizado" após uma consulta com falha, faz as notificações dispararem uma vez por atualização, preserva a política de atualização nas transferências entre agente e controlador e implanta a imagem que foi verificada. Também corrige o zlib para CVE-2026-85091 e o libexpat para CVE-2026-93990 e atualiza dependências de execução. Quem já usa `1.6.1-rc.15` não recebe mudanças adicionais em tempo de execução.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1/CHANGELOG.md#161--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.15 highlights</strong></summary>
 
 Esta versão candidata corrige CVE-2026-85091 no zlib e atualiza libexpat para 2.8.5-r0 para CVE-2026-93990. As varreduras de vulnerabilidades em lote aceitas continuam após a conclusão da solicitação HTTP. A publicação GA foi autorizada após a verificação, sem reiniciar o período de testes de sete dias.

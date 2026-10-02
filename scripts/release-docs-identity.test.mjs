@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.1-rc.15';
-const PREV_RC_VERSION = '1.6.1-rc.14';
+const RC_VERSION = '1.6.1';
+const PREV_RC_VERSION = '1.6.0';
 const RC_DATE = '2026-10-02';
 const RC_DISPLAY_DATE = 'October 2, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];

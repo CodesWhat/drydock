@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -173,6 +173,15 @@ docker run -d \
 <h2 align="center" id="recent-updates">🆕 最近更新</h2>
 
 <details open>
+<summary><strong>v1.6.1 highlights</strong></summary>
+
+此版本汇总了 `1.6.1-rc.1` … `1.6.1-rc.15` 预发布版本。它修复了查询失败后仍显示“已是最新”的更新检查，使每次更新只触发一次通知，在代理与控制器之间移交时保留更新策略，并部署经过验证的镜像。同时修复了 zlib 的 CVE-2026-85091 和 libexpat 的 CVE-2026-93990，并更新了运行时依赖。已使用 `1.6.1-rc.15` 的用户不会收到额外的运行时变更。
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1/CHANGELOG.md#161--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.15 highlights</strong></summary>
 
 此候选版本修复了 zlib 中的 CVE-2026-85091，并将 libexpat 更新至 2.8.5-r0，以修复 CVE-2026-93990。已接受的批量漏洞扫描会在 HTTP 请求完成后继续运行。维护者已授权在验证通过后发布 GA，无需重新开始七天观察期。
