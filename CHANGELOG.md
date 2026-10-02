@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Patch brace-expansion to 5.0.10 and the website to Next.js 16.3.6. Update DOMPurify to 3.4.16 for its in-place sanitization fix.
+- Patch brace-expansion to 5.0.12 and the website to Next.js 16.3.6. Update DOMPurify to 3.4.16 for its in-place sanitization fix.
 - Update Undici to 8.10.2, Nodemailer to 10.0.9, gRPC to 1.14.5, Moment to 2.31.0, fast-uri to 4.1.5, and ip-address to 10.7.1 for the newly published dependency advisories. Keep UI and E2E Undici on their patched 7.29.1 line. Nodemailer 10 requires Node.js 20 or newer; Drydock already requires Node.js 24.
 - Patch Alpine zlib 1.3.2 with the upstream fix for CVE-2026-85091 and update libexpat to 2.8.5-r0 for CVE-2026-93990. The temporary zlib APK retains its upstream version and records a unique local revision; its exact backport is documented in the image scanner's VEX evidence.
 
