@@ -16,10 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Patch brace-expansion to 5.0.12 and the website to Next.js 16.3.6. Update DOMPurify to 3.4.16 for its in-place sanitization fix.
 - Update Undici to 8.10.2, Nodemailer to 10.0.9, gRPC to 1.14.5, Moment to 2.31.0, fast-uri to 4.1.5, and ip-address to 10.7.1 for the newly published dependency advisories. Keep UI and E2E Undici on their patched 7.29.1 line. Nodemailer 10 requires Node.js 20 or newer; Drydock already requires Node.js 24.
+- Update Alpine OpenSSL to 3.5.9-r0 after 3.5.8-r0 left the package index and the pinned install stopped resolving.
 - Patch Alpine zlib 1.3.2 with the upstream fix for CVE-2026-85091 and update libexpat to 2.8.5-r0 for CVE-2026-93990. The temporary zlib APK retains its upstream version and records a unique local revision; its exact backport is documented in the image scanner's VEX evidence.
 
 ### Fixed
 
+- **[#1284](https://github.com/CodesWhat/drydock/issues/1284): a disabled healthcheck no longer health-gates the update.** A container with `healthcheck: disable: true` (stored by Docker as `Test: ["NONE"]`), an empty test, or a healthcheck block with only timing fields was treated as having a healthcheck. Docker never reports a health state for those, so the Docker action waited out the whole rollback window and rolled back an update that had started fine. The gate now applies only when the container has a real `CMD` or `CMD-SHELL` probe or Docker is reporting health.
+- **[#1280](https://github.com/CodesWhat/drydock/issues/1280): update policy set in the UI survives recreation of an agent-managed container.** An agent reports a recreated container as a removal of the old id and an addition of the new one. The controller deleted the old row without keeping its policy, so a maturity setting made in the UI was lost every time the container was updated. The policy is now carried to the replacement whichever of the two events arrives first, and also when a reconnecting agent's snapshot drops the old id before listing the new one. It is only ever carried to a container with the same agent, watcher and name. A local scan that catches Drydock's temporary `-old-<timestamp>` rename no longer stores that name, which could make the same carry-over miss on the controller host.
+- **[#1281](https://github.com/CodesWhat/drydock/issues/1281): the Docker Hub config blob redirect is no longer logged as a failure.** Registry redirects are not followed, so the optional created-date lookup against Docker Hub always ends in a 307. The debug line now says the created date is optional and was skipped, instead of "Unable to fetch image config blob created date", which read like the reason an update had not run.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 
 ## [1.7.0-rc.16] — 2026-09-15
@@ -1583,7 +1587,7 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 
 - **[#248](https://github.com/CodesWhat/drydock/issues/248) — API guard against duplicate container updates (409 conflict).**
 
-- **[#245](https://github.com/CodesWhat/drydock/issues/245) — Container update fails with 500 error when no healthcheck** — Health gate now skipped when `dd.rollback.auto` is not set. Pre-healthy timeout uses `max(120s, dd.rollback.window)` instead of a fixed value.
+- **[#245](https://github.com/CodesWhat/drydock/issues/245) — Container update fails with 500 error when no healthcheck** — Health gate now skipped when the container has no healthcheck. (This entry originally said the gate was skipped when `dd.rollback.auto` is not set. That condition was removed before 1.5.0 shipped: the gate applies to any running container with a healthcheck, and `dd.rollback.auto` only controls monitoring after the update completes.) Pre-healthy timeout uses `max(120s, dd.rollback.window)` instead of a fixed value.
 
 - **[#238](https://github.com/CodesWhat/drydock/issues/238) — Container inspect Config.Image fallback** — When Docker summary only exposes a `sha256:…` image ID (no RepoTags), container discovery falls back to container inspect `Config.Image` to recover the original tagged reference.
 
