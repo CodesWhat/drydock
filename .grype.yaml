@@ -45,6 +45,9 @@
 #      already covers libssl3/libcrypto3 once a rebuilt package exists).
 #   2. 2026-11-17 (90 days out) — recheck regardless, so this can't sit past a
 #      quarter if the version bump goes unnoticed.
+# Verified upstream backport, scoped to its unique local APK revision and CVE.
+vex-documents:
+  - docker/zlib/fixed.vex.json
 ignore:
   - package:
       location: "/usr/bin/cosign"
