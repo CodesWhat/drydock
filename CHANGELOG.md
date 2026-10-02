@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Store migrations gated on a release now run when upgrading to that release's stable image, which reports its release candidate's version. Previously they ran one release late.
+- Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.
 
 ## [1.7.0-rc.17] — 2026-10-02
 
