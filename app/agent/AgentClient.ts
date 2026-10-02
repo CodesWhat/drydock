@@ -92,6 +92,8 @@ export interface AgentClientConfig {
 
 interface AgentClientRuntimeInfo {
   version?: string;
+  // Full build identity reported next to the base version (1.6.1-rc.15 for 1.6.1).
+  build?: string;
   os?: string;
   arch?: string;
   cpus?: number;
@@ -196,6 +198,7 @@ function isControllerDockerTransportWatcher(descriptor: AgentComponentDescriptor
 
 interface AgentRuntimeAckPayload {
   version?: unknown;
+  build?: unknown;
   os?: unknown;
   arch?: unknown;
   cpus?: unknown;
@@ -1453,6 +1456,10 @@ export class AgentClient {
     return {
       ...this.info,
       version: typeof runtimeData?.version === 'string' ? runtimeData.version : this.info.version,
+      // Never carried over from a previous ack: an agent that reports no build
+      // (an older release) must not inherit the one its predecessor reported.
+      build:
+        typeof runtimeData?.build === 'string' && runtimeData.build ? runtimeData.build : undefined,
       os: typeof runtimeData?.os === 'string' ? runtimeData.os : this.info.os,
       arch: typeof runtimeData?.arch === 'string' ? runtimeData.arch : this.info.arch,
       cpus: Number.isFinite(runtimeData?.cpus) ? Number(runtimeData.cpus) : this.info.cpus,
@@ -1480,7 +1487,9 @@ export class AgentClient {
   private handleAckEvent(data: unknown) {
     this.info = this.buildRuntimeInfoFromAck(data);
     const ackData = data as AgentRuntimeAckPayload;
-    this.log.info(`Agent ${this.name} connected (version: ${ackData.version})`);
+    const { build } = this.info;
+    const buildSuffix = build && build !== ackData.version ? `, build: ${build}` : '';
+    this.log.info(`Agent ${this.name} connected (version: ${ackData.version}${buildSuffix})`);
     void this.handshake().catch((error: unknown) => {
       this.log.error(`Handshake failed after dd:ack: ${getErrorMessage(error)}`);
     });
