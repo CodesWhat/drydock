@@ -1,0 +1,15 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/CodesWhat/drydock/security/zlib-1.3.2-r2026092401",
+  "author": "https://github.com/CodesWhat",
+  "timestamp": "2026-09-24T23:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": { "name": "CVE-2026-85091" },
+      "products": [{ "@id": "pkg:apk/alpine/zlib@1.3.2-r2026092401" }],
+      "status": "fixed",
+      "status_notes": "Drydock builds this unique APK revision from checksummed zlib 1.3.2 source with upstream fix df84af25dc1942490e1d1c899a07619152a46148. The build runs upstream tests and verifies failed gzip writes clear external input state. No other version or vulnerability is covered. See docker/zlib/README.md."
+    }
+  ]
+}

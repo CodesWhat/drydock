@@ -1066,8 +1066,10 @@ describe('getImageManifestDigest', () => {
 
   test('should preserve the digest when schemaVersion 2 created metadata redirects', async () => {
     const registryMocked = createMockedRegistry();
-    const redirectError = Object.assign(new Error('Request failed with status code 302'), {
-      response: { status: 302 },
+    const debugSpy = vi.fn();
+    registryMocked.log = { debug: debugSpy } as any;
+    const redirectError = Object.assign(new Error('Request failed with status code 307'), {
+      response: { status: 307 },
     });
     registryMocked.callRegistry = vi.fn((options) => {
       if (options.method === 'head') {
@@ -1101,6 +1103,15 @@ describe('getImageManifestDigest', () => {
       version: 2,
       digest: 'sha256:manifest',
     });
+
+    const blobMessages = debugSpy.mock.calls
+      .map(([msg]) => msg as string)
+      .filter((msg) => msg.includes('sha256:config'));
+    expect(blobMessages).toHaveLength(1);
+    expect(blobMessages[0]).toContain('optional');
+    expect(blobMessages[0]).toContain('307');
+    expect(blobMessages[0]).toContain('image@sha256:config');
+    expect(blobMessages[0]).toContain('redirects are not followed');
   });
 
   test('should preserve the digest when the schemaVersion 2 manifest config redirects', async () => {

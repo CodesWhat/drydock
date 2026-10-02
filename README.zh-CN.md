@@ -219,6 +219,15 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.17 highlights</strong></summary>
+
+此候选版本修复了 zlib 中的 CVE-2026-85091，并将 libexpat 更新至 2.8.5-r0，以修复 CVE-2026-93990。已接受的批量漏洞扫描会在 HTTP 请求完成后继续运行。维护者已授权在验证通过后发布 GA，无需重新开始七天观察期。
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.17/CHANGELOG.md#170-rc17--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.16 亮点</strong></summary>
 
 Home Assistant 自动发现与状态发布现在为代理容器使用同一个 MQTT 主题。现有默认值 `HASS_AGENTTOPICSEGMENT=true` 保持不变，容器的规范名称及未启用 Home Assistant 集成的 MQTT 主题也不变。感谢 [@depuits](https://github.com/depuits) 在[讨论 #1201](https://github.com/CodesWhat/drydock/discussions/1201) 中提供复现细节。
