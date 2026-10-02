@@ -360,6 +360,12 @@ The official image defaults to `DD_LOG_FORMAT=text` for pretty, human-readable l
 Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/v1/log/entries` and the UI log viewer.
 See [Logs](/docs/configuration/logs) for examples.
 
+## A stable release shows a release candidate as its build
+
+That's expected. A stable release is the last release candidate's image, promoted unchanged, so the image published as `1.6.1` is the same image as `1.6.1-rc.15`. Drydock shows `1.6.1` as the version and keeps `1.6.1-rc.15` as the build, in the About dialog, under **Config > General**, in the startup log and in `GET /api/v1/app`.
+
+You're running the stable release. The build only names the candidate it was promoted from, which is useful in a bug report. Releases before 1.7.0 showed the full build identity as the version, which is why a `1.6.x` install reports a release candidate version. See [version and build](/docs/api/app#version-and-build).
+
 ## Trivy or Cosign not found errors
 
 Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosign. If you see "not found" errors, you are likely running a custom or older image that does not include them.
