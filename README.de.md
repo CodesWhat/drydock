@@ -219,6 +219,15 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.17 highlights</strong></summary>
+
+Dieser Kandidat behebt CVE-2026-85091 in zlib und aktualisiert libexpat auf 2.8.5-r0 für CVE-2026-93990. Außerdem laufen angenommene Sammelprüfungen auf Schwachstellen nach Abschluss der HTTP-Anfrage weiter. Nach der Verifizierung ist die GA-Freigabe ohne erneute siebentägige Testphase autorisiert.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.17/CHANGELOG.md#170-rc17--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.16</strong></summary>
 
 Home-Assistant-Erkennung und Statusveröffentlichung verwenden jetzt für Agent-Container dasselbe MQTT-Topic. Der bisherige Standard `HASS_AGENTTOPICSEGMENT=true` bleibt bestehen; kanonische Containernamen und reine MQTT-Topics ändern sich nicht. Danke an [@depuits](https://github.com/depuits) für die Reproduktionsdetails in [Diskussion #1201](https://github.com/CodesWhat/drydock/discussions/1201).

@@ -21,6 +21,7 @@ import {
   deriveContainerIdentityKey,
   deriveContainerIdRetentionKey,
   getCandidateIdentityFields,
+  getCanonicalContainerName,
   hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
@@ -1091,22 +1092,101 @@ function takeRetainedUpdatePolicyEntry(cacheKey: string | undefined) {
 }
 
 /**
+ * #1280: find the stored records that are the same container as `candidate` under a
+ * different Docker id: same agent, watcher and name, and the same identity key the
+ * retention stash uses. Names are compared in canonical form, so a predecessor whose
+ * stored name was overwritten with Drydock's own `-old-<timestamp>` rollback rename
+ * (an older agent's snapshot can still deliver that) is recognised too.
+ *
+ * The explicit name comparison is not redundant with the identity key: for a compose
+ * service that key is `project/service`, which every replica shares, and a policy set
+ * on one replica must not spread to the others. Docker never lets two live containers
+ * on one daemon hold the same name, so a same-name record under another id can only be
+ * the container this one replaces (or is replaced by).
+ *
+ * `matchAnyName` drops the name comparison and keeps only the identity-key one, which
+ * finds every record that shares the identity, replicas of a compose service included.
+ */
+function findIdentitySiblings(candidate, matchAnyName = false): container.Container[] {
+  const canonicalName = getCanonicalContainerName(candidate.name);
+  const identityKey = deriveContainerIdentityKey({ ...candidate, name: canonicalName });
+  if (identityKey === undefined || typeof containers?.find !== 'function') {
+    return [];
+  }
+  return containers
+    .find({ 'data.watcher': candidate.watcher })
+    .map((item) => item.data as container.Container)
+    .filter((stored) => {
+      const storedName = getCanonicalContainerName(stored.name);
+      return (
+        stored.id !== candidate.id &&
+        (matchAnyName || storedName === canonicalName) &&
+        deriveContainerIdentityKey({ ...stored, name: storedName }) === identityKey
+      );
+    });
+}
+
+function isAgentOwnedContainer(candidate): boolean {
+  return typeof candidate?.agent === 'string' && candidate.agent !== '';
+}
+
+/**
+ * #1280: the update-policy overrides of a still-stored predecessor of `incoming`.
+ *
+ * An agent reports a recreate as two independent events, dd:container-removed for the
+ * old id and dd:container-added for the new one, and nothing orders them. When the add
+ * wins, the predecessor has not been deleted yet, so nothing is stashed and the
+ * retention cache misses; its record is still here to read the policy from instead.
+ * Limited to agent-owned containers because the controller's own watcher always deletes
+ * the stale record before it inserts the replacement.
+ */
+function getLivePredecessorUpdatePolicyOverrides(
+  incoming,
+): container.ContainerUpdatePolicy | undefined {
+  if (!isAgentOwnedContainer(incoming)) {
+    return undefined;
+  }
+  for (const sibling of findIdentitySiblings(incoming)) {
+    const overrides = getUpdatePolicyOverrides(sibling);
+    if (Object.keys(overrides).length > 0) {
+      return overrides;
+    }
+  }
+  return undefined;
+}
+
+function takeUnexpiredRetainedUpdatePolicyOverrides(
+  incoming,
+): container.ContainerUpdatePolicy | undefined {
+  // Take both keys unconditionally: an agent prune stashes under both, and a hit on one
+  // must not leave the other behind to resurrect a since-cleared policy later.
+  const identityEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(incoming));
+  const idEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
+  const entry = identityEntry ?? idEntry;
+  if (!entry || entry.expiresAt <= Date.now()) {
+    return undefined;
+  }
+  return entry.updatePolicyOverrides;
+}
+
+/**
  * #496: restore a retained updatePolicy onto the record replacing a deleted one.
  *
  * The identity key comes first because it is the narrower match: it names one
  * container under one watcher on one agent, and a recreate is the common case. The
  * Docker id is the DR-112 fallback for the hand-off the identity key cannot see, where
- * the id survives and the identity does not. Only one of the two is ever stashed per
- * delete, so the order is a preference, not a conflict.
+ * the id survives and the identity does not. An agent-reported removal that cannot tell
+ * which of the two is happening stashes under both, and the order decides which one a
+ * given insert reads.
+ *
+ * #1280: when neither is stashed, the predecessor may simply not have been deleted yet
+ * (see getLivePredecessorUpdatePolicyOverrides).
  */
 function restoreRetainedUpdatePolicy(container) {
-  const entry =
-    takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(container)) ??
-    takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(container));
-  if (!entry) {
-    return;
-  }
-  if (entry.expiresAt <= Date.now()) {
+  const retainedOverrides =
+    takeUnexpiredRetainedUpdatePolicyOverrides(container) ??
+    getLivePredecessorUpdatePolicyOverrides(container);
+  if (!retainedOverrides) {
     return;
   }
   // A non-empty incoming controller layer is authoritative and must not be replaced; an empty
@@ -1115,9 +1195,9 @@ function restoreRetainedUpdatePolicy(container) {
     return;
   }
   if (container.updatePolicyDeclarative !== undefined) {
-    applyUpdatePolicyOverrides(container, entry.updatePolicyOverrides);
+    applyUpdatePolicyOverrides(container, retainedOverrides);
   } else if (!Object.hasOwn(container, 'updatePolicy')) {
-    container.updatePolicy = structuredClone(entry.updatePolicyOverrides);
+    container.updatePolicy = structuredClone(retainedOverrides);
   }
 }
 
@@ -1565,6 +1645,21 @@ interface DeleteContainerOptions {
    * the removal event both key on identity and would not be read back.
    */
   identityChangeExpected?: boolean;
+  /**
+   * #1280: a removal that may or may not be a recreate, reported by a source that
+   * cannot say which (an agent's `dd:container-removed` carries only the id, and a
+   * snapshot can drop a container before its replacement is listed). Stashes the
+   * update policy under the identity key exactly as `replacementExpected` does, so a
+   * same-identity container arriving later inherits it, but claims nothing else: the
+   * removal event is not flagged as a replacement, so subscribers still clean up
+   * after a container that is genuinely gone. Skipped when the replacement is already
+   * stored, since it inherited the policy when it was inserted and a stash nobody
+   * consumes would attach to the next container of that name. Also skipped when any
+   * other stored record shares the identity key (replicas of one compose service share
+   * it): the stash could land on the wrong replica, and losing a policy beats
+   * misapplying it.
+   */
+  retainUpdatePolicy?: boolean;
 }
 
 /**
@@ -1584,7 +1679,10 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       .remove();
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
-    if (options.replacementExpected === true) {
+    if (
+      options.replacementExpected === true ||
+      (options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0)
+    ) {
       stashUpdatePolicyForReplacement(containerRaw);
     }
     if (options.identityChangeExpected === true) {
