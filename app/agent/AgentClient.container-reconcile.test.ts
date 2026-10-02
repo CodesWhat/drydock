@@ -254,5 +254,168 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
         expect.stringContaining('Watcher snapshot returned 0 containers'),
       );
     });
+
+    test('retains updatePolicy when the snapshot drops the old id before the replacement is reported (#1280)', async () => {
+      seedOldContainerWithPolicy();
+      storeContainer.insertContainer(
+        createContainerFixture({
+          id: 'bystander-id',
+          name: 'bystander',
+          watcher: WATCHER_NAME,
+          agent: AGENT_NAME,
+        }),
+      );
+
+      // The agent's discovery-settling delay can hide the recreated container from the
+      // snapshot that already dropped its predecessor.
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: WATCHER_NAME, name: WATCHER_NAME },
+        containers: [buildIncomingContainer({ id: 'bystander-id', name: 'bystander' })],
+      });
+      expect(storeContainer.getContainer('old-id')).toBeUndefined();
+
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+  });
+
+  // #1280: per-container SSE events. The agent forwards dd:container-removed as
+  // `{ id }` only, and nothing orders it against the dd:container-added of the
+  // container that replaces it.
+  describe('dd:container-removed / dd:container-added via handleEvent (#1280)', () => {
+    test('retains updatePolicy when the removal arrives before the replacement', async () => {
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent('dd:container-removed', { id: 'old-id' });
+      expect(storeContainer.getContainer('old-id')).toBeUndefined();
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
+
+    test('retains updatePolicy when the replacement arrives as dd:container-updated for an unknown id', async () => {
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent('dd:container-removed', { id: 'old-id' });
+      await client.handleEvent('dd:container-updated', buildIncomingContainer());
+
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('retains updatePolicy when the replacement arrives before the removal', async () => {
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      await client.handleEvent('dd:container-removed', { id: 'old-id' });
+
+      expect(storeContainer.getContainer('old-id')).toBeUndefined();
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      // The replacement already inherited it, so nothing is left behind to attach to a
+      // later container of the same name.
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
+
+    test('retains updatePolicy when the predecessor row carries the rollback name (older agent snapshot)', async () => {
+      storeContainer.insertContainer(
+        createContainerFixture({
+          id: 'old-id',
+          name: `${CONTAINER_NAME}-old-1752019200000`,
+          watcher: WATCHER_NAME,
+          agent: AGENT_NAME,
+          updatePolicy: MATURITY_POLICY,
+        }),
+      );
+
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('does not hand the policy to a container with a different name', async () => {
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent('dd:container-removed', { id: 'old-id' });
+      await client.handleEvent(
+        'dd:container-added',
+        buildIncomingContainer({ id: 'other-id', name: 'redis' }),
+      );
+
+      expect(storeContainer.getContainer('other-id')?.updatePolicy).toBeUndefined();
+    });
+
+    test('does not hand a live container’s policy to a differently named container', async () => {
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent(
+        'dd:container-added',
+        buildIncomingContainer({ id: 'other-id', name: 'redis' }),
+      );
+
+      expect(storeContainer.getContainer('other-id')?.updatePolicy).toBeUndefined();
+      expect(storeContainer.getContainer('old-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('does not spread a policy between replicas of one compose service', async () => {
+      const composeLabels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      storeContainer.insertContainer(
+        createContainerFixture({
+          id: 'replica-1',
+          name: 'stack-web-1',
+          watcher: WATCHER_NAME,
+          agent: AGENT_NAME,
+          labels: composeLabels,
+          updatePolicy: MATURITY_POLICY,
+        }),
+      );
+
+      await client.handleEvent(
+        'dd:container-added',
+        buildIncomingContainer({ id: 'replica-2', name: 'stack-web-2', labels: composeLabels }),
+      );
+
+      expect(storeContainer.getContainer('replica-2')?.updatePolicy).toBeUndefined();
+    });
+
+    test('does not hand the policy to a same-named container on another agent', async () => {
+      seedOldContainerWithPolicy();
+      const otherClient = new AgentClient('agent2', { host: 'localhost', port: 3002, secret: '' });
+
+      try {
+        // Live predecessor on agent1, same watcher and name reported by agent2.
+        await otherClient.handleEvent('dd:container-added', buildIncomingContainer());
+        expect(storeContainer.getContainer('new-id')?.updatePolicy).toBeUndefined();
+
+        // Same again once agent1's container is gone and its policy is stashed.
+        await client.handleEvent('dd:container-removed', { id: 'old-id' });
+        await otherClient.handleEvent(
+          'dd:container-added',
+          buildIncomingContainer({ id: 'new-id-2' }),
+        );
+        expect(storeContainer.getContainer('new-id-2')?.updatePolicy).toBeUndefined();
+      } finally {
+        otherClient.stop();
+      }
+    });
+
+    test('does not resurrect overrides the user cleared on the replacement', async () => {
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+      const replacement = storeContainer.getContainerRaw('new-id');
+      storeContainer.updateContainer(
+        { ...replacement, updatePolicy: undefined },
+        { authoritativeEmptyOverrides: true },
+      );
+      await client.handleEvent('dd:container-removed', { id: 'old-id' });
+
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toBeUndefined();
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
   });
 });
