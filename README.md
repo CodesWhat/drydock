@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.14-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,15 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.15 highlights</strong></summary>
+
+This candidate patches zlib for CVE-2026-85091 and updates libexpat to 2.8.5-r0 for CVE-2026-93990. It also updates Undici, Nodemailer, gRPC, Moment, fast-uri, and ip-address to patched versions and includes the accepted bulk vulnerability scan fix, so scans continue after a completed HTTP request. The security package update changes no Drydock application source. The owner authorized GA promotion after verification without a fresh seven-day soak.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.15/CHANGELOG.md#161-rc15--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.14 highlights</strong></summary>
 
 Home Assistant discovery and state publishing now agree for agent containers

@@ -10,8 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.15] — 2026-10-02
+
 ### Security
 
+- Patch brace-expansion to 5.0.12 and the website to Next.js 16.3.6. Update Axios to 1.20.0 for its HTTP request security fixes.
+- Update Undici to 8.10.2, Nodemailer to 10.0.9, gRPC to 1.14.5, Moment to 2.31.0, fast-uri to 4.1.5, and ip-address to 10.7.1 for the newly published dependency advisories. Keep UI and E2E Undici on their patched 7.29.1 line. Nodemailer 10 requires Node.js 20 or newer; Drydock already requires Node.js 24.
+- Update Alpine OpenSSL to 3.5.9-r0 after 3.5.8-r0 left the package index, and drop the scanner exception for CVE-2026-14456, which the packaged OpenSSL has fixed since 3.5.8. Axios 1.20.0 also starts honouring CIDR entries in `NO_PROXY`, so a registry address covered by one now connects directly instead of through the configured proxy.
 - Patch Alpine zlib 1.3.2 with the upstream fix for CVE-2026-85091 and update libexpat to 2.8.5-r0 for CVE-2026-93990. The temporary zlib APK retains its upstream version and records a unique local revision; its exact backport is documented in the image scanner's VEX evidence.
 
 ### Fixed
@@ -2535,7 +2540,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.14...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.15...HEAD
+[1.6.1-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.14...v1.6.1-rc.15
 [1.6.1-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.13...v1.6.1-rc.14
 [1.6.1-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.12...v1.6.1-rc.13
 [1.6.1-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.11...v1.6.1-rc.12

@@ -235,3 +235,35 @@ test('the rc.3 changelog records the security dependency refresh', () => {
   assert.match(rc3, /`fast-xml-parser` to 5\.10\.1/);
   assert.match(rc3, /`sharp` dependency to 0\.35\.3/);
 });
+
+const septemberSecurityFloors = {
+  axios: { 1: '1.20.0' },
+  'brace-expansion': { 5: '5.0.12' },
+  next: { 16: '16.3.6' },
+  nodemailer: { 10: '10.0.9' },
+  undici: { 7: '7.29.1', 8: '8.10.2' },
+  '@grpc/grpc-js': { 1: '1.14.5' },
+  moment: { 2: '2.31.0' },
+  'fast-uri': { 4: '4.1.5' },
+  'ip-address': { 10: '10.7.1' },
+};
+
+test('workspace resolutions include the September runtime security fixes', () => {
+  const found = new Set();
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+    for (const [path, entry] of Object.entries(lockfile.packages)) {
+      for (const [name, floors] of Object.entries(septemberSecurityFloors)) {
+        if (!path.endsWith(`node_modules/${name}`)) continue;
+        found.add(name);
+        const floor = floors[Number(entry.version.split('.')[0])];
+        assert.ok(floor, `${workspace}/${path} uses an unvetted major: ${entry.version}`);
+        assert.ok(
+          compareSemver(entry.version, floor) >= 0,
+          `${workspace}/${path}: ${entry.version} < ${floor}`,
+        );
+      }
+    }
+  }
+  assert.deepEqual([...found].sort(), Object.keys(septemberSecurityFloors).sort());
+});

@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.14-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -173,6 +173,15 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">🆕 Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.15 highlights</strong></summary>
+
+Esta versión candidata corrige CVE-2026-85091 en zlib y actualiza libexpat a 2.8.5-r0 para CVE-2026-93990. También permite que los análisis de vulnerabilidades por lotes aceptados continúen después de completar la solicitud HTTP. Se autorizó la publicación GA tras la verificación, sin reiniciar el periodo de prueba de siete días.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.15/CHANGELOG.md#161-rc15--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>Aspectos destacados de v1.6.0-rc.2</strong></summary>
 
 - **Notificaciones**: plantillas de cuerpo y título por regla/por proveedor con vista previa en vivo, además de categorías de campana en la aplicación respaldadas por auditorías y umbrales de gravedad de actualización.
