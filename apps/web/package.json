@@ -33,7 +33,7 @@
     "fumadocs-mdx": "^15.0.12",
     "fumadocs-ui": "^16.10.5",
     "lucide-react": "^1.14.0",
-    "next": "16.3.4",
+    "next": "16.3.6",
     "posthog-js": "1.427.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -57,6 +57,7 @@
     "sharp": "0.35.4",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
-    "nanoid": "6.0.1"
+    "nanoid": "6.0.1",
+    "dompurify": "3.4.16"
   }
 }
