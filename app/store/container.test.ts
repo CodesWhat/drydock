@@ -6307,6 +6307,96 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       ]);
     });
 
+    test('a same-id return consumes both stash keys, so the id entry cannot linger', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'retain-both-take',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+      container.deleteContainer('retain-both-take', {
+        identityChangeExpected: true,
+        retainUpdatePolicy: true,
+      });
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(2);
+
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'retain-both-take', agent: 'agent1' }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
+
+    test('retainUpdatePolicy skips the stash when another replica shares the compose identity', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'replica-1',
+            name: 'stack-web-1',
+            agent: 'agent1',
+            labels,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        {
+          data: makePolicyFixture({
+            id: 'replica-2',
+            name: 'stack-web-2',
+            agent: 'agent1',
+            labels,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('replica-1', { retainUpdatePolicy: true });
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+
+      container.deleteContainer('replica-2', { retainUpdatePolicy: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({
+          id: 'replica-2-new',
+          name: 'stack-web-2',
+          agent: 'agent1',
+          labels,
+        }),
+      );
+      expect(inserted.updatePolicy).toBeUndefined();
+    });
+
+    test('retainUpdatePolicy still stashes for a sole compose service container', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'solo-old',
+            name: 'stack-web-1',
+            agent: 'agent1',
+            labels,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('solo-old', { retainUpdatePolicy: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'solo-new', name: 'stack-web-1', agent: 'agent1', labels }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
     test('retainUpdatePolicy stashes nothing when the replacement is already stored', () => {
       mountWith([
         {

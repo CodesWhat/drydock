@@ -304,6 +304,47 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
       expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
     });
 
+    test('a cleared override stays cleared after a pruned container returns and leaves again', async () => {
+      seedOldContainerWithPolicy();
+      storeContainer.insertContainer(
+        createContainerFixture({
+          id: 'bystander-id',
+          name: 'bystander',
+          watcher: WATCHER_NAME,
+          agent: AGENT_NAME,
+        }),
+      );
+      const snapshotWithout = (...ids: string[]) =>
+        client.handleEvent('dd:watcher-snapshot', {
+          watcher: { type: WATCHER_NAME, name: WATCHER_NAME },
+          containers: ids.map((id) =>
+            buildIncomingContainer({ id, name: id === 'old-id' ? CONTAINER_NAME : 'bystander' }),
+          ),
+        });
+
+      // Pruned by a snapshot that omits it: stashed under both identity and id keys.
+      await snapshotWithout('bystander-id');
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(2);
+
+      // Returns under the same id: policy restored, and neither stash key may survive.
+      await client.handleEvent('dd:container-added', buildIncomingContainer({ id: 'old-id' }));
+      expect(storeContainer.getContainer('old-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+
+      // The user clears the override.
+      const stored = storeContainer.getContainerRaw('old-id');
+      storeContainer.updateContainer(
+        { ...stored, updatePolicy: undefined, updatePolicyOverrides: {} },
+        { authoritativeEmptyOverrides: true } as never,
+      );
+      expect(storeContainer.getContainer('old-id')?.updatePolicy).toBeUndefined();
+
+      // Leaves and returns again: the cleared override must not be resurrected.
+      await snapshotWithout('bystander-id');
+      await client.handleEvent('dd:container-added', buildIncomingContainer({ id: 'old-id' }));
+      expect(storeContainer.getContainer('old-id')?.updatePolicy).toBeUndefined();
+    });
+
     test('retains updatePolicy when the replacement arrives before the removal', async () => {
       seedOldContainerWithPolicy();
 

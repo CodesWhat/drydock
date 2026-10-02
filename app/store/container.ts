@@ -1103,8 +1103,11 @@ function takeRetainedUpdatePolicyEntry(cacheKey: string | undefined) {
  * on one replica must not spread to the others. Docker never lets two live containers
  * on one daemon hold the same name, so a same-name record under another id can only be
  * the container this one replaces (or is replaced by).
+ *
+ * `matchAnyName` drops the name comparison and keeps only the identity-key one, which
+ * finds every record that shares the identity, replicas of a compose service included.
  */
-function findIdentitySiblings(candidate): container.Container[] {
+function findIdentitySiblings(candidate, matchAnyName = false): container.Container[] {
   const canonicalName = getCanonicalContainerName(candidate.name);
   const identityKey = deriveContainerIdentityKey({ ...candidate, name: canonicalName });
   if (identityKey === undefined || typeof containers?.find !== 'function') {
@@ -1113,12 +1116,14 @@ function findIdentitySiblings(candidate): container.Container[] {
   return containers
     .find({ 'data.watcher': candidate.watcher })
     .map((item) => item.data as container.Container)
-    .filter(
-      (stored) =>
+    .filter((stored) => {
+      const storedName = getCanonicalContainerName(stored.name);
+      return (
         stored.id !== candidate.id &&
-        getCanonicalContainerName(stored.name) === canonicalName &&
-        deriveContainerIdentityKey({ ...stored, name: canonicalName }) === identityKey,
-    );
+        (matchAnyName || storedName === canonicalName) &&
+        deriveContainerIdentityKey({ ...stored, name: storedName }) === identityKey
+      );
+    });
 }
 
 function isAgentOwnedContainer(candidate): boolean {
@@ -1153,9 +1158,11 @@ function getLivePredecessorUpdatePolicyOverrides(
 function takeUnexpiredRetainedUpdatePolicyOverrides(
   incoming,
 ): container.ContainerUpdatePolicy | undefined {
-  const entry =
-    takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(incoming)) ??
-    takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
+  // Take both keys unconditionally: an agent prune stashes under both, and a hit on one
+  // must not leave the other behind to resurrect a since-cleared policy later.
+  const identityEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(incoming));
+  const idEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
+  const entry = identityEntry ?? idEntry;
   if (!entry || entry.expiresAt <= Date.now()) {
     return undefined;
   }
@@ -1647,7 +1654,10 @@ interface DeleteContainerOptions {
    * removal event is not flagged as a replacement, so subscribers still clean up
    * after a container that is genuinely gone. Skipped when the replacement is already
    * stored, since it inherited the policy when it was inserted and a stash nobody
-   * consumes would attach to the next container of that name.
+   * consumes would attach to the next container of that name. Also skipped when any
+   * other stored record shares the identity key (replicas of one compose service share
+   * it): the stash could land on the wrong replica, and losing a policy beats
+   * misapplying it.
    */
   retainUpdatePolicy?: boolean;
 }
@@ -1671,7 +1681,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     containerSecurityStateHashCache.delete(id);
     if (
       options.replacementExpected === true ||
-      (options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw).length === 0)
+      (options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0)
     ) {
       stashUpdatePolicyForReplacement(containerRaw);
     }
