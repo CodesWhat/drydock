@@ -243,6 +243,10 @@ test('the rc.3 changelog records the security dependency refresh', () => {
 });
 
 const septemberSecurityFloors = {
+  dompurify: { 3: '3.4.16' },
+  axios: { 1: '1.20.0' },
+  'brace-expansion': { 5: '5.0.10' },
+  next: { 16: '16.3.6' },
   nodemailer: { 10: '10.0.9' },
   undici: { 7: '7.29.1', 8: '8.10.2' },
   '@grpc/grpc-js': { 1: '1.14.5' },
