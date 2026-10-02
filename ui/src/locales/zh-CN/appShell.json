@@ -92,6 +92,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Docker 容器更新管理器",
+        "build": "构建版本 {build}",
         "documentation": "文档",
         "github": "GitHub",
         "changelog": "更新日志",

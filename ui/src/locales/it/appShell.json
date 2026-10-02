@@ -92,6 +92,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Gestore aggiornamenti container Docker",
+        "build": "Build {build}",
         "documentation": "Documentazione",
         "github": "GitHub",
         "changelog": "Changelog",

@@ -92,6 +92,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Docker コンテナ更新マネージャー",
+        "build": "ビルド {build}",
         "documentation": "ドキュメント",
         "github": "GitHub",
         "changelog": "変更履歴",
