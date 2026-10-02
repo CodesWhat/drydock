@@ -1,7 +1,7 @@
 {
   "name": "drydock-app",
   "version": "1.7.0",
-  "description": "Drydock backend — Docker container update manager",
+  "description": "Drydock backend \u2014 Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
   },
@@ -50,7 +50,7 @@
     "mqtt": "5.15.2",
     "nocache": "4.0.0",
     "node-cron": "4.6.0",
-    "nodemailer": "9.1.1",
+    "nodemailer": "10.0.9",
     "openid-client": "6.8.7",
     "p-limit": "7.3.2",
     "parse-docker-image-name": "3.0.0",
@@ -65,7 +65,7 @@
     "semver": "7.8.5",
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
-    "undici": "8.10.1",
+    "undici": "8.10.2",
     "uuid": "14.0.2",
     "ws": "8.21.3",
     "yaml": "2.9.0"
@@ -74,9 +74,9 @@
     "axios": "1.20.0",
     "body-parser": "2.3.0",
     "brace-expansion": "5.0.9",
-    "fast-uri": "4.1.4",
+    "fast-uri": "4.1.5",
     "fast-xml-parser": "5.11.1",
-    "ip-address": "10.7.0",
+    "ip-address": "10.7.1",
     "picomatch": "4.0.7",
     "postcss": "8.5.28",
     "qs": "6.16.0",
@@ -86,8 +86,10 @@
     "@babel/core": "7.29.7",
     "form-data": "4.0.6",
     "protobufjs": "7.6.6",
-    "undici": "8.10.1",
-    "nanoid": "6.0.1"
+    "undici": "8.10.2",
+    "nanoid": "6.0.1",
+    "@grpc/grpc-js": "1.14.5",
+    "moment": "2.31.0"
   },
   "devDependencies": {
     "@fast-check/vitest": "0.4.1",

@@ -224,7 +224,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <details open>
 <summary><strong>v1.7.0-rc.17 highlights</strong></summary>
 
-This candidate patches zlib for CVE-2026-85091 and updates libexpat to 2.8.5-r0 for CVE-2026-93990. It also includes the accepted bulk vulnerability scan fix, so scans continue after a completed HTTP request. The security package update changes no Drydock application source. The owner authorized GA promotion after verification without a fresh seven-day soak.
+This candidate patches zlib for CVE-2026-85091 and updates libexpat to 2.8.5-r0 for CVE-2026-93990. It also updates Undici, Nodemailer, gRPC, Moment, fast-uri, and ip-address to patched versions and includes the accepted bulk vulnerability scan fix, so scans continue after a completed HTTP request. The security package update changes no Drydock application source. The owner authorized GA promotion after verification without a fresh seven-day soak.
 
 [Full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.17/CHANGELOG.md#170-rc17--2026-10-02)
 
