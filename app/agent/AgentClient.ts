@@ -4,6 +4,7 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
+import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type {
   BatchUpdateCompletedEventPayload,
   ContainerUpdateAppliedEventPayload,
@@ -1453,13 +1454,25 @@ export class AgentClient {
 
   private buildRuntimeInfoFromAck(data: unknown): AgentClientRuntimeInfo {
     const runtimeData = data as AgentRuntimeAckPayload;
+    // An agent on an older image reports its full build (an rc) as `version` and
+    // no `build`, so derive the base version and build from whichever it sent.
+    const reportedBuild =
+      typeof runtimeData?.build === 'string' && runtimeData.build ? runtimeData.build : undefined;
+    const reportedVersion =
+      typeof runtimeData?.version === 'string' && runtimeData.version
+        ? runtimeData.version
+        : undefined;
+    const identitySource = reportedBuild ?? reportedVersion;
+    const identity =
+      identitySource === undefined ? undefined : deriveVersionIdentity(identitySource);
     return {
       ...this.info,
-      version: typeof runtimeData?.version === 'string' ? runtimeData.version : this.info.version,
-      // Never carried over from a previous ack: an agent that reports no build
-      // (an older release) must not inherit the one its predecessor reported.
-      build:
-        typeof runtimeData?.build === 'string' && runtimeData.build ? runtimeData.build : undefined,
+      version:
+        identity?.version ??
+        (typeof runtimeData?.version === 'string' ? runtimeData.version : this.info.version),
+      // Never carried over from a previous ack: an agent that reports neither
+      // a build nor a version must not inherit the one its predecessor reported.
+      build: identity?.build,
       os: typeof runtimeData?.os === 'string' ? runtimeData.os : this.info.os,
       arch: typeof runtimeData?.arch === 'string' ? runtimeData.arch : this.info.arch,
       cpus: Number.isFinite(runtimeData?.cpus) ? Number(runtimeData.cpus) : this.info.cpus,

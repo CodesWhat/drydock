@@ -2327,6 +2327,7 @@ describe('AgentClient', () => {
       expect(spy).toHaveBeenCalled();
       expect(client.info).toEqual({
         version: '1.0',
+        build: '1.0',
         os: 'linux',
         arch: 'x64',
         cpus: 8,
@@ -5956,12 +5957,30 @@ describe('AgentClient', () => {
       expect(result.build).toBe('1.6.1-rc.15');
     });
 
-    test('drops a stale build when an older agent reports only a version', () => {
+    test('normalises the version an older agent reports without a build', () => {
       const internal = client as any;
       client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
 
       const result = internal.buildRuntimeInfoFromAck({ version: '1.6.1-rc.15' });
-      expect(result.version).toBe('1.6.1-rc.15');
+      expect(result.version).toBe('1.6.1');
+      expect(result.build).toBe('1.6.1-rc.15');
+    });
+
+    test('reports a plain version as both version and build', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.2.3' });
+      expect(result.version).toBe('1.2.3');
+      expect(result.build).toBe('1.2.3');
+    });
+
+    test('drops a stale build when the ack has no version', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: undefined });
+      expect(result.version).toBe('1.7.0');
       expect(result.build).toBeUndefined();
     });
 
@@ -5969,12 +5988,13 @@ describe('AgentClient', () => {
       ['a number', 42],
       ['an empty string', ''],
       ['null', null],
-    ])('ignores a build that is %s', (_label, build) => {
+    ])('falls back to the version when the build is %s', (_label, build) => {
       const internal = client as any;
       client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
 
       const result = internal.buildRuntimeInfoFromAck({ version: '1.7.0', build });
-      expect(result.build).toBeUndefined();
+      expect(result.version).toBe('1.7.0');
+      expect(result.build).toBe('1.7.0');
     });
 
     test('applies logLevel and pollInterval from ack payload', () => {
