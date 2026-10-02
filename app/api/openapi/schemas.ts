@@ -115,9 +115,18 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       name: { type: 'string' },
-      version: { type: 'string' },
+      version: {
+        type: 'string',
+        description:
+          'Base product version, with any prerelease suffix removed (for example 1.6.1).',
+      },
+      build: {
+        type: 'string',
+        description:
+          'Full build identity (for example 1.6.1-rc.15). A stable release is the promoted release candidate image, so this names the candidate it was promoted from. Equal to version when the build has no prerelease suffix.',
+      },
     },
-    required: ['name', 'version'],
+    required: ['name', 'version', 'build'],
     additionalProperties: true,
   },
   WebhookWatchAllResponse: {

@@ -12,6 +12,7 @@ interface EntryPointOptions {
   migrateExitCode?: number | null;
   triggerState?: Record<string, unknown>;
   configurationValidationErrors?: Array<{ path: string; envKey: string; message: string }>;
+  version?: string;
 }
 
 async function loadEntryPoint({
@@ -21,6 +22,7 @@ async function loadEntryPoint({
   migrateExitCode = null,
   triggerState = {},
   configurationValidationErrors = [],
+  version = '1.8.0',
 }: EntryPointOptions = {}) {
   vi.resetModules();
   vi.clearAllMocks();
@@ -42,6 +44,7 @@ async function loadEntryPoint({
 
   const setDefaultResultOrder = vi.fn();
   const getDnsMode = vi.fn(() => 'ipv4first');
+  const getVersion = vi.fn(() => version);
   const validateStartupConfiguration = vi.fn(async () => ({
     errors: configurationValidationErrors,
   }));
@@ -78,7 +81,11 @@ async function loadEntryPoint({
     default: { setDefaultResultOrder },
   }));
   vi.doMock('./banner/index.js', () => ({ renderBanner }));
-  vi.doMock('./configuration/index.js', () => ({ getDnsMode, validateStartupConfiguration }));
+  vi.doMock('./configuration/index.js', () => ({
+    getDnsMode,
+    getVersion,
+    validateStartupConfiguration,
+  }));
   vi.doMock('./configuration/file/watch.js', () => ({ startConfigFileWatch }));
   vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
   vi.doMock('./log/index.js', () => ({
@@ -214,7 +221,7 @@ describe('entrypoint', () => {
     await harness.imported;
 
     expect(harness.renderBanner).toHaveBeenCalledWith({ mode: 'controller' });
-    expect(harness.logInfo).toHaveBeenCalledWith('drydock is starting');
+    expect(harness.logInfo).toHaveBeenCalledWith('drydock is starting, version 1.8.0');
     expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
     expect(harness.prometheusInit).toHaveBeenCalledOnce();
     expect(harness.registryInit).toHaveBeenCalledWith({ agent: false });
@@ -269,6 +276,27 @@ describe('entrypoint', () => {
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
     expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
     expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
+  });
+
+  test('logs the base version with the build when starting a release candidate image', async () => {
+    const harness = await loadEntryPoint({ version: '1.8.0-rc.4' });
+
+    await harness.imported;
+
+    expect(harness.logInfo).toHaveBeenCalledWith(
+      'drydock is starting, version 1.8.0 (build 1.8.0-rc.4)',
+    );
+  });
+
+  test('logs a non-semver build version unchanged and without a build', async () => {
+    const harness = await loadEntryPoint({
+      argv: ['node', 'main.js', '--agent'],
+      version: 'ci-multiarch-smoke',
+    });
+
+    await harness.imported;
+
+    expect(harness.logInfo).toHaveBeenCalledWith('drydock is starting, version ci-multiarch-smoke');
   });
 
   test('blocks insecure root mode unless explicitly acknowledged', async () => {

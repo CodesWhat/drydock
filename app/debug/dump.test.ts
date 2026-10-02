@@ -467,6 +467,7 @@ describe('debug dump utilities', () => {
       generatedAtWindowStart: minutesAgoIso(12),
       recentMinutes: 12,
       drydockVersion: VERSION,
+      drydockBuild: VERSION,
       nodeVersion: process.version,
       uptimeSeconds: 0,
     });
@@ -690,6 +691,16 @@ describe('debug dump utilities', () => {
       },
     });
     expect(mockRedactDebugDump).toHaveBeenCalledTimes(1);
+  });
+
+  test('collectDebugDump reports the base version and keeps the release candidate as the build', async () => {
+    configureFixture();
+    mockGetVersion.mockReturnValue('1.6.1-rc.15');
+
+    const dump = await collectDebugDump();
+
+    expect(dump.metadata.drydockVersion).toBe('1.6.1');
+    expect(dump.metadata.drydockBuild).toBe('1.6.1-rc.15');
   });
 
   test('collectDebugDump reads containers through the redacted store accessor', async () => {
