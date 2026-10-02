@@ -53,10 +53,11 @@ test('every linked changelog heading has exactly one link definition', () => {
   );
 });
 
-test('v1.6.1 RC, v1.6.0 GA, and v1.5.2 GA have a complete chronological comparison-link chain', () => {
+test('v1.6.1 GA and RC, v1.6.0 GA, and v1.5.2 GA have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.6.1-rc.15...HEAD`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.6.1...HEAD`],
+    ['1.6.1', `${repositoryUrl}/compare/v1.6.0...v1.6.1`],
     ['1.6.1-rc.15', `${repositoryUrl}/compare/v1.6.1-rc.14...v1.6.1-rc.15`],
     ['1.6.1-rc.14', `${repositoryUrl}/compare/v1.6.1-rc.13...v1.6.1-rc.14`],
     ['1.6.1-rc.13', `${repositoryUrl}/compare/v1.6.1-rc.12...v1.6.1-rc.13`],
@@ -167,5 +168,29 @@ test('real changelog exposes nonempty v1.6.0 GA release notes', () => {
     'Anonymous access fails closed',
   ]) {
     assert.ok(entry.includes(marker), `v1.6.0 GA notes must include: ${marker}`);
+  }
+});
+
+test('real changelog exposes nonempty v1.6.1 GA release notes', () => {
+  const entry = extractChangelogEntry(changelog, 'v1.6.1');
+
+  assert.match(entry, /^## \[1\.6\.1\] [–—-] \d{4}-\d{2}-\d{2}$/mu);
+  assert.match(entry, /Consolidates the `1\.6\.1-rc\.1` … `1\.6\.1-rc\.15` prereleases\./u);
+  assert.match(entry, /^### Changed$/mu);
+  assert.match(entry, /^### Fixed$/mu);
+  assert.match(entry, /^### Security$/mu);
+  // The rc sections stay below the GA entry as history; the entry must stop before them.
+  assert.doesNotMatch(entry, /^## \[1\.6\.1-rc\.15\]/mu);
+  assert.match(changelog, /^## \[1\.6\.1-rc\.15\]/mu);
+
+  for (const marker of [
+    'Update checks and registry lookups report their real result',
+    'Notifications fire once per update',
+    'Update policy survives agent and controller handoffs',
+    'Updates and rollbacks deploy what was verified',
+    'Agent container ingestion checks ownership',
+    'CVE-2026-85091',
+  ]) {
+    assert.ok(entry.includes(marker), `v1.6.1 GA notes must include: ${marker}`);
   }
 });

@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -173,6 +173,15 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">🆕 Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1 highlights</strong></summary>
+
+Dieses Release fasst die Vorabversionen `1.6.1-rc.1` … `1.6.1-rc.15` zusammen. Es behebt Update-Prüfungen, die nach einer fehlgeschlagenen Abfrage "Aktuell" meldeten, sorgt dafür, dass Benachrichtigungen pro Update nur einmal ausgelöst werden, erhält die Update-Richtlinie bei Übergaben zwischen Agent und Controller und stellt das verifizierte Image bereit. Außerdem werden zlib für CVE-2026-85091 und libexpat für CVE-2026-93990 gepatcht und Laufzeitabhängigkeiten aktualisiert. Wer bereits `1.6.1-rc.15` nutzt, erhält keine weiteren Laufzeitänderungen.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1/CHANGELOG.md#161--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.15 highlights</strong></summary>
 
 Dieser Kandidat behebt CVE-2026-85091 in zlib und aktualisiert libexpat auf 2.8.5-r0 für CVE-2026-93990. Außerdem laufen angenommene Sammelprüfungen auf Schwachstellen nach Abschluss der HTTP-Anfrage weiter. Nach der Verifizierung ist die GA-Freigabe ohne erneute siebentägige Testphase autorisiert.
