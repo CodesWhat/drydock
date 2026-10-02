@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.14-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -173,6 +173,15 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">🆕 Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.15 highlights</strong></summary>
+
+Ten kandydat naprawia CVE-2026-85091 w zlib i aktualizuje libexpat do 2.8.5-r0 dla CVE-2026-93990. Przyjęte zbiorcze skanowania podatności są kontynuowane po zakończeniu żądania HTTP. Wydanie GA zostało zatwierdzone po weryfikacji, bez ponownego siedmiodniowego okresu testowego.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.15/CHANGELOG.md#161-rc15--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji 1.6.0-rc.2</strong></summary>
 
 - **Powiadomienia** — szablony tytułów i treści dla poszczególnych reguł/dostawców z podglądem na żywo oraz wspierane audytem kategorie dzwonków w aplikacji i progi ważności aktualizacji.

@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.14-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.15-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -173,6 +173,15 @@ docker run -d \
 <h2 align="center" id="recent-updates">🆕 最近更新</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.15 highlights</strong></summary>
+
+此候选版本修复了 zlib 中的 CVE-2026-85091，并将 libexpat 更新至 2.8.5-r0，以修复 CVE-2026-93990。已接受的批量漏洞扫描会在 HTTP 请求完成后继续运行。维护者已授权在验证通过后发布 GA，无需重新开始七天观察期。
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.6.1-rc.15/CHANGELOG.md#161-rc15--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>v1.6.0-rc.2亮点</strong></summary>
 
 - **通知** — 每个规则/每个提供商的标题和正文模板，带有实时预览，加上审计支持的应用内响铃类别和更新严重性阈值。

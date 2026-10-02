@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.15] — 2026-10-02
+
 ### Security
 
 - Patch Alpine zlib 1.3.2 with the upstream fix for CVE-2026-85091 and update libexpat to 2.8.5-r0 for CVE-2026-93990. The temporary zlib APK retains its upstream version and records a unique local revision; its exact backport is documented in the image scanner's VEX evidence.
@@ -2535,7 +2537,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.14...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.15...HEAD
+[1.6.1-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.14...v1.6.1-rc.15
 [1.6.1-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.13...v1.6.1-rc.14
 [1.6.1-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.12...v1.6.1-rc.13
 [1.6.1-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.11...v1.6.1-rc.12
