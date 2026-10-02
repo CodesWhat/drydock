@@ -1688,7 +1688,7 @@ onUnmounted(() => {
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">{{ t('appShell.layout.about.title') }}</h2>
               <span class="text-2xs-plus dd-text-muted mt-0.5">{{ t('appShell.layout.about.subtitle') }}</span>
               <span v-if="appVersion" class="badge text-2xs font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
-              <span v-if="appBuild" class="text-2xs font-mono dd-text-muted mt-1">{{ t('appShell.layout.about.build', { build: appBuild }) }}</span>
+              <span v-if="appBuild" class="text-2xs font-mono dd-text-muted mt-1">{{ t('appShell.layout.about.build') }} <span dir="ltr">{{ appBuild }}</span></span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">

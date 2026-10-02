@@ -951,6 +951,16 @@ describe('AppLayout', () => {
       expect(rendered).toContain('Build 1.6.1-rc.15');
     });
 
+    it('renders the build value in its own left-to-right element', async () => {
+      await openAboutDialog({ name: 'drydock', version: '1.6.1', build: '1.6.1-rc.15' });
+
+      const value = Array.from(document.body.querySelectorAll('[dir="ltr"]')).find(
+        (el) => el.textContent === '1.6.1-rc.15',
+      );
+      expect(value).toBeDefined();
+      expect(value?.parentElement?.textContent).toBe('Build 1.6.1-rc.15');
+    });
+
     it('shows no build when it matches the version', async () => {
       const rendered = await openAboutDialog({ name: 'drydock', version: '1.6.1', build: '1.6.1' });
 
