@@ -3,6 +3,19 @@
 # Pin the image index so every target architecture resolves reproducibly.
 FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
 
+# Build the upstream zlib security backport until Alpine publishes it.
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS zlib-build
+RUN apk add --no-cache alpine-sdk=1.1-r1 abuild=3.17.0-r0 \
+    && abuild-keygen -a -n \
+    && cp /root/.abuild/*.rsa.pub /etc/apk/keys/
+WORKDIR /build/drydock/zlib
+COPY docker/zlib/ ./
+ENV PACKAGER="CodesWhat <security@getdrydock.com>"
+RUN abuild -F -r \
+    && mkdir /out \
+    && cp /root/packages/drydock/*/zlib-1.3.2-r2026092401.apk /out/zlib.apk \
+    && cp /root/.abuild/*.rsa.pub /out/
+
 # Common Stage
 # Pin the image index digest, never a per-platform manifest digest: buildx
 # resolves a digest the same for every --platform, so arm64 built amd64 (#1021).
@@ -26,13 +39,18 @@ RUN apk add --no-cache \
     bash=5.3.9-r1 \
     git=2.54.0-r0 \
     jq=1.8.2-r0 \
+    libexpat=2.8.5-r0 \
     openssl=3.5.8-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026d-r0 \
     && apk add --no-cache cosign=3.0.6-r2 \
-    && apk upgrade --no-cache zlib libcrypto3 libssl3 libexpat \
+    && apk upgrade --no-cache zlib libcrypto3 libssl3 \
     && mkdir -m 0700 /store && chown node:node /store
+
+# Exact-version APK from the checksummed local build, not a repository package.
+# hadolint ignore=DL3018
+RUN --mount=from=zlib-build,source=/out,target=/pkg apk --keys-dir /pkg add --no-network --no-cache /pkg/zlib.apk
 
 # Build stage for healthcheck binary (~65KB static binary)
 # Also an image index digest, never a per-platform manifest digest: a manifest
