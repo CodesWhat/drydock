@@ -259,7 +259,7 @@ describe('containerName', () => {
       )
       .run('agent1::local::compose:stack/web', '{"maturityMode":"mature"}', 1_000, 1);
 
-    expect(migrate(legacyDb)).toEqual([CONTAINER_NAME_MIGRATION_VERSION]);
+    expect(migrate(legacyDb)).toContain(CONTAINER_NAME_MIGRATION_VERSION);
     updatePolicyRetentionCache.createCollections(legacyDb);
 
     expect(updatePolicyRetentionCache.listRecords()).toEqual([

@@ -5719,6 +5719,73 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       ]);
     });
 
+    // The sibling lookup reads every row of one watcher on one agent. A delete with no
+    // overrides to retain cannot stash anything, so it must not pay for the lookup.
+    describe('identity-sibling lookup cost', () => {
+      const SIBLING_LOOKUP_SQL_FRAGMENT = 'FROM containers WHERE watcher = ?';
+
+      function siblingLookupSql(prepare: { mock: { calls: unknown[][] } }): string[] {
+        return prepare.mock.calls
+          .map(([sql]) => String(sql))
+          .filter((sql) => sql.includes(SIBLING_LOOKUP_SQL_FRAGMENT));
+      }
+
+      test.each([
+        ['retainUpdatePolicy', { retainUpdatePolicy: true }],
+        ['replacementExpected', { replacementExpected: true }],
+      ] as const)(
+        '%s looks up no siblings for an agent-owned record with nothing to retain',
+        (_option, deleteOptions) => {
+          mountWith([
+            { data: makePolicyFixture({ id: 'cost-empty', agent: 'agent1' }) },
+            { data: makePolicyFixture({ id: 'cost-other', agent: 'agent1', name: 'redis' }) },
+          ]);
+          const prepare = vi.spyOn(db, 'prepare');
+
+          container.deleteContainer('cost-empty', deleteOptions);
+
+          expect(siblingLookupSql(prepare)).toEqual([]);
+          expect(container.getContainer('cost-empty')).toBeUndefined();
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+        },
+      );
+
+      test('a record with overrides to retain still looks its siblings up', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'cost-policy',
+              agent: 'agent1',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const prepare = vi.spyOn(db, 'prepare');
+
+        container.deleteContainer('cost-policy', { retainUpdatePolicy: true });
+
+        expect(siblingLookupSql(prepare)).toHaveLength(1);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(1);
+      });
+
+      // Every agent-owned insert without a stash hit runs the lookup too, and nothing
+      // gates that one. An index on (watcher, COALESCE(agent, '')) keeps it to the rows
+      // of one watcher on one agent, already in rowid order, so no sort step either.
+      test('the lookup is served by an index on watcher and agent, with no sort step', () => {
+        const prepare = vi.spyOn(db, 'prepare');
+        container.insertContainer(makePolicyFixture({ id: 'cost-insert', agent: 'agent1' }));
+        const [sql] = siblingLookupSql(prepare);
+        prepare.mockRestore();
+
+        const plan = db
+          .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+          .all('local', 'agent1')
+          .map((step) => String(step.detail));
+
+        expect(plan).toEqual([expect.stringContaining('USING INDEX containers_watcher_agent')]);
+      });
+    });
+
     test('an agent-owned insert never adopts from the stored record with its own id', () => {
       mountWith([
         {

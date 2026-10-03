@@ -2156,6 +2156,11 @@ function shouldStashUpdatePolicyForReplacement(
   containerRaw,
   options: DeleteContainerOptions,
 ): boolean {
+  // Nothing to retain means nothing to stash; skip the sibling lookups below, which read
+  // every row of the record's watcher on its agent.
+  if (Object.keys(getUpdatePolicyOverrides(containerRaw)).length === 0) {
+    return false;
+  }
   if (options.replacementExpected === true) {
     return !(isAgentOwnedContainer(containerRaw) && findIdentitySiblings(containerRaw).length > 0);
   }
