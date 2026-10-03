@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Add `Cross-Origin-Opener-Policy: same-origin` and a static strict CSP on `/api` responses to the website, and stop sending `X-Powered-By`.
+
+### Fixed
+
+- The website docs pages `/docs/v1.6/changelog`, `/docs/v1.6/configuration/ui`, `/docs/v1.7/changelog` and `/docs/v1.7/configuration/ui` no longer return a 500. A remark plugin renders bare `{column}`, `{date}` and `{countdown}` in prose as literal text instead of evaluating them as JS expressions.
+
 ## [1.7.0-rc.17] — 2026-10-02
 
 ### Security
