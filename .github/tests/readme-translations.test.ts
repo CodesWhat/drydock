@@ -14,142 +14,43 @@ const translatedReadmes = [
 const allReadmes = ['README.md', ...translatedReadmes];
 const sourceReadme = readFileSync(`${repoRoot}/README.md`, 'utf8');
 const sourceUrls = [...sourceReadme.matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url).sort();
-const localizedBehaviorFragments: Record<
-  string,
-  { homeAssistantUpdate: string; portwingEventSource: string; rawInventoryAuthority: string }
-> = {
-  'README.de.md': {
-    homeAssistantUpdate: 'Installieren-Schaltfläche ein echtes Update auslöst',
-    portwingEventSource: 'Portwing bleibt Ereignisquelle',
-    rawInventoryAuthority: 'Rohinventar kann Controller-Ergebnisse nicht löschen',
-  },
-  'README.es.md': {
-    homeAssistantUpdate: 'botón Instalar ejecuta una actualización real',
-    portwingEventSource: 'Portwing sigue siendo la fuente de eventos',
-    rawInventoryAuthority: 'inventario sin procesar no puede borrar resultados del controlador',
-  },
-  'README.fr.md': {
-    homeAssistantUpdate: 'bouton Installer déclenche une véritable mise à jour',
-    portwingEventSource: 'Portwing reste la source des événements de cycle de vie',
-    rawInventoryAuthority:
-      'inventaire brut ne peut pas effacer les résultats de mise à jour enrichis par le contrôleur',
-  },
-  'README.pl.md': {
-    homeAssistantUpdate: 'przycisk Instaluj uruchamia rzeczywistą aktualizację',
-    portwingEventSource: 'Portwing pozostaje źródłem zdarzeń cyklu życia',
-    rawInventoryAuthority:
-      'surowy spis nie może usunąć wyników aktualizacji wzbogaconych przez kontroler',
-  },
-  'README.pt-BR.md': {
-    homeAssistantUpdate: 'botão Instalar aciona uma atualização real',
-    portwingEventSource: 'Portwing continua sendo a fonte de eventos de ciclo de vida',
-    rawInventoryAuthority:
-      'inventário bruto não pode apagar resultados de atualização enriquecidos pelo controlador',
-  },
-  'README.zh-CN.md': {
-    homeAssistantUpdate: '“安装”按钮会触发实际更新',
-    portwingEventSource: 'Portwing 仍是生命周期事件源',
-    rawInventoryAuthority: '原始清单无法抹除控制器增强的更新结果',
-  },
-};
-
 const localizedSurfaceFragments: Record<
   string,
   {
     featureTableHeader: string;
     builtWithHeading: string;
     communityQaHeading: string;
-    releaseHeading: string;
   }
 > = {
   'README.de.md': {
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.14</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.14</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.14</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
-    releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.14</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.14</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.14 亮点</strong></summary>',
-  },
-};
-
-const localizedReleaseFragments: Record<
-  string,
-  {
-    digestWatchHeader: string;
-    dastTimeoutHeader: string;
-    dastBudgetMention: string;
-  }
-> = {
-  'README.de.md': {
-    digestWatchHeader:
-      '**Container auf einem Floating-Tag, die Drydock erstmals vor v1.5.0-rc.17 gesehen hat, konnten für immer als Current markiert bleiben, selbst wenn die Registry einen neueren Digest hatte.**',
-    dastTimeoutHeader:
-      '**Der wöchentliche vollständige ZAP-Scan von getdrydock.com lief bei jedem Durchlauf in sein 60-Minuten-Job-Timeout und lieferte nie einen Bericht.**',
-    dastBudgetMention: 'im Job-Budget',
-  },
-  'README.es.md': {
-    digestWatchHeader:
-      '**Los contenedores en una etiqueta flotante que drydock vio por primera vez antes de v1.5.0-rc.17 podían quedar marcados como Actuales para siempre, incluso con un digest más reciente disponible.**',
-    dastTimeoutHeader:
-      '**El escaneo ZAP completo semanal de getdrydock.com llegaba a su tiempo de espera de 60 minutos en cada ejecución y nunca producía un informe.**',
-    dastBudgetMention: 'presupuesto del job',
-  },
-  'README.fr.md': {
-    digestWatchHeader:
-      '**Les conteneurs sur un tag flottant que drydock avait vu pour la première fois avant v1.5.0-rc.17 pouvaient rester marqués Current pour toujours, même avec un digest plus récent disponible.**',
-    dastTimeoutHeader:
-      "**Le scan ZAP complet hebdomadaire de getdrydock.com atteignait son délai d'expiration de 60 minutes à chaque exécution et ne produisait jamais de rapport.**",
-    dastBudgetMention: 'budget du job',
-  },
-  'README.pl.md': {
-    digestWatchHeader:
-      '**Kontenery na płynnym tagu, które drydock po raz pierwszy zobaczył przed v1.5.0-rc.17, mogły zostać oznaczone jako Current na zawsze, nawet gdy registry miało nowszy digest.**',
-    dastTimeoutHeader:
-      '**Cotygodniowy pełny skan ZAP dla getdrydock.com za każdym razem trafiał w swój 60-minutowy limit czasu zadania i nigdy nie tworzył raportu.**',
-    dastBudgetMention: 'budżecie zadania',
-  },
-  'README.pt-BR.md': {
-    digestWatchHeader:
-      '**Contêineres em uma tag flutuante que o drydock viu pela primeira vez antes da v1.5.0-rc.17 podiam ficar marcados como Current para sempre, mesmo com um digest mais novo disponível.**',
-    dastTimeoutHeader:
-      '**A varredura ZAP completa semanal do getdrydock.com atingia seu tempo limite de 60 minutos em toda execução e nunca produzia um relatório.**',
-    dastBudgetMention: 'orçamento do job',
-  },
-  'README.zh-CN.md': {
-    digestWatchHeader:
-      '**drydock 在 v1.5.0-rc.17 之前首次发现的浮动标签容器，即使镜像仓库中已有更新的 digest，也可能永远被标记为 Current。**',
-    dastTimeoutHeader:
-      '**getdrydock.com 每周的完整 ZAP 扫描每次都会触及 60 分钟的任务超时，从未生成过报告。**',
-    dastBudgetMention: '任务预算',
   },
 };
 
@@ -158,22 +59,6 @@ const balancedTagPairs = [
   { name: 'summary', opening: /<summary>/g, closing: /<\/summary>/g },
   { name: 'emphasis', opening: /<em>/g, closing: /<\/em>/g },
 ];
-
-function getReleaseBlock(content: string, heading: string): string {
-  const headingIndex = content.indexOf(heading);
-  const startIndex = content.lastIndexOf('<details', headingIndex);
-  const endIndex = content.indexOf('</details>', headingIndex);
-
-  if (headingIndex === -1 || startIndex === -1 || endIndex === -1) {
-    throw new Error(`could not find release block for ${heading}`);
-  }
-
-  return content.slice(startIndex, endIndex);
-}
-
-function getBullet(block: string, fragment: string): string | undefined {
-  return block.split('\n').find((line) => line.startsWith('- ') && line.includes(fragment));
-}
 
 const forbiddenSourceEnglishProse = [
   'Most tools force a tradeoff.',
@@ -194,24 +79,6 @@ const requiredFragments = [
   '`allowmetadata=true`',
   '`DD_NOTIFICATION_HTTP_*`',
   'DEPRECATIONS.md#enforced-security-changes-no-deprecation-window',
-  'v1.6.0-rc.13',
-  'v1.6.0-rc.12',
-  'v1.6.0-rc.11',
-  './CHANGELOG.md#160--2026-08-11',
-  './CHANGELOG.md#170-rc1--2026-08-14',
-  './CHANGELOG.md#170-rc2--2026-08-20',
-  './CHANGELOG.md#170-rc3--2026-08-23',
-  './CHANGELOG.md#170-rc4--2026-08-26',
-  './CHANGELOG.md#170-rc5--2026-08-27',
-  './CHANGELOG.md#170-rc6--2026-08-29',
-  './CHANGELOG.md#170-rc7--2026-08-29',
-  './CHANGELOG.md#170-rc8--2026-09-03',
-  './CHANGELOG.md#170-rc9--2026-09-03',
-  './CHANGELOG.md#170-rc10--2026-09-04',
-  './CHANGELOG.md#170-rc11--2026-09-05',
-  './CHANGELOG.md#170-rc12--2026-09-06',
-  './CHANGELOG.md#170-rc13--2026-09-08',
-  './CHANGELOG.md#170-rc14--2026-09-08',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -246,44 +113,16 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).not.toContain('https://star-history.com/#');
   });
 
-  test('preserves Home Assistant update and Portwing result-authority behavior', () => {
-    const behavior = localizedBehaviorFragments[readme];
-    expect(content).toContain(behavior.homeAssistantUpdate);
-    expect(content).toContain(behavior.portwingEventSource);
-    expect(content).toContain(behavior.rawInventoryAuthority);
-  });
-
   test('keeps public README labels in the target language', () => {
     const surface = localizedSurfaceFragments[readme];
     expect(content).toContain(surface.featureTableHeader);
     expect(content).toContain(surface.builtWithHeading);
     expect(content).toContain(surface.communityQaHeading);
-    expect(content).toContain(surface.releaseHeading);
   });
 
-  test('maps archived rc.13 release bullets to their source links', () => {
-    const surface = localizedSurfaceFragments[readme];
-    const release = localizedReleaseFragments[readme];
-    const releaseBlock = getReleaseBlock(
-      content,
-      surface.releaseHeading.replace('v1.7.0-rc.14', 'v1.7.0-rc.13'),
-    );
-    const releaseBullets = [release.digestWatchHeader, release.dastTimeoutHeader].map((fragment) =>
-      getBullet(releaseBlock, fragment),
-    );
-    const getUrls = (bullet: string | undefined) =>
-      [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
-
-    expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[0]).toContain('`isLocalImage`');
-    expect(releaseBullets[1]).toContain(release.dastBudgetMention);
-    expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/1080',
-      'https://github.com/CodesWhat/drydock/pull/1108',
-    ]);
-    expect(getUrls(releaseBullets[0]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/1108',
-    ]);
+  test('carries no per-release highlights block', () => {
+    expect(content).not.toMatch(/<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/);
+    expect(content).not.toContain('id="recent-updates"');
   });
 
   test('preserves the exact source URL multiset', () => {
@@ -299,26 +138,14 @@ describe.each(translatedReadmes)('%s', (readme) => {
   });
 });
 
-test('English rc.7 update highlight scopes cleanup failures to the health gate', () => {
-  const releaseBlock = getReleaseBlock(
-    sourceReadme,
-    '<summary><strong>v1.7.0-rc.7 highlights</strong></summary>',
-  );
-  const bullet = getBullet(releaseBlock, '**Update execution stays successful');
-  const urls = [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"]+/g)].map(([url]) => url);
+describe.each(allReadmes)('%s release notes', (readme) => {
+  const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
-  expect(bullet).toContain('after the health gate');
-  expect(bullet).toContain('self-updates wait for active lifecycles');
-  expect(urls.sort()).toEqual([
-    'https://github.com/CodesWhat/drydock/pull/931',
-    'https://github.com/CodesWhat/drydock/pull/942',
-  ]);
-});
-
-test('German rc.7 release notes use registry terminology', () => {
-  const german = readFileSync(`${repoRoot}/README.de.md`, 'utf8');
-
-  expect(german).not.toContain('Registrierungspaginierung');
+  test('keeps release highlights in CHANGELOG.md and GitHub Releases, not the README', () => {
+    expect(content).not.toMatch(/<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/);
+    expect(content).toContain('[`CHANGELOG.md`](CHANGELOG.md)');
+    expect(content).toContain('https://github.com/CodesWhat/drydock/releases)');
+  });
 });
 
 describe.each(allReadmes)('%s star history', (readme) => {
