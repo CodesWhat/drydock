@@ -352,6 +352,13 @@ function parseRevisionQuery(query: unknown, minimum: number): number | undefined
   return revision >= minimum ? revision : undefined;
 }
 
+/** The `overrideId` query value, which is a plain string or absent. */
+function parseOverrideIdQuery(query: unknown): string | undefined {
+  const raw = (query as { overrideId?: unknown } | undefined)?.overrideId;
+  const text = Array.isArray(raw) ? raw[0] : raw;
+  return typeof text === 'string' && text.length > 0 ? text : undefined;
+}
+
 function deleteContainerLabelOverrides(req: Request, res: Response) {
   try {
     const revision = parseRevisionQuery(req.query, 0);
@@ -359,12 +366,19 @@ function deleteContainerLabelOverrides(req: Request, res: Response) {
       sendInvalid(res, [{ field: 'revision', code: 'invalid-revision' }]);
       return;
     }
+    // Deleting the last field deletes the row and the next save restarts at revision 1, so
+    // a revision alone cannot tell a stale tab's row from a newer one: name the row too.
+    const overrideId = parseOverrideIdQuery(req.query);
+    if (revision > 0 && overrideId === undefined) {
+      sendInvalid(res, [{ field: 'overrideId', code: 'invalid-override-id' }]);
+      return;
+    }
     const context = resolveWritableContext(req, res);
     if (!context) {
       return;
     }
     const { record } = context;
-    if (record === undefined || record.revision !== revision) {
+    if (record === undefined || record.revision !== revision || record.id !== overrideId) {
       if (record === undefined && revision === 0) {
         respondWithSnapshot(res, context, [], []);
       } else {

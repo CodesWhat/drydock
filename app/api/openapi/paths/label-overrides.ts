@@ -9,6 +9,16 @@ const revisionQuery = (minimum: number) => ({
   schema: { type: 'integer', minimum },
 });
 
+const overrideIdQuery = {
+  name: 'overrideId',
+  in: 'query',
+  required: false,
+  description:
+    'The `overrideId` the caller last read. Required when `revision` is above 0: a row deleted ' +
+    'and saved again restarts at revision 1, so the id is what tells a stale row from a new one.',
+  schema: { type: 'string' },
+};
+
 const overrideIdPathParam = {
   name: 'overrideId',
   in: 'path',
@@ -77,18 +87,18 @@ export const labelOverridePaths = {
       summary: 'Reset every label override of a container to its labels',
       description: 'Requires the admin scope.',
       operationId: 'resetContainerLabelOverrides',
-      parameters: [containerIdPathParam, revisionQuery(0)],
+      parameters: [containerIdPathParam, revisionQuery(0), overrideIdQuery],
       responses: {
         200: jsonResponse('Label override snapshot after the reset', {
           $ref: '#/components/schemas/LabelOverrideChangeResult',
         }),
-        400: jsonResponse('Invalid revision', {
+        400: jsonResponse('Invalid revision or missing override id', {
           $ref: '#/components/schemas/LabelOverrideInvalidRequest',
         }),
         401: errorResponse('Authentication required'),
         403: errorResponse('Missing required admin scope'),
         404: errorResponse('Container not found'),
-        409: jsonResponse('Stale revision or rollback container', {
+        409: jsonResponse('Stale revision, another override row, or rollback container', {
           $ref: '#/components/schemas/LabelOverrideConflict',
         }),
         500: errorResponse('Unable to reset label overrides'),

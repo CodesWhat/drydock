@@ -521,7 +521,7 @@ An override belongs to a container identity: the watcher, the agent and the cont
 | --- | --- | --- |
 | `GET /api/v1/containers/{id}/label-overrides` | `read` | Snapshot for one container |
 | `PATCH /api/v1/containers/{id}/label-overrides` | `admin` | Set or remove fields |
-| `DELETE /api/v1/containers/{id}/label-overrides?revision=N` | `admin` | Reset every field to its labels |
+| `DELETE /api/v1/containers/{id}/label-overrides?revision=N&overrideId=ID` | `admin` | Reset every field to its labels (`overrideId` is required once `revision` is above 0) |
 | `GET /api/v1/label-overrides` | `read` | Every stored row, with the containers each one matches |
 | `DELETE /api/v1/label-overrides/{overrideId}?revision=N` | `admin` | Delete a row, including one with no matching container |
 
@@ -551,18 +551,18 @@ The response is the snapshot plus `changed` (the fields that changed) and `warni
 
 Errors:
 
-- `400` with `errors: [{ field, code }]` for an invalid request. Codes include `unknown-field`, `duplicate-field`, `invalid-icon`, `display-name-invalid-characters`, `unknown-trigger-reference`, `wrong-trigger-category`, `depends-on-self` and `agent-enforced-widening`. List codes carry the offending `entries`.
+- `400` with `errors: [{ field, code }]` for an invalid request. Codes include `unknown-field`, `duplicate-field`, `invalid-icon`, `display-name-invalid-characters`, `unknown-trigger-reference`, `wrong-trigger-category`, `depends-on-self`, `invalid-override-id` and `agent-enforced-widening`. List codes carry the offending `entries`.
 - `403` when an API key lacks the scope, `404` for an unknown container or row.
-- `409` for a stale `revision`, with the current `snapshot` (or `current` row) in the body and nothing written, or for a rollback container.
+- `409` for a stale `revision`, or for a reset whose `overrideId` is no longer the container's row, with the current `snapshot` (or `current` row) in the body and nothing written, or for a rollback container.
 - `422` with `cycle` (container names) when the dependencies would create a dependency cycle. A cycle that already existed does not block a save.
 
-On a traditional agent, action include and auto overrides can only narrow what the container's labels allow, and an action exclude override can only add to the label's exclusions, because the agent checks its own labels again before it acts. Resetting is always allowed. Portwing controller-transport and controller-local containers are not restricted. Notification routing, display and dependencies always apply on the controller.
+On a traditional agent, action routing overrides can only narrow what the container's labels allow, because the agent checks its own labels again before it acts. An exclude override has to start with the label's exclusions in the same order and may add more after them. An include or auto entry has to name a reference the label also lists, with no wider threshold, so a container whose labels declare no include accepts no include entry. Entries are matched first-match, the way the agent matches them, and the effective value is composed against the labels each time the container is written, so a later label change is never cancelled by a stored override. Resetting is always allowed. Portwing controller-transport and controller-local containers are not restricted. Notification routing, display and dependencies always apply on the controller.
 
 Every successful change writes `label-override-set` or `label-override-cleared` to the [audit log](/docs/api#audit-trail) in the same transaction as the change. The details carry the operation (`patch`, `reset-all` or `delete-row`), the scope, and for each field the label value, declared value, previous and new override and the effective source, each cut to 256 characters. Rejected requests are not audited.
 
 ```bash
-# Reset every override of one container to its labels (revision from the last snapshot)
-curl -X DELETE 'http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides?revision=3'
+# Reset every override of one container to its labels (revision and overrideId from the last snapshot)
+curl -X DELETE 'http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides?revision=3&overrideId=9f1c0a52-6a7e-4b52-8f0e-2d4c5a1b7e90'
 ```
 
 ## Get security vulnerability overview

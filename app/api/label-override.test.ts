@@ -105,8 +105,20 @@ const patch = (id: string, body: unknown, principal?: Principal) =>
   call('PATCH', `/api/v1/containers/${id}/label-overrides`, { body, principal });
 const get = (id: string, principal?: Principal) =>
   call('GET', `/api/v1/containers/${id}/label-overrides`, { principal });
-const reset = (id: string, revision: unknown, principal?: Principal) =>
-  call('DELETE', `/api/v1/containers/${id}/label-overrides?revision=${revision}`, { principal });
+const currentOverrideId = () => labelOverrideStore.getLabelOverrides().at(0)?.id;
+const reset = (
+  id: string,
+  revision: unknown,
+  principal?: Principal,
+  overrideId: string | undefined = currentOverrideId(),
+) =>
+  call(
+    'DELETE',
+    `/api/v1/containers/${id}/label-overrides?revision=${revision}${
+      overrideId === undefined ? '' : `&overrideId=${overrideId}`
+    }`,
+    { principal },
+  );
 
 function expectContract(path: string, method: string, status: number, payload: unknown) {
   expect(
@@ -827,6 +839,11 @@ describe('DELETE /containers/:id/label-overrides', () => {
       expectContract(CONTAINER_PATH, 'delete', 400, invalid.json);
     }
     expect((await call('DELETE', '/api/v1/containers/1/label-overrides')).status).toBe(400);
+    // A row at revision 1 or above can only be reset by naming it.
+    const unnamed = await call('DELETE', '/api/v1/containers/1/label-overrides?revision=1');
+    expect(unnamed.status).toBe(400);
+    expect(unnamed.json.errors).toEqual([{ field: 'overrideId', code: 'invalid-override-id' }]);
+    expectContract(CONTAINER_PATH, 'delete', 400, unnamed.json);
 
     const stale = await reset('1', 7);
     expect(stale.status).toBe(409);
@@ -836,7 +853,12 @@ describe('DELETE /containers/:id/label-overrides', () => {
     expect((await reset('nope', 1)).status).toBe(404);
     // A repeated query key reads as its first value.
     expect(
-      (await call('DELETE', '/api/v1/containers/1/label-overrides?revision=1&revision=2')).status,
+      (
+        await call(
+          'DELETE',
+          `/api/v1/containers/1/label-overrides?revision=1&revision=2&overrideId=${currentOverrideId()}`,
+        )
+      ).status,
     ).toBe(200);
     storeContainer.insertContainer(watched('2', {}, 'web-old-1760000000000'));
     const rollback = await reset('2', 0);
@@ -851,7 +873,27 @@ describe('DELETE /containers/:id/label-overrides', () => {
     expect(noop.status).toBe(200);
     expect(noop.json.changed).toEqual([]);
     expect(audits()).toHaveLength(before);
-    expect((await reset('1', 3)).status).toBe(409);
+    expect((await reset('1', 3, undefined, 'gone')).status).toBe(409);
+  });
+
+  test('a stale tab cannot wipe a newer row that restarted at the same revision', async () => {
+    storeContainer.insertContainer(watched('1'));
+    await save('1', 0, set('displayName', 'First'));
+    const staleId = currentOverrideId();
+    await save('1', 1, { field: 'displayName', op: 'remove' });
+    expect(labelOverrideStore.getLabelOverrides()).toEqual([]);
+    await save('1', 0, set('displayName', 'Second'));
+    const [fresh] = labelOverrideStore.getLabelOverrides();
+    expect(fresh).toMatchObject({ revision: 1 });
+    expect(fresh.id).not.toBe(staleId);
+
+    const stale = await reset('1', 1, undefined, staleId);
+
+    expect(stale.status).toBe(409);
+    expectContract(CONTAINER_PATH, 'delete', 409, stale.json);
+    expect(stale.json.snapshot.overrideId).toBe(fresh.id);
+    expect(storeContainer.getContainer('1')?.displayName).toBe('Second');
+    expect((await reset('1', 1, undefined, fresh.id)).status).toBe(200);
   });
 
   test('a delete that loses a race at the store is a 409', async () => {
