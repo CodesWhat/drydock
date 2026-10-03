@@ -3,9 +3,8 @@ import * as agentServer from './agent/api/index.js';
 import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
 import { renderBanner } from './banner/index.js';
-import { getDnsMode, getVersion } from './configuration/index.js';
+import { getDnsMode } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
-import { deriveVersionIdentity, formatVersionIdentity } from './configuration/version-identity.js';
 import log from './log/index.js';
 import * as maturityScheduler from './maturity/scheduler.js';
 import type { NotificationOutboxEntry } from './model/notification-outbox.js';
@@ -37,9 +36,7 @@ if (commandExitCode !== null) {
   const runAsRootEnabled = process.env.DD_RUN_AS_ROOT === 'true';
   const insecureRootAcknowledged = process.env.DD_ALLOW_INSECURE_ROOT === 'true';
   renderBanner({ mode: isAgent ? 'agent' : 'controller' });
-  log.info(
-    `drydock is starting, version ${formatVersionIdentity(deriveVersionIdentity(getVersion()))}`,
-  );
+  log.info('drydock is starting');
 
   if (runningAsRoot && runAsRootEnabled && !insecureRootAcknowledged) {
     throw new Error(
