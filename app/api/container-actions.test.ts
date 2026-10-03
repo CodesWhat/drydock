@@ -614,6 +614,30 @@ describe('Container Actions Router', () => {
       expect(actionCounter).toHaveBeenCalledOnce();
     });
 
+    test('serves the projected label-owned sources, never the declared layer', async () => {
+      const labelOwned = {
+        v: 1,
+        declared: { displayName: 'Declared' },
+        declaredSources: { displayName: 'label' },
+        sources: { displayName: 'override' },
+      };
+      const stored = { id: 'c1', name: 'nginx', image: { name: 'nginx' }, labelOwned };
+      mockGetContainer.mockReturnValue(stored);
+      const { trigger, dockerContainer } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      for (const inspect of ['resolves', 'rejects'] as const) {
+        if (inspect === 'rejects') {
+          dockerContainer.inspect.mockRejectedValue(new Error('inspect unavailable'));
+        }
+        const res = createMockResponse();
+        await getHandler('post', route)(createMockRequest({ params: { id: 'c1' } }), res);
+
+        const { result } = res.json.mock.calls[0][0];
+        expect(result.labelOwned).toBeUndefined();
+        expect(result.labelOwnedSources).toEqual({ displayName: 'override' });
+      }
+    });
+
     test('keeps authoritative action success when refreshed state cannot be stored', async () => {
       const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
       const preRefreshContainer = { ...container, status: 'stale' };
