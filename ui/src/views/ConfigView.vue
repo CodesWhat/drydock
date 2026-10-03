@@ -27,6 +27,7 @@ import { preferences } from '../preferences/store';
 import { pushInitialSync } from '../preferences/sync';
 import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
+import { distinctBuild } from '../utils/build-identity';
 import { errorMessage } from '../utils/error';
 
 const { t } = useI18n();
@@ -237,11 +238,13 @@ async function loadGeneralSettingsData() {
     const disabled = t('configView.general.fields.disabled');
     const yes = t('configView.general.fields.yes');
     const no = t('configView.general.fields.no');
+    const appBuild = distinctBuild(appData?.version, appData?.build);
     const fields = [
       {
         label: t('configView.general.fields.version'),
         value: appData?.version ?? t('common.unknown'),
       },
+      ...(appBuild ? [{ label: t('configView.general.fields.build'), value: appBuild }] : []),
       { label: t('configView.general.fields.serverPort'), value: String(config.port ?? 3000) },
       {
         label: t('configView.general.fields.containerActions'),
@@ -271,7 +274,7 @@ async function loadGeneralSettingsData() {
       },
       {
         label: t('configView.general.fields.storeFile'),
-        value: String(storeConfig.file ?? t('common.unknown')),
+        value: String(storeConfig.dbFile ?? storeConfig.file ?? t('common.unknown')),
       },
     ];
     serverFields.value = fields;

@@ -94,6 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Менеджер обновлений Docker-контейнеров",
+        "build": "Сборка",
         "documentation": "Документация",
         "github": "GitHub",
         "changelog": "История изменений",
@@ -116,6 +117,8 @@
         "openHint": "открыть",
         "recentGroup": "Недавние",
         "unknownHost": "неизвестный узел",
+        "unknownImage": "неизвестный образ",
+        "localHost": "локально",
         "containerSubtitle": "Контейнер · {image} · {status} · {host}",
         "agentSubtitle": "Агент · {status} · {host}",
         "triggerSubtitle": "Триггер · {type}",

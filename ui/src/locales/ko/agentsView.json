@@ -76,6 +76,7 @@
         "agent": "에이전트",
         "host": "호스트",
         "agentVersion": "에이전트 버전",
+        "agentBuild": "에이전트 빌드",
         "logLevel": "로그 레벨",
         "pollInterval": "폴링 간격",
         "dockerSocket": "Docker 소켓",

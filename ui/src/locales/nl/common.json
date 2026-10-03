@@ -15,8 +15,8 @@
     "close": "Sluiten",
     "retry": "Opnieuw proberen",
     "unknown": "onbekend",
-    "yes": "yes",
-    "no": "no",
+    "yes": "ja",
+    "no": "nee",
     "errorSummary": {
       "rateLimitHit": "Ratelimiet van register bereikt",
       "accessDenied": "Toegang tot register geweigerd",
@@ -28,7 +28,7 @@
       "signatureFailed": "Handtekeningverificatie mislukt"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Aangepast"
     },
     "timeAgo": {
       "justNow": "Zojuist"

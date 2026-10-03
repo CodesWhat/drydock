@@ -22,6 +22,11 @@ export interface UpdatePolicyRetentionCacheRecord {
   cacheKey: string; // deriveContainerIdentityKey() — same key the in-memory Map uses
   updatePolicyOverrides: unknown;
   expiresAt: number; // epoch ms — same TTL semantics as the in-memory Map
+  /**
+   * #1280: canonical name of the container the stash came from. Absent on a record
+   * written before the `container_name` column existed (schema migration 5).
+   */
+  containerName?: string;
 }
 
 let db: Database | undefined;
@@ -46,6 +51,7 @@ function rowToRecord(row: Row): UpdatePolicyRetentionCacheRecord {
         ? undefined
         : JSON.parse(String(row.update_policy_overrides)),
     expiresAt: Number(row.expires_at),
+    ...(row.container_name === null ? {} : { containerName: String(row.container_name) }),
   };
 }
 
@@ -82,13 +88,20 @@ export function upsertRecord(record: UpdatePolicyRetentionCacheRecord): void {
       : JSON.stringify(record.updatePolicyOverrides);
   refreshOrderCounter += 1;
   db.prepare(
-    `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order, container_name)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(cache_key) DO UPDATE SET
        update_policy_overrides = excluded.update_policy_overrides,
        expires_at = excluded.expires_at,
-       refresh_order = excluded.refresh_order`,
-  ).run(record.cacheKey, overridesJson, record.expiresAt, refreshOrderCounter);
+       refresh_order = excluded.refresh_order,
+       container_name = excluded.container_name`,
+  ).run(
+    record.cacheKey,
+    overridesJson,
+    record.expiresAt,
+    refreshOrderCounter,
+    record.containerName ?? null,
+  );
 }
 
 /**
@@ -114,7 +127,7 @@ export function listRecords(): UpdatePolicyRetentionCacheRecord[] {
   }
   return db
     .prepare(
-      'SELECT cache_key, update_policy_overrides, expires_at FROM update_policy_retention_cache ORDER BY refresh_order ASC',
+      'SELECT cache_key, update_policy_overrides, expires_at, container_name FROM update_policy_retention_cache ORDER BY refresh_order ASC',
     )
     .all()
     .map(rowToRecord);

@@ -165,6 +165,7 @@ function getAgentsList(req: Request, res: Response) {
       port: agent.config.port,
       connected: agent.isConnected,
       version: agent.info?.version,
+      build: agent.info?.build,
       os: agent.info?.os,
       arch: agent.info?.arch,
       cpus: agent.info?.cpus,

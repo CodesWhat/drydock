@@ -137,6 +137,7 @@
       },
       "fields": {
         "version": "Versão",
+        "build": "Compilação",
         "serverPort": "Porta do servidor",
         "containerActions": "Ações de contêiner",
         "webhook": "Webhook",
@@ -210,7 +211,7 @@
     },
     "profile": {
       "loading": "Carregando perfil",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Usuário desconhecido",
       "fields": {
         "username": "Usuário",
         "email": "Email",
@@ -224,8 +225,8 @@
       "loading": "Carregando logs...",
       "emptyMessage": "Nenhuma entrada de log encontrada para os filtros atuais.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Pausado",
+        "offline": "Desconectado"
       },
       "toolbar": {
         "live": "Ao vivo",

@@ -1,4 +1,8 @@
-import { type Container, normalizeContainerHealth } from '../../../model/container.js';
+import {
+  type Container,
+  getCanonicalContainerName,
+  normalizeContainerHealth,
+} from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
@@ -287,6 +291,17 @@ function refreshContainerIdentityFromSummary(
   if (dockerContainerName === '' || existingName === dockerContainerName) {
     return;
   }
+  // The update executor renames the outgoing container to
+  // `${name}-old-${Date.now()}` before creating its replacement, and a full scan
+  // can list it under that name before the cleanup removes it. Persisting the
+  // transient name poisons the record the same way the rename event did (#535,
+  // guarded in updateContainerFromInspect): the replacement no longer matches it
+  // by name, and the update-policy stash skips rollback-named records, so the
+  // replacement loses its update policy (#1280). The rename is provably ours only
+  // when stripping the rollback suffix reconstructs the stored name.
+  if (getCanonicalContainerName(dockerContainerName) === existingName) {
+    return;
+  }
 
   const shouldUpdateDisplayName = shouldUpdateDisplayNameFromContainerName(
     dockerContainerName,
@@ -525,6 +540,16 @@ async function applyContainerDependsOn(
   container.dependsOnAction = resolution.dependsOnAction;
 }
 
+function getDependencyFields(
+  container: Container,
+): Pick<Container, 'dependsOn' | 'dependsOnSource' | 'dependsOnAction'> {
+  return {
+    dependsOn: container.dependsOn,
+    dependsOnSource: container.dependsOnSource,
+    dependsOnAction: container.dependsOnAction,
+  };
+}
+
 async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyInStoreContext) {
   const {
     watcher,
@@ -551,12 +576,16 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     watcher.configuration,
     { logger: watcher.log, containerName: dockerContainerName },
   );
+  const dependenciesBeforeRefresh = getDependencyFields(containerInStore);
   await applyContainerDependsOn(
     containerInStore,
     container.Labels || {},
     watcher,
     dockerContainerName,
   );
+  const dependenciesAfterRefresh = getDependencyFields(containerInStore);
+  const dependenciesChanged =
+    JSON.stringify(dependenciesAfterRefresh) !== JSON.stringify(dependenciesBeforeRefresh);
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
   // tag-repair gating) so the cron leg is an actual fallback for the
@@ -619,6 +648,11 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   }
   if (statusChanged) {
     runtimeObservationPatch.status = containerInStore.status;
+  }
+  // Compose `depends_on` can only be re-read here, so a compose file edit
+  // reaches the store through this patch or not at all.
+  if (dependenciesChanged) {
+    Object.assign(runtimeObservationPatch, dependenciesAfterRefresh);
   }
   if (Object.keys(runtimeObservationPatch).length > 0) {
     storeContainer.updateContainerFields(containerInStore.id, runtimeObservationPatch);

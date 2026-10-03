@@ -47,7 +47,7 @@
       "switchTo": "Passer au thème {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Claire",
+        "light": "Clair",
         "system": "Système",
         "dark": "Sombre"
       }
@@ -94,6 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Gestionnaire de mises à jour de conteneurs Docker",
+        "build": "Build",
         "documentation": "Documentation",
         "github": "GitHub",
         "changelog": "Journal de modifications",
@@ -116,6 +117,8 @@
         "openHint": "ouvrir",
         "recentGroup": "Récent",
         "unknownHost": "hôte inconnu",
+        "unknownImage": "image inconnue",
+        "localHost": "local",
         "containerSubtitle": "Conteneur · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",

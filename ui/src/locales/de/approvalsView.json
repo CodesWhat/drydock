@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Zusammenfassung der Genehmigungen konnte nicht geladen werden",
+      "detailLoadFailed": "Genehmigung konnte nicht geladen werden",
+      "approveFailed": "Update konnte nicht genehmigt werden",
+      "rejectFailed": "Update konnte nicht abgelehnt werden",
+      "deferFailed": "Update konnte nicht verschoben werden"
+    },
     "ofCount": "{count} angezeigt",
     "refresh": "Aktualisieren",
     "loading": "Genehmigungen werden geladen…",

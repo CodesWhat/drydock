@@ -76,6 +76,7 @@
         "agent": "Agent",
         "host": "Gastheer",
         "agentVersion": "Agent-versie",
+        "agentBuild": "Agent-build",
         "logLevel": "Logniveau",
         "pollInterval": "Poll-interval",
         "dockerSocket": "Docker Socket",

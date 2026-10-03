@@ -15,8 +15,8 @@
     "close": "Kapat",
     "retry": "Yeniden dene",
     "unknown": "bilinmiyor",
-    "yes": "yes",
-    "no": "no",
+    "yes": "evet",
+    "no": "hayır",
     "errorSummary": {
       "rateLimitHit": "Kayıt defteri istek sınırı aşıldı",
       "accessDenied": "Kayıt defteri erişimi reddedildi",
@@ -28,7 +28,7 @@
       "signatureFailed": "İmza doğrulaması başarısız oldu"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Özel"
     },
     "timeAgo": {
       "justNow": "Az önce"

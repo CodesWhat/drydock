@@ -15,8 +15,8 @@
     "close": "إغلاق",
     "retry": "إعادة المحاولة",
     "unknown": "غير معروف",
-    "yes": "yes",
-    "no": "no",
+    "yes": "نعم",
+    "no": "لا",
     "errorSummary": {
       "rateLimitHit": "تم تجاوز حد الطلبات في السجل",
       "accessDenied": "تم رفض الوصول إلى السجل",
@@ -28,7 +28,7 @@
       "signatureFailed": "فشل التحقق من التوقيع"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "مخصص"
     },
     "timeAgo": {
       "justNow": "الآن"
