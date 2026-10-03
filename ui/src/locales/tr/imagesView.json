@@ -28,6 +28,8 @@
       "description": "Geçerli filtrelerle eşleşen imaj yok."
     },
     "prune": {
+      "previewLoadFailed": "Temizleme önizlemesi yüklenemedi",
+      "requestFailed": "İmajlar temizlenemedi",
       "dangling": "Sahipsizleri temizle",
       "unused": "Kullanılmayanları temizle",
       "confirm": {

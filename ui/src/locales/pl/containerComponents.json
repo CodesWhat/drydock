@@ -236,11 +236,11 @@
       "download": "Pobierz",
       "allLevels": "Wszystkie poziomy",
       "downloadError": "Nie można pobrać logów",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
+      "tailCount": "Ostatnie wiersze: {count}",
+      "tailAll": "Wszystkie wiersze",
       "statusPaused": "Wstrzymano",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "statusLive": "Na żywo",
+      "statusOffline": "Brak połączenia",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -522,18 +522,18 @@
       "new": "Wykryto {duration} temu"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Anuluj",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Zatrzymaj kontener",
+        "message": "Zatrzymać {name}?",
+        "acceptLabel": "Zatrzymaj",
+        "successMessage": "Zatrzymano: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Uruchom ponownie kontener",
+        "message": "Uruchomić ponownie {name}?",
+        "acceptLabel": "Uruchom ponownie",
+        "successMessage": "Uruchomiono ponownie: {name}"
       },
       "forceUpdate": {
         "header": "Wymuś aktualizację",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Ponowne sprawdzenie nie powiodło się dla {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} wpis",
+      "entryCountPlural": "Liczba wpisów: {count}",
       "kindLabels": {
         "tag": "tag",
         "digest": "skrót"
@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Jawne",
+        "inherited": "Odziedziczone",
+        "unknown": "Nieznane"
       },
       "timeoutDefault": "60000ms (domyślnie)",
       "preAbortYes": "Przerwij aktualizację w przypadku niepowodzenia haka wstępnego",

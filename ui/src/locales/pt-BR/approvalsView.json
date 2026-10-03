@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Falha ao carregar o resumo das aprovações",
+      "detailLoadFailed": "Falha ao carregar a aprovação",
+      "approveFailed": "Falha ao aprovar a atualização",
+      "rejectFailed": "Falha ao rejeitar a atualização",
+      "deferFailed": "Falha ao adiar a atualização"
+    },
     "ofCount": "Exibidos: {count}",
     "refresh": "Atualizar",
     "loading": "Carregando aprovações…",

@@ -71,7 +71,7 @@
       "agent-disconnect": "Отключение агента",
       "notification-delivery-failed": "Ошибка доставки уведомления",
       "security-alert": "Предупреждение безопасности",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Период ожидания завершён",
       "image-prune": "Очистка образа"
     },
     "target": {
@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Не удалось начать сканирование.",
+    "scanProgressUnavailable": "Сведения о ходе сканирования недоступны. Принятые сканирования могут ещё выполняться. Обновите результаты перед запуском нового сканирования.",
     "loadingVulnerabilityData": "Загрузка данных об уязвимостях...",
     "runtimeLoadError": "Не удалось загрузить статус среды выполнения проверки безопасности",
     "scanNow": "Сканировать сейчас",
@@ -211,8 +213,8 @@
       "clean": "Чисто"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "образы",
+      "scanned": "просканировано"
     },
     "fixableBadge": "{count} испр.",
     "delta": {
@@ -357,7 +359,7 @@
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет триггеров, соответствующих фильтрам",
-    "testContainerName": "Test Container",
+    "testContainerName": "Тестовый контейнер",
     "columns": {
       "trigger": "Триггер",
       "type": "Тип",

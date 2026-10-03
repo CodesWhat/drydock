@@ -211,7 +211,7 @@
     },
     "profile": {
       "loading": "جارٍ تحميل الملف الشخصي",
-      "unknownUser": "Unknown User",
+      "unknownUser": "مستخدم غير معروف",
       "fields": {
         "username": "اسم المستخدم",
         "email": "البريد الإلكتروني",
@@ -225,8 +225,8 @@
       "loading": "جارٍ تحميل السجلات...",
       "emptyMessage": "لا توجد إدخالات سجل للفلاتر الحالية.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "متوقف مؤقتًا",
+        "offline": "غير متصل"
       },
       "toolbar": {
         "live": "مباشر",

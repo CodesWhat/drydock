@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Échec du chargement du résumé des approbations",
+      "detailLoadFailed": "Échec du chargement de l’approbation",
+      "approveFailed": "Échec de l’approbation de la mise à jour",
+      "rejectFailed": "Échec du rejet de la mise à jour",
+      "deferFailed": "Échec du report de la mise à jour"
+    },
     "ofCount": "{count} affichée | {count} affichées",
     "refresh": "Actualiser",
     "loading": "Chargement des approbations…",

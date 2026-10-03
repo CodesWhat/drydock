@@ -274,7 +274,7 @@ async function loadGeneralSettingsData() {
       },
       {
         label: t('configView.general.fields.storeFile'),
-        value: String(storeConfig.file ?? t('common.unknown')),
+        value: String(storeConfig.dbFile ?? storeConfig.file ?? t('common.unknown')),
       },
     ];
     serverFields.value = fields;
