@@ -116,6 +116,8 @@
         "openHint": "открыть",
         "recentGroup": "Недавние",
         "unknownHost": "неизвестный узел",
+        "unknownImage": "неизвестный образ",
+        "localHost": "локально",
         "containerSubtitle": "Контейнер · {image} · {status} · {host}",
         "agentSubtitle": "Агент · {status} · {host}",
         "triggerSubtitle": "Триггер · {type}",

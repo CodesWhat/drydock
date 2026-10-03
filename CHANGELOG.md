@@ -107,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Translate the app-shell user fallback in 13 locales and align dashboard fallback captions with their existing navigation translations, while preserving supplied usernames and display names.
+- Translate the custom-registry fallback in container tables, cards and details, including changes to the active language, while preserving registry hostnames, configured names and provider brands.
 - Images inventory and prune failures use localized fallback messages when a proxy or API supplies no usable error text, while preserving HTTP status, server diagnostics, confirmation and timeout handling.
 - Container Stats only shows Live after its stream opens, disables Pause when no stream exists, and clears stale connection feedback during reconnect. Closing the panel or switching containers retires pending reads and old stream callbacks so they cannot reopen or overwrite the selected container's stats.
 - Container stats, trigger-list and update-history HTTP failures use the selected language while preserving container identity, status codes and server reason text. Stats offers a read-only Retry button after a failed load.
