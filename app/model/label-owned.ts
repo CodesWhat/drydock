@@ -364,6 +364,15 @@ export function stripAgentLabelOwnedState(container: Container): Container {
   ) as Container;
 }
 
+/**
+ * A container as an agent may be sent it: declared values only and no `labelOwned`, because
+ * overrides live on the controller and never flow to agents. Returns the container itself
+ * when it carries nothing to project.
+ */
+export function toAgentPayload(container: Container): Container {
+  return stripAgentLabelOwnedState(toDeclaredProjection(container));
+}
+
 /** The label-owned slice of a record, for change detection and write-backs. */
 export function pickLabelOwnedFlat(container: Container): LabelOwnedFlat {
   const picked = Object.fromEntries(

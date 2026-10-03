@@ -12,6 +12,7 @@ import {
   parseLabelOwnedState,
   pickLabelOwnedFlat,
   stripAgentLabelOwnedState,
+  toAgentPayload,
   toDeclaredProjection,
 } from './label-owned.js';
 
@@ -380,6 +381,21 @@ describe('model/label-owned', () => {
   });
 
   describe('agent payloads', () => {
+    test('toAgentPayload projects to declared values and drops state, or returns the record', () => {
+      const plain = containerWith({ displayName: 'Sonarr' });
+      expect(toAgentPayload(plain)).toBe(plain);
+
+      const payload = toAgentPayload(
+        resolve(containerWith({ displayName: 'Sonarr', dependsOn: ['db'] }), {
+          displayName: override('TV'),
+          dependsOn: override(['x']),
+        }),
+      );
+      expect(payload).not.toHaveProperty('labelOwned');
+      expect(payload).toMatchObject({ displayName: 'Sonarr', dependsOn: ['db'] });
+      expect(payload.dependsOnSource).toBeUndefined();
+    });
+
     test('a payload with no state and no override source is returned as is', () => {
       const container = containerWith({ dependsOnSource: 'label' });
       expect(stripAgentLabelOwnedState(container)).toBe(container);

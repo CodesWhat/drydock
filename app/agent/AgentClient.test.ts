@@ -87,6 +87,12 @@ vi.mock('../registry/index.js', () => ({
 
 import * as event from '../event/index.js';
 import * as gateWatch from '../maturity/gate-watch.js';
+import type { Container } from '../model/container.js';
+import {
+  applyLabelOwnedState,
+  buildLabelOwnedState,
+  inferDeclaredSources,
+} from '../model/label-owned.js';
 import Hub from '../registries/providers/hub/Hub.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -4722,6 +4728,82 @@ describe('AgentClient', () => {
       await client.runRemoteTriggerBatch(containers, 'docker', 'update');
       const [, postedBody] = axios.post.mock.calls[0];
       expect(postedBody).toBe(containers);
+    });
+
+    describe('overrides never flow to agents', () => {
+      function overridden(id: string): Container {
+        const base = {
+          id,
+          name: `app-${id}`,
+          displayName: 'Declared',
+          displayIcon: 'mdi:docker',
+          status: 'running',
+          watcher: 'local',
+          dependsOn: ['db'],
+          dependsOnSource: 'compose',
+          actionTriggerInclude: 'docker.declared',
+        } as unknown as Container;
+        const declared = {
+          displayName: 'Declared',
+          dependsOn: ['db'],
+          actionTriggerInclude: 'docker.declared',
+        };
+        const overrides = {
+          displayName: { value: 'Override', updatedAt: 'a', updatedBy: 'u' },
+          dependsOn: { value: ['api'], updatedAt: 'a', updatedBy: 'u' },
+          actionTriggerInclude: { value: ['docker.override'], updatedAt: 'a', updatedBy: 'u' },
+        };
+        const state = buildLabelOwnedState(
+          declared,
+          inferDeclaredSources(declared, base, 'compose'),
+          overrides,
+        );
+        return applyLabelOwnedState({ ...base }, state, overrides);
+      }
+
+      function expectDeclared(payload: Record<string, unknown>) {
+        expect(payload).not.toHaveProperty('labelOwned');
+        expect(payload).toMatchObject({
+          displayName: 'Declared',
+          dependsOn: ['db'],
+          dependsOnSource: 'compose',
+          actionTriggerInclude: 'docker.declared',
+        });
+        expect(JSON.stringify(payload)).not.toContain('Override');
+        expect(JSON.stringify(payload)).not.toContain('docker.override');
+      }
+
+      test('a non-update trigger payload carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        const container = overridden('c1');
+        expect(container.displayName).toBe('Override');
+        await client.runRemoteTrigger(container, 'command', 'run');
+        expectDeclared(axios.post.mock.calls[0][1]);
+      });
+
+      test('a non-update batch carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        await client.runRemoteTriggerBatch([overridden('c1'), overridden('c2')], 'command', 'run');
+        const [, postedBody] = axios.post.mock.calls[0];
+        expect(postedBody).toHaveLength(2);
+        postedBody.forEach(expectDeclared);
+      });
+
+      test('an update batch with operation ids carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        await client.runRemoteTriggerBatch([overridden('c1')], 'docker', 'update', {
+          operationIds: { c1: 'op-1' },
+        });
+        const [, postedBody] = axios.post.mock.calls[0];
+        expectDeclared(postedBody[0]);
+        expect(postedBody[0]).toHaveProperty('operationId', 'op-1');
+      });
+
+      test('an update batch with no operation ids carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        await client.runRemoteTriggerBatch([overridden('c1')], 'docker', 'update');
+        expectDeclared(axios.post.mock.calls[0][1][0]);
+      });
     });
 
     test('should not embed operationIds for notification batch triggers', async () => {
