@@ -8,8 +8,8 @@
     "password": {
       "label": "كلمة المرور",
       "placeholder": "أدخل كلمة المرور",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "إظهار كلمة المرور",
+      "hide": "إخفاء كلمة المرور"
     },
     "submit": {
       "signIn": "تسجيل الدخول",

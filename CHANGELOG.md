@@ -108,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The login password visibility button now uses localized screen-reader labels in every supported language. Showing, hiding, and switching languages preserve the entered value and never submit the form.
 - Stop the dashboard from showing a connected Local Docker host when no local watcher is configured. Agent-only fleets show only their configured agents.
 - Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.
 - Shared yes/no options, unnamed custom-registry labels, the missing-profile caption and paused/offline log states now translate in the remaining 13 languages, without changing submitted boolean values, registry or user identities, or raw log messages.

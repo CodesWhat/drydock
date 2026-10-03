@@ -8,8 +8,8 @@
     "password": {
       "label": "Wachtwoord",
       "placeholder": "Voer uw wachtwoord in",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "Wachtwoord tonen",
+      "hide": "Wachtwoord verbergen"
     },
     "submit": {
       "signIn": "Log in",
