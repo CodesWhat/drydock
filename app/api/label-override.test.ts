@@ -16,6 +16,7 @@ vi.mock('node:fs/promises', async (importOriginal) => ({
 }));
 
 import type { Container } from '../model/container.js';
+import { isAgentEnforcedWatcher, setAgentEnforcementResolver } from '../model/label-owned.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 import type { Database } from '../store/db/driver.js';
@@ -160,6 +161,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
+  setAgentEnforcementResolver((container) => isAgentEnforcedWatcher(container, state.watcher));
   vi.restoreAllMocks();
   vi.clearAllMocks();
   storeContainer._resetContainerStoreStateForTests();
@@ -177,6 +179,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setAgentEnforcementResolver(undefined);
   labelOverrideStore.clearCollectionForTesting();
   db.close();
 });
@@ -664,16 +667,60 @@ describe('PATCH /containers/:id/label-overrides', () => {
 
     test('accepts narrowing, and widening notification routing, which the controller owns', async () => {
       storeContainer.insertContainer(
-        watched('1', { agent: 'edge', actionTriggerExclude: 'docker.edge:minor' }),
+        watched('1', {
+          agent: 'edge',
+          actionTriggerInclude: 'docker.edge',
+          actionTriggerExclude: 'docker.edge:minor',
+        }),
       );
       const json = await save(
         '1',
         0,
-        set('actionTriggerInclude', ['docker.edge']),
+        set('actionTriggerInclude', ['docker.edge:major']),
         set('actionTriggerExclude', ['docker.edge:minor', 'docker.edge:major']),
         set('notificationTriggerInclude', ['ops']),
       );
       expect(json.changed).toHaveLength(3);
+    });
+
+    test('refuses an include on a container whose agent declares none', async () => {
+      storeContainer.insertContainer(watched('1', { agent: 'edge' }));
+      const result = await patch('1', {
+        revision: 0,
+        changes: [set('actionTriggerInclude', ['docker.edge'])],
+      });
+      expect(result.status).toBe(400);
+      expect(result.json.errors).toEqual([
+        {
+          field: 'actionTriggerInclude',
+          code: 'agent-enforced-widening',
+          entries: ['docker.edge:all'],
+        },
+      ]);
+    });
+
+    test('shows the effective value composed with the agent labels after they change', async () => {
+      storeContainer.insertContainer(
+        watched('1', { agent: 'edge', actionTriggerExclude: 'docker.edge:minor' }),
+      );
+      await save('1', 0, set('actionTriggerExclude', ['docker.edge:minor', 'docker.edge:major']));
+      storeContainer.updateContainer(
+        watched('1', {
+          agent: 'edge',
+          actionTriggerExclude: 'docker.edge:minor,slack.ops',
+        }),
+        { labelOwned: 'declared' },
+      );
+
+      const { json } = await get('1');
+
+      expect(json.fields.actionTriggerExclude.effective).toEqual({
+        value: ['docker.edge:minor', 'slack.ops', 'docker.edge:major'],
+        source: 'override',
+      });
+      expect(storeContainer.getContainer('1')?.actionTriggerExclude).toBe(
+        'docker.edge:minor,slack.ops,docker.edge:major',
+      );
     });
 
     test('a Portwing controller-transport container is unrestricted', async () => {

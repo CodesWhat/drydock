@@ -6,7 +6,9 @@ import type { Container } from '../../model/container.js';
 import {
   buildLabelOwnedState,
   captureDeclaredFromFlat,
+  composeAgentEnforcedRouting,
   inferDeclaredSources,
+  isAgentEnforcedRoutingField,
   LABEL_OWNED_FIELDS,
   type LabelOverrideEntry,
   type LabelOverrideFields,
@@ -92,6 +94,29 @@ function staleTriggerWarnings(
     .map((reference) => ({ field: spec.field, code: 'stale-trigger-reference', reference }));
 }
 
+/**
+ * The value an override leaves in effect. On a container whose agent re-runs admission it
+ * is the override composed with the agent's labels, the same value the store writes onto
+ * the container, so the editor never shows an entry the agent would refuse.
+ */
+function effectiveValue(
+  spec: LabelOwnedFieldSpec,
+  state: LabelOwnedState,
+  override: LabelOverrideEntry | undefined,
+  agentEnforced: boolean,
+): SnapshotValue | undefined {
+  if (override === undefined) {
+    return undefined;
+  }
+  return agentEnforced && isAgentEnforcedRoutingField(spec.field)
+    ? composeAgentEnforcedRouting(
+        spec.field,
+        state.declared[spec.field] as string | undefined,
+        override.value as string[],
+      )
+    : override.value;
+}
+
 /** The editor GET: every field with its declared, overridden and effective value. */
 export function buildSnapshot(input: SnapshotInput) {
   const { container, scope, record, members, triggers } = input;
@@ -117,7 +142,8 @@ export function buildSnapshot(input: SnapshotInput) {
                   updatedBy: override.updatedBy,
                 },
           effective: {
-            value: override === undefined ? declared : override.value,
+            value:
+              effectiveValue(spec, state, override, input.agentEnforcedActionRouting) ?? declared,
             source: override === undefined ? state.declaredSources[spec.field] : 'override',
           },
         },

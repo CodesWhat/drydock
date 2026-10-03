@@ -1,17 +1,24 @@
+import { type ActionPolicyTrigger, resolveForTrigger } from './action-policy.js';
 import type { Container } from './container.js';
 import {
   applyLabelOwnedState,
   buildLabelOwnedState,
   captureDeclaredFromFlat,
+  composeAgentEnforcedRouting,
   describeRoutingOrigin,
   getLabelOwnedFieldSpec,
   inferDeclaredSources,
+  isAgentEnforcedRoutingField,
+  isAgentEnforcedWatcher,
+  isEntryPermittedByDeclared,
   LABEL_OWNED_FIELDS,
   type LabelOverrideFields,
   type LabelOwnedState,
+  parseDeclaredRoutingEntries,
   parseLabelOverrideFields,
   parseLabelOwnedState,
   pickLabelOwnedFlat,
+  setAgentEnforcementResolver,
   stripAgentLabelOwnedState,
   toAgentPayload,
   toDeclaredProjection,
@@ -460,5 +467,214 @@ describe('describeRoutingOrigin', () => {
     expect(describeRoutingOrigin({} as Container, 'actionTriggerInclude')).toBe(
       'by container label dd.action.include',
     );
+  });
+});
+
+describe('agent-enforced routing composition', () => {
+  const RANK = { blocked: 0, manual: 1, auto: 2 } as const;
+  const DIFFS = ['major', 'minor', 'patch'] as const;
+  const MODES = ['all', 'oninclude', 'onauto', 'none'] as const;
+
+  afterEach(() => {
+    setAgentEnforcementResolver(undefined);
+  });
+
+  function outcomes(flat: Container, mode: (typeof MODES)[number], triggerId: string): number[] {
+    const trigger = {
+      type: 'docker',
+      getId: () => triggerId,
+      configuration: { auto: mode },
+    } as unknown as ActionPolicyTrigger;
+    return DIFFS.map(
+      (semverDiff) =>
+        RANK[
+          resolveForTrigger(trigger, {
+            ...flat,
+            updateKind: { kind: 'tag', localValue: '1', remoteValue: '2', semverDiff },
+          } as Container).state
+        ],
+    );
+  }
+
+  const agentContainer = (declared: Record<string, string>) =>
+    containerWith({ agent: 'edge', watcher: 'local', ...declared });
+
+  test('the registry decides who is enforced, and an unwired resolver fails closed', () => {
+    const base = agentContainer({ actionTriggerExclude: 'a' });
+    const overrides = { actionTriggerExclude: override(['b']) };
+    expect(resolve(base, overrides).actionTriggerExclude).toBe('a,b');
+    setAgentEnforcementResolver(() => false);
+    expect(resolve(base, overrides).actionTriggerExclude).toBe('b');
+    setAgentEnforcementResolver(undefined);
+    expect(resolve(base, overrides).actionTriggerExclude).toBe('a,b');
+    expect(
+      resolve(containerWith({ actionTriggerExclude: 'a' }), overrides).actionTriggerExclude,
+    ).toBe('b');
+  });
+
+  test('a stored exclude cannot drop an exclude the agent labels add later', () => {
+    // Stored while the label said `a`: the override held [a, b]. The label then gained `c`.
+    const relabelled = agentContainer({ actionTriggerExclude: 'a,c' });
+    const resolved = resolve(relabelled, { actionTriggerExclude: override(['a', 'b']) });
+    expect(resolved.actionTriggerExclude).toBe('a,c,b');
+    expect(outcomes(resolved, 'all', 'docker.c')).toEqual([0, 0, 0]);
+  });
+
+  test('declared entries stay ahead of an override entry for the same trigger', () => {
+    const base = agentContainer({ actionTriggerExclude: 'docker.edge' });
+    const resolved = resolve(base, {
+      actionTriggerExclude: override(['docker.edge:major-only', 'docker.edge']),
+    });
+    expect(resolved.actionTriggerExclude).toBe('docker.edge,docker.edge:major-only');
+    expect(outcomes(resolved, 'all', 'docker.edge')).toEqual([0, 0, 0]);
+  });
+
+  test('a stored include or auto entry the labels do not permit is dropped', () => {
+    const base = agentContainer({ actionTriggerInclude: 'docker.edge:major' });
+    const resolved = resolve(base, {
+      actionTriggerInclude: override(['docker.edge:all', 'docker.other']),
+    });
+    expect(resolved.actionTriggerInclude).toBeUndefined();
+    expect(outcomes(resolved, 'oninclude', 'docker.edge')).toEqual([0, 0, 0]);
+    expect(
+      resolve(agentContainer({}), { actionTriggerInclude: override(['docker.edge']) })
+        .actionTriggerInclude,
+    ).toBeUndefined();
+    expect(
+      resolve(base, { actionTriggerInclude: override(['docker.edge:major']) }).actionTriggerInclude,
+    ).toBe('docker.edge:major');
+    expect(
+      resolve(agentContainer({ actionTriggerAuto: 'docker.edge' }), {
+        actionTriggerAuto: override(['docker.edge:minor', 'docker.other']),
+      }).actionTriggerAuto,
+    ).toBe('docker.edge:minor');
+  });
+
+  test('a local container keeps whole-replacement semantics', () => {
+    const base = containerWith({
+      actionTriggerExclude: 'a',
+      actionTriggerInclude: 'docker.edge:major',
+    });
+    const resolved = resolve(base, {
+      actionTriggerExclude: override(['b']),
+      actionTriggerInclude: override(['docker.edge:all', 'docker.other']),
+    });
+    expect(resolved.actionTriggerExclude).toBe('b');
+    expect(resolved.actionTriggerInclude).toBe('docker.edge:all,docker.other');
+  });
+
+  test('other fields on an agent container still replace whole', () => {
+    const resolved = resolve(agentContainer({}), {
+      notificationTriggerExclude: override(['slack']),
+      displayName: override('Renamed'),
+    });
+    expect(resolved.notificationTriggerExclude).toBe('slack');
+    expect(resolved.displayName).toBe('Renamed');
+  });
+
+  test('no override of any shape widens a declared outcome on an agent container', () => {
+    const ENTRIES = ['docker.edge', 'edge', 'docker.other'].flatMap((id) =>
+      ['', ':major-only', ':minor', ':all'].map((threshold) => `${id}${threshold}`),
+    );
+    const LISTS: string[][] = [[], ...ENTRIES.map((entry) => [entry])].concat(
+      ENTRIES.flatMap((first) => ENTRIES.map((second) => [first, second])),
+    );
+    const DECLARED = [
+      undefined,
+      'docker.edge',
+      'docker.edge:major-only',
+      'edge:minor,docker.edge',
+      'docker.edge:major-only,docker.edge',
+    ];
+    const fields = ['actionTriggerExclude', 'actionTriggerInclude', 'actionTriggerAuto'] as const;
+    for (const field of fields) {
+      const others = {
+        actionTriggerExclude: { actionTriggerInclude: 'docker.edge,docker.other' },
+        actionTriggerInclude: {},
+        actionTriggerAuto: { actionTriggerInclude: 'docker.edge,docker.other' },
+      }[field];
+      for (const declared of DECLARED) {
+        const base = agentContainer({
+          ...others,
+          ...(declared === undefined ? {} : { [field]: declared }),
+        });
+        for (const entries of LISTS) {
+          const resolved = resolve(base, { [field]: override(entries) });
+          for (const mode of MODES) {
+            for (const triggerId of ['docker.edge', 'docker.other']) {
+              const before = outcomes(base, mode, triggerId);
+              const after = outcomes(resolved, mode, triggerId);
+              expect({ field, declared, entries, mode, triggerId, after }).toEqual({
+                field,
+                declared,
+                entries,
+                mode,
+                triggerId,
+                after: after.map((value, index) => Math.min(value, before[index])),
+              });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  test('composeAgentEnforcedRouting drops permitted-only entries and appends exclude extras', () => {
+    expect(composeAgentEnforcedRouting('actionTriggerExclude', undefined, ['a', 'b'])).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(
+      composeAgentEnforcedRouting('actionTriggerExclude', ' A:Major , b', ['a:major']),
+    ).toEqual(['A:Major', 'b']);
+    expect(composeAgentEnforcedRouting('actionTriggerAuto', 'a', ['a', 'b'])).toEqual(['a']);
+  });
+
+  test('isEntryPermittedByDeclared reads the first overlapping declared reference', () => {
+    expect(isEntryPermittedByDeclared('docker.edge', 'edge')).toBe(false);
+    expect(isEntryPermittedByDeclared('edge', 'edge')).toBe(true);
+    expect(isEntryPermittedByDeclared('edge:minor', 'EDGE')).toBe(true);
+    expect(isEntryPermittedByDeclared('edge', 'edge:minor')).toBe(false);
+    expect(isEntryPermittedByDeclared('edge', 'other')).toBe(false);
+    expect(isEntryPermittedByDeclared('edge', undefined)).toBe(false);
+    expect(isEntryPermittedByDeclared('a.edge', 'b.edge')).toBe(false);
+    expect(isEntryPermittedByDeclared('x', 'a.b.x')).toBe(false);
+  });
+
+  test('parseDeclaredRoutingEntries normalizes ids and unreadable thresholds', () => {
+    expect(parseDeclaredRoutingEntries(' Docker:Major, slack ,x:bogus')).toEqual([
+      'docker:major',
+      'slack:all',
+      'x:all',
+    ]);
+    expect(parseDeclaredRoutingEntries(undefined)).toEqual([]);
+    expect(isAgentEnforcedRoutingField('actionTriggerAuto')).toBe(true);
+    expect(isAgentEnforcedRoutingField('notificationTriggerAuto')).toBe(false);
+  });
+
+  describe('isAgentEnforcedWatcher', () => {
+    const traditional = { type: 'docker', name: 'local', agent: 'edge', configuration: {} };
+    const portwing = {
+      type: 'docker',
+      name: 'host',
+      agent: 'pw',
+      configuration: { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+    };
+    const state = { 'edge.docker.local': traditional, 'pw.docker.host': portwing };
+
+    test('a controller-local container is never enforced', () => {
+      expect(isAgentEnforcedWatcher({ agent: undefined, watcher: 'local' }, state)).toBe(false);
+      expect(isAgentEnforcedWatcher({ agent: '', watcher: 'local' }, state)).toBe(false);
+    });
+
+    test('a traditional agent is enforced and a Portwing controller transport is not', () => {
+      expect(isAgentEnforcedWatcher({ agent: 'edge', watcher: 'local' }, state)).toBe(true);
+      expect(isAgentEnforcedWatcher({ agent: 'pw', watcher: 'host' }, state)).toBe(false);
+    });
+
+    test('an agent whose watcher is not registered is treated as enforced', () => {
+      expect(isAgentEnforcedWatcher({ agent: 'gone', watcher: 'local' }, state)).toBe(true);
+      expect(isAgentEnforcedWatcher({ agent: 'edge', watcher: 'local' }, undefined)).toBe(true);
+    });
   });
 });

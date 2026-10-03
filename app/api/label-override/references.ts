@@ -3,15 +3,14 @@
  * the agent watchers. Each takes that state as an argument, so it is exercised with plain
  * data and the handler wires in the registry and the store.
  */
-import { usesControllerDockerTransport } from '../../agent/controller-docker-transport.js';
 import { buildDependencyGraph, topologicalSort } from '../../dependencies/dependency-graph.js';
 import type { Container } from '../../model/container.js';
-import { getLabelOwnedFieldSpec } from '../../model/label-owned.js';
 import {
-  doesReferenceMatchId,
-  parseIncludeOrIncludeTriggerString,
-  splitAndTrimCommaSeparatedList,
-} from '../../triggers/providers/trigger-reference-matching.js';
+  getLabelOwnedFieldSpec,
+  isEntryPermittedByDeclared,
+  parseDeclaredRoutingEntries,
+} from '../../model/label-owned.js';
+import { doesReferenceMatchId } from '../../triggers/providers/trigger-reference-matching.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import type { FieldError } from './validation.js';
 import { normalizeRoutingEntry } from './validation.js';
@@ -109,13 +108,6 @@ export function checkRoutingReferences(
   return { errors, warnings };
 }
 
-function normalizeDeclaredEntries(declared: string | undefined): string[] {
-  return splitAndTrimCommaSeparatedList(declared ?? '').map((entry) => {
-    const parsed = parseIncludeOrIncludeTriggerString(entry);
-    return `${parsed.id.toLowerCase()}:${parsed.threshold}`;
-  });
-}
-
 function widening(field: string, entries: string[]): FieldError | undefined {
   return entries.length === 0 ? undefined : { field, code: 'agent-enforced-widening', entries };
 }
@@ -123,62 +115,49 @@ function widening(field: string, entries: string[]): FieldError | undefined {
 /**
  * Traditional agents re-run admission against their own labels, so an action routing
  * override there may only narrow what the labels allow. `declared` is the label value the
- * agent enforces. An exclude must keep every declared entry; an auto list must be a subset
- * of the declared one; an include must be a subset too, where an empty list means "no
- * include filter" and so lifts a declared restriction. Resetting an override is always
- * allowed and never reaches this check.
+ * agent enforces, and matching is first-match, so order matters:
+ * - An exclude must carry the declared entries as an exact prefix, because a wider entry
+ *   placed ahead of a declared one would shadow it.
+ * - An include or auto entry must name the first declared reference that can match the
+ *   same trigger, with no wider threshold. With nothing declared, no entry qualifies, and
+ *   an include must also keep every declared entry (under `AUTO=oninclude` an empty include
+ *   includes nothing, so it narrows, but it is not a way to drop a declared restriction).
+ * Resetting an override is always allowed and never reaches this check. The same rules are
+ * applied again to the effective value at every write (`composeAgentEnforcedRouting`).
  */
 export function checkAgentRestriction(
   field: string,
   entries: string[],
   declared: string | undefined,
 ): FieldError | undefined {
-  const declaredEntries = normalizeDeclaredEntries(declared);
+  const declaredEntries = parseDeclaredRoutingEntries(declared);
   const overrideEntries = entries.map(normalizeRoutingEntry);
   switch (field) {
-    case 'actionTriggerExclude':
+    case 'actionTriggerExclude': {
+      const missing = declaredEntries.filter((entry) => !overrideEntries.includes(entry));
       return widening(
         field,
-        declaredEntries.filter((entry) => !overrideEntries.includes(entry)),
+        missing.length > 0
+          ? missing
+          : declaredEntries.filter((entry, index) => overrideEntries[index] !== entry),
       );
+    }
     case 'actionTriggerInclude':
-      if (declaredEntries.length === 0) {
-        return undefined;
+      if (overrideEntries.length === 0) {
+        return widening(field, declaredEntries);
       }
-      return widening(
-        field,
-        overrideEntries.length === 0
-          ? declaredEntries
-          : overrideEntries.filter((entry) => !declaredEntries.includes(entry)),
-      );
+      return widening(field, notPermitted(entries, declared));
     case 'actionTriggerAuto':
-      return widening(
-        field,
-        overrideEntries.filter((entry) => !declaredEntries.includes(entry)),
-      );
+      return widening(field, notPermitted(entries, declared));
     default:
       return undefined;
   }
 }
 
-/**
- * Whether a container's action admission is re-run by an agent against its own labels. A
- * controller-local container is not, and neither is a Portwing controller-transport
- * container, which executes on the controller. An agent whose watcher is not registered
- * right now is treated as enforcing: narrowing is always safe, widening is not.
- */
-export function isAgentEnforcedWatcher(
-  container: { agent?: string; watcher: string },
-  watcherState: Record<string, unknown> | undefined,
-): boolean {
-  if (!container.agent) {
-    return false;
-  }
-  const watcher = Object.values(watcherState ?? {}).find((candidate) => {
-    const component = candidate as ComponentLike;
-    return component.agent === container.agent && component.name === container.watcher;
-  }) as ComponentLike | undefined;
-  return !(watcher && usesControllerDockerTransport(watcher.type, watcher.configuration));
+function notPermitted(entries: string[], declared: string | undefined): string[] {
+  return entries
+    .filter((entry) => !isEntryPermittedByDeclared(entry, declared))
+    .map(normalizeRoutingEntry);
 }
 
 function cycleKey(cycle: string[]): string {

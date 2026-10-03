@@ -16,6 +16,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { type Container, isRollbackContainerName } from '../model/container.js';
 import {
   getLabelOwnedFieldSpec,
+  isAgentEnforcedWatcher,
   type LabelOverrideFields,
   type LabelOwnedField,
 } from '../model/label-owned.js';
@@ -30,7 +31,6 @@ import {
   checkAgentRestriction,
   checkRoutingReferences,
   evaluateDependencyOverride,
-  isAgentEnforcedWatcher,
   type OverrideWarning,
   toTriggerInfos,
 } from './label-override/references.js';

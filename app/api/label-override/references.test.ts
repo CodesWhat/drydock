@@ -1,9 +1,9 @@
+import { type ActionPolicyTrigger, resolveForTrigger } from '../../model/action-policy.js';
 import type { Container } from '../../model/container.js';
 import {
   checkAgentRestriction,
   checkRoutingReferences,
   evaluateDependencyOverride,
-  isAgentEnforcedWatcher,
   toTriggerInfos,
 } from './references.js';
 
@@ -133,7 +133,7 @@ describe('api/label-override/references', () => {
       expect(check('actionTriggerExclude', [], 'docker')?.entries).toEqual(['docker:all']);
     });
 
-    test('an include may only narrow, and an empty list lifts the restriction', () => {
+    test('an include may only narrow, and an empty list is not a way to drop the restriction', () => {
       expect(check('actionTriggerInclude', ['docker:major'], 'docker:major,slack')).toBeUndefined();
       expect(check('actionTriggerInclude', ['docker', 'other'], 'docker')).toEqual({
         field: 'actionTriggerInclude',
@@ -147,10 +147,148 @@ describe('api/label-override/references', () => {
       });
     });
 
-    test('an include against no declared restriction is always a narrowing', () => {
-      expect(check('actionTriggerInclude', ['docker'], undefined)).toBeUndefined();
-      expect(check('actionTriggerInclude', ['docker'], '  ')).toBeUndefined();
+    test('an include against no declared include allows only an empty override', () => {
+      // Under AUTO=oninclude an empty include means nothing is included, so any entry grants.
+      expect(check('actionTriggerInclude', ['docker'], undefined)).toEqual({
+        field: 'actionTriggerInclude',
+        code: 'agent-enforced-widening',
+        entries: ['docker:all'],
+      });
+      expect(check('actionTriggerInclude', ['docker:major'], '  ')?.entries).toEqual([
+        'docker:major',
+      ]);
       expect(check('actionTriggerInclude', [], undefined)).toBeUndefined();
+      expect(check('actionTriggerInclude', [], '  ')).toBeUndefined();
+    });
+
+    test('an exclude must carry the declared entries as an exact prefix', () => {
+      expect(
+        check('actionTriggerExclude', ['docker.edge:major-only', 'docker.edge'], 'docker.edge'),
+      ).toEqual({
+        field: 'actionTriggerExclude',
+        code: 'agent-enforced-widening',
+        entries: ['docker.edge:all'],
+      });
+      expect(
+        check('actionTriggerExclude', ['docker.edge', 'docker.edge:major-only'], 'docker.edge'),
+      ).toBeUndefined();
+      expect(check('actionTriggerExclude', ['b', 'a'], 'a,b')?.entries).toEqual(['a:all', 'b:all']);
+    });
+
+    test('an include entry may not shadow a declared entry with a wider threshold', () => {
+      expect(check('actionTriggerInclude', ['docker.edge:all'], 'docker.edge:major')).toEqual({
+        field: 'actionTriggerInclude',
+        code: 'agent-enforced-widening',
+        entries: ['docker.edge:all'],
+      });
+      expect(check('actionTriggerInclude', ['docker.edge:major'], 'docker.edge')).toBeUndefined();
+      // `edge` is declared first and matches the same trigger, so docker.edge:all would widen it.
+      expect(
+        check('actionTriggerInclude', ['docker.edge:all'], 'edge:major,docker.edge:all')?.entries,
+      ).toEqual(['docker.edge:all']);
+      expect(check('actionTriggerAuto', ['edge:all'], 'docker.edge:all')?.entries).toEqual([
+        'edge:all',
+      ]);
+    });
+
+    describe('never widens what resolveForTrigger returns', () => {
+      const RANK = { blocked: 0, manual: 1, auto: 2 } as const;
+      const DIFFS = ['major', 'minor', 'patch'] as const;
+      const MODES = ['all', 'oninclude', 'onauto', 'none'] as const;
+      const TRIGGER_IDS = ['docker.edge', 'docker.other'] as const;
+
+      function outcomes(
+        flat: Partial<Container>,
+        mode: (typeof MODES)[number],
+        triggerId: string,
+      ): number[] {
+        const candidate = {
+          type: 'docker',
+          getId: () => triggerId,
+          configuration: { auto: mode },
+        } as unknown as ActionPolicyTrigger;
+        return DIFFS.map(
+          (semverDiff) =>
+            RANK[
+              resolveForTrigger(candidate, {
+                id: 'c1',
+                name: 'web',
+                watcher: 'local',
+                updateKind: { kind: 'tag', localValue: '1', remoteValue: '2', semverDiff },
+                ...flat,
+              } as unknown as Container).state
+            ],
+        );
+      }
+
+      const flatOf = (field: string, entries: string[]) => ({
+        [field]: entries.length === 0 ? undefined : entries.join(','),
+      });
+
+      function widens(field: string, declared: string | undefined, entries: string[]): boolean {
+        // The declared layer sets the other routing fields to what the agent's labels would
+        // grant, so a narrowing in one field is judged on its own.
+        const base =
+          field === 'actionTriggerExclude'
+            ? { actionTriggerInclude: 'docker.edge,docker.other', actionTriggerAuto: 'docker.edge' }
+            : field === 'actionTriggerInclude'
+              ? { actionTriggerAuto: undefined }
+              : { actionTriggerInclude: 'docker.edge,docker.other' };
+        return MODES.some((mode) =>
+          TRIGGER_IDS.some((triggerId) => {
+            const before = outcomes({ ...base, [field]: declared || undefined }, mode, triggerId);
+            const after = outcomes({ ...base, ...flatOf(field, entries) }, mode, triggerId);
+            return after.some((value, index) => value > before[index]);
+          }),
+        );
+      }
+
+      const ENTRIES = ['docker.edge', 'edge', 'docker.other', 'other'].flatMap((id) =>
+        ['', ':major-only', ':minor', ':all'].map((threshold) => `${id}${threshold}`),
+      );
+      const LISTS = [[], ...ENTRIES.map((entry) => [entry])].concat(
+        ENTRIES.flatMap((first) => ENTRIES.map((second) => [first, second])),
+      );
+      const DECLARED = [
+        undefined,
+        'docker.edge',
+        'docker.edge:major-only',
+        'edge:minor,docker.edge',
+        'docker.edge:minor,docker.other',
+        'docker.edge:major-only,docker.edge',
+      ];
+
+      test('blocked stays blocked when an agent container has no include label', () => {
+        expect(outcomes({ actionTriggerInclude: undefined }, 'oninclude', 'docker.edge')).toEqual([
+          0, 0, 0,
+        ]);
+        expect(check('actionTriggerInclude', ['docker.edge'], undefined)).toBeDefined();
+        expect(widens('actionTriggerInclude', undefined, ['docker.edge'])).toBe(true);
+      });
+
+      test('an exclude that un-excludes minor updates is the case the check catches', () => {
+        const entries = ['docker.edge:major-only', 'docker.edge'];
+        expect(widens('actionTriggerExclude', 'docker.edge', entries)).toBe(true);
+        expect(check('actionTriggerExclude', entries, 'docker.edge')).toBeDefined();
+      });
+
+      test.each(['actionTriggerExclude', 'actionTriggerInclude', 'actionTriggerAuto'])(
+        'every override %s the check allows keeps every outcome at or below the declared one',
+        (field) => {
+          for (const declared of DECLARED) {
+            for (const entries of LISTS) {
+              if (check(field, entries, declared) === undefined) {
+                expect({
+                  field,
+                  declared,
+                  entries,
+                  widens: widens(field, declared, entries),
+                }).toEqual({ field, declared, entries, widens: false });
+              }
+            }
+          }
+        },
+      );
     });
 
     test('an auto list must be a subset of the declared one, and an empty list always is', () => {
@@ -170,32 +308,6 @@ describe('api/label-override/references', () => {
 
     test('an unparseable declared threshold reads as all, the way the agent reads it', () => {
       expect(check('actionTriggerAuto', ['docker'], 'docker:bogus')).toBeUndefined();
-    });
-  });
-
-  describe('isAgentEnforcedWatcher', () => {
-    const traditional = { type: 'docker', name: 'local', agent: 'edge', configuration: {} };
-    const portwing = {
-      type: 'docker',
-      name: 'host',
-      agent: 'pw',
-      configuration: { transport: 'docker-api', execution: 'controller', events: 'portwing' },
-    };
-    const state = { 'edge.docker.local': traditional, 'pw.docker.host': portwing };
-
-    test('a controller-local container is never enforced', () => {
-      expect(isAgentEnforcedWatcher({ agent: undefined, watcher: 'local' }, state)).toBe(false);
-      expect(isAgentEnforcedWatcher({ agent: '', watcher: 'local' }, state)).toBe(false);
-    });
-
-    test('a traditional agent is enforced and a Portwing controller transport is not', () => {
-      expect(isAgentEnforcedWatcher({ agent: 'edge', watcher: 'local' }, state)).toBe(true);
-      expect(isAgentEnforcedWatcher({ agent: 'pw', watcher: 'host' }, state)).toBe(false);
-    });
-
-    test('an agent whose watcher is not registered is treated as enforced', () => {
-      expect(isAgentEnforcedWatcher({ agent: 'gone', watcher: 'local' }, state)).toBe(true);
-      expect(isAgentEnforcedWatcher({ agent: 'edge', watcher: 'local' }, undefined)).toBe(true);
     });
   });
 
