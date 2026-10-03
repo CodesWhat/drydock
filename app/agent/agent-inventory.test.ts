@@ -206,12 +206,101 @@ test.each([
       ([topic, payload]) => topic.startsWith('homeassistant/update/') && payload === '',
     );
     expect(discoveryRemovals.length > 0).toBe(!replacement);
+    // #1280: the replacement flag decides the HA cleanup and nothing else. A removal
+    // with no replacement in this pass can still be a recreate whose new container
+    // the agent has not listed yet, so the controller-set policy is retained too.
     if (!replacement) seed('new');
-    expect(store.getContainerRaw('new')?.updatePolicyOverrides?.snoozeUntil).toBe(
-      replacement ? '2027-01-01T00:00:00.000Z' : undefined,
+    expect(store.getContainerRaw('new')?.updatePolicy?.snoozeUntil).toBe(
+      '2027-01-01T00:00:00.000Z',
     );
   },
 );
+
+// #1280: an inventory pass can sample a recreate between the removal of the old
+// container and the listing of its replacement, exactly like a watcher snapshot.
+describe('removal without a replacement in the same pass (#1280)', () => {
+  const policy = { snoozeUntil: '2027-01-01T00:00:00.000Z' };
+
+  test.each([
+    ['HTTP', false],
+    ['HTTP', true],
+    ['SSE', false],
+    ['SSE', true],
+  ] as const)(
+    '%s removal asks the store to retain the policy only when no replacement is expected (%s)',
+    async (delivery, replacement) => {
+      seed('old', { updatePolicyOverrides: policy });
+      const deleted = vi.spyOn(store, 'deleteContainer');
+      const pending = inventory.refresh('docker', 'local');
+      if (delivery === 'SSE') frame('removed', { id: 'old', replacementExpected: replacement });
+      resolve(result(replacement ? [remote('new')] : [], { removedIds: ['old'] }));
+      await pending;
+      expect(deleted).toHaveBeenCalledTimes(1);
+      expect(deleted).toHaveBeenCalledWith('old', {
+        replacementExpected: replacement,
+        retainUpdatePolicy: !replacement,
+        context: { ...context(), source: { type: 'docker', name: 'local', agent: 'edge' } },
+      });
+    },
+  );
+
+  test.each(['HTTP', 'SSE'] as const)(
+    'hands the policy to the replacement a later %s pass reports',
+    async (delivery) => {
+      seed('old', { updatePolicyOverrides: policy });
+      const removed = vi.fn();
+      event.registerContainerRemoved(removed);
+      const first = inventory.refresh('docker', 'local');
+      if (delivery === 'SSE') frame('removed', { id: 'old', replacementExpected: false });
+      resolve(result([], { removedIds: ['old'] }));
+      await first;
+      expect(store.getContainerRaw('old')).toBeUndefined();
+      expect(removed.mock.calls[0][0].replacementExpected).toBe(false);
+
+      const second = inventory.refresh('docker', 'local');
+      if (delivery === 'SSE') frame('added', remote('new'));
+      resolve(result([remote('new')]));
+      expect(await second).toMatchObject({ authoritative: true, errors: [] });
+
+      expect(store.getContainerRaw('new')?.updatePolicyOverrides).toEqual(policy);
+      expect(store.getContainerRaw('new')?.updatePolicy).toEqual(policy);
+      expect(store._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    },
+  );
+
+  test('does not hand the policy to a container with a different name', async () => {
+    seed('old', { updatePolicyOverrides: policy });
+    const first = inventory.refresh('docker', 'local');
+    resolve(result([], { removedIds: ['old'] }));
+    await first;
+
+    const second = inventory.refresh('docker', 'local');
+    resolve(result([remote('other', { name: 'redis' })]));
+    await second;
+
+    expect(store.getContainerRaw('other')?.updatePolicy).toBeUndefined();
+  });
+
+  test.each(['HTTP', 'SSE'] as const)(
+    'a late %s removal stashes nothing when the replacement is already stored',
+    async (delivery) => {
+      seed('old', { updatePolicyOverrides: policy });
+      // The replacement reached the controller first, as a real-time dd:container-added,
+      // and inherited the policy from its still-stored predecessor.
+      seed('new');
+      expect(store.getContainerRaw('new')?.updatePolicy).toEqual(policy);
+
+      const pending = inventory.refresh('docker', 'local');
+      if (delivery === 'SSE') frame('removed', { id: 'old', replacementExpected: false });
+      resolve(result([], { removedIds: ['old'] }));
+      await pending;
+
+      expect(store.getContainerRaw('old')).toBeUndefined();
+      expect(store.getContainerRaw('new')?.updatePolicy).toEqual(policy);
+      expect(store._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    },
+  );
+});
 
 test.each([undefined, 'true', 1])(
   'does not treat an untrusted replacement hint %j as true',

@@ -1494,6 +1494,72 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.displayName).toBe('Friendly Service');
   });
 
+  test('does not persist Drydock’s own rollback rename over the stored name (#1280)', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      error: undefined,
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        name: 'acme/service',
+        id: 'image-old',
+        digest: { repo: 'sha256:old', value: 'sha256:old' },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher } = createWatcher({
+      configuration: { watchevents: true },
+    });
+
+    // A full scan that lists the outgoing container between the update executor's
+    // `-old-<timestamp>` rename and its cleanup.
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ Names: ['/service-old-1752019200000'] }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toBe(containerInStore);
+    expect(containerInStore.name).toBe('service');
+    expect(containerInStore.displayName).toBe('service');
+  });
+
+  test('still follows a rename to a rollback-shaped name that is not this container’s own', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      error: undefined,
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        name: 'acme/service',
+        id: 'image-old',
+        digest: { repo: 'sha256:old', value: 'sha256:old' },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher } = createWatcher({
+      configuration: { watchevents: true },
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ Names: ['/other-old-1752019200000'] }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(containerInStore.name).toBe('other-old-1752019200000');
+  });
+
   test('throws a clear error when image inspection fails for a new container', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 
