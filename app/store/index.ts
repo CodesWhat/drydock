@@ -21,6 +21,7 @@ import * as approval from './approval.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
+import * as groupPolicy from './group-policy.js';
 import * as mqttHass from './mqtt-hass.js';
 import * as nameBindings from './name-bindings.js';
 import * as notification from './notification.js';
@@ -154,6 +155,9 @@ function createCollections(): void {
   approval.createCollections(sqliteDb as Database);
   audit.createCollections(sqliteDb as Database);
   backup.createCollections(sqliteDb as Database);
+  // Spec 7.3: every container write reads the group policy cache, so it is loaded before
+  // anything below (startup repairs included) can write a container.
+  groupPolicy.createCollections(sqliteDb as Database);
   container.createCollections(sqliteDb as Database);
   // #556: the update-lifecycle-cache collection must exist before rehydration
   // repopulates container.ts's in-memory Map from it.
@@ -176,6 +180,9 @@ function createCollections(): void {
   // roadmap 7-STORE slice 10 — MQTT identity cut one-shot marker.
   mqttHass.createCollections(sqliteDb as Database);
   app.completeStartupInitialization();
+  // Spec 7.3: after every collection and any first-start import, heal group-policy
+  // snapshots a crash or a downgrade left stale. A no-op with zero policies.
+  container.reconcileGroupPolicySnapshots();
 }
 
 async function migrateSbomsOffHeap(): Promise<void> {
