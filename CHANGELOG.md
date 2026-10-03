@@ -107,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep bulk scan counts and scanner results accurate when a post-scan notification fails. Each completed task is counted once, and notification delivery failures no longer replace a completed scan's status with an error.
+- Keep bulk scan progress accurate for large fleets and busy event streams while HTTP acceptance is delayed. Fresh request correlation and server-owned cumulative counts replace the 500-entry early-event buffer, with bounded client state and explicit recovery for conflicting or lost progress. Duplicate/replayed events do not overcount, and failed tasks still advance progress.
+- Correlate bulk security scan progress by accepted cycle and container, retaining early completions and ignoring unrelated or duplicate events. Request failures and scan/image counts now use localized text. Lost progress requires an explicit successful read-only results refresh before another scan; it neither cancels accepted work nor proves the server scan has finished.
 - Update Harden Runner to 2.21.1 so block-mode CI includes the GitHub runner control-plane endpoints added upstream. Existing egress policies, endpoint restrictions and workflow permissions stay unchanged.
 - Apply the configured outbound HTTP timeout to Docker Hub publish-date metadata requests, so a stalled response cannot indefinitely hold up container discovery. Existing bounded retries and publish-date failure handling are unchanged.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
