@@ -241,7 +241,9 @@ async function getContainerTriggersWithReasons(containerId: string): Promise<{
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.triggers.toasts.loadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
   const envelope = payload as { unassociatedTriggers?: unknown };
@@ -291,7 +293,7 @@ async function getContainerUpdateOperations(
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to get update operations for container ${containerId}: ${response.statusText}`,
+      `${i18n.global.t('containerComponents.backups.operationHistoryLoadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   const payload = await readJsonResponse(response, 'Container update operations API');

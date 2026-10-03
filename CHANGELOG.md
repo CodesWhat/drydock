@@ -107,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Container Stats only shows Live after its stream opens, disables Pause when no stream exists, and clears stale connection feedback during reconnect. Closing the panel or switching containers retires pending reads and old stream callbacks so they cannot reopen or overwrite the selected container's stats.
+- Container stats, trigger-list and update-history HTTP failures use the selected language while preserving container identity, status codes and server reason text. Stats offers a read-only Retry button after a failed load.
+- Trigger tests show a translated failure and HTTP status for JSON `null` or unusable error messages instead of a JavaScript exception. Provider diagnostics, successful responses and execution routing are unchanged; failed tests are not retried automatically.
 - Keep bulk scan counts and scanner results accurate when a post-scan notification fails. Each completed task is counted once, and notification delivery failures no longer replace a completed scan's status with an error.
 - Keep bulk scan progress accurate for large fleets and busy event streams while HTTP acceptance is delayed. Fresh request correlation and server-owned cumulative counts replace the 500-entry early-event buffer, with bounded client state and explicit recovery for conflicting or lost progress. Duplicate/replayed events do not overcount, and failed tasks still advance progress.
 - Correlate bulk security scan progress by accepted cycle and container, retaining early completions and ignoring unrelated or duplicate events. Request failures and scan/image counts now use localized text. Lost progress requires an explicit successful read-only results refresh before another scan; it neither cancels accepted work nor proves the server scan has finished.

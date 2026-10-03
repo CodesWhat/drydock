@@ -1,3 +1,4 @@
+import { i18n } from '@/boot/i18n';
 import {
   type ContainerGroup,
   deleteContainer,
@@ -459,11 +460,12 @@ describe('Container Service', () => {
     it('throws when fetching triggers fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 404,
         statusText: 'Not Found',
       } as any);
 
       await expect(getContainerTriggersWithReasons('c1')).rejects.toThrow(
-        'Failed to get triggers for container c1: Not Found',
+        `${i18n.global.t('containerComponents.triggers.toasts.loadFailed')} (c1) (HTTP 404): Not Found`,
       );
     });
   });
@@ -875,11 +877,12 @@ describe('Container Service', () => {
     it('throws when fetching update operations fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 502,
         statusText: 'Bad Gateway',
       } as any);
 
       await expect(getContainerUpdateOperations('c1')).rejects.toThrow(
-        'Failed to get update operations for container c1: Bad Gateway',
+        `${i18n.global.t('containerComponents.backups.operationHistoryLoadFailed')} (c1) (HTTP 502): Bad Gateway`,
       );
     });
   });
