@@ -1,7 +1,7 @@
 {
   "name": "drydock-ui",
   "version": "1.7.0",
-  "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
+  "description": "Drydock dashboard \u2014 Vue 3 + Tailwind CSS 4 SPA",
   "repository": "CodesWhat/drydock",
   "engines": {
     "node": ">=24.0.0"
@@ -66,8 +66,8 @@
     "vitest": "4.1.11"
   },
   "overrides": {
-    "brace-expansion": "5.0.9",
-    "fast-uri": "4.1.4",
+    "brace-expansion": "5.0.12",
+    "fast-uri": "4.1.5",
     "js-cookie": "3.0.8",
     "minimatch": "10.2.6",
     "picomatch": "4.0.7",

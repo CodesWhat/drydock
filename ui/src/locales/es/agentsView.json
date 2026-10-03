@@ -71,6 +71,7 @@
         "agent": "Agente",
         "host": "Servidor",
         "agentVersion": "Versión del agente",
+        "agentBuild": "Compilación del agente",
         "logLevel": "Nivel de registro",
         "pollInterval": "Intervalo de sondeo",
         "dockerSocket": "Socket de Docker",

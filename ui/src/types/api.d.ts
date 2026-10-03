@@ -21,6 +21,7 @@ export interface ApiAgent {
   port?: number;
   connected: boolean;
   version?: string;
+  build?: string;
   os?: string;
   arch?: string;
   cpus?: number;

@@ -76,6 +76,7 @@
       },
       "fields": {
         "version": "Версия",
+        "build": "Сборка",
         "serverPort": "Порт сервера",
         "containerActions": "Действия с контейнерами",
         "webhook": "Webhook",

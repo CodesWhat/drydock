@@ -1,4 +1,5 @@
 import { getVersion } from '../../configuration/index.js';
+import { deriveVersionIdentity } from '../../configuration/version-identity.js';
 import { SESSION_COOKIE_NAME } from '../session-cookie.js';
 import { openApiPaths } from './paths/index.js';
 import { openApiSchemas } from './schemas.js';
@@ -7,7 +8,7 @@ export const openApiDocument = {
   openapi: '3.1.0',
   info: {
     title: 'Drydock API',
-    version: getVersion(),
+    version: deriveVersionIdentity(getVersion()).version,
     description:
       'Machine-readable API specification for Drydock. Canonical API base path is /api/v1 — the unversioned /api/* alias was removed in v1.6.0 (see DEPRECATIONS.md) and now returns 410 Gone, aside from the flag-gated wud-card compatibility endpoints and a small set of standalone auth aliases documented individually below. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
   },
