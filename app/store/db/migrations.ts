@@ -10,7 +10,7 @@
 
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
-import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL } from './schema.js';
+import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL, TOTP_TABLES_SQL } from './schema.js';
 
 const log = logger.child({ component: 'store.db' });
 
@@ -20,6 +20,14 @@ export interface Migration {
   note: string;
   sql: string;
 }
+
+/**
+ * Versions 7 (dependency_config), 8 (group policies) and 9 (label overrides)
+ * are reserved by branches that land ahead of this one. The runner applies
+ * whichever versions are missing from schema_migrations and does not require a
+ * contiguous list, so 10 is safe to ship first.
+ */
+export const TOTP_MIGRATION_VERSION = 10;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -90,6 +98,14 @@ ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
     // the rows of one watcher on one agent and needs no sort step.
     note: 'index containers by watcher and agent for the identity-sibling lookup (#1280)',
     sql: "CREATE INDEX containers_watcher_agent ON containers(watcher, COALESCE(agent, ''));",
+  },
+  {
+    version: TOTP_MIGRATION_VERSION,
+    // Spec 11.1.2 slice 1: encrypted TOTP seeds, pending enrollments, hashed
+    // recovery codes and the per-subject version counter. Inert until the
+    // login and management slices use them.
+    note: 'add TOTP factor, enrollment, recovery code and subject version tables (spec 11.1.2 slice 1)',
+    sql: TOTP_TABLES_SQL,
   },
 ];
 

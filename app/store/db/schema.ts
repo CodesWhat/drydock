@@ -380,6 +380,84 @@ CREATE TABLE sessions (
 CREATE INDEX sessions_expires ON sessions(expires_at);
 `;
 
+/**
+ * TOTP two-factor storage (spec 11.1.2, slice 1), created by a later migration
+ * rather than the initial schema. Seeds are stored AES-GCM encrypted and
+ * recovery codes only as SHA-256 digests; nothing here holds a usable secret.
+ *
+ * totp_subject_versions is a fourth table beyond the spec's three. A subject's
+ * factor version must keep counting through removal (a removed factor leaves no
+ * row), otherwise a session minted before the removal would match version 0
+ * again. It holds one integer per subject and no secret.
+ */
+export const TOTP_TABLES_SQL = `
+CREATE TABLE totp_factors (
+  factor_id             TEXT PRIMARY KEY,
+  schema_version        INTEGER NOT NULL,
+  subject_id            TEXT NOT NULL UNIQUE,
+  provider_id           TEXT NOT NULL,
+  username              TEXT NOT NULL,
+  factor_version        INTEGER NOT NULL,
+  encryption_key_id     TEXT NOT NULL,
+  secret_nonce          TEXT NOT NULL,
+  secret_ciphertext     TEXT NOT NULL,
+  secret_auth_tag       TEXT NOT NULL,
+  algorithm             TEXT NOT NULL,
+  digits                INTEGER NOT NULL,
+  period_seconds        INTEGER NOT NULL,
+  allowed_skew_steps    INTEGER NOT NULL,
+  created_at            TEXT NOT NULL,
+  activated_at          TEXT NOT NULL,
+  updated_at            TEXT NOT NULL,
+  last_accepted_counter INTEGER,
+  recovery_generation   INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE totp_enrollments (
+  enrollment_id           TEXT PRIMARY KEY,
+  schema_version          INTEGER NOT NULL,
+  subject_id              TEXT NOT NULL UNIQUE,
+  provider_id             TEXT NOT NULL,
+  username                TEXT NOT NULL,
+  expected_factor_version INTEGER NOT NULL,
+  replaces_factor_id      TEXT,
+  encryption_key_id       TEXT NOT NULL,
+  secret_nonce            TEXT NOT NULL,
+  secret_ciphertext       TEXT NOT NULL,
+  secret_auth_tag         TEXT NOT NULL,
+  created_at              TEXT NOT NULL,
+  expires_at              TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE totp_recovery_codes (
+  code_id        TEXT PRIMARY KEY,
+  schema_version INTEGER NOT NULL,
+  factor_id      TEXT NOT NULL REFERENCES totp_factors(factor_id) ON DELETE CASCADE,
+  subject_id     TEXT NOT NULL,
+  generation     INTEGER NOT NULL,
+  code_digest    TEXT NOT NULL,
+  created_at     TEXT NOT NULL,
+  used_at        TEXT,
+  UNIQUE (factor_id, generation, code_digest)
+) STRICT;
+
+CREATE INDEX totp_recovery_codes_factor_generation_used
+  ON totp_recovery_codes(factor_id, generation, used_at);
+
+CREATE TABLE totp_subject_versions (
+  subject_id     TEXT PRIMARY KEY,
+  factor_version INTEGER NOT NULL
+) STRICT;
+`;
+
+/** Every table TOTP_TABLES_SQL creates. */
+export const TOTP_TABLES: readonly string[] = [
+  'totp_enrollments',
+  'totp_factors',
+  'totp_recovery_codes',
+  'totp_subject_versions',
+];
+
 /** Everything the initial migration creates, `schema_migrations` excepted. */
 export const INITIAL_SCHEMA_SQL = [
   STORE_METADATA_SQL,
