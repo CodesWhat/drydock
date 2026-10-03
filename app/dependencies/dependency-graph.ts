@@ -37,7 +37,7 @@ export interface DependencyEdge {
   /** The dependency's node id (must be dispatched first). */
   to: string;
   action: 'update' | 'restart';
-  source: 'label' | 'compose';
+  source: 'label' | 'compose' | 'override';
 }
 
 interface UnresolvedDependencyEdge {

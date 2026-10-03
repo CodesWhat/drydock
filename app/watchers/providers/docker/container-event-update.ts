@@ -3,6 +3,7 @@ import {
   getCanonicalContainerName,
   normalizeContainerHealth,
 } from '../../../model/container.js';
+import { toDeclaredProjection } from '../../../model/label-owned.js';
 import { getErrorMessage } from '../../../util/error.js';
 
 import {
@@ -269,10 +270,15 @@ function areLabelsEqual(labelsA: Record<string, string>, labelsB: Record<string,
 }
 
 export function updateContainerFromInspect(
-  containerFound: Container,
+  containerStored: Container,
   containerInspect: unknown,
   dependencies: UpdateContainerFromInspectDependencies,
 ) {
+  // Spec 7.5: re-derive label fields from what the watcher declared, not from the
+  // effective values a Drydock override may have put on the stored record. Otherwise an
+  // override reads as a watcher-side change on every event, and a display-name override
+  // stops rename tracking, which compares the stored display name to the old name.
+  const containerFound = toDeclaredProjection(containerStored);
   const dockerContainerInspect = containerInspect as DockerContainerInspectLike;
   const newStatus = dockerContainerInspect.State.Status;
   const newHealth = normalizeContainerHealth(dockerContainerInspect.State.Health?.Status);

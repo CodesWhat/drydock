@@ -151,6 +151,7 @@ const {
       updateContainer: vi.fn(),
       rehydrateUpdateLifecycleCacheFromStore: vi.fn(),
       rehydrateUpdatePolicyRetentionCacheFromStore: vi.fn(),
+      reconcileGroupPolicySnapshots: vi.fn(),
       ...overrides,
     };
   }
@@ -212,6 +213,8 @@ const {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', () => createContainerMock(overrides.container));
+    vi.doMock('./group-policy', createCollectionsMock);
+    vi.doMock('./label-override', createCollectionsMock);
     vi.doMock('./mqtt-hass', createCollectionsMock);
     vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createNotificationMock);
@@ -262,6 +265,8 @@ vi.mock('./approval', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createContainerMock);
+vi.mock('./group-policy', createCollectionsMock);
+vi.mock('./label-override', createCollectionsMock);
 vi.mock('./mqtt-hass', createCollectionsMock);
 vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createNotificationMock);
@@ -363,6 +368,23 @@ describe('Store Module', () => {
     expect(
       container.rehydrateUpdatePolicyRetentionCacheFromStore.mock.invocationCallOrder[0],
     ).toBeLessThan(app.completeStartupInitialization.mock.invocationCallOrder[0]);
+
+    // Spec 7.3: the group policy cache is loaded before startup repairs can write a
+    // container, and stale group-policy snapshots are reconciled once every collection
+    // (and any first-start import) is in place.
+    const groupPolicy = await import('./group-policy.js');
+    expect(groupPolicy.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      app.completeStartupInitialization.mock.invocationCallOrder[0],
+    );
+    expect(app.completeStartupInitialization.mock.invocationCallOrder[0]).toBeLessThan(
+      container.reconcileGroupPolicySnapshots.mock.invocationCallOrder[0],
+    );
+
+    // Spec 7.5: label overrides are loaded before the container collection can write.
+    const labelOverride = await import('./label-override.js');
+    expect(labelOverride.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      container.createCollections.mock.invocationCallOrder[0],
+    );
   });
 
   test('should run the first-start import before opening the SQLite database', async () => {

@@ -22,11 +22,15 @@ export interface Migration {
 }
 
 /**
- * Versions 7 (dependency_config), 8 (group policies) and 9 (label overrides)
- * are reserved by branches that land ahead of this one. The runner applies
- * whichever versions are missing from schema_migrations and does not require a
- * contiguous list, so 10 is safe to ship first.
+ * Spec 7.3 group policies. Named so the tests reference the number through this one
+ * constant: a branch that lands another migration first renumbers this line only.
  */
+export const GROUP_POLICIES_MIGRATION_VERSION = 8;
+
+/** Spec 7.5 label-owned overrides. Always one past the group policies migration. */
+export const LABEL_OVERRIDES_MIGRATION_VERSION = 9;
+
+/** Spec 11.1.2 TOTP: factor, enrollment, recovery code and subject version tables. */
 export const TOTP_MIGRATION_VERSION = 10;
 
 export const MIGRATIONS: readonly Migration[] = [
@@ -98,6 +102,75 @@ ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
     // the rows of one watcher on one agent and needs no sort step.
     note: 'index containers by watcher and agent for the identity-sibling lookup (#1280)',
     sql: "CREATE INDEX containers_watcher_agent ON containers(watcher, COALESCE(agent, ''));",
+  },
+  {
+    version: 7,
+    // Spec 7.5 slice 1: the containers table shipped with no home for
+    // `dependsOn`/`dependsOnSource`/`dependsOnAction`, so every read dropped
+    // them and the dependency graph, list-view edges and batch waves saw no
+    // edges. They are read together and never queried on their own, so they
+    // share one grouped JSON column like trigger_config. Nullable: a row
+    // written before this migration reads back with no dependencies until the
+    // next watch cycle or event writes them.
+    note: 'add containers.dependency_config (spec 7.5 slice 1)',
+    sql: 'ALTER TABLE containers ADD COLUMN dependency_config TEXT;',
+  },
+  {
+    version: GROUP_POLICIES_MIGRATION_VERSION,
+    // Spec 7.3: one Drydock-owned policy per exact group name. group_name is a column
+    // because the store looks policies up by it; BINARY collation keeps the match
+    // case-sensitive and untrimmed, the #1251 group identity rule. The two bodies are
+    // JSON ('{}' when empty) because nothing queries inside them. id is a random UUID,
+    // the API path key, since group names are not URL-safe.
+    //
+    // containers.group_policy is the snapshot of the policy a container's last write
+    // applied, NULL when none did. It lets a container response explain its effective
+    // policy from one write, and lets startup reconciliation find drift without a join.
+    note: 'add group_policies and containers.group_policy (spec 7.3 group policies)',
+    sql: `
+CREATE TABLE group_policies (
+  id            TEXT PRIMARY KEY,
+  group_name    TEXT NOT NULL UNIQUE,
+  revision      INTEGER NOT NULL CHECK (revision >= 1),
+  update_policy TEXT NOT NULL,
+  actions       TEXT NOT NULL,
+  created_at    TEXT NOT NULL,
+  created_by    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  updated_by    TEXT NOT NULL
+) STRICT;
+ALTER TABLE containers ADD COLUMN group_policy TEXT;
+`,
+  },
+  {
+    version: LABEL_OVERRIDES_MIGRATION_VERSION,
+    // Spec 7.5: durable Drydock overrides of the label-owned container fields, one row per
+    // container identity (deriveContainerIdentityKey over the canonical name, so every
+    // Compose replica of a service shares a row and a recreate under a new Docker id
+    // finds it again). Nothing expires: unlike the update-policy retention stash, a row
+    // lives until someone resets it. fields is JSON and never '{}', the row being deleted
+    // when its last field is removed. id is a random UUID, the API handle.
+    //
+    // containers.label_owned is the declared layer behind a container's effective
+    // label-owned fields, plus where each effective value came from. NULL until an
+    // override has ever applied to the row, and a NULL row's flat fields are pristine.
+    note: 'add container_label_overrides and containers.label_owned (spec 7.5 label overrides)',
+    sql: `
+CREATE TABLE container_label_overrides (
+  id         TEXT PRIMARY KEY,
+  scope_key  TEXT NOT NULL UNIQUE,
+  agent      TEXT NOT NULL DEFAULT '',
+  watcher    TEXT NOT NULL,
+  scope_kind TEXT NOT NULL CHECK (scope_kind IN ('container', 'compose-service')),
+  scope_name TEXT NOT NULL,
+  fields     TEXT NOT NULL,
+  revision   INTEGER NOT NULL CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+CREATE INDEX container_label_overrides_watcher_agent ON container_label_overrides(watcher, agent);
+ALTER TABLE containers ADD COLUMN label_owned TEXT;
+`,
   },
   {
     version: TOTP_MIGRATION_VERSION,

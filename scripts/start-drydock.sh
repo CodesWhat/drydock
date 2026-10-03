@@ -69,6 +69,7 @@ DOCKER_ARGS=(
 	--env DD_NOTIFICATION_MOCK_EXAMPLE_MOCK=mock
 	--env DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
 	--env DD_WATCHER_LOCAL_JITTER=0
+	--env DD_LOG_LEVEL=debug
 )
 
 # ECR — dummy credentials are fine (no retry logic, fast 401)

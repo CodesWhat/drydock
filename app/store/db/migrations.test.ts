@@ -1,7 +1,10 @@
 import { createMemoryDatabase } from '../../test/sqlite-db.js';
 import type { Database } from './driver.js';
+import { StoreConstraintError } from './driver.js';
 import {
+  GROUP_POLICIES_MIGRATION_VERSION,
   getAppliedSchemaVersions,
+  LABEL_OVERRIDES_MIGRATION_VERSION,
   MIGRATIONS,
   migrate,
   TOTP_MIGRATION_VERSION,
@@ -104,5 +107,154 @@ describe('store/db/migrations', () => {
         .prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'table' AND name = 'ok'")
         .get(),
     ).toEqual({ n: 0 });
+  });
+
+  describe('group policies migration', () => {
+    const insertPolicy = (database: Database, id: string, group: string, revision = 1) =>
+      database
+        .prepare(
+          `INSERT INTO group_policies
+             (id, group_name, revision, update_policy, actions, created_at, created_by, updated_at, updated_by)
+           VALUES (?, ?, ?, '{}', '{}', 'now', 'user:admin', 'now', 'user:admin')`,
+        )
+        .run(id, group, revision);
+
+    test('is appended after every earlier version and applies exactly once', () => {
+      const versions = MIGRATIONS.map((migration) => migration.version);
+      expect(versions.filter((version) => version > GROUP_POLICIES_MIGRATION_VERSION)).toEqual([
+        LABEL_OVERRIDES_MIGRATION_VERSION,
+        TOTP_MIGRATION_VERSION,
+      ]);
+      expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
+      expect(migrate(db)).toEqual([]);
+      expect(
+        db
+          .prepare('SELECT COUNT(*) AS n FROM schema_migrations WHERE version = ?')
+          .get(GROUP_POLICIES_MIGRATION_VERSION),
+      ).toEqual({ n: 1 });
+    });
+
+    test('creates a STRICT group_policies table keyed by an exact-case unique group name', () => {
+      migrate(db);
+      const tableSql = String(
+        db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'group_policies'").get()?.sql,
+      );
+      expect(tableSql).toContain('STRICT');
+
+      insertPolicy(db, 'policy-lower', 'payments');
+      insertPolicy(db, 'policy-upper', 'Payments');
+      insertPolicy(db, 'policy-padded', ' payments ');
+      expect(() => insertPolicy(db, 'policy-duplicate', 'payments')).toThrow(
+        expect.objectContaining({ code: 'SQLITE_CONSTRAINT_UNIQUE' }),
+      );
+      expect(
+        db
+          .prepare('SELECT group_name FROM group_policies ORDER BY id')
+          .all()
+          .map((row) => row.group_name),
+      ).toEqual(['payments', ' payments ', 'Payments']);
+    });
+
+    test('rejects a revision below 1 and a body of the wrong type', () => {
+      migrate(db);
+      expect(() => insertPolicy(db, 'policy-zero', 'payments', 0)).toThrow(StoreConstraintError);
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO group_policies
+               (id, group_name, revision, update_policy, actions, created_at, created_by, updated_at, updated_by)
+             VALUES ('policy-typed', 'payments', 'one', '{}', '{}', 'now', 'u', 'now', 'u')`,
+          )
+          .run(),
+      ).toThrow(StoreConstraintError);
+    });
+
+    test('adds a nullable containers.group_policy column to an existing database in place', () => {
+      migrate(
+        db,
+        MIGRATIONS.filter((migration) => migration.version < GROUP_POLICIES_MIGRATION_VERSION),
+      );
+      db.prepare(
+        `INSERT INTO containers (id, identity_key, name, display_name, status, watcher, image_name, image_tag_value, image)
+         VALUES ('existing', '::local::existing', 'existing', 'existing', 'running', 'local', 'library/web', '1', '{}')`,
+      ).run();
+
+      expect(migrate(db)).toEqual([
+        GROUP_POLICIES_MIGRATION_VERSION,
+        LABEL_OVERRIDES_MIGRATION_VERSION,
+        TOTP_MIGRATION_VERSION,
+      ]);
+      expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
+        { group_policy: null },
+      );
+    });
+  });
+  describe('label overrides migration', () => {
+    const insertOverride = (
+      database: Database,
+      id: string,
+      scopeKey: string,
+      overrides: { kind?: string; revision?: number } = {},
+    ) =>
+      database
+        .prepare(
+          `INSERT INTO container_label_overrides
+             (id, scope_key, agent, watcher, scope_kind, scope_name, fields, revision, created_at, updated_at)
+           VALUES (?, ?, '', 'local', ?, 'web', '{}', ?, 'now', 'now')`,
+        )
+        .run(id, scopeKey, overrides.kind ?? 'container', overrides.revision ?? 1);
+
+    test('is appended after the group policies migration and applies exactly once', () => {
+      expect(
+        MIGRATIONS.find((migration) => migration.version > GROUP_POLICIES_MIGRATION_VERSION)
+          ?.version,
+      ).toBe(LABEL_OVERRIDES_MIGRATION_VERSION);
+      expect(LABEL_OVERRIDES_MIGRATION_VERSION).toBe(GROUP_POLICIES_MIGRATION_VERSION + 1);
+      expect(migrate(db)).toContain(LABEL_OVERRIDES_MIGRATION_VERSION);
+      expect(migrate(db)).toEqual([]);
+    });
+
+    test('creates a STRICT table with a unique scope key, a scope kind and a revision floor', () => {
+      migrate(db);
+      expect(
+        String(
+          db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'container_label_overrides'").get()
+            ?.sql,
+        ),
+      ).toContain('STRICT');
+      insertOverride(db, 'one', '::local::web');
+      expect(() => insertOverride(db, 'two', '::local::web')).toThrow(
+        expect.objectContaining({ code: 'SQLITE_CONSTRAINT_UNIQUE' }),
+      );
+      expect(() => insertOverride(db, 'three', '::local::api', { kind: 'pod' })).toThrow(
+        StoreConstraintError,
+      );
+      expect(() => insertOverride(db, 'four', '::local::api', { revision: 0 })).toThrow(
+        StoreConstraintError,
+      );
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_schema WHERE name = 'container_label_overrides_watcher_agent'",
+          )
+          .get(),
+      ).toEqual({ name: 'container_label_overrides_watcher_agent' });
+    });
+
+    test('adds a nullable containers.label_owned column to an existing database in place', () => {
+      migrate(
+        db,
+        MIGRATIONS.filter((migration) => migration.version < LABEL_OVERRIDES_MIGRATION_VERSION),
+      );
+      db.prepare(
+        `INSERT INTO containers (id, identity_key, name, display_name, status, watcher, image_name, image_tag_value, image)
+         VALUES ('existing', '::local::existing', 'existing', 'existing', 'running', 'local', 'library/web', '1', '{}')`,
+      ).run();
+
+      expect(migrate(db)).toEqual([LABEL_OVERRIDES_MIGRATION_VERSION, TOTP_MIGRATION_VERSION]);
+      expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
+        label_owned: null,
+      });
+    });
   });
 });
