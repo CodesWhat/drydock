@@ -8,8 +8,8 @@
     "password": {
       "label": "密码",
       "placeholder": "请输入密码",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "显示密码",
+      "hide": "隐藏密码"
     },
     "submit": {
       "signIn": "登录",

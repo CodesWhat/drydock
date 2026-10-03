@@ -109,6 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Container dependency settings (`dd.depends_on`, `dd.depends_on.action` and compose `depends_on`) were dropped by the 1.8 SQLite store and are now kept, so dependency-ordered updates, list-view dependency counts and the dependency graph work again. Containers imported from a 1.7 store keep their dependencies too.
+- The login password visibility button now uses localized screen-reader labels in every supported language. Showing, hiding, and switching languages preserve the entered value and never submit the form.
+- Stop the dashboard from showing a connected Local Docker host when no local watcher is configured. Agent-only fleets show only their configured agents.
 - Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.
 - Shared yes/no options, unnamed custom-registry labels, the missing-profile caption and paused/offline log states now translate in the remaining 13 languages, without changing submitted boolean values, registry or user identities, or raw log messages.
 - Maintenance-window state captions, maturity-cleared audit labels and the synthetic container name in test notifications now translate in all supported languages. Spanish maintenance captions describe the current state rather than an action; schedules, audit identities and trigger routing stay unchanged.
