@@ -53,6 +53,7 @@ describe('Agent Router', () => {
         isConnected: true,
         info: {
           version: '1.5.0',
+          build: '1.5.0-rc.9',
           os: 'linux',
           arch: 'x64',
           cpus: 8,
@@ -88,6 +89,7 @@ describe('Agent Router', () => {
           port: 3000,
           connected: true,
           version: '1.5.0',
+          build: '1.5.0-rc.9',
           os: 'linux',
           arch: 'x64',
           cpus: 8,
