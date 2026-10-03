@@ -94,7 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Docker 컨테이너 업데이트 관리자",
-        "build": "빌드 {build}",
+        "build": "빌드",
         "documentation": "문서",
         "github": "GitHub",
         "changelog": "변경 이력",
