@@ -28,6 +28,8 @@
       "description": "No images match the current filters."
     },
     "prune": {
+      "previewLoadFailed": "Failed to load prune preview",
+      "requestFailed": "Failed to prune images",
       "dangling": "Prune dangling",
       "unused": "Prune unused",
       "confirm": {

@@ -71,7 +71,7 @@
       "agent-disconnect": "Ajan Bağlantı Kesimi",
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
       "security-alert": "Güvenlik Uyarısı",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Bekleme süresi doldu",
       "image-prune": "İmaj Temizleme"
     },
     "target": {
@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Tarama başlatılamadı.",
+    "scanProgressUnavailable": "Tarama ilerlemesi kullanılamıyor. Kabul edilen taramalar hâlâ devam ediyor olabilir. Başka bir tarama başlatmadan önce sonuçları yenileyin.",
     "loadingVulnerabilityData": "Güvenlik açığı verileri yükleniyor...",
     "runtimeLoadError": "Güvenlik çalışma zamanı durumu yüklenemedi",
     "scanNow": "Şimdi tara",
@@ -211,8 +213,8 @@
       "clean": "Temiz"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "imajlar",
+      "scanned": "tarandı"
     },
     "fixableBadge": "{count} düzeltme",
     "delta": {
@@ -357,7 +359,7 @@
     "filterPlaceholder": "Ada göre filtrele...",
     "clear": "Temizle",
     "emptyFiltered": "Filtrelerinizle eşleşen tetikleyici yok",
-    "testContainerName": "Test Container",
+    "testContainerName": "Test konteyneri",
     "columns": {
       "trigger": "Tetikleyici",
       "type": "Tür",

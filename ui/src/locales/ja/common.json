@@ -15,8 +15,8 @@
     "close": "閉じる",
     "retry": "再試行",
     "unknown": "不明",
-    "yes": "yes",
-    "no": "no",
+    "yes": "はい",
+    "no": "いいえ",
     "errorSummary": {
       "rateLimitHit": "レジストリのレート制限に達しました",
       "accessDenied": "レジストリへのアクセスが拒否されました",
@@ -28,7 +28,7 @@
       "signatureFailed": "署名の検証に失敗しました"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "カスタム"
     },
     "timeAgo": {
       "justNow": "たった今"

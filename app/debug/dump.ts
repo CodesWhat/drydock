@@ -1,5 +1,6 @@
 import { mapComponentsToList } from '../api/component.js';
 import { ddEnvVars, getVersion } from '../configuration/index.js';
+import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type { Container } from '../model/container.js';
 import type { RegistryState } from '../registry/index.js';
 import * as registry from '../registry/index.js';
@@ -315,13 +316,15 @@ export async function collectDebugDump(options: CollectDebugDumpOptions = {}) {
   const containers = storeContainer.getContainers();
   const registryState = registry.getState();
   const dockerWatchers = getDockerWatchers(registryState.watcher);
+  const versionIdentity = deriveVersionIdentity(getVersion());
 
   const dump = {
     metadata: {
       generatedAt: toIsoNow(),
       generatedAtWindowStart: getRecentWindowStartIso(recentMinutes),
       recentMinutes,
-      drydockVersion: getVersion(),
+      drydockVersion: versionIdentity.version,
+      drydockBuild: versionIdentity.build,
       nodeVersion: process.version,
       uptimeSeconds: Math.floor(process.uptime()),
     },

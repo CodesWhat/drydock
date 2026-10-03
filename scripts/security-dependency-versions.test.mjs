@@ -261,3 +261,68 @@ test('the rc.3 changelog records the security dependency refresh', () => {
   assert.match(rc3, /`fast-xml-parser` to 5\.10\.1/);
   assert.match(rc3, /`sharp` dependency to 0\.35\.3/);
 });
+
+const septemberSecurityFloors = {
+  dompurify: { 3: '3.4.16' },
+  axios: { 1: '1.20.0' },
+  'brace-expansion': { 5: '5.0.12' },
+  next: { 16: '16.3.6' },
+  nodemailer: { 10: '10.0.9' },
+  undici: { 7: '7.29.1', 8: '8.10.2' },
+  '@grpc/grpc-js': { 1: '1.14.5' },
+  moment: { 2: '2.31.0' },
+  'fast-uri': { 4: '4.1.5' },
+  'ip-address': { 10: '10.7.1' },
+};
+
+function assertSeptemberSecurityFloors(workspace, lockfile, found) {
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    // A link entry (`link: true`) points at a local package rather than a registry
+    // resolution and carries no version of its own, so there is no floor to check.
+    if (typeof entry.version !== 'string') continue;
+    for (const [name, floors] of Object.entries(septemberSecurityFloors)) {
+      if (!path.endsWith(`node_modules/${name}`)) continue;
+      found.add(name);
+      const floor = floors[Number(entry.version.split('.')[0])];
+      assert.ok(floor, `${workspace}/${path} uses an unvetted major: ${entry.version}`);
+      assert.ok(
+        compareSemver(entry.version, floor) >= 0,
+        `${workspace}/${path}: ${entry.version} < ${floor}`,
+      );
+    }
+  }
+}
+
+test('workspace resolutions include the September runtime security fixes', () => {
+  const found = new Set();
+  for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
+    assertSeptemberSecurityFloors(workspace, readJson(`${workspace}/package-lock.json`), found);
+  }
+  assert.deepEqual([...found].sort(), Object.keys(septemberSecurityFloors).sort());
+});
+
+test('September floor check skips lockfile entries without a version', () => {
+  const found = new Set();
+  assert.doesNotThrow(() =>
+    assertSeptemberSecurityFloors(
+      'fixture',
+      {
+        packages: {
+          'node_modules/axios': { resolved: 'packages/axios', link: true },
+          'node_modules/next': { version: '16.3.6' },
+        },
+      },
+      found,
+    ),
+  );
+  assert.deepEqual([...found], ['next']);
+  assert.throws(
+    () =>
+      assertSeptemberSecurityFloors(
+        'fixture',
+        { packages: { 'node_modules/next': { version: '17.0.0' } } },
+        new Set(),
+      ),
+    /fixture\/node_modules\/next uses an unvetted major: 17\.0\.0/,
+  );
+});

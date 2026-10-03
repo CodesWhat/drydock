@@ -181,7 +181,7 @@ describe('Trigger Service', () => {
       ).rejects.toThrow('Trigger execution failed');
     });
 
-    it('throws "Unknown error" when no error message in response', async () => {
+    it('throws a contextual error when no error message is in the response', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -194,7 +194,7 @@ describe('Trigger Service', () => {
           triggerName: 'hook1',
           container: { id: 'c1' },
         }),
-      ).rejects.toThrow('Unknown error');
+      ).rejects.toThrow('Trigger test failed (HTTP 400)');
     });
 
     it('runs agent-scoped trigger when agent is provided', async () => {

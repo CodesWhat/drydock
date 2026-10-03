@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllTriggers, getTrigger, runTrigger } from '@/services/trigger';
 import TriggersView from '@/views/TriggersView.vue';
@@ -158,6 +159,63 @@ describe('TriggersView', () => {
     mockRunTrigger.mockResolvedValue({ ok: true });
     mockGetTrigger.mockResolvedValue(makeTrigger());
   });
+
+  it.each([
+    ['ar', 'حاوية اختبار'],
+    ['de', 'Testcontainer'],
+    ['es', 'Contenedor de prueba'],
+    ['fr', 'Conteneur de test'],
+    ['it', 'Container di prova'],
+    ['ja', 'テスト用コンテナ'],
+    ['ko', '테스트 컨테이너'],
+    ['nl', 'Testcontainer'],
+    ['pl', 'Kontener testowy'],
+    ['pt-BR', 'Contêiner de teste'],
+    ['ru', 'Тестовый контейнер'],
+    ['tr', 'Test konteyneri'],
+    ['uk', 'Тестовий контейнер'],
+    ['vi', 'Container thử nghiệm'],
+    ['zh-CN', '测试容器'],
+    ['zh-TW', '測試容器'],
+  ] as const)(
+    'localizes only the synthetic test container name in %s on explicit submission',
+    async (locale, name) => {
+      setI18nLocale('en');
+      const trigger = makeTrigger({ name: 'Test Container', agent: 'remote-agent' });
+      mockGetAllTriggers.mockResolvedValue([trigger]);
+      mockGetTrigger.mockResolvedValue(trigger);
+      const wrapper = await mountTriggersView();
+      try {
+        await wrapper.get('.row-click-first').trigger('click');
+        await flushPromises();
+        const reads = mockGetTrigger.mock.calls.length;
+        setI18nLocale(locale);
+        await nextTick();
+        expect(mockRunTrigger).not.toHaveBeenCalled();
+        expect(mockGetTrigger).toHaveBeenCalledTimes(reads);
+        expect(wrapper.text()).toContain('Test Container');
+        const button = findButtonByText(wrapper, i18n.global.t('triggersView.test.testTrigger'));
+        expect(button).toBeDefined();
+        await button!.trigger('click');
+        await flushPromises();
+        expect(mockRunTrigger).toHaveBeenCalledExactlyOnceWith({
+          triggerType: 'slack',
+          triggerName: 'Test Container',
+          triggerAgent: 'remote-agent',
+          container: {
+            id: 'test',
+            name,
+            image: { name: 'test/image', tag: { value: 'latest' } },
+            result: { tag: 'latest' },
+            updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+          },
+        });
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    },
+  );
 
   it('successful load renders trigger rows', async () => {
     const wrapper = await mountTriggersView();

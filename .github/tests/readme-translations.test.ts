@@ -346,67 +346,68 @@ test.each(allReadmes)('%s identifies the published v1.7 candidate', (readme) => 
 
 const notificationRoadmapStatus: Record<
   string,
-  { pending: string; remaining: string; stale: string }
+  { delivered: string; remaining: string; stale: string }
 > = {
   'README.md': {
-    pending: '**In review:** notification-only exact group routing',
+    delivered: 'notification-only exact group routing',
     remaining:
       'broader live configuration and inherited group/action policies need ownership decisions',
     stale: 'broader live configuration and group notification routing need ownership decisions',
   },
   'README.de.md': {
-    pending: '**In Prüfung:** exaktes Gruppenrouting nur für Benachrichtigungen',
+    delivered: 'exaktes Gruppenrouting nur für Benachrichtigungen',
     remaining:
       'Erweiterte Live-Konfiguration und vererbte Gruppen-/Aktionsrichtlinien brauchen Entscheidungen zur Zuständigkeit',
     stale:
       'Erweiterte Live-Konfiguration und Gruppenrouting für Benachrichtigungen brauchen Entscheidungen zur Zuständigkeit',
   },
   'README.es.md': {
-    pending: '**En revisión:** enrutamiento por grupo exacto solo para notificaciones',
+    delivered: 'enrutamiento por grupo exacto solo para notificaciones',
     remaining:
       'La configuración en vivo ampliada y las políticas heredadas de grupos y acciones requieren decisiones sobre quién controla los ajustes',
     stale:
       'La configuración en vivo ampliada y el enrutamiento de notificaciones por grupo requieren decisiones sobre quién controla los ajustes',
   },
   'README.fr.md': {
-    pending: '**En revue :** routage par groupe exact réservé aux notifications',
+    delivered: 'routage par groupe exact réservé aux notifications',
     remaining:
       'La configuration en direct étendue et les politiques héritées des groupes et des actions exigent des décisions sur la propriété des réglages',
     stale:
       'La configuration en direct étendue et le routage des notifications par groupe exigent des décisions sur la propriété des réglages',
   },
   'README.pl.md': {
-    pending: '**W przeglądzie:** routing według dokładnej grupy tylko dla powiadomień',
+    delivered: 'routing według dokładnej grupy tylko dla powiadomień',
     remaining:
       'Szersza konfiguracja na żywo i dziedziczone polityki grup oraz akcji wymagają decyzji o zarządzaniu ustawieniami',
     stale:
       'Szersza konfiguracja na żywo i routing powiadomień według grup wymagają decyzji o zarządzaniu ustawieniami',
   },
   'README.pt-BR.md': {
-    pending: '**Em revisão:** roteamento por grupo exato apenas para notificações',
+    delivered: 'roteamento por grupo exato apenas para notificações',
     remaining:
       'A configuração ao vivo ampliada e as políticas herdadas de grupos e ações precisam de decisões sobre quem controla os ajustes',
     stale:
       'A configuração ao vivo ampliada e o roteamento de notificações por grupo precisam de decisões sobre quem controla os ajustes',
   },
   'README.zh-CN.md': {
-    pending: '**审核中：** 仅用于通知的精确分组路由',
+    delivered: '仅用于通知的精确分组路由',
     remaining: '更广泛的实时配置以及分组和操作的继承策略仍需确定设置归属',
     stale: '更广泛的实时配置和分组通知路由需要确定设置归属',
   },
 };
 
 test.each(allReadmes)(
-  '%s separates approved notification routing from remaining ownership decisions',
+  '%s separates implemented notification routing from remaining ownership decisions',
   (readme) => {
     const row =
       readFileSync(`${repoRoot}/${readme}`, 'utf8')
         .split('\n')
         .find((line) => line.startsWith('| **v1.8.0**')) ?? '';
     const status = notificationRoadmapStatus[readme];
-    expect(row).toContain(status.pending);
+    expect(row).toContain(status.delivered);
     expect(row).toContain('[#1251](https://github.com/CodesWhat/drydock/pull/1251)');
     expect(row).toContain(status.remaining);
+    expect(row.indexOf(status.delivered)).toBeLessThan(row.indexOf(status.remaining));
     expect(row).not.toContain(status.stale);
     expect(row).toContain('`dev/v1.8`');
     expect(row).toContain('TOTP');

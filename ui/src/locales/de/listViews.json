@@ -71,7 +71,7 @@
       "agent-disconnect": "Agent getrennt",
       "notification-delivery-failed": "Benachrichtigung fehlgeschlagen",
       "security-alert": "Sicherheitswarnung",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Reifezeit abgelaufen",
       "image-prune": "Image-Bereinigung"
     },
     "target": {
@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Der Scan konnte nicht gestartet werden.",
+    "scanProgressUnavailable": "Der Scanfortschritt ist nicht verfügbar. Angenommene Scans laufen möglicherweise noch. Aktualisieren Sie die Ergebnisse, bevor Sie einen weiteren Scan starten.",
     "loadingVulnerabilityData": "Schwachstellendaten werden geladen...",
     "runtimeLoadError": "Sicherheits-Runtime-Status konnte nicht geladen werden",
     "scanNow": "Jetzt scannen",
@@ -211,8 +213,8 @@
       "clean": "Sauber"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "Images",
+      "scanned": "gescannt"
     },
     "fixableBadge": "{count} behebbar",
     "delta": {
@@ -357,7 +359,7 @@
     "filterPlaceholder": "Nach Name filtern...",
     "clear": "Löschen",
     "emptyFiltered": "Keine Trigger passen zu deinen Filtern",
-    "testContainerName": "Test Container",
+    "testContainerName": "Testcontainer",
     "columns": {
       "trigger": "Trigger",
       "type": "Typ",

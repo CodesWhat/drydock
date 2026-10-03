@@ -365,6 +365,39 @@ describe('ConfigView', () => {
       expect(text).toContain('Metrics Auth');
     });
 
+    it('shows the build next to the version when the build is a release candidate', async () => {
+      mockGetServer.mockResolvedValue({ configuration: { port: 3000 } });
+      mockGetAppInfos.mockResolvedValue({ version: '1.6.1', build: '1.6.1-rc.15' });
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('Version');
+      expect(text).toContain('1.6.1');
+      expect(text).toContain('Build');
+      expect(text).toContain('1.6.1-rc.15');
+    });
+
+    it.each([
+      ['matches the version', { version: '1.6.1', build: '1.6.1' }],
+      ['is not reported by an older server', { version: '1.6.1' }],
+    ])('hides the build when it %s', async (_label, appInfos) => {
+      mockGetServer.mockResolvedValue({ configuration: { port: 3000 } });
+      mockGetAppInfos.mockResolvedValue(appInfos);
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('1.6.1');
+      expect(text).not.toContain('Build');
+    });
+
     it('shows webhook API details when webhook is enabled', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
@@ -415,7 +448,25 @@ describe('ConfigView', () => {
       expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
     });
 
-    it('displays store fields after loading', async () => {
+    it.each(['dd.sqlite', 'production.sqlite'])(
+      'displays active SQLite store file %s',
+      async (dbFile) => {
+        mockGetStore.mockResolvedValue({
+          configuration: { path: '/var/drydock', file: 'dd.json', dbFile },
+        });
+
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(w.text()).not.toContain('Loading');
+        });
+
+        expect(w.text()).toContain('/var/drydock');
+        expect(w.text()).toContain(dbFile);
+        expect(w.text()).not.toContain('dd.json');
+      },
+    );
+
+    it('displays legacy store fields when no SQLite file is reported', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
           port: 3000,
@@ -588,6 +639,65 @@ describe('ConfigView', () => {
       await vi.waitFor(() => {
         expect(mockDisableIconifyApi).toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('profile fallback labels', () => {
+    it.each([
+      ['ar', 'مستخدم غير معروف'],
+      ['de', 'Unbekannter Benutzer'],
+      ['it', 'Utente sconosciuto'],
+      ['ja', '不明なユーザー'],
+      ['ko', '알 수 없는 사용자'],
+      ['nl', 'Onbekende gebruiker'],
+      ['pl', 'Nieznany użytkownik'],
+      ['pt-BR', 'Usuário desconhecido'],
+      ['ru', 'Неизвестный пользователь'],
+      ['tr', 'Bilinmeyen kullanıcı'],
+      ['uk', 'Невідомий користувач'],
+      ['vi', 'Người dùng không xác định'],
+      ['zh-TW', '未知使用者'],
+    ] as const)(
+      'updates the missing identity caption in %s without reloading the profile',
+      async (locale, expected) => {
+        mockRouteQuery.value = { tab: 'profile' };
+        mockGetUser.mockResolvedValue({ username: '' });
+        mockGetServer.mockResolvedValue({ configuration: {} });
+        const wrapper = factory();
+        try {
+          await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+          await nextTick();
+          const heading = () => wrapper.get('.dd-text-heading-section.truncate').text();
+          expect(heading()).toBe('Unknown User');
+          setI18nLocale(locale);
+          await nextTick();
+          expect(heading()).toBe(expected);
+          expect(mockGetUser).toHaveBeenCalledOnce();
+          expect(mockUpdateSettings).not.toHaveBeenCalled();
+          expect(mockPushInitialSync).not.toHaveBeenCalled();
+        } finally {
+          wrapper.unmount();
+          setI18nLocale('en');
+        }
+      },
+    );
+
+    it('preserves a real username that matches the English fallback', async () => {
+      mockRouteQuery.value = { tab: 'profile' };
+      mockGetUser.mockResolvedValue({ username: 'Unknown User' });
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      const wrapper = factory();
+      try {
+        await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+        await nextTick();
+        setI18nLocale('ar');
+        await nextTick();
+        expect(wrapper.get('.dd-text-heading-section.truncate').text()).toBe('Unknown User');
+        expect(mockGetUser).toHaveBeenCalledOnce();
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
     });
   });
 

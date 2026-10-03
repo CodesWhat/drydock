@@ -107,9 +107,9 @@
       "digest": "イメージ更新"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "現在利用可能",
+      "scheduled": "予定済み",
+      "openingSoon": "まもなく開始"
     },
     "dataLoadFailed": "ダッシュボードデータの読み込みに失敗しました",
     "widgets": {

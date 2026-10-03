@@ -18,6 +18,10 @@
  * instead of the whole first-start import transaction throwing on the second
  * INSERT (review finding, roadmap 7-STORE slice 7).
  *
+ * `containerName` (#1280) is carried across when the legacy document has one, so a
+ * stash recorded by a release that already wrote it keeps telling compose replicas
+ * apart; a document without one imports as a nameless legacy entry.
+ *
  * `refresh_order` is assigned in legacy document order — the only ordering
  * evidence a first-start import has — so a fresh install's eviction order
  * (app/store/container.ts) at least reflects the order the legacy store held
@@ -34,12 +38,13 @@ export const updatePolicyRetentionCacheImporter: CollectionImporter = {
   table: TARGET_TABLE,
   importInto({ db, snapshot }: ImportContext): number {
     const insert = db.prepare(
-      `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order, container_name)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(cache_key) DO UPDATE SET
          update_policy_overrides = excluded.update_policy_overrides,
          expires_at = excluded.expires_at,
-         refresh_order = excluded.refresh_order`,
+         refresh_order = excluded.refresh_order,
+         container_name = excluded.container_name`,
     );
 
     let rows = 0;
@@ -53,6 +58,7 @@ export const updatePolicyRetentionCacheImporter: CollectionImporter = {
         doc.updatePolicyOverrides === undefined ? null : JSON.stringify(doc.updatePolicyOverrides),
         doc.expiresAt,
         rows,
+        typeof doc.containerName === 'string' ? doc.containerName : null,
       );
     }
     return rows;
