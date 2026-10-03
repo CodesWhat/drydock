@@ -34,9 +34,15 @@ describe('store/db/schema', () => {
   });
 
   test('creates every table the store needs, plus its own bookkeeping', () => {
-    // group_policies arrives in a later migration rather than the initial schema.
+    // group_policies and container_label_overrides arrive in later migrations rather than
+    // the initial schema.
     expect(tableNames(db)).toEqual(
-      [...INITIAL_SCHEMA_TABLES, 'group_policies', 'schema_migrations'].sort(),
+      [
+        ...INITIAL_SCHEMA_TABLES,
+        'container_label_overrides',
+        'group_policies',
+        'schema_migrations',
+      ].sort(),
     );
   });
 

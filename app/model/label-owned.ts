@@ -1,0 +1,386 @@
+/**
+ * Label-owned field overrides (spec 7.5): the nine Container fields that Docker labels own
+ * and that Drydock can durably override per container identity.
+ *
+ * Leaf module: it imports label key constants and types only, never the store or the
+ * registry, so the store, the watchers and (later) the API can all use it without the
+ * require cycles `triggers/trigger-category.ts` documents.
+ *
+ * Two layers per field. `declared` is what the owning watcher reported (labels, Compose,
+ * imgset config). An override, when the container's scope has one, replaces it. The store
+ * materializes the effective value into the ordinary Container field, so every consumer
+ * keeps reading the fields it reads today, and keeps the declared layer (plus where each
+ * effective value came from) in `Container.labelOwned`.
+ */
+import {
+  ddActionAuto,
+  ddActionExclude,
+  ddActionInclude,
+  ddDependsOn,
+  ddDependsOnAction,
+  ddDisplayIcon,
+  ddDisplayName,
+  ddNotificationExclude,
+  ddNotificationInclude,
+} from '../watchers/providers/docker/label.js';
+import type { Container } from './container.js';
+
+export type LabelOwnedFamily = 'display' | 'dependencies' | 'routing';
+export type LabelOwnedKind = 'text' | 'icon' | 'name-list' | 'action' | 'trigger-list';
+export type LabelOwnedCategory = 'action' | 'notification';
+
+export interface LabelOwnedFieldSpec {
+  field: LabelOwnedField;
+  labelKey: string;
+  family: LabelOwnedFamily;
+  kind: LabelOwnedKind;
+  /** Routing fields only. */
+  category?: LabelOwnedCategory;
+}
+
+export const LABEL_OWNED_FIELDS = [
+  { field: 'displayName', labelKey: ddDisplayName, family: 'display', kind: 'text' },
+  { field: 'displayIcon', labelKey: ddDisplayIcon, family: 'display', kind: 'icon' },
+  { field: 'dependsOn', labelKey: ddDependsOn, family: 'dependencies', kind: 'name-list' },
+  { field: 'dependsOnAction', labelKey: ddDependsOnAction, family: 'dependencies', kind: 'action' },
+  {
+    field: 'notificationTriggerInclude',
+    labelKey: ddNotificationInclude,
+    family: 'routing',
+    kind: 'trigger-list',
+    category: 'notification',
+  },
+  {
+    field: 'notificationTriggerExclude',
+    labelKey: ddNotificationExclude,
+    family: 'routing',
+    kind: 'trigger-list',
+    category: 'notification',
+  },
+  {
+    field: 'actionTriggerInclude',
+    labelKey: ddActionInclude,
+    family: 'routing',
+    kind: 'trigger-list',
+    category: 'action',
+  },
+  {
+    field: 'actionTriggerExclude',
+    labelKey: ddActionExclude,
+    family: 'routing',
+    kind: 'trigger-list',
+    category: 'action',
+  },
+  {
+    field: 'actionTriggerAuto',
+    labelKey: ddActionAuto,
+    family: 'routing',
+    kind: 'trigger-list',
+    category: 'action',
+  },
+] as const;
+
+export type LabelOwnedField = (typeof LABEL_OWNED_FIELDS)[number]['field'];
+
+/** The registry as a Map: field names from outside never become computed keys. */
+const FIELD_SPECS: ReadonlyMap<string, LabelOwnedFieldSpec> = new Map(
+  LABEL_OWNED_FIELDS.map((spec) => [spec.field, spec as LabelOwnedFieldSpec]),
+);
+
+export function getLabelOwnedFieldSpec(field: string): LabelOwnedFieldSpec | undefined {
+  return FIELD_SPECS.get(field);
+}
+
+export const DEPENDS_ON_ACTIONS = ['update', 'restart'] as const;
+
+export type LabelOwnedSource = 'override' | 'label' | 'compose' | 'watcher' | 'default' | 'unset';
+export type LabelOwnedDeclaredSource = Exclude<LabelOwnedSource, 'override'>;
+
+/** A declared value in the Container field's own form: routing fields are strings. */
+export type LabelOwnedDeclaredValue = string | string[];
+/** An override value: lists stay lists, `[]` being an explicit "none". */
+export type LabelOverrideValue = string | string[];
+
+export type LabelOwnedDeclared = Partial<Record<LabelOwnedField, LabelOwnedDeclaredValue>>;
+export type LabelOwnedSources = Record<LabelOwnedField, LabelOwnedSource>;
+export type LabelOwnedDeclaredSources = Record<LabelOwnedField, LabelOwnedDeclaredSource>;
+
+export interface LabelOverrideEntry {
+  value: LabelOverrideValue;
+  updatedAt: string;
+  /** The principal's display identity, never a credential. */
+  updatedBy: string;
+}
+
+export type LabelOverrideFields = Partial<Record<LabelOwnedField, LabelOverrideEntry>>;
+
+export interface LabelOwnedState {
+  v: 1;
+  /** What the owning watcher reported. */
+  declared: LabelOwnedDeclared;
+  declaredSources: LabelOwnedDeclaredSources;
+  /** Effective source per field. */
+  sources: LabelOwnedSources;
+}
+
+export interface InvalidLabelOverrideField {
+  field: string;
+  reason: string;
+}
+
+const FIELD_NAMES: readonly LabelOwnedField[] = LABEL_OWNED_FIELDS.map((spec) => spec.field);
+
+type LabelOwnedFlat = Pick<Container, LabelOwnedField | 'dependsOnSource'>;
+type LabelOwnedContext = Pick<Container, 'name' | 'labels'>;
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isOverrideValueValid(kind: LabelOwnedKind, value: unknown): value is LabelOverrideValue {
+  switch (kind) {
+    case 'text':
+    case 'icon':
+      return typeof value === 'string' && value.length > 0;
+    case 'action':
+      return (DEPENDS_ON_ACTIONS as readonly unknown[]).includes(value);
+    default:
+      return isStringArray(value);
+  }
+}
+
+/**
+ * Read a stored `fields` JSON document. An unreadable document or field is dropped and
+ * reported, never thrown: a bad override row must not be able to fail a container write.
+ */
+export function parseLabelOverrideFields(raw: unknown): {
+  fields: LabelOverrideFields;
+  invalid: InvalidLabelOverrideField[];
+} {
+  const fields: LabelOverrideFields = {};
+  const invalid: InvalidLabelOverrideField[] = [];
+  let document: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      document = JSON.parse(raw);
+    } catch {
+      return { fields, invalid: [{ field: '*', reason: 'not valid JSON' }] };
+    }
+  }
+  if (document === null || typeof document !== 'object' || Array.isArray(document)) {
+    return { fields, invalid: [{ field: '*', reason: 'not an object' }] };
+  }
+  const entries: [string, LabelOverrideEntry][] = [];
+  for (const [name, entry] of Object.entries(document)) {
+    const spec = getLabelOwnedFieldSpec(name);
+    const candidate = entry as Partial<LabelOverrideEntry> | null;
+    if (spec === undefined) {
+      invalid.push({ field: name, reason: 'unknown field' });
+    } else if (
+      candidate === null ||
+      typeof candidate !== 'object' ||
+      !isOverrideValueValid(spec.kind, candidate.value) ||
+      typeof candidate.updatedAt !== 'string' ||
+      typeof candidate.updatedBy !== 'string'
+    ) {
+      invalid.push({ field: name, reason: 'invalid value' });
+    } else {
+      entries.push([name, candidate as LabelOverrideEntry]);
+    }
+  }
+  return { fields: Object.fromEntries(entries) as LabelOverrideFields, invalid };
+}
+
+/** The declared layer a container's flat fields currently show. */
+export function captureDeclaredFromFlat(
+  container: Pick<Container, LabelOwnedField>,
+): LabelOwnedDeclared {
+  return Object.fromEntries(
+    FIELD_NAMES.filter((field) => container[field] !== undefined).map((field) => [
+      field,
+      structuredClone(container[field]),
+    ]),
+  ) as LabelOwnedDeclared;
+}
+
+function nonBlank(value: string | undefined): value is string {
+  return value !== undefined && value.trim() !== '';
+}
+
+function inferDeclaredSource(
+  spec: LabelOwnedFieldSpec,
+  declared: LabelOwnedDeclared,
+  context: LabelOwnedContext,
+  dependsOnSource: Container['dependsOnSource'],
+): LabelOwnedDeclaredSource {
+  const value = declared[spec.field];
+  if (value === undefined) {
+    return 'unset';
+  }
+  const labelValue = context.labels?.[spec.labelKey];
+  switch (spec.field) {
+    case 'displayName':
+      if (nonBlank(labelValue) && labelValue === value) {
+        return 'label';
+      }
+      return value === context.name ? 'default' : 'watcher';
+    case 'displayIcon':
+      if (nonBlank(labelValue) && labelValue === value) {
+        return 'label';
+      }
+      return value === 'mdi:docker' || value === '' ? 'default' : 'watcher';
+    case 'dependsOn':
+      return dependsOnSource === 'label' || dependsOnSource === 'compose'
+        ? dependsOnSource
+        : 'unset';
+    case 'dependsOnAction':
+      return (DEPENDS_ON_ACTIONS as readonly unknown[]).includes(
+        labelValue?.trim().toLowerCase(),
+      ) && labelValue?.trim().toLowerCase() === value
+        ? 'label'
+        : 'default';
+    default:
+      return labelValue === value ? 'label' : 'watcher';
+  }
+}
+
+/** Where each declared value came from, inferred from the value, the labels and the name. */
+export function inferDeclaredSources(
+  declared: LabelOwnedDeclared,
+  context: LabelOwnedContext,
+  dependsOnSource: Container['dependsOnSource'],
+): LabelOwnedDeclaredSources {
+  return Object.fromEntries(
+    LABEL_OWNED_FIELDS.map((spec) => [
+      spec.field,
+      inferDeclaredSource(spec, declared, context, dependsOnSource),
+    ]),
+  ) as LabelOwnedDeclaredSources;
+}
+
+/** The Container-field form of an override value. */
+function overrideToFlat(
+  spec: LabelOwnedFieldSpec,
+  value: LabelOverrideValue,
+): string | string[] | undefined {
+  if (spec.kind === 'trigger-list') {
+    const entries = value as string[];
+    return entries.length === 0 ? undefined : entries.join(',');
+  }
+  return Array.isArray(value) ? [...value] : value;
+}
+
+/** Build the state for a declared layer under an optional set of overrides. */
+export function buildLabelOwnedState(
+  declared: LabelOwnedDeclared,
+  declaredSources: LabelOwnedDeclaredSources,
+  overrides: LabelOverrideFields | undefined,
+): LabelOwnedState {
+  return {
+    v: 1,
+    declared: structuredClone(declared),
+    declaredSources,
+    sources: Object.fromEntries(
+      FIELD_NAMES.map((field) => [
+        field,
+        overrides?.[field] === undefined ? declaredSources[field] : 'override',
+      ]),
+    ) as LabelOwnedSources,
+  };
+}
+
+/**
+ * Write the effective value of every label-owned field onto `container`: the override when
+ * there is one, else the declared value. Lists replace whole and never merge.
+ */
+export function applyLabelOwnedState(
+  container: Container,
+  state: LabelOwnedState,
+  overrides: LabelOverrideFields | undefined,
+): Container {
+  const target = container as unknown as Record<string, unknown>;
+  for (const spec of LABEL_OWNED_FIELDS as readonly LabelOwnedFieldSpec[]) {
+    const override = overrides?.[spec.field];
+    const effective =
+      override === undefined
+        ? structuredClone(state.declared[spec.field])
+        : overrideToFlat(spec, override.value);
+    // Display name and icon are required on a Container: a state that lacks one (only a
+    // hand-built round trip can) keeps the value the record already shows.
+    if (effective === undefined && (spec.kind === 'text' || spec.kind === 'icon')) {
+      continue;
+    }
+    target[spec.field] = effective;
+  }
+  const declaredDependencySource = state.declaredSources.dependsOn;
+  container.dependsOnSource =
+    state.sources.dependsOn === 'override'
+      ? 'override'
+      : declaredDependencySource === 'label' || declaredDependencySource === 'compose'
+        ? declaredDependencySource
+        : undefined;
+  container.labelOwned = state;
+  return container;
+}
+
+/**
+ * A record read from the store, with its label-owned fields shown as the owning watcher
+ * declared them. Watcher paths that re-derive label fields on a stored record start from
+ * this, so an override is never mistaken for a watcher-side change and a display-name
+ * override cannot stop rename tracking. A record with no state is returned as is.
+ */
+export function toDeclaredProjection(container: Container): Container {
+  const state = container.labelOwned;
+  if (state === undefined) {
+    return container;
+  }
+  const projected = { ...container } as Container;
+  const target = projected as unknown as Record<string, unknown>;
+  for (const field of FIELD_NAMES) {
+    target[field] = structuredClone(state.declared[field]);
+  }
+  const source = state.declaredSources.dependsOn;
+  projected.dependsOnSource = source === 'label' || source === 'compose' ? source : undefined;
+  return projected;
+}
+
+/** The label-owned slice of a record, for change detection and write-backs. */
+export function pickLabelOwnedFlat(container: Container): LabelOwnedFlat {
+  const picked = Object.fromEntries(
+    [...FIELD_NAMES, 'dependsOnSource' as const].map((field) => [field, container[field]]),
+  );
+  return picked as LabelOwnedFlat;
+}
+
+const STATE_SOURCES: readonly LabelOwnedSource[] = [
+  'override',
+  'label',
+  'compose',
+  'watcher',
+  'default',
+  'unset',
+];
+
+/** Read a stored state document, or `undefined` when it is absent or unreadable. */
+export function parseLabelOwnedState(raw: unknown): LabelOwnedState | undefined {
+  if (raw === null || typeof raw !== 'object') {
+    return undefined;
+  }
+  const state = raw as Partial<LabelOwnedState>;
+  const isRecordOfSources = (value: unknown) =>
+    value !== null &&
+    typeof value === 'object' &&
+    FIELD_NAMES.every((field) =>
+      STATE_SOURCES.includes((value as Record<string, LabelOwnedSource>)[field]),
+    );
+  if (
+    state.v !== 1 ||
+    state.declared === null ||
+    typeof state.declared !== 'object' ||
+    !isRecordOfSources(state.declaredSources) ||
+    !isRecordOfSources(state.sources)
+  ) {
+    return undefined;
+  }
+  return state as LabelOwnedState;
+}
