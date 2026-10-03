@@ -47,15 +47,15 @@
       "switchTo": "Chuyển sang giao diện {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Sáng",
+        "system": "Hệ thống",
+        "dark": "Tối"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "Bảng điều khiển",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "Bảng điều khiển",
         "containers": "Container",
         "security": "Bảo mật",
         "approvals": "Phê duyệt",
@@ -89,7 +89,7 @@
         "userMenu": "Menu người dùng",
         "profile": "Hồ sơ",
         "signOut": "Đăng xuất",
-        "userFallback": "User"
+        "userFallback": "Người dùng"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "Phạm vi tiền tố đang hoạt động; dùng ",
         "typeHint": "Nhập",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", hoặc",
         "hashSemicolon": "; dùng",
         "useTab": " để đổi phạm vi",
         "moveHint": "di chuyển",
         "openHint": "mở",
         "recentGroup": "Gần đây",
         "unknownHost": "máy chủ không xác định",
+        "unknownImage": "image không xác định",
+        "localHost": "cục bộ",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "Xác thực · {type}",
         "notificationSubtitle": "Quy tắc thông báo · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Tất cả",
+          "pages": "Trang",
+          "containers": "Container",
+          "runtime": "Môi trường chạy",
+          "config": "Cấu hình"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Điều hướng",
+          "containers": "Container",
+          "runtime": "Môi trường chạy",
+          "configuration": "Cấu hình"
         },
         "settings": {
           "appearanceTitle": "Cài đặt giao diện",

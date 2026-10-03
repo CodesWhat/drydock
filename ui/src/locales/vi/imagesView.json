@@ -28,6 +28,8 @@
       "description": "Không có image nào khớp với bộ lọc hiện tại."
     },
     "prune": {
+      "previewLoadFailed": "Không thể tải bản xem trước dọn dẹp",
+      "requestFailed": "Không thể dọn dẹp hình ảnh",
       "dangling": "Dọn dẹp image dangling",
       "unused": "Dọn dẹp image chưa dùng",
       "confirm": {

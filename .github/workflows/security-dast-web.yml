@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           # DAST scanners hit unbounded third-party endpoints (ZAP passive
           # rule callbacks) with no stable upstream-published allowlist —
@@ -157,7 +157,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           # DAST scanners hit unbounded third-party endpoints (Nuclei
           # template fetches) with no stable upstream-published allowlist —
@@ -362,7 +362,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           # Same accepted-audit exception as dast-web-zap/dast-web-nuclei
           # above and ci-verify.yml's dast-zap-baseline job (security.md
