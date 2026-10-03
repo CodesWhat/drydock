@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Не вдалося завантажити зведення схвалень",
+      "detailLoadFailed": "Не вдалося завантажити схвалення",
+      "approveFailed": "Не вдалося схвалити оновлення",
+      "rejectFailed": "Не вдалося відхилити оновлення",
+      "deferFailed": "Не вдалося відкласти оновлення"
+    },
     "ofCount": "Показано: {count}",
     "refresh": "Оновити",
     "loading": "Завантаження погоджень…",

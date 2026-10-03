@@ -1,3 +1,4 @@
+import { i18n, SUPPORTED_LOCALES } from '@/boot/i18n';
 import { CURRENT_SCHEMA_VERSION, DEFAULTS } from '@/preferences/schema';
 import { previewNotificationTemplates, updateNotificationRule } from '@/services/notification';
 import { getPreferences, updatePreferences } from '@/services/preferences';
@@ -21,6 +22,7 @@ const operations = [
 
 describe.each(operations)('$name error responses', ({ run }) => {
   const originalFetch = globalThis.fetch;
+  const originalLocale = i18n.global.locale.value;
 
   beforeEach(() => {
     globalThis.fetch = vi.fn();
@@ -28,6 +30,7 @@ describe.each(operations)('$name error responses', ({ run }) => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    i18n.global.locale.value = originalLocale;
   });
 
   it.each([
@@ -64,9 +67,30 @@ describe.each(operations)('$name error responses', ({ run }) => {
     await expect(run()).rejects.toThrow(new Error('  Server diagnostic  '));
   });
 
-  it('keeps the existing fallback for malformed JSON', async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response('{broken', { status: 502 }));
-    await expect(run()).rejects.toThrow(new Error('Unknown error'));
+  it.each(SUPPORTED_LOCALES)(
+    'localizes malformed JSON in %s and retains HTTP status',
+    async (locale) => {
+      i18n.global.locale.value = locale;
+      expect(i18n.global.te('common.apiResponse.invalidJson', locale)).toBe(true);
+      vi.mocked(fetch).mockResolvedValue(new Response('{broken', { status: 502 }));
+      await expect(run()).rejects.toThrow(
+        new Error(
+          `${i18n.global.t('common.apiResponse.invalidJson', { context: 'API' })} (HTTP 502)`,
+        ),
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('uses the locale selected when the malformed body arrives', async () => {
+    i18n.global.locale.value = 'en';
+    vi.mocked(fetch).mockImplementation(async () => {
+      i18n.global.locale.value = 'ar';
+      return new Response('<html>Bad gateway</html>', { status: 503 });
+    });
+    await expect(run()).rejects.toThrow(
+      `${i18n.global.t('common.apiResponse.invalidJson', { context: 'API' }, { locale: 'ar' })} (HTTP 503)`,
+    );
   });
 
   it('preserves transport failure identity', async () => {

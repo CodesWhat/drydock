@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Goedkeuringsoverzicht kon niet worden geladen",
+      "detailLoadFailed": "Goedkeuring kon niet worden geladen",
+      "approveFailed": "Update kon niet worden goedgekeurd",
+      "rejectFailed": "Update kon niet worden afgewezen",
+      "deferFailed": "Update kon niet worden uitgesteld"
+    },
     "ofCount": "{count} weergegeven",
     "refresh": "Vernieuwen",
     "loading": "Goedkeuringen laden…",

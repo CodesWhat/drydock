@@ -184,7 +184,7 @@
       "volumes": "Volumes",
       "composeFiles": "Compose-Dateien",
       "version": "Version",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Softwareversion",
       "currentLabel": "Aktuell:",
       "latestLabel": "Neueste:",
       "digestLabel": "Digest:",
@@ -228,19 +228,19 @@
       "noPortsExposed": "Keine Ports veröffentlicht",
       "notConfigured": "Nicht konfiguriert",
       "noVolumesMounted": "Keine Volumes gemountet",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Laufzeit",
+      "uptimeAriaLabel": "Container-Laufzeit"
     },
     "containerLogs": {
       "title": "Container-Logs",
       "download": "Herunterladen",
       "allLevels": "Alle Level",
       "downloadError": "Logs konnten nicht heruntergeladen werden",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Letzte {count} Zeilen",
+      "tailAll": "Alle Zeilen",
+      "statusPaused": "Pausiert",
+      "statusLive": "Aktiv",
+      "statusOffline": "Nicht verbunden",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -403,13 +403,13 @@
     },
     "updateDialog": {
       "title": "Container aktualisieren",
-      "thisContainer": "this container",
+      "thisContainer": "diesen Container",
       "confirmTagChange": "{name} aktualisieren? Der Image-Tag wird von :{currentTag} auf :{newTag}{kind} geändert.",
       "confirmDigestChange": "{name} aktualisieren? Ein neuerer Build von :{currentTag} ist verfügbar (Digest-Änderung).",
       "confirmLatest": "{name} jetzt aktualisieren? Das neueste erkannte Image wird angewendet.",
       "updating": "Aktualisiert...",
       "update": "Aktualisieren",
-      "updateFailed": "Update failed"
+      "updateFailed": "Aktualisierung fehlgeschlagen"
     },
     "floatingTag": {
       "badgeText": "Floating Tag",
@@ -522,18 +522,18 @@
       "new": "Vor {duration} erkannt"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Abbrechen",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Container stoppen",
+        "message": "{name} stoppen?",
+        "acceptLabel": "Stoppen",
+        "successMessage": "Gestoppt: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Container neu starten",
+        "message": "{name} neu starten?",
+        "acceptLabel": "Neu starten",
+        "successMessage": "Neu gestartet: {name}"
       },
       "forceUpdate": {
         "header": "Update erzwingen",
@@ -619,8 +619,8 @@
       "recheckFailedDetail": "Erneute Prüfung für {name} fehlgeschlagen"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} Eintrag",
+      "entryCountPlural": "{count} Einträge",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explizit",
+        "inherited": "Geerbt",
+        "unknown": "Unbekannt"
       },
       "timeoutDefault": "60000ms (Standard)",
       "preAbortYes": "Update bei Pre-Hook-Fehler abbrechen",

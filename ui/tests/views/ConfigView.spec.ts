@@ -415,7 +415,25 @@ describe('ConfigView', () => {
       expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
     });
 
-    it('displays store fields after loading', async () => {
+    it.each(['dd.sqlite', 'production.sqlite'])(
+      'displays active SQLite store file %s',
+      async (dbFile) => {
+        mockGetStore.mockResolvedValue({
+          configuration: { path: '/var/drydock', file: 'dd.json', dbFile },
+        });
+
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(w.text()).not.toContain('Loading');
+        });
+
+        expect(w.text()).toContain('/var/drydock');
+        expect(w.text()).toContain(dbFile);
+        expect(w.text()).not.toContain('dd.json');
+      },
+    );
+
+    it('displays legacy store fields when no SQLite file is reported', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
           port: 3000,

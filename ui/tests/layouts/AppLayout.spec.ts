@@ -1,9 +1,10 @@
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
-import { setI18nLocale } from '@/boot/i18n';
+import { i18n, SUPPORTED_LOCALES, setI18nLocale } from '@/boot/i18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
 const {
+  mockRoute,
   mockRouterPush,
   mockRouterReplace,
   mockGetAgents,
@@ -23,6 +24,7 @@ const {
   mockLoadRecentItems,
   mockSaveRecentItems,
 } = vi.hoisted(() => ({
+  mockRoute: { path: '/', name: 'dashboard', query: {}, params: {} },
   mockRouterPush: vi.fn(),
   mockRouterReplace: vi.fn(),
   mockGetAgents: vi.fn(),
@@ -45,7 +47,7 @@ const {
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
-  useRoute: () => ({ path: '/', name: 'dashboard', query: {}, params: {} }),
+  useRoute: () => mockRoute,
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -147,6 +149,7 @@ describe('AppLayout', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRoute.path = '/';
     setI18nLocale('en');
     localStorage.clear();
     mockFetch = vi.fn();
@@ -182,6 +185,299 @@ describe('AppLayout', () => {
     }
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  describe('search localization', () => {
+    it.each(['fr', 'ar'] as const)(
+      'updates all cached resource results and recents in %s without refetching',
+      async (locale) => {
+        mockGetAgents.mockResolvedValue([
+          { name: 'remote', connected: true, host: 'server', port: 3000 },
+          { name: 'offline', connected: false },
+        ]);
+        mockGetAllTriggers.mockResolvedValue([
+          { id: 'slack.notice', name: 'notice', type: 'slack' },
+        ]);
+        mockGetAllWatchers.mockResolvedValue([
+          { id: 'docker.local', name: 'local', type: 'docker' },
+        ]);
+        mockGetAllRegistries.mockResolvedValue([{ id: 'hub.public', name: 'public', type: 'hub' }]);
+        mockGetAllAuthentications.mockResolvedValue([
+          { id: 'oidc.auth', name: 'auth', type: 'oidc' },
+        ]);
+        mockGetAllNotificationRules.mockResolvedValue([{ id: 'updates', name: 'updates' }]);
+        const wrapper = mountLayout({ teleport: true, AppButton: false });
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        const state = wrapper.vm as unknown as {
+          showSearch: boolean;
+          searchQuery: string;
+          searchResourceResults: { id: string; subtitle: string; query: { q: string } }[];
+          hydratedRecentSearchResults: { subtitle: string }[];
+          searchResults: { id: string }[];
+          recordRecentSearchResult: (result: unknown) => void;
+        };
+        state.showSearch = true;
+        await flushPromises();
+        const fetchers = [
+          mockGetAgents,
+          mockGetAllTriggers,
+          mockGetAllWatchers,
+          mockGetAllRegistries,
+          mockGetAllAuthentications,
+          mockGetAllNotificationRules,
+        ];
+        const calls = fetchers.map((fetcher) => fetcher.mock.calls.length);
+        const originalQueries = state.searchResourceResults.map((result) => result.query);
+        state.recordRecentSearchResult(state.searchResourceResults[0]);
+        setI18nLocale(locale);
+        await flushPromises();
+        const { t } = i18n.global;
+        const expected = [
+          t('appShell.layout.search.agentSubtitle', {
+            status: t('agentsView.list.status.connected'),
+            host: 'server:3000',
+          }),
+          t('appShell.layout.search.agentSubtitle', {
+            status: t('agentsView.list.status.disconnected'),
+            host: t('appShell.layout.search.unknownHost'),
+          }),
+          t('appShell.layout.search.triggerSubtitle', { type: 'slack' }),
+          t('appShell.layout.search.watcherSubtitle', { type: 'docker' }),
+          t('appShell.layout.search.registrySubtitle', { type: 'hub' }),
+          t('appShell.layout.search.authSubtitle', { type: 'oidc' }),
+          t('appShell.layout.search.notificationSubtitle', { id: 'updates' }),
+        ];
+        expect(state.searchResourceResults.map((result) => result.subtitle)).toEqual(expected);
+        expect(state.hydratedRecentSearchResults[0].subtitle).toBe(expected[0]);
+        expect(state.searchResourceResults.map((result) => result.query)).toEqual(originalQueries);
+        state.searchQuery = 'remote';
+        await flushPromises();
+        expect(wrapper.find('[role="dialog"]').text()).toContain(expected[0]);
+        for (const query of [t('agentsView.list.status.connected'), 'connected']) {
+          state.searchQuery = query;
+          await flushPromises();
+          expect(state.searchResults).toContainEqual(
+            expect.objectContaining({ id: 'agent:remote' }),
+          );
+        }
+        expect(fetchers.map((fetcher) => fetcher.mock.calls.length)).toEqual(calls);
+      },
+    );
+
+    it.each([
+      ['/', 'pages'],
+      ['@', 'runtime'],
+      ['#', 'config'],
+    ])('localizes the %s prefix badge while preserving its %s filter', async (prefix, scope) => {
+      const wrapper = mountLayout({ teleport: true, AppButton: false });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const state = wrapper.vm as unknown as {
+        showSearch: boolean;
+        searchQuery: string;
+        scopePrefixLabel: string;
+        effectiveSearchScope: string;
+      };
+      state.showSearch = true;
+      await flushPromises();
+      state.searchQuery = `${prefix} web`;
+      for (const locale of ['fr', 'ar'] as const) {
+        setI18nLocale(locale);
+        await flushPromises();
+        const expected = `${prefix} ${i18n.global.t(`appShell.layout.search.scope.${scope}`)}`;
+        expect(state.scopePrefixLabel).toBe(expected);
+        expect(state.effectiveSearchScope).toBe(scope);
+        expect(wrapper.find('[role="dialog"]').text()).toContain(expected);
+      }
+    });
+
+    it.each(['trigger', 'watcher', 'registry', 'auth'] as const)(
+      'localizes missing %s type without changing identity or a literal provider name',
+      async (kind) => {
+        setI18nLocale('fr');
+        const mock = {
+          trigger: mockGetAllTriggers,
+          watcher: mockGetAllWatchers,
+          registry: mockGetAllRegistries,
+          auth: mockGetAllAuthentications,
+        }[kind];
+        mock.mockResolvedValue([{ name: 'missing' }, { name: 'named', type: 'unknown' }]);
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        const state = wrapper.vm as unknown as {
+          searchResourceResults: { id: string; subtitle: string }[];
+        };
+        expect(state.searchResourceResults[0]).toMatchObject({
+          id: `${kind}:unknown.missing`,
+          subtitle: i18n.global.t(`appShell.layout.search.${kind}Subtitle`, {
+            type: i18n.global.t('common.unknown'),
+          }),
+        });
+        expect(state.searchResourceResults[1]).toMatchObject({
+          id: `${kind}:unknown.named`,
+          subtitle: i18n.global.t(`appShell.layout.search.${kind}Subtitle`, { type: 'unknown' }),
+        });
+      },
+    );
+
+    it.each(SUPPORTED_LOCALES)('localizes status and missing metadata in %s', async (locale) => {
+      setI18nLocale(locale);
+      mockGetAllContainers.mockResolvedValue([
+        { id: 'web', name: 'web', status: 'running' },
+        { id: 'sparse', name: 'sparse' },
+      ]);
+      const wrapper = mountLayout({ teleport: true, AppButton: false });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const state = wrapper.vm as unknown as {
+        showSearch: boolean;
+        searchQuery: string;
+        containerSearchResults: { subtitle: string }[];
+      };
+      const { t, te } = i18n.global;
+      expect(te('appShell.layout.search.unknownImage', locale)).toBe(true);
+      expect(te('appShell.layout.search.localHost', locale)).toBe(true);
+      const expected = t('appShell.layout.search.containerSubtitle', {
+        image: t('appShell.layout.search.unknownImage'),
+        status: t('containersView.status.running'),
+        host: t('appShell.layout.search.localHost'),
+      });
+      expect(state.containerSearchResults[0].subtitle).toBe(expected);
+      expect(state.containerSearchResults[1].subtitle).toContain(t('common.unknown'));
+      state.showSearch = true;
+      state.searchQuery = 'web';
+      await flushPromises();
+      expect(wrapper.find('[role="dialog"]').text()).toContain(expected);
+    });
+
+    it('relocalizes current and recent results without refetching or translating resource names', async () => {
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'web',
+          name: 'web',
+          status: 'running',
+          agent: 'local',
+          image: { name: 'unknown image' },
+        },
+      ]);
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const state = wrapper.vm as unknown as {
+        searchQuery: string;
+        containerSearchResults: { id: string; subtitle: string }[];
+        hydratedRecentSearchResults: { subtitle: string }[];
+        searchResults: { id: string }[];
+        recordRecentSearchResult: (result: unknown) => void;
+      };
+      state.recordRecentSearchResult(state.containerSearchResults[0]);
+      const calls = mockGetAllContainers.mock.calls.length;
+      for (const locale of ['fr', 'ar'] as const) {
+        setI18nLocale(locale);
+        await flushPromises();
+        const status = i18n.global.t('containersView.status.running');
+        const expected = i18n.global.t('appShell.layout.search.containerSubtitle', {
+          image: 'unknown image',
+          status,
+          host: 'local',
+        });
+        expect(state.containerSearchResults[0].subtitle).toBe(expected);
+        expect(state.hydratedRecentSearchResults[0].subtitle).toBe(expected);
+        state.searchQuery = status;
+        await flushPromises();
+        expect(state.searchResults).toContainEqual(
+          expect.objectContaining({ id: 'container:web' }),
+        );
+        state.searchQuery = 'running';
+        await flushPromises();
+        expect(state.searchResults).toContainEqual(
+          expect.objectContaining({ id: 'container:web' }),
+        );
+      }
+      expect(mockGetAllContainers).toHaveBeenCalledTimes(calls);
+    });
+
+    it('localizes SSE replacements and preserves an unfamiliar status and watcher name', async () => {
+      setI18nLocale('fr');
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const emit = mockSseConnect.mock.calls[0][0].emit;
+      const state = wrapper.vm as unknown as { containerSearchResults: { subtitle: string }[] };
+      emit('container-added', { id: 'web', status: 'paused', watcher: 'local' });
+      await flushPromises();
+      expect(state.containerSearchResults[0].subtitle).toBe(
+        i18n.global.t('appShell.layout.search.containerSubtitle', {
+          image: i18n.global.t('appShell.layout.search.unknownImage'),
+          status: i18n.global.t('containersView.status.paused'),
+          host: 'local',
+        }),
+      );
+      emit('container-updated', { id: 'web', status: 'future-state', watcher: 'local' });
+      await flushPromises();
+      expect(state.containerSearchResults[0].subtitle).toContain('future-state');
+      expect(state.containerSearchResults[0].subtitle).toContain('local');
+    });
+  });
+
+  describe('layout fallback localization', () => {
+    it.each([
+      ['ar', 'مستخدم'],
+      ['de', 'Benutzer'],
+      ['it', 'Utente'],
+      ['ja', 'ユーザー'],
+      ['ko', '사용자'],
+      ['nl', 'Gebruiker'],
+      ['pl', 'Użytkownik'],
+      ['pt-BR', 'Usuário'],
+      ['tr', 'Kullanıcı'],
+      ['uk', 'Користувач'],
+      ['vi', 'Người dùng'],
+      ['zh-CN', '用户'],
+      ['zh-TW', '使用者'],
+    ] as const)(
+      'updates mounted fallback labels in %s without refetching',
+      async (locale, user) => {
+        mockRoute.path = '/containers/example/logs';
+        const wrapper = mountLayout({ AppButton: false });
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+        await wrapper.get('button[aria-label="User menu"]').trigger('click');
+        expect(wrapper.get('.user-menu-wrapper .truncate').text()).toBe('User');
+
+        setI18nLocale(locale);
+        await flushPromises();
+
+        expect(wrapper.get('header nav > span.font-medium').text()).toBe(
+          i18n.global.t('appShell.layout.nav.dashboard'),
+        );
+        expect(wrapper.get('.user-menu-wrapper .truncate').text()).toBe(user);
+        expect(mockGetUser).toHaveBeenCalledTimes(1);
+        expect(mockRouterPush).not.toHaveBeenCalled();
+        expect(mockLogout).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { username: 'User', displayName: 'Dashboard', expected: 'User' },
+      { displayName: 'User', expected: 'User' },
+    ])('preserves the supplied identity $expected across locale changes', async (user) => {
+      mockGetUser.mockResolvedValue(user);
+      const wrapper = mountLayout({ AppButton: false });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      await wrapper.get('button[aria-label="User menu"]').trigger('click');
+
+      for (const locale of ['fr', 'ar'] as const) {
+        setI18nLocale(locale);
+        await flushPromises();
+        expect(wrapper.get('.user-menu-wrapper .truncate').text()).toBe(user.expected);
+      }
+      expect(mockGetUser).toHaveBeenCalledTimes(1);
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
   });
 
   describe('layout spacing', () => {
@@ -489,7 +785,7 @@ describe('AppLayout', () => {
     emit('container-updated', { id: 'web' });
     await flushPromises();
     expect(state.searchContainers).toEqual([
-      expect.objectContaining({ id: 'web', image: 'unknown image', hasSecurityIssues: false }),
+      expect.objectContaining({ id: 'web', image: '', hasSecurityIssues: false }),
     ]);
     expect(state.securityIssueCount).toBe('');
     emit('container-added', { name: 'name-only', image: { name: 'redis' } });
@@ -521,9 +817,7 @@ describe('AppLayout', () => {
     };
     expect(state.searchContainers[0]).toMatchObject({
       image:
-        typeof nested.image === 'object' && nested.image && 'name' in nested.image
-          ? 'nginx'
-          : 'unknown image',
+        typeof nested.image === 'object' && nested.image && 'name' in nested.image ? 'nginx' : '',
       hasSecurityIssues: false,
     });
     expect(mockGetAllContainers).toHaveBeenCalledTimes(baselineCalls);

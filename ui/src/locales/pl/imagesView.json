@@ -28,6 +28,8 @@
       "description": "Żaden obraz nie pasuje do bieżących filtrów."
     },
     "prune": {
+      "previewLoadFailed": "Nie udało się wczytać podglądu czyszczenia",
+      "requestFailed": "Nie udało się wyczyścić obrazów",
       "dangling": "Wyczyść osierocone",
       "unused": "Wyczyść nieużywane",
       "confirm": {

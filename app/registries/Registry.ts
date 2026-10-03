@@ -631,15 +631,22 @@ class Registry<
       }
       return Number.isNaN(Date.parse(configResponse.created)) ? undefined : configResponse.created;
     } catch (error: unknown) {
+      if (isRedirectError(error)) {
+        const status = (error as { response: { status: number } }).response.status;
+        this.log.debug(
+          `Skipping optional created date for ${this.getImageFullName(
+            image,
+            digest,
+          )}: registry redirected the config blob request (status ${status}) and redirects are not followed`,
+        );
+        return undefined;
+      }
       this.log.debug(
         `Unable to fetch image config blob created date for ${this.getImageFullName(
           image,
           digest,
         )} (${getErrorMessage(error)})`,
       );
-      if (isRedirectError(error)) {
-        return undefined;
-      }
       throw error;
     }
   }

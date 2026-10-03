@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Không thể bắt đầu quét.",
+    "scanProgressUnavailable": "Không có thông tin tiến trình quét. Các lượt quét đã được chấp nhận có thể vẫn đang chạy. Hãy làm mới kết quả trước khi bắt đầu lượt quét khác.",
     "loadingVulnerabilityData": "Đang tải dữ liệu lỗ hổng...",
     "runtimeLoadError": "Không thể tải trạng thái runtime bảo mật",
     "scanNow": "Quét ngay",
@@ -211,8 +213,8 @@
       "clean": "Sạch"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "image",
+      "scanned": "đã quét"
     },
     "fixableBadge": "{count} có thể vá",
     "delta": {

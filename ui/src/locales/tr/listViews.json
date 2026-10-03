@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Tarama başlatılamadı.",
+    "scanProgressUnavailable": "Tarama ilerlemesi kullanılamıyor. Kabul edilen taramalar hâlâ devam ediyor olabilir. Başka bir tarama başlatmadan önce sonuçları yenileyin.",
     "loadingVulnerabilityData": "Güvenlik açığı verileri yükleniyor...",
     "runtimeLoadError": "Güvenlik çalışma zamanı durumu yüklenemedi",
     "scanNow": "Şimdi tara",
@@ -211,8 +213,8 @@
       "clean": "Temiz"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "imajlar",
+      "scanned": "tarandı"
     },
     "fixableBadge": "{count} düzeltme",
     "delta": {
