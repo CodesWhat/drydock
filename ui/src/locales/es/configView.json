@@ -76,6 +76,7 @@
       },
       "fields": {
         "version": "Versión",
+        "build": "Compilación",
         "serverPort": "Puerto del servidor",
         "containerActions": "Acciones de contenedor",
         "webhook": "Webhook",

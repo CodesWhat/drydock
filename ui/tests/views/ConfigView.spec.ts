@@ -357,6 +357,39 @@ describe('ConfigView', () => {
       expect(text).toContain('Metrics Auth');
     });
 
+    it('shows the build next to the version when the build is a release candidate', async () => {
+      mockGetServer.mockResolvedValue({ configuration: { port: 3000 } });
+      mockGetAppInfos.mockResolvedValue({ version: '1.6.1', build: '1.6.1-rc.15' });
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('Version');
+      expect(text).toContain('1.6.1');
+      expect(text).toContain('Build');
+      expect(text).toContain('1.6.1-rc.15');
+    });
+
+    it.each([
+      ['matches the version', { version: '1.6.1', build: '1.6.1' }],
+      ['is not reported by an older server', { version: '1.6.1' }],
+    ])('hides the build when it %s', async (_label, appInfos) => {
+      mockGetServer.mockResolvedValue({ configuration: { port: 3000 } });
+      mockGetAppInfos.mockResolvedValue(appInfos);
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('1.6.1');
+      expect(text).not.toContain('Build');
+    });
+
     it('shows webhook API details when webhook is enabled', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {

@@ -56,6 +56,39 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/auth/login']?.post).toBeDefined();
   });
 
+  test('should report the base version when the build is a release candidate', async () => {
+    vi.resetModules();
+    vi.doMock('../configuration/index.js', () => ({ getVersion: () => '1.6.1-rc.15' }));
+    try {
+      const { openApiDocument: releaseCandidateDocument } = await import('./openapi/index.js');
+      expect(releaseCandidateDocument.info.version).toBe('1.6.1');
+    } finally {
+      vi.doUnmock('../configuration/index.js');
+      vi.resetModules();
+    }
+  });
+
+  test('should document the app version and its build identity', () => {
+    expect(openApiDocument.components.schemas.AppInfo).toStrictEqual({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        version: {
+          type: 'string',
+          description:
+            'Base product version, with any prerelease suffix removed (for example 1.6.1).',
+        },
+        build: {
+          type: 'string',
+          description:
+            'Full build identity (for example 1.6.1-rc.15). A stable release is the promoted release candidate image, so this names the candidate it was promoted from. Equal to version when the build has no prerelease suffix.',
+        },
+      },
+      required: ['name', 'version', 'build'],
+      additionalProperties: true,
+    });
+  });
+
   test('should define session, webhook, registry webhook, and metrics security schemes', () => {
     expect(openApiDocument.components.securitySchemes.sessionAuth).toMatchObject({
       type: 'apiKey',
