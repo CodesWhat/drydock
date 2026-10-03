@@ -34,7 +34,10 @@ describe('store/db/schema', () => {
   });
 
   test('creates every table the store needs, plus its own bookkeeping', () => {
-    expect(tableNames(db)).toEqual([...INITIAL_SCHEMA_TABLES, 'schema_migrations'].sort());
+    // group_policies arrives in a later migration rather than the initial schema.
+    expect(tableNames(db)).toEqual(
+      [...INITIAL_SCHEMA_TABLES, 'group_policies', 'schema_migrations'].sort(),
+    );
   });
 
   test('declares every table STRICT', () => {

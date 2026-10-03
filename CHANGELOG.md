@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Cucumber test containers retain debug-level registry diagnostics for startup failures. The reliability report now includes a 100-attempt reassessment, with unresolved readiness failures separated from missing build artifacts.
 - Notification triggers can target one exact server-derived group with `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` or the YAML `group` field. Routing uses `dd.group`, then Compose project, then Swarm namespace, while retaining exclusions, thresholds and agent boundaries. Group-restricted queued notifications and digests recheck current membership before sending. Action providers reject this setting.
 - UI coverage CI emits bounded numeric memory, disk and process-RSS samples to help diagnose abrupt runner cancellations, without collecting environment values or command arguments or changing test gates.
 
@@ -109,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The audit event picker and shared URL filters now support every backend audit action, including container health, maturity, approvals, configuration, scanner preparation and API-key events. Missing action captions are translated in all 17 locales; filtering still sends the original action IDs and keeps the existing read permissions.
+- Container dependency settings (`dd.depends_on`, `dd.depends_on.action` and compose `depends_on`) were dropped by the 1.8 SQLite store and are now kept, so dependency-ordered updates, list-view dependency counts and the dependency graph work again. Containers imported from a 1.7 store keep their dependencies too.
 - The login password visibility button now uses localized screen-reader labels in every supported language. Showing, hiding, and switching languages preserve the entered value and never submit the form.
 - Stop the dashboard from showing a connected Local Docker host when no local watcher is configured. Agent-only fleets show only their configured agents.
 - Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.

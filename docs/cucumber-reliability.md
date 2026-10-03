@@ -1,8 +1,39 @@
 # Cucumber CI reliability audit
 
-Audit snapshot: 2026-07-22T13:38Z
+Latest reassessment: 2026-09-19T05:04Z. The original July audit follows below.
 
-## Result
+## September reassessment
+
+The current check is named `E2E: Cucumber`. A bounded sample of 100 completed applicable job attempts contains **96 successes and four failures**. All four failed before scenario execution. The observed failure rate is 4%; this is not a claim that four product regressions or four external flakes occurred.
+
+The sample came from the newest 200 completed `ci-verify.yml` runs available at 2026-09-19T05:02:51Z, ordered by workflow creation time. Each run's jobs were fetched with `filter=all` so earlier attempts were retained. Applicable attempts were ordered by workflow creation time, then attempt number, newest first; the first 100 were selected. Their workflow creation times span September 14 00:24:24Z through September 19 04:27:05Z. There were no retrieval gaps. This is an attempt-level sample, not 100 independent commits or the globally latest 100 job completion times.
+
+The full 200-run collection contained 139 successful, four failed, 21 cancelled and 52 skipped Cucumber attempts. Cancelled and skipped attempts are excluded from the 100-attempt denominator. A green workflow is not proof that Cucumber ran: the job is conditional on runtime changes or manual dispatch, and scheduled runs are excluded.
+
+| Failure | Evidence | Classification |
+| --- | --- | --- |
+| Home Assistant inventory absent at readiness expiry, three attempts | [September 16](https://github.com/CodesWhat/drydock/actions/runs/35119452727/job/104882657358), [September 17](https://github.com/CodesWhat/drydock/actions/runs/35164135511/job/105028357431), [September 19](https://github.com/CodesWhat/drydock/actions/runs/35418240726/job/105834427049) | The application was healthy, but only four of six fixtures appeared while a discovery scan remained unfinished. The two retained diagnostic bundles confirmed both Home Assistant containers were running. The third bundle was no longer available. The pending operation and underlying cause remain unresolved. |
+| QA image unavailable on a later rerun, one attempt | [Artifact download failure](https://github.com/CodesWhat/drydock/actions/runs/35164135511/job/105668500294) | The image artifact was not found, before application startup. The rerun occurred more than a day after the original workflow, consistent with the one-day image retention policy; the retained evidence does not distinguish expiry from deletion. |
+
+An [exact-SHA second attempt](https://github.com/CodesWhat/drydock/actions/runs/35119452727/job/104885473272) resolved all six fixtures in about 58 seconds and passed. That establishes intermittent behavior, not external causation. Do not classify an unexplained failure as a flake just because a rerun passes. When a QA image is no longer available, rerunning only its consumer cannot recover it; verification needs a build and its downstream jobs for the same candidate.
+
+### What the lane proves
+
+Readiness checks the six required identities plus image name, registry name, registry URL and tag. Those fields do not establish a successful registry result or an available update. The digest scenario still accepts an undefined digest. The watcher awaits version discovery and release-note enrichment before publishing its first container report, so a running Docker fixture can be absent from the API while that work is pending.
+
+Fixture setup also starts ECR and TrueForge outside the required six-fixture manifest. They remain additional dependencies, but none of the four sampled failures stopped at fixture setup.
+
+### Follow-up
+
+The Cucumber test container now enables existing debug logging, retained by the existing failure-diagnostics upload. This exposes registry lookup and retry messages omitted at the normal information level; it is diagnostic instrumentation, not a claimed fix for the three startup failures. Production logging defaults, readiness requirements, retry policy and timeouts are unchanged.
+
+The 100-attempt reassessment threshold has been met. The separate trigger for moving core contracts to a local registry requires evidence that live-registry availability caused a blocking failure. Repeated readiness shortfalls alone do not establish that. Inspect the pending lookup and retry evidence on the next failure before changing fixtures or budgets. Keep exact digest/update assertions in scope for any justified local-registry split. Reassess again after the next 100 applicable completed attempts, or immediately when another unexplained readiness failure supplies new diagnostic evidence.
+
+## Original audit: July 22
+
+Audit snapshot: 2026-07-22T13:38Z. The counts and resolutions below describe that historical snapshot.
+
+### Result
 
 The check named `🥒 E2E: Cucumber` was unreliable, but Cucumber scenario execution was not the dominant cause. The job combined dependency installation, public image pulls, a second application build, application startup, live-registry discovery, API and stream contracts, and browser navigation under one check name.
 
@@ -16,7 +47,7 @@ The audit covered every retained `CI Verify` run available through GitHub Action
 
 Of the 30 failures, 25 were deterministic code, configuration, fixture, or dependency-metadata regressions; four were genuine external/readiness transients; and one had insufficient retained evidence. Only five reached a meaningful product or test-contract assertion. Twenty-five failed in setup, build, readiness, dependency installation, or browser runtime initialization.
 
-## Failure taxonomy
+### Failure taxonomy
 
 | Failure signature | Attempts | Classification | Resolution |
 |---|---:|---|---|
@@ -37,7 +68,7 @@ Of the 30 failures, 25 were deterministic code, configuration, fixture, or depen
 
 Representative evidence includes the [Alpine build failure](https://github.com/CodesWhat/drydock/actions/runs/29317755504), [Playwright runtime mismatch](https://github.com/CodesWhat/drydock/actions/runs/29309859241), [watcher error-restoration failure surfaced as 7/8 readiness](https://github.com/CodesWhat/drydock/actions/runs/29552146138), [npm connection reset](https://github.com/CodesWhat/drydock/actions/runs/29877740897), [stale responsive UI assertion](https://github.com/CodesWhat/drydock/actions/runs/29918885848), and the [latest package/lock mismatch](https://github.com/CodesWhat/drydock/actions/runs/29923008150).
 
-## Reliability policy
+### Reliability policy
 
 - Isolate retries to dependency and fixture-setup boundaries; never retry the scenario suite.
 - Run the exact image artifact already accepted by the build gate.
@@ -49,7 +80,7 @@ Representative evidence includes the [Alpine build failure](https://github.com/C
 
 The blanket `--retry 1` was removed. It could not repair any failure before scenario execution, doubled deterministic failure time, and did not retain evidence when a retry recovered.
 
-## Release-gate follow-on
+### Release-gate follow-on
 
 Moving browser coverage out of Cucumber exposed additional reliability problems in the required Playwright lane. The direct-route smoke loop repeatedly reloaded the authenticated application and pushed the shared QA process over both its production API limit of 1,000 requests per 15 minutes per rate-limit key and its 100-request icon-proxy limit. Later tests then received HTTP 429 responses, producing a cascade of unrelated-looking fixture, modal, and rendering failures. Five whole-test retries added 127 API requests and recovered no failures. The outer API maximum remains 1,000 by default, while the short-lived QA stack uses explicit 10,000-request API and 1,000-request icon budgets so the synthetic release gate can exercise live responses without weakening deployed defaults. Playwright keeps first-failure traces, screenshots, video, and logs but no longer retries the complete test.
 
@@ -63,7 +94,7 @@ Exact-main verification for rc.5 then exposed a separate suite-startup race in [
 
 Playwright's authenticated setup now waits for a snapshot of at least 29 containers with representative local and remote groups, registry results, and update availability before any browser scenario runs. It does not trigger another scan alongside the built-in startup scan. The browser-only compose fixture parks later cron runs and disables event-driven refreshes, leaving production watcher defaults unchanged while keeping the accepted snapshot stable. A cold-stack validation produced one local and one remote startup scan, and the complete 34-scenario browser suite then passed with no retries (33 passed, one intentional skip).
 
-## Residual risk and follow-up threshold
+### Residual risk and follow-up threshold
 
 The remaining nondeterministic boundary is live public-registry behavior. It produced two direct readiness failures plus the npm and GitLab transport failures in the 30-attempt history. Exact readiness and richer artifacts make those failures actionable, but do not make Docker Hub, Quay, npm, or other providers deterministic.
 

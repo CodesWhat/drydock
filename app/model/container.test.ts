@@ -1218,6 +1218,47 @@ test('model should reject empty error message', async () => {
   }).toThrow('ValidationError: "error.message" is not allowed to be empty');
 });
 
+describe('group policy snapshot validation', () => {
+  const snapshot = {
+    id: 'policy-1',
+    group: 'payments',
+    revision: 2,
+    updatePolicy: { maturityMode: 'mature', skipTags: ['1.0.0'] },
+    actions: { updateMode: 'manual', exclude: ['docker.local'] },
+  };
+
+  test('accepts a group snapshot and group as an update-policy source', () => {
+    const validated = container.validate(
+      createValidContainer({
+        groupPolicy: snapshot,
+        updatePolicy: { maturityMode: 'mature' },
+        updatePolicySources: { maturityMode: 'group', skipTags: 'group' },
+      }),
+    );
+
+    expect(validated.groupPolicy).toEqual(snapshot);
+    expect(validated.updatePolicySources).toEqual({ maturityMode: 'group', skipTags: 'group' });
+  });
+
+  test.each([
+    ['a revision below 1', { revision: 0 }],
+    ['an empty group', { group: '' }],
+    ['an automatic update mode', { actions: { updateMode: 'auto' } }],
+    ['an out-of-range minimum age', { updatePolicy: { maturityMinAgeDays: 0 } }],
+    ['a missing actions body', { actions: undefined }],
+  ])('rejects a snapshot with %s', (_case, change) => {
+    expect(() =>
+      container.validate(createValidContainer({ groupPolicy: { ...snapshot, ...change } })),
+    ).toThrow('groupPolicy');
+  });
+
+  test('rejects an unknown update-policy source', () => {
+    expect(() =>
+      container.validate(createValidContainer({ updatePolicySources: { skipTags: 'fleet' } })),
+    ).toThrow('updatePolicySources.skipTags');
+  });
+});
+
 test('validate should allow and preserve unknown future fields (forward compatibility)', () => {
   const input = {
     ...createValidContainer(),

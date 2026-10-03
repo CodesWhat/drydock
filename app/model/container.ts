@@ -132,13 +132,34 @@ export interface ContainerUpdatePolicy extends ContainerDeclarativeUpdatePolicy 
   snoozeUntil?: string;
 }
 
-export type ContainerUpdatePolicySource = 'env' | 'label' | 'override';
+export type ContainerUpdatePolicySource = 'env' | 'group' | 'label' | 'override';
 export type ContainerUpdatePolicySources = Partial<
   Record<keyof ContainerDeclarativeUpdatePolicy, ContainerUpdatePolicySource>
 >;
 export interface ContainerUpdatePolicyDeclarative {
   env: ContainerDeclarativeUpdatePolicy;
   label: ContainerDeclarativeUpdatePolicy;
+}
+
+/** Group action rules only restrict, so `auto` is not a value a group can hold. */
+export type ContainerGroupPolicyUpdateMode = 'manual' | 'notify';
+
+export interface ContainerGroupPolicyActions {
+  updateMode?: ContainerGroupPolicyUpdateMode;
+  exclude?: string[];
+}
+
+/**
+ * The group policy a container's last store write applied (spec 7.3). Re-derived from the
+ * container's current labels and the current policy on every write, never carried over
+ * from a predecessor, and absent when no policy applies.
+ */
+export interface ContainerGroupPolicySnapshot {
+  id: string;
+  group: string;
+  revision: number;
+  updatePolicy: ContainerDeclarativeUpdatePolicy;
+  actions: ContainerGroupPolicyActions;
 }
 
 export interface ContainerSecurityState {
@@ -217,10 +238,11 @@ export interface Container {
   triggerInclude?: string;
   /** @deprecated compat mirror. */
   triggerExclude?: string;
-  // Dependency-ordering fields (#219). Derived, not persisted independently —
-  // re-resolved from the container's labels/compose file every watch cycle,
-  // same pattern as actionTriggerInclude/includeTags above. See
-  // app/dependencies/dependency-graph.ts for how these are consumed.
+  // Dependency-ordering fields (#219). Re-resolved from the container's
+  // labels/compose file every watch cycle, and persisted in the store's
+  // containers.dependency_config column the way actionTriggerInclude is in
+  // trigger_config. See app/dependencies/dependency-graph.ts for how these
+  // are consumed.
   dependsOn?: string[];
   dependsOnSource?: 'label' | 'compose';
   dependsOnAction?: 'update' | 'restart';
@@ -230,6 +252,7 @@ export interface Container {
   updatePolicyDeclarative?: ContainerUpdatePolicyDeclarative;
   updatePolicyOverrides?: ContainerUpdatePolicy;
   updatePolicySources?: ContainerUpdatePolicySources;
+  groupPolicy?: ContainerGroupPolicySnapshot;
   security?: ContainerSecurityState;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
@@ -346,6 +369,25 @@ const containerSecuritySbomSchema = joi
   })
   .or('documents', 'documentRefs');
 
+/** One declarative update-policy layer: env, group or label. */
+export const containerDeclarativeUpdatePolicySchema = joi.object({
+  skipTags: joi.array().items(joi.string()),
+  skipDigests: joi.array().items(joi.string()),
+  maturityMode: joi.string().valid('all', 'mature'),
+  maturityMinAgeDays: joi
+    .number()
+    .integer()
+    .min(MATURITY_MIN_AGE_DAYS_MIN)
+    .max(MATURITY_MIN_AGE_DAYS_MAX),
+});
+
+export const containerGroupPolicyActionsSchema = joi.object({
+  updateMode: joi.string().valid('manual', 'notify'),
+  exclude: joi.array().items(joi.string()),
+});
+
+const UPDATE_POLICY_SOURCE_VALUES = ['env', 'group', 'label', 'override'];
+
 // Container data schema
 const schema = joi.object({
   id: joi.string().min(1).required(),
@@ -389,26 +431,8 @@ const schema = joi.object({
       .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   updatePolicyDeclarative: joi.object({
-    env: joi.object({
-      skipTags: joi.array().items(joi.string()),
-      skipDigests: joi.array().items(joi.string()),
-      maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi
-        .number()
-        .integer()
-        .min(MATURITY_MIN_AGE_DAYS_MIN)
-        .max(MATURITY_MIN_AGE_DAYS_MAX),
-    }),
-    label: joi.object({
-      skipTags: joi.array().items(joi.string()),
-      skipDigests: joi.array().items(joi.string()),
-      maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi
-        .number()
-        .integer()
-        .min(MATURITY_MIN_AGE_DAYS_MIN)
-        .max(MATURITY_MIN_AGE_DAYS_MAX),
-    }),
+    env: containerDeclarativeUpdatePolicySchema,
+    label: containerDeclarativeUpdatePolicySchema,
   }),
   updatePolicyOverrides: joi.object({
     skipTags: joi.array().items(joi.string()),
@@ -422,10 +446,17 @@ const schema = joi.object({
       .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   updatePolicySources: joi.object({
-    skipTags: joi.string().valid('env', 'label', 'override'),
-    skipDigests: joi.string().valid('env', 'label', 'override'),
-    maturityMode: joi.string().valid('env', 'label', 'override'),
-    maturityMinAgeDays: joi.string().valid('env', 'label', 'override'),
+    skipTags: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    skipDigests: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturityMode: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturityMinAgeDays: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+  }),
+  groupPolicy: joi.object({
+    id: joi.string().min(1).required(),
+    group: joi.string().min(1).required(),
+    revision: joi.number().integer().min(1).required(),
+    updatePolicy: containerDeclarativeUpdatePolicySchema.required(),
+    actions: containerGroupPolicyActionsSchema.required(),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,

@@ -48,6 +48,28 @@ describe('store/db/importers/containers', () => {
     });
   });
 
+  test('carries the dependency fields of a 1.7 container document', () => {
+    expect(
+      run([
+        createContainerFixture({
+          id: 'container-with-dependencies',
+          dependsOn: ['db', 'cache'],
+          dependsOnSource: 'compose',
+          dependsOnAction: 'restart',
+        }),
+      ]),
+    ).toBe(1);
+
+    const row = db
+      .prepare('SELECT dependency_config FROM containers WHERE id = ?')
+      .get('container-with-dependencies');
+    expect(JSON.parse(String(row?.dependency_config))).toEqual({
+      dependsOn: ['db', 'cache'],
+      dependsOnSource: 'compose',
+      dependsOnAction: 'restart',
+    });
+  });
+
   test('skips a document that fails container validation', () => {
     expect(run([{ id: 'missing-required-fields' }])).toBe(0);
     expect(db.prepare('SELECT COUNT(*) AS n FROM containers').get()).toEqual({ n: 0 });
