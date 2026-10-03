@@ -10,7 +10,7 @@
 
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
-import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL } from './schema.js';
+import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL, TOTP_TABLES_SQL } from './schema.js';
 
 const log = logger.child({ component: 'store.db' });
 
@@ -29,6 +29,9 @@ export const GROUP_POLICIES_MIGRATION_VERSION = 8;
 
 /** Spec 7.5 label-owned overrides. Always one past the group policies migration. */
 export const LABEL_OVERRIDES_MIGRATION_VERSION = 9;
+
+/** Spec 11.1.2 TOTP: factor, enrollment, recovery code and subject version tables. */
+export const TOTP_MIGRATION_VERSION = 10;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -168,6 +171,14 @@ CREATE TABLE container_label_overrides (
 CREATE INDEX container_label_overrides_watcher_agent ON container_label_overrides(watcher, agent);
 ALTER TABLE containers ADD COLUMN label_owned TEXT;
 `,
+  },
+  {
+    version: TOTP_MIGRATION_VERSION,
+    // Spec 11.1.2 slice 1: encrypted TOTP seeds, pending enrollments, hashed
+    // recovery codes and the per-subject version counter. Inert until the
+    // login and management slices use them.
+    note: 'add TOTP factor, enrollment, recovery code and subject version tables (spec 11.1.2 slice 1)',
+    sql: TOTP_TABLES_SQL,
   },
 ];
 

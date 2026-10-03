@@ -7,6 +7,7 @@ import {
   LABEL_OVERRIDES_MIGRATION_VERSION,
   MIGRATIONS,
   migrate,
+  TOTP_MIGRATION_VERSION,
 } from './migrations.js';
 
 const { logMock } = vi.hoisted(() => ({
@@ -41,6 +42,25 @@ describe('store/db/migrations', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get()).toEqual({
       n: MIGRATIONS.length,
     });
+  });
+
+  test('applies the TOTP tables as version 10 even when 7 to 9 are not present yet', () => {
+    expect(TOTP_MIGRATION_VERSION).toBe(10);
+    const withGap = MIGRATIONS.filter(
+      (migration) => migration.version < 7 || migration.version === TOTP_MIGRATION_VERSION,
+    );
+    expect(migrate(db, withGap)).toEqual([1, 2, 3, 4, 5, 6, TOTP_MIGRATION_VERSION]);
+    expect(
+      db.prepare("SELECT name FROM sqlite_schema WHERE name = 'totp_factors'").all(),
+    ).toHaveLength(1);
+  });
+
+  test('a database migrated before TOTP existed picks the tables up later', () => {
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < TOTP_MIGRATION_VERSION),
+    );
+    expect(migrate(db)).toEqual([TOTP_MIGRATION_VERSION]);
   });
 
   test('records the version, the note and when it was applied', () => {
@@ -103,6 +123,7 @@ describe('store/db/migrations', () => {
       const versions = MIGRATIONS.map((migration) => migration.version);
       expect(versions.filter((version) => version > GROUP_POLICIES_MIGRATION_VERSION)).toEqual([
         LABEL_OVERRIDES_MIGRATION_VERSION,
+        TOTP_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -161,6 +182,7 @@ describe('store/db/migrations', () => {
       expect(migrate(db)).toEqual([
         GROUP_POLICIES_MIGRATION_VERSION,
         LABEL_OVERRIDES_MIGRATION_VERSION,
+        TOTP_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -183,9 +205,10 @@ describe('store/db/migrations', () => {
         .run(id, scopeKey, overrides.kind ?? 'container', overrides.revision ?? 1);
 
     test('is appended after the group policies migration and applies exactly once', () => {
-      expect(Math.max(...MIGRATIONS.map((migration) => migration.version))).toBe(
-        LABEL_OVERRIDES_MIGRATION_VERSION,
-      );
+      expect(
+        MIGRATIONS.find((migration) => migration.version > GROUP_POLICIES_MIGRATION_VERSION)
+          ?.version,
+      ).toBe(LABEL_OVERRIDES_MIGRATION_VERSION);
       expect(LABEL_OVERRIDES_MIGRATION_VERSION).toBe(GROUP_POLICIES_MIGRATION_VERSION + 1);
       expect(migrate(db)).toContain(LABEL_OVERRIDES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -228,7 +251,7 @@ describe('store/db/migrations', () => {
          VALUES ('existing', '::local::existing', 'existing', 'existing', 'running', 'local', 'library/web', '1', '{}')`,
       ).run();
 
-      expect(migrate(db)).toEqual([LABEL_OVERRIDES_MIGRATION_VERSION]);
+      expect(migrate(db)).toEqual([LABEL_OVERRIDES_MIGRATION_VERSION, TOTP_MIGRATION_VERSION]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,
       });

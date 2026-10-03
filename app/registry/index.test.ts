@@ -1019,6 +1019,24 @@ test('registerAuthentications should log startup health guidance when DD_AUTH va
   );
 });
 
+test('registerAuthentications should not treat the TOTP key ring vars as auth provider configuration', async () => {
+  configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING = '{"k1":"AAAA"}';
+  configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID = 'k1';
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+
+  authentications = {};
+  try {
+    await registry.testable_registerAuthentications();
+
+    expect(spyLog).not.toHaveBeenCalledWith(
+      expect.stringContaining('Detected DD_AUTH_* environment variables'),
+    );
+  } finally {
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING;
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID;
+  }
+});
+
 test('registerAuthentications should log startup health guidance when DD_AUTH vars exist but no provider registers', async () => {
   configuration.ddEnvVars.DD_AUTH_BASIC_ANDI_USER = 'ANDI';
   mockIsUpgrade.mockReturnValue(true);

@@ -745,9 +745,11 @@ async function registerAuthentications() {
     | ProviderConfigurationsByProvider
     | null
     | undefined;
-  const hasAuthEnvConfiguration = Object.keys(ddEnvVars).some((envKey) =>
-    envKey.toUpperCase().startsWith('DD_AUTH_'),
-  );
+  // DD_AUTH_TOTP_* hold the TOTP key ring, not provider configuration.
+  const hasAuthEnvConfiguration = Object.keys(ddEnvVars).some((envKey) => {
+    const upperKey = envKey.toUpperCase();
+    return upperKey.startsWith('DD_AUTH_') && !upperKey.startsWith('DD_AUTH_TOTP_');
+  });
 
   if (!configurations || Object.keys(configurations).length === 0) {
     log.info('No authentication configured => Allow anonymous access');

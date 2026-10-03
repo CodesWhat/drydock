@@ -223,6 +223,7 @@ const {
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./session', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./totp', createCollectionsMock);
     vi.doMock('./ui-preferences', createCollectionsMock);
     vi.doMock('./update-lifecycle-cache', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
@@ -276,6 +277,7 @@ vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./session', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
+vi.mock('./totp', createCollectionsMock);
 vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-lifecycle-cache', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
@@ -318,6 +320,7 @@ describe('Store Module', () => {
     const notification = await import('./notification.js');
     const sessionStore = await import('./session.js');
     const settings = await import('./settings.js');
+    const totp = await import('./totp.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateLifecycleCache = await import('./update-lifecycle-cache.js');
     const updateOperation = await import('./update-operation.js');
@@ -330,6 +333,7 @@ describe('Store Module', () => {
     expect(notification.createCollections).toHaveBeenCalled();
     expect(sessionStore.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(totp.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateLifecycleCache.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
@@ -482,6 +486,7 @@ describe('Store Module', () => {
     const mqttHass = await import('./mqtt-hass.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const totp = await import('./totp.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
     expect(apiKey.createCollections).toHaveBeenCalled();
@@ -490,6 +495,7 @@ describe('Store Module', () => {
     expect(mqttHass.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(totp.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
