@@ -56,7 +56,7 @@ export function resolveLabelOwnedState(
   );
 }
 
-export interface ScopeMember {
+interface ScopeMember {
   id: string;
   name: string;
 }
