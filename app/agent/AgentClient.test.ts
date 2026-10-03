@@ -929,6 +929,7 @@ describe('AgentClient', () => {
 
         expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1', {
           identityChangeExpected: true,
+          retainUpdatePolicy: true,
         });
         expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('stale-1', {
           replacementExpected: true,
@@ -1479,6 +1480,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
     });
 
@@ -1496,6 +1498,7 @@ describe('AgentClient', () => {
       await client.watch('docker', 'local');
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
     });
 
@@ -1610,6 +1613,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
     });
@@ -2323,6 +2327,7 @@ describe('AgentClient', () => {
       expect(spy).toHaveBeenCalled();
       expect(client.info).toEqual({
         version: '1.0',
+        build: '1.0',
         os: 'linux',
         arch: 'x64',
         cpus: 8,
@@ -2422,7 +2427,11 @@ describe('AgentClient', () => {
         agent: 'test-agent',
       } as never);
       await client.handleEvent('dd:container-removed', { id: 'c1' });
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
+      // #1280: the id-only event cannot say whether this is a recreate, so the
+      // controller-set update policy is retained for a same-identity replacement.
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1', {
+        retainUpdatePolicy: true,
+      });
     });
 
     test('rejects another agent or controller container id before update side effects', async () => {
@@ -2616,7 +2625,9 @@ describe('AgentClient', () => {
 
       await agentA.handleEvent('dd:container-removed', { id: 'agent-a-id', watcher: 'local' });
       expect(rows.has('agent-a-id')).toBe(false);
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('agent-a-id');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('agent-a-id', {
+        retainUpdatePolicy: true,
+      });
 
       await agentB.handleEvent('dd:container-removed', { id: 'agent-b-id' });
       expect(rows.has('agent-b-id')).toBe(false);
@@ -3956,6 +3967,7 @@ describe('AgentClient', () => {
       expect(processSpy).toHaveBeenCalledWith({ id: 'c1', name: 'current', watcher: 'local' });
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
     });
@@ -4009,6 +4021,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
     });
@@ -5930,6 +5943,58 @@ describe('AgentClient', () => {
       const result = internal.buildRuntimeInfoFromAck(undefined);
       // Should not throw — optional chaining prevents it
       expect(result).toBeDefined();
+    });
+
+    test('applies the build identity reported next to the base version', () => {
+      const internal = client as any;
+      client.info = { version: '1.6.0', build: '1.6.0-rc.13' };
+
+      const result = internal.buildRuntimeInfoFromAck({
+        version: '1.6.1',
+        build: '1.6.1-rc.15',
+      });
+      expect(result.version).toBe('1.6.1');
+      expect(result.build).toBe('1.6.1-rc.15');
+    });
+
+    test('normalises the version an older agent reports without a build', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.6.1-rc.15' });
+      expect(result.version).toBe('1.6.1');
+      expect(result.build).toBe('1.6.1-rc.15');
+    });
+
+    test('reports a plain version as both version and build', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.2.3' });
+      expect(result.version).toBe('1.2.3');
+      expect(result.build).toBe('1.2.3');
+    });
+
+    test('drops a stale build when the ack has no version', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: undefined });
+      expect(result.version).toBe('1.7.0');
+      expect(result.build).toBeUndefined();
+    });
+
+    test.each([
+      ['a number', 42],
+      ['an empty string', ''],
+      ['null', null],
+    ])('falls back to the version when the build is %s', (_label, build) => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.7.0', build });
+      expect(result.version).toBe('1.7.0');
+      expect(result.build).toBe('1.7.0');
     });
 
     test('applies logLevel and pollInterval from ack payload', () => {
@@ -7905,6 +7970,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('old-id', {
         replacementExpected: true,
@@ -7920,6 +7986,7 @@ describe('AgentClient', () => {
       (client as any).pruneOldContainers([{ id: 'other-id', name: 'something-else' }]);
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
     });
 
@@ -7928,6 +7995,7 @@ describe('AgentClient', () => {
       (client as any).pruneOldContainers([{ id: 'new-id', name: 'nginx' }]);
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c3', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
     });
 
@@ -7938,6 +8006,7 @@ describe('AgentClient', () => {
       (client as any).pruneOldContainers([{ id: 'new-id' }, { id: 'n2', name: '' }]);
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
     });
   });
@@ -8163,6 +8232,31 @@ describe('AgentClient', () => {
           (m.includes('test-agent') || m.includes('connected')),
       );
       expect(hasAckLog).toBe(true);
+    });
+
+    test.each([
+      [
+        'adds the build when it differs from the version',
+        { version: '1.6.1', build: '1.6.1-rc.15' },
+        'Agent test-agent connected (version: 1.6.1, build: 1.6.1-rc.15)',
+      ],
+      [
+        'omits the build when it matches the version',
+        { version: '1.6.1', build: '1.6.1' },
+        'Agent test-agent connected (version: 1.6.1)',
+      ],
+      [
+        'omits the build when an older agent reports none',
+        { version: '1.6.1-rc.15' },
+        'Agent test-agent connected (version: 1.6.1-rc.15)',
+      ],
+    ])('%s', async (_label, ack, expectedLog) => {
+      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+
+      await client.handleEvent('dd:ack', ack);
+
+      const infoCalls = mockLogChild.info.mock.calls.map((c) => c[0]);
+      expect(infoCalls).toContain(expectedLog);
     });
   });
 
@@ -8503,6 +8597,7 @@ describe('AgentClient', () => {
       // c2 must have been pruned; c1 must remain.
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2', {
         identityChangeExpected: true,
+        retainUpdatePolicy: true,
       });
       expect(containerStore.map((c) => c.id)).toEqual(['c1']);
     });

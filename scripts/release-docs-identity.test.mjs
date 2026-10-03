@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.16';
-const PREV_RC_VERSION = '1.7.0-rc.15';
-const RC_DATE = '2026-09-15';
-const RC_DISPLAY_DATE = 'September 15, 2026';
+const RC_VERSION = '1.7.0-rc.17';
+const PREV_RC_VERSION = '1.7.0-rc.16';
+const RC_DATE = '2026-10-02';
+const RC_DISPLAY_DATE = 'October 2, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -75,8 +75,41 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   assert.match(readme, new RegExp(`v${escapedRcVersion} highlights`, 'u'));
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
-  assert.match(appApi, new RegExp(`"version":"${escapedRcVersion}"`, 'u'));
-  assert.match(agentApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
+  // The app and agent APIs report the base version as `version` and the full build
+  // identity as `build`. A GA image is the promoted candidate, so at the GA cut the
+  // build example keeps naming a candidate of that base version rather than the base.
+  const escapedBaseVersion = escapeRegExp(RC_VERSION.replace(/-rc\.\d+$/u, ''));
+  const buildPattern = rcSuffixMatch ? escapedRcVersion : `${escapedBaseVersion}-rc\\.\\d+`;
+  assert.match(
+    appApi,
+    new RegExp(`"version":"${escapedBaseVersion}"`, 'u'),
+    'the app API example must show the base version',
+  );
+  assert.match(
+    appApi,
+    new RegExp(`"build":"${buildPattern}"`, 'u'),
+    'the app API example build must name a release candidate (at GA, the one it was promoted from)',
+  );
+  assert.equal(
+    agentApi.match(new RegExp(`"version": "${escapedBaseVersion}"`, 'gu'))?.length,
+    2,
+    'the agent list and dd:ack examples must both show the base version',
+  );
+  assert.equal(
+    agentApi.match(new RegExp(`"build": "${buildPattern}"`, 'gu'))?.length,
+    2,
+    'the agent list and dd:ack examples must both show the build identity',
+  );
+  for (const [name, page] of [
+    ['app', appApi],
+    ['agent', agentApi],
+  ]) {
+    assert.doesNotMatch(
+      page,
+      /"version":\s*"\d+\.\d+\.\d+-/u,
+      `${name} API examples must not show a prerelease as the version`,
+    );
+  }
   assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
   assert.match(
@@ -215,7 +248,10 @@ test('credit links require an exact Markdown destination', () => {
   }
 });
 
-test('current candidate notes credit the MQTT report and describe its fresh soak', () => {
+test('rc.16 notes retain MQTT credit and the original soak record', () => {
+  const RC_VERSION = '1.7.0-rc.16';
+  const RC_DATE = '2026-09-15';
+  const RC_DISPLAY_DATE = 'September 15, 2026';
   const updates = extractMarkdownSection(
     read('content/docs/current/updates/index.mdx'),
     `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
@@ -227,8 +263,11 @@ test('current candidate notes credit the MQTT report and describe its fresh soak
   assert.ok(updates.includes(changelogUrl));
   for (const suffix of ['', '.de', '.es', '.fr', '.pl', '.pt-BR', '.zh-CN']) {
     const readme = read(`README${suffix}.md`);
-    const currentHighlights = readme.split('<details open>')[1]?.split('</details>')[0];
-    assert.ok(currentHighlights?.includes(`v${RC_VERSION}`), suffix);
+    const currentHighlights = readme
+      .split('<details>')
+      .find((section) => section.split('</summary>')[0].includes(`v${RC_VERSION}`))
+      ?.split('</details>')[0];
+    assert.ok(currentHighlights, suffix);
     assert.ok(currentHighlights?.includes(changelogUrl), suffix);
     assertMarkdownLink(currentHighlights, 'https://github.com/depuits');
     assertMarkdownLink(currentHighlights, 'https://github.com/CodesWhat/drydock/discussions/1201');

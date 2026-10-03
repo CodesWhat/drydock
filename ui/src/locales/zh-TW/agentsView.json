@@ -71,6 +71,7 @@
         "agent": "代理",
         "host": "主機",
         "agentVersion": "代理版本",
+        "agentBuild": "代理組建版本",
         "logLevel": "日誌級別",
         "pollInterval": "輪詢間隔",
         "dockerSocket": "Docker Socket",

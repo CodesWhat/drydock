@@ -5,16 +5,31 @@ description: "Application info, server configuration, and diagnostic endpoints."
 
 ## Get App information
 
-Returns application name and version.
+Returns the application name, version and build.
 
 ```bash
 curl http://drydock:3000/api/v1/app
 
 {
   "name":"drydock",
-  "version":"1.7.0-rc.16"
+  "version":"1.7.0",
+  "build":"1.7.0-rc.17"
 }
 ```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | Always `drydock` |
+| `version` | string | Base version, with any prerelease suffix removed. This is the version the UI shows |
+| `build` | string | Full build identity. Same as `version` unless the image was built as a prerelease |
+
+### Version and build
+
+A stable release is the last release candidate's image, promoted unchanged. Nothing is rebuilt, so the image you pull as `1.6.1` is the same image as `1.6.1-rc.15`, and it can't tell which tag it was pulled by. It reports `"version":"1.6.1"` and `"build":"1.6.1-rc.15"`.
+
+So a release candidate in `build` on a stable tag is expected. It names the candidate the release was promoted from, and it doesn't mean you're running a prerelease. Include the build when you report a bug.
+
+A build with no prerelease suffix, or a custom value such as `local`, reports the same string in both fields. Drydock versions that predate `build` reported the full build identity as `version` and had no `build` field.
 
 ## Get server configuration
 
@@ -147,7 +162,7 @@ The response is a JSON attachment with a timestamped filename (e.g. `drydock-deb
 
 | Section | Contents |
 | --- | --- |
-| `metadata` | Generated timestamp, drydock version, Node.js version, uptime |
+| `metadata` | Generated timestamp, drydock version (`drydockVersion`) and build (`drydockBuild`), Node.js version, uptime |
 | `state` | All registered components: containers, watchers, triggers, registries, authentications, agents |
 | `mqttHomeAssistant` | Home Assistant MQTT sensor discovery topics and definitions |
 | `dockerEvents` | Active Docker event subscriptions and recent events within the time window |

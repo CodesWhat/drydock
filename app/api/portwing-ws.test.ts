@@ -1194,6 +1194,66 @@ describe('hello verification — happy path', () => {
     expect(getLastAgentClientInstance()?.info).toMatchObject({ pollInterval: '5' });
   });
 
+  describe.each([
+    ['a prerelease version into base and build', { version: '1.2.3-rc.4' }, '1.2.3', '1.2.3-rc.4'],
+    ['a plain version into the same base and build', { version: '1.2.3' }, '1.2.3', '1.2.3'],
+  ])('hello version normalisation', (title, overrides, version, build) => {
+    test(`splits ${title}`, async () => {
+      const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+      const ts = Math.floor(Date.now() / 1000);
+      const nonce = 'a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+      const sig = signHello(privateKey, ts, nonce);
+      const record: AgentKeyRecord = {
+        keyId,
+        pubkey: pubkeyBase64,
+        label: 'test',
+        createdAt: new Date().toISOString(),
+        revokedAt: null,
+      };
+      const { gateway, getUpgradedWs } = createGateway(record);
+      gateway.handleUpgrade(
+        createRequest('/api/portwing/ws'),
+        createMockSocket() as unknown as Socket,
+        Buffer.alloc(0),
+      );
+      const ws = getUpgradedWs()!;
+      sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, overrides));
+      await vi.waitFor(() => {
+        expect(ws.sentMessages.length).toBeGreaterThan(0);
+      });
+      expect(getLastAgentClientInstance()?.info).toMatchObject({ version, build });
+    });
+  });
+
+  test('leaves version and build unset when hello carries no version', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'b9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { version: undefined }));
+    await vi.waitFor(() => {
+      expect(ws.sentMessages.length).toBeGreaterThan(0);
+    });
+    const info = getLastAgentClientInstance()?.info as Record<string, unknown>;
+    expect(info.version).toBeUndefined();
+    expect('build' in info).toBe(false);
+    expect(typeof info.pollInterval).toBe('string');
+  });
+
   test('protocol portwing/1.0 is accepted', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);

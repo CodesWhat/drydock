@@ -92,6 +92,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Gestor de actualizaciones de contenedores Docker",
+        "build": "Compilación",
         "documentation": "Documentación",
         "github": "GitHub",
         "changelog": "Registro de cambios",

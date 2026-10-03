@@ -24,6 +24,7 @@ import {
   getServerConfiguration,
   getVersion,
 } from '../configuration/index.js';
+import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import logger from '../log/index.js';
 import * as agentKeys from '../store/agent-keys.js';
 import { save as saveStore } from '../store/index.js';
@@ -855,8 +856,12 @@ async function processHello(
     port: 0,
     secret: '',
   });
+  const reportedVersion =
+    typeof hello.version === 'string' && hello.version.length > 0
+      ? deriveVersionIdentity(hello.version)
+      : { version: hello.version };
   client.info = {
-    version: hello.version,
+    ...reportedVersion,
     pollInterval: String(pollInterval),
   };
 
