@@ -25,6 +25,7 @@ import {
   deriveContainerIdRetentionKey,
   getCandidateIdentityFields,
   getCanonicalContainerName,
+  getComposeProjectService,
   hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
@@ -113,6 +114,13 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 type UpdatePolicyRetentionCacheEntry = {
   updatePolicyOverrides: container.ContainerUpdatePolicy;
   expiresAt: number;
+  /**
+   * #1280: canonical name of the container the entry was stashed from. Replicas of one
+   * compose service share the identity key, and this is what tells them apart (see
+   * takeIdentityRetainedUpdatePolicyEntry). Absent on an entry stashed before it was
+   * recorded.
+   */
+  containerName?: string;
 };
 
 const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
@@ -1300,6 +1308,8 @@ function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
   const entry: UpdatePolicyRetentionCacheEntry = {
     updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+    // Already canonical: a rollback-renamed record returned above.
+    containerName: containerRaw.name,
   };
   updatePolicyRetentionCache.set(cacheKey, entry);
   // #565: write-through to the durable store so this stash survives the
@@ -1479,29 +1489,84 @@ function getLivePredecessorUpdatePolicyOverrides(
   return undefined;
 }
 
+/**
+ * #1280: take the entry retained under `incoming`'s identity key, if it is this
+ * container's to take.
+ *
+ * Replicas of one compose service share the identity key (`compose:project/service`),
+ * so after a compose down/up the entry one replica stashed is equally reachable from
+ * every other. An agent-owned insert therefore takes only an entry recorded under its
+ * own name and leaves another replica's entry where it is, for that replica to take.
+ *
+ * An entry stashed before names were recorded cannot be attributed. Under a compose key
+ * it is consumed and discarded: applying it could hand one replica's policy to another,
+ * while dropping it only loses a policy that was in flight across the upgrade. Under a
+ * plain identity key the key itself names the container, so it is taken as before.
+ *
+ * Controller-local inserts keep the name-agnostic match, which is what carries a policy
+ * across a compose service redeployed under a new container name.
+ */
+function takeIdentityRetainedUpdatePolicyEntry(incoming) {
+  const cacheKey = deriveContainerIdentityKey(incoming);
+  const entry = cacheKey === undefined ? undefined : updatePolicyRetentionCache.get(cacheKey);
+  if (!entry) {
+    return undefined;
+  }
+  if (isAgentOwnedContainer(incoming)) {
+    if (entry.containerName !== undefined && entry.containerName !== incoming.name) {
+      return undefined;
+    }
+    if (entry.containerName === undefined && getComposeProjectService(incoming) !== undefined) {
+      takeRetainedUpdatePolicyEntry(cacheKey);
+      return undefined;
+    }
+  }
+  return takeRetainedUpdatePolicyEntry(cacheKey);
+}
+
+/**
+ * Take every entry retained for `incoming` and return the overrides of the one stashed
+ * last, ignoring expired ones.
+ *
+ * Both keys are taken: an agent prune stashes under both, and a hit on one must not leave
+ * the other behind to resurrect a since-cleared policy later. The only entry left in
+ * place is one another compose replica stashed (see takeIdentityRetainedUpdatePolicyEntry).
+ *
+ * Neither key is the better match in general. After an agent -> controller -> agent move
+ * the identity entry is the one the first move left behind, and the id entry carries the
+ * policy as the controller last held it. So the later stash wins, and an expired entry
+ * never shadows a live one. Stash order is the Map's insertion order: a stash deletes
+ * then sets its key, and rehydrate inserts in `refresh_order`, so the later position is
+ * the later stash. `expiresAt` is no proxy for it, because the TTL is configurable
+ * (DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS) and may differ between two stashes across a
+ * restart.
+ */
 function takeUnexpiredRetainedUpdatePolicyOverrides(
   incoming,
 ): container.ContainerUpdatePolicy | undefined {
-  // Take both keys unconditionally: an agent prune stashes under both, and a hit on one
-  // must not leave the other behind to resurrect a since-cleared policy later.
-  const identityEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(incoming));
-  const idEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
-  const entry = identityEntry ?? idEntry;
-  if (!entry || entry.expiresAt <= Date.now()) {
-    return undefined;
-  }
-  return entry.updatePolicyOverrides;
+  const nowMs = Date.now();
+  const identityKey = deriveContainerIdentityKey(incoming);
+  const idKey = deriveContainerIdRetentionKey(incoming);
+  const keys = [...updatePolicyRetentionCache.keys()];
+  const positionOf = (key: string | undefined) => (key === undefined ? -1 : keys.indexOf(key));
+  const [candidate] = [
+    { entry: takeIdentityRetainedUpdatePolicyEntry(incoming), position: positionOf(identityKey) },
+    { entry: takeRetainedUpdatePolicyEntry(idKey), position: positionOf(idKey) },
+  ]
+    .filter(({ entry }) => entry !== undefined && entry.expiresAt > nowMs)
+    .sort((first, second) => second.position - first.position);
+  return candidate?.entry?.updatePolicyOverrides;
 }
 
 /**
  * #496: restore a retained updatePolicy onto the record replacing a deleted one.
  *
- * The identity key comes first because it is the narrower match: it names one
- * container under one watcher on one agent, and a recreate is the common case. The
- * Docker id is the DR-112 fallback for the hand-off the identity key cannot see, where
- * the id survives and the identity does not. An agent-reported removal that cannot tell
- * which of the two is happening stashes under both, and the order decides which one a
- * given insert reads.
+ * The identity key carries a recreate: it names one container under one watcher on one
+ * agent, and survives the new Docker id. The Docker id carries the DR-112 hand-off the
+ * identity key cannot see, where the id survives and the identity does not. An
+ * agent-reported removal that cannot tell which of the two is happening stashes under
+ * both, and an insert that finds both takes the later stash (see
+ * takeUnexpiredRetainedUpdatePolicyOverrides).
  *
  * #1280: when neither is stashed, the predecessor may simply not have been deleted yet
  * (see getLivePredecessorUpdatePolicyOverrides).
@@ -2078,6 +2143,37 @@ interface DeleteContainerOptions {
 }
 
 /**
+ * Whether a delete stashes the record's update policy under its identity key for a
+ * same-identity replacement to inherit.
+ *
+ * #1280: an agent-owned replacement can already be stored when its predecessor is
+ * deleted, because a real-time dd:container-added landed first and the replacement
+ * inherited the policy from the still-stored predecessor on insert. A later inventory
+ * pass or snapshot that lists that replacement still flags the removal as
+ * `replacementExpected`, and HA/MQTT need the flag to keep the replacement's discovery,
+ * but the stash would never be consumed by it. It would sit under the identity key and
+ * hand the policy to the next recreate, even after the user cleared it. Controller-local
+ * records keep the unconditional stash, because their inserts never adopt from a live
+ * predecessor (see getLivePredecessorUpdatePolicyOverrides).
+ */
+function shouldStashUpdatePolicyForReplacement(
+  containerRaw,
+  options: DeleteContainerOptions,
+): boolean {
+  // Nothing to retain means nothing to stash; skip the sibling lookups below, which read
+  // every row of the record's watcher on its agent.
+  if (Object.keys(getUpdatePolicyOverrides(containerRaw)).length === 0) {
+    return false;
+  }
+  if (options.replacementExpected === true) {
+    return !(isAgentOwnedContainer(containerRaw) && findIdentitySiblings(containerRaw).length > 0);
+  }
+  return (
+    options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0
+  );
+}
+
+/**
  * Delete container by id.
  * @param id
  */
@@ -2089,10 +2185,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     db.prepare(CONTAINER_DELETE_BY_ID_SQL).run(id);
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
-    if (
-      options.replacementExpected === true ||
-      (options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0)
-    ) {
+    if (shouldStashUpdatePolicyForReplacement(containerRaw, options)) {
       stashUpdatePolicyForReplacement(containerRaw);
     }
     if (options.identityChangeExpected === true) {
@@ -2235,6 +2328,7 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
     updatePolicyRetentionCache.set(record.cacheKey, {
       updatePolicyOverrides: record.updatePolicyOverrides as container.ContainerUpdatePolicy,
       expiresAt: record.expiresAt,
+      containerName: record.containerName,
     });
   }
 }
