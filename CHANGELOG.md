@@ -106,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Update Harden Runner to 2.21.1 so block-mode CI includes the GitHub runner control-plane endpoints added upstream. Existing egress policies, endpoint restrictions and workflow permissions stay unchanged.
 - Apply the configured outbound HTTP timeout to Docker Hub publish-date metadata requests, so a stalled response cannot indefinitely hold up container discovery. Existing bounded retries and publish-date failure handling are unchanged.
 - Let accepted bulk vulnerability scans finish after the HTTP request completes normally. Previously, inventories larger than the four-scan concurrency limit could stop after the first batch while the UI kept waiting for the remaining results. Prematurely closed, incomplete requests still stop queued scans.
 - **[#1284](https://github.com/CodesWhat/drydock/issues/1284): a disabled healthcheck no longer health-gates the update.** A container with `healthcheck: disable: true` (stored by Docker as `Test: ["NONE"]`), an empty test, or a healthcheck block with only timing fields was treated as having a healthcheck. Docker never reports a health state for those, so the Docker action waited out the whole rollback window and rolled back an update that had started fine. The gate now applies only when the container has a real `CMD` or `CMD-SHELL` probe or Docker is reporting health.
