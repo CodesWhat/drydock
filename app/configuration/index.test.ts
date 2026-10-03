@@ -1619,6 +1619,23 @@ describe('getAuthenticationConfigurations', () => {
   });
 });
 
+describe('getAuthenticationConfigurations TOTP key ring vars', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING;
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID;
+    delete configuration.ddEnvVars.DD_AUTH_BASIC_JOHN_USER;
+  });
+
+  test('does not discover a totp provider from the key ring variables', () => {
+    configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING = '{"k1":"x"}';
+    configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID = 'k1';
+    configuration.ddEnvVars.DD_AUTH_BASIC_JOHN_USER = 'john';
+    const result = configuration.getAuthenticationConfigurations();
+    expect(result).not.toHaveProperty('totp');
+    expect(result.basic.john).toBeDefined();
+  });
+});
+
 describe('getWebhookConfiguration', () => {
   beforeEach(() => {
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
