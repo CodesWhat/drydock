@@ -40,12 +40,32 @@ describe('approval service', () => {
   });
 
   describe.each([
-    ['list', () => listApprovals(), 'Failed to load approvals: Service Unavailable'],
-    ['summary', () => getApprovalSummary(), 'Failed to load approval summary: Service Unavailable'],
-    ['detail', () => getApproval('approval-1'), 'Failed to load approval: Service Unavailable'],
-    ['approve', () => approveApproval('approval-1'), 'Failed to approve update'],
-    ['reject', () => rejectApproval('approval-1'), 'Failed to reject update'],
-    ['defer', () => deferApproval('approval-1'), 'Failed to defer update'],
+    ['list', () => listApprovals(), 'Failed to load approvals (HTTP 503): Service Unavailable'],
+    [
+      'summary',
+      () => getApprovalSummary(),
+      'Failed to load approval summary (HTTP 503): Service Unavailable',
+    ],
+    [
+      'detail',
+      () => getApproval('approval-1'),
+      'Failed to load approval (HTTP 503): Service Unavailable',
+    ],
+    [
+      'approve',
+      () => approveApproval('approval-1'),
+      'Failed to approve update (HTTP 503): Service Unavailable',
+    ],
+    [
+      'reject',
+      () => rejectApproval('approval-1'),
+      'Failed to reject update (HTTP 503): Service Unavailable',
+    ],
+    [
+      'defer',
+      () => deferApproval('approval-1'),
+      'Failed to defer update (HTTP 503): Service Unavailable',
+    ],
   ] as const)('%s error responses', (_name, request, fallback) => {
     it.each([
       'null',
@@ -162,7 +182,7 @@ describe('approval service', () => {
 
       const err = await listApprovals().catch((e: unknown) => e);
       expect((err as ApprovalApiError).message).toBe(
-        'Failed to load approvals: Internal Server Error',
+        'Failed to load approvals (HTTP 500): Internal Server Error',
       );
     });
   });
@@ -191,7 +211,7 @@ describe('approval service', () => {
       });
 
       await expect(getApprovalSummary()).rejects.toThrow(
-        'Failed to load approval summary: Unauthorized',
+        'Failed to load approval summary (HTTP 401): Unauthorized',
       );
     });
   });
