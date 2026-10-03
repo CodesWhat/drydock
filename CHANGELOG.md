@@ -107,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- General settings show the active SQLite database filename instead of the legacy JSON import filename, including custom database names.
 - Container recheck, delete, policy, dependency-chain, scan, environment-reveal and update-preview HTTP failures use the active interface language while retaining HTTP context and existing server diagnostics. Canonical rollback reasons also keep their translations in update toasts and container rows.
 - Table/card view controls and copy-failure tooltips now use translated labels across all supported interface languages, including when the language changes while feedback is visible.
 - Approval loading and decision failures use localized HTTP fallback messages while preserving server diagnostics, confirmation, and explicit retry behavior.
