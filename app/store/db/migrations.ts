@@ -25,7 +25,7 @@ export interface Migration {
  * Spec 7.3 group policies. Named so the tests reference the number through this one
  * constant: a branch that lands another migration first renumbers this line only.
  */
-export const GROUP_POLICIES_MIGRATION_VERSION = 7;
+export const GROUP_POLICIES_MIGRATION_VERSION = 8;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
