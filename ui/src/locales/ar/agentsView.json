@@ -76,6 +76,7 @@
         "agent": "الوكيل",
         "host": "المضيف",
         "agentVersion": "إصدار الوكيل",
+        "agentBuild": "بنية الوكيل",
         "logLevel": "مستوى السجل",
         "pollInterval": "فترة الاستطلاع",
         "dockerSocket": "مقبس Docker",

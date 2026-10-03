@@ -1101,6 +1101,63 @@ describe('AppLayout', () => {
     expect(rendered).toContain('; use');
   });
 
+  describe('about dialog version', () => {
+    async function openAboutDialog(appInfos: Record<string, unknown>) {
+      mockFetch.mockImplementation(async (url: string) =>
+        url === '/api/v1/app' ? { ok: true, json: async () => appInfos } : undefined,
+      );
+
+      // Un-stub Teleport so the about dialog (teleported to body) renders its content.
+      const wrapper = mountLayout({
+        teleport: false,
+        AppIconButton: {
+          inheritAttrs: false,
+          template: '<button v-bind="$attrs"><slot /></button>',
+        },
+      });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      await wrapper.find('button[aria-label="About Drydock"]').trigger('click');
+      await flushPromises();
+
+      return `${document.body.textContent ?? ''}${wrapper.text()}`;
+    }
+
+    it('shows the base version as the headline and the build beneath it', async () => {
+      const rendered = await openAboutDialog({
+        name: 'drydock',
+        version: '1.6.1',
+        build: '1.6.1-rc.15',
+      });
+
+      expect(rendered).toContain('v1.6.1');
+      expect(rendered).not.toContain('v1.6.1-rc.15');
+      expect(rendered).toContain('Build 1.6.1-rc.15');
+    });
+
+    it('shows no build when it matches the version', async () => {
+      const rendered = await openAboutDialog({ name: 'drydock', version: '1.6.1', build: '1.6.1' });
+
+      expect(rendered).toContain('v1.6.1');
+      expect(rendered).not.toContain('Build');
+    });
+
+    it('shows no build when an older server reports only a version', async () => {
+      const rendered = await openAboutDialog({ name: 'drydock', version: '1.6.1-rc.15' });
+
+      expect(rendered).toContain('v1.6.1-rc.15');
+      expect(rendered).not.toContain('Build');
+    });
+
+    it('shows no version or build when app infos carry no version', async () => {
+      const rendered = await openAboutDialog({});
+
+      expect(rendered).toContain('Docker Container Update Manager');
+      expect(rendered).not.toContain('Build');
+    });
+  });
+
   describe('keyboard shortcuts wiring', () => {
     it('pressing "/" outside a text input opens the search overlay', async () => {
       const wrapper = mountLayout();

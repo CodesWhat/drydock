@@ -94,6 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Docker Container Update Manager",
+        "build": "Build {build}",
         "documentation": "Documentation",
         "github": "GitHub",
         "changelog": "Changelog",

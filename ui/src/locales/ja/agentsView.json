@@ -76,6 +76,7 @@
         "agent": "エージェント",
         "host": "ホスト",
         "agentVersion": "エージェントバージョン",
+        "agentBuild": "エージェントビルド",
         "logLevel": "ログレベル",
         "pollInterval": "ポーリング間隔",
         "dockerSocket": "Docker ソケット",

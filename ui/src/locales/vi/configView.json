@@ -137,6 +137,7 @@
       },
       "fields": {
         "version": "Phiên bản",
+        "build": "Bản dựng",
         "serverPort": "Cổng máy chủ",
         "containerActions": "Thao tác Container",
         "webhook": "Webhook",

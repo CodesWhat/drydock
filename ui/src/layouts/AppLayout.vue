@@ -30,6 +30,7 @@ import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
 import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
+import { distinctBuild } from '@/utils/build-identity';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -280,6 +281,7 @@ async function handleSignOut() {
 // About modal
 const showAbout = ref(false);
 const appVersion = ref('');
+const appBuild = ref('');
 
 // Search modal
 const showSearch = ref(false);
@@ -1418,7 +1420,10 @@ onMounted(async () => {
       getAppInfos().catch(() => null),
     ]);
     if (user) currentUser.value = user;
-    if (appInfos?.version) appVersion.value = appInfos.version;
+    if (appInfos?.version) {
+      appVersion.value = appInfos.version;
+      appBuild.value = distinctBuild(appInfos.version, appInfos.build) ?? '';
+    }
   } catch {
     // Sidebar works without badge data
   }
@@ -1751,6 +1756,7 @@ onUnmounted(() => {
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">{{ t('appShell.layout.about.title') }}</h2>
               <span class="text-2xs-plus dd-text-muted mt-0.5">{{ t('appShell.layout.about.subtitle') }}</span>
               <span v-if="appVersion" class="badge text-2xs font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
+              <span v-if="appBuild" class="text-2xs font-mono dd-text-muted mt-1">{{ t('appShell.layout.about.build', { build: appBuild }) }}</span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">

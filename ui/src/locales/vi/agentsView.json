@@ -76,6 +76,7 @@
         "agent": "Agent",
         "host": "Máy chủ",
         "agentVersion": "Phiên bản Agent",
+        "agentBuild": "Bản dựng Agent",
         "logLevel": "Mức độ nhật ký",
         "pollInterval": "Chu kỳ kiểm tra",
         "dockerSocket": "Docker Socket",
