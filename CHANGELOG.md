@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The weekly DAST scans of getdrydock.com and the demo can now pass.** The two public-site ZAP jobs read a new `.zap/rules-public-site.tsv`, which adds IGNORE entries for the reviewed false positives (SQL, private IP, timestamp, eval, debug-error and application-error text matched in docs prose, plus proxy, user-agent and public-file CORS notices) and the accepted CORP and COEP choices. The app scan in `ci-verify.yml` keeps the stricter `.zap/rules.tsv`, and a workflow test pins both.
+
 ### Security
 
 - **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.

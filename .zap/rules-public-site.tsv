@@ -1,0 +1,20 @@
+# Rules for the public-site scans (getdrydock.com full scan and demo.getdrydock.com baseline in security-dast-web.yml).
+# The first block is a verbatim copy of .zap/rules.tsv; a workflow test fails if they drift. The IGNORE lines after it
+# are dismissed false positives and accepted risks that apply to the static public sites only. ci-verify.yml's app scan
+# keeps using .zap/rules.tsv so these rules still fire there.
+10049	IGNORE	Storable and Cacheable Content (informational) - content-hashed static assets are intentionally cacheable
+10055	IGNORE	CSP style-src unsafe-inline - accepted: vendor libraries (iconify-icon, Vue Transition) set element.style programmatically; documented in the CSP directives in app/api/index.ts. Stays visible in code scanning (not in IGNORED_ZAP_PLUGIN_IDS).
+10109	IGNORE	Modern Web Application (informational) - SPA detection notice, not a finding; recurs on every scan.
+10015	IGNORE	Re-examine Cache-control Directives - demo.getdrydock.com (apps/demo/vercel.json) is a 100% static SPA serving mock data only, no auth, no per-user or sensitive responses; Vercel's CDN caches the shell and assets by design, same rationale as 10049. The dynamic getdrydock.com surface sends `Cache-Control: private, no-cache, no-store` on its documents, so this stays a no-op there.
+10050	IGNORE	Retrieved from Cache - same static/CDN-cached-by-design rationale as 10015 and 10049; demo.getdrydock.com has nothing dynamic or per-user to be served stale.
+10098	IGNORE	Cross-Domain Misconfiguration - getdrydock.com and the demo serve only public static files (robots.txt, sitemap.xml, hashed fonts) with Vercel's default `access-control-allow-origin: *`; no auth, cookies or credentialed responses to read cross-origin.
+10099	IGNORE	Source Code Disclosure - SQL - false positive, matches ordinary docs sentences ('Select a format from the', 'update entirely. Set'); static docs pages with no database behind them. Still fires against the app scan.
+2	IGNORE	Private IP Disclosure - false positive, `192.168.1.50` is the RFC 1918 example address in the agent setup docs and sample API responses. Still fires against the app scan.
+10096	IGNORE	Timestamp Disclosure - false positive, sample values in the Prometheus and Portwing docs examples. Still fires against the app scan.
+10110	IGNORE	Dangerous JS Functions - false positive, changelog prose quoting the past eval() fix; the sites ship no eval. Still fires against the app scan.
+10023	IGNORE	Information Disclosure - Debug Error Messages - false positive, changelog text quoting the generic 'Internal server error' message; pages return 200. Still fires against the app scan.
+90022	IGNORE	Application Error Disclosure - false positive, docs prose such as '500 on an internal error'. Still fires against the app scan.
+40025	IGNORE	Proxy Disclosure - false positive, the only proxy found is Vercel's edge, which every response already names in its Server header; TRACE gets a 405.
+10104	IGNORE	User Agent Fuzzer (informational) - the public sites have no user-agent-dependent code; variation comes from Vercel's edge redirects and bot challenges.
+90004-1	IGNORE	Insufficient Site Isolation Against Spectre (CORP) - accepted: all public-site content is public and cookie-less, and ZAP only passes `same-origin`/`cross-origin`, which would either block image hotlinks or change nothing. COOP (90004-3) is not ignored. Still fires against the app scan.
+90004-2	IGNORE	Insufficient Site Isolation Against Spectre (COEP) - accepted: the marketing site has no cross-origin isolation need, and `require-corp` would break badge images, the analytics script and the demo iframe. COOP (90004-3) is not ignored. Still fires against the app scan.
