@@ -1570,9 +1570,7 @@ export class AgentClient {
       identitySource === undefined ? undefined : deriveVersionIdentity(identitySource);
     return {
       ...this.info,
-      version:
-        identity?.version ??
-        (typeof runtimeData?.version === 'string' ? runtimeData.version : this.info.version),
+      version: identity?.version ?? this.info.version,
       // Never carried over from a previous ack: an agent that reports neither
       // a build nor a version must not inherit the one its predecessor reported.
       build: identity?.build,
