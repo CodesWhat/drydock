@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.
+
 ## [1.7.0-rc.17] — 2026-10-02
 
 ### Security
