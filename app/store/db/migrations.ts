@@ -67,6 +67,30 @@ ALTER TABLE containers ADD COLUMN source_repo TEXT;
 ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
 `,
   },
+  {
+    version: 5,
+    // #1280: replicas of one compose service share the identity key a stash is
+    // written under, so the key alone cannot say which replica the stashed policy
+    // came from. The canonical container name tells them apart. It is a column
+    // rather than part of update_policy_overrides because that column is an opaque
+    // policy blob (spec section 2.1, rule 2) applied to the replacement as-is.
+    // Nullable: rows written before this migration have no name, which
+    // app/store/container.ts reads as a legacy entry.
+    note: 'add update_policy_retention_cache.container_name (#1280)',
+    sql: 'ALTER TABLE update_policy_retention_cache ADD COLUMN container_name TEXT;',
+  },
+  {
+    version: 6,
+    // #1280: app/store/container.ts looks up a container's identity siblings with
+    // `WHERE watcher = ? AND COALESCE(agent, '') = ? ORDER BY rowid`, on every
+    // agent-owned insert that finds no retained policy. containers_watcher_status
+    // only narrows that to the watcher name, which every agent's `local` watcher
+    // shares, and then sorts. This index matches both terms exactly, and its
+    // entries for one key are already in rowid order, so the lookup reads only
+    // the rows of one watcher on one agent and needs no sort step.
+    note: 'index containers by watcher and agent for the identity-sibling lookup (#1280)',
+    sql: "CREATE INDEX containers_watcher_agent ON containers(watcher, COALESCE(agent, ''));",
+  },
 ];
 
 /** Versions already recorded in `schema_migrations`, ascending. */
