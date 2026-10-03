@@ -45,6 +45,7 @@ import {
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
 import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
+import { stripAgentLabelOwnedState, toAgentPayload } from '../model/label-owned.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
@@ -893,6 +894,9 @@ export class AgentClient {
         },
       };
     }
+    // Spec 7.5: an agent reports what it declares. Controller overrides never flow to or
+    // from agents, so any label-owned state in the payload is dropped before the store.
+    container = stripAgentLabelOwnedState(container);
     container.agent = this.name;
     if (
       this.controllerDockerTransportWatchers.has(container.watcher) &&
@@ -931,7 +935,9 @@ export class AgentClient {
     };
 
     if (existing) {
-      containerReport.container = storeContainer.updateContainer(container);
+      containerReport.container = storeContainer.updateContainer(container, {
+        labelOwned: 'declared',
+      });
       // existing is the old state (from store), container is new state (from Agent)
       // But storeContainer.updateContainer returns the NEW state object with validation/methods
       // We use existing.resultChanged() to compare with the new state
@@ -2455,7 +2461,7 @@ export class AgentClient {
           ...(operationId !== undefined ? { operationId } : {}),
         };
       } else {
-        payload = container;
+        payload = toAgentPayload(container);
       }
       this.log.debug(
         `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (payload=${sanitizeLogParam(JSON.stringify(payload), 500)})`,
@@ -2497,10 +2503,14 @@ export class AgentClient {
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType) && runtimeContext !== undefined) {
         body = containers.map((container) => {
           const operationId = getRequestedOperationId(container, runtimeContext);
-          return operationId !== undefined ? { ...container, operationId } : container;
+          const declared = toAgentPayload(container);
+          return operationId !== undefined ? { ...declared, operationId } : declared;
         });
       } else {
-        body = containers;
+        const projected = containers.map(toAgentPayload);
+        body = projected.every((payload, index) => payload === containers[index])
+          ? containers
+          : projected;
       }
       const target = `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/batch`;
       await axios.post(

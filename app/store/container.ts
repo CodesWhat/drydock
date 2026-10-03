@@ -32,6 +32,17 @@ import {
 } from '../model/container.js';
 import { getContainerGroup } from '../model/container-group.js';
 import { toContainerGroupPolicySnapshot } from '../model/group-policy.js';
+import {
+  applyLabelOwnedState,
+  buildLabelOwnedState,
+  captureDeclaredFromFlat,
+  inferDeclaredSources,
+  LABEL_OWNED_FIELDS,
+  type LabelOwnedDeclared,
+  type LabelOwnedState,
+  parseLabelOwnedState,
+  pickLabelOwnedFlat,
+} from '../model/label-owned.js';
 import { isMaturityGatePending } from '../model/maturity-policy.js';
 import {
   applyDeclarativeUpdatePolicy,
@@ -43,6 +54,7 @@ import { ddActionAuto } from '../watchers/providers/docker/label.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import type { Database, Row } from './db/driver.js';
 import * as groupPolicyStore from './group-policy.js';
+import * as labelOverrideStore from './label-override.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 
@@ -760,10 +772,25 @@ function hasContainerChangedWithSecurityHashes(
   if (getUpdatePolicyComparisonKey(existing) !== getUpdatePolicyComparisonKey(incoming)) {
     return true;
   }
+  if (getLabelOwnedComparisonKey(existing) !== getLabelOwnedComparisonKey(incoming)) {
+    return true;
+  }
   if (existingSecurityHash !== incomingSecurityHash) {
     return true;
   }
   return false;
+}
+
+/**
+ * Spec 7.5: the effective label-owned values and where each came from. Icon, routing and
+ * dependency changes leave every other compared field alone, and the UI still needs its
+ * container-updated event.
+ */
+function getLabelOwnedComparisonKey(containerToCompare: container.Container): string {
+  return JSON.stringify({
+    fields: pickLabelOwnedFlat(containerToCompare),
+    sources: containerToCompare.labelOwned?.sources ?? null,
+  });
 }
 
 function getUpdatePolicyComparisonKey(containerToCompare: container.Container): string {
@@ -1009,6 +1036,7 @@ const CONTAINER_COLUMNS = [
   'current_release_notes',
   'dependency_config',
   'group_policy',
+  'label_owned',
 ] as const;
 
 type ContainerColumn = (typeof CONTAINER_COLUMNS)[number];
@@ -1086,7 +1114,12 @@ function containerToRow(c: container.Container, securityHash: string): Container
   };
   const dependencyConfig = {
     dependsOn: c.dependsOn,
-    dependsOnSource: c.dependsOnSource,
+    // The column keeps the declared source, as builds before overrides read it: an
+    // `override` here would fail their schema on every read. The read derives it.
+    dependsOnSource:
+      c.dependsOnSource === 'override'
+        ? toDeclaredDependencySource(c.labelOwned?.declaredSources.dependsOn)
+        : c.dependsOnSource,
     dependsOnAction: c.dependsOnAction,
   };
 
@@ -1128,6 +1161,7 @@ function containerToRow(c: container.Container, securityHash: string): Container
     current_release_notes: toStoredJson(c.currentReleaseNotes),
     dependency_config: toStoredJson(dependencyConfig),
     group_policy: toStoredJson(c.groupPolicy),
+    label_owned: toStoredJson(c.labelOwned),
   };
 }
 
@@ -1142,6 +1176,53 @@ function updateContainerRow(c: container.Container, securityHash: string): void 
     ...CONTAINER_UPDATE_COLUMNS.map((column) => row[column]),
     row.id,
   );
+}
+
+/**
+ * Read a stored state document without ever throwing. A NULL column is a row no override
+ * has reached and has no state. Anything else is a row an override applied to, so what
+ * cannot be read is rebuilt rather than dropped: a field with no override reads its value
+ * from the row (that is the declared value), and a field an override is hiding stays unset
+ * until the next declared write, because the row's value there is the override, not the label.
+ */
+function readStoredLabelOwned(
+  stored: string | number | null,
+  flat: Record<string, unknown>,
+  overrides: ReturnType<typeof getLabelOverrideFieldsFor>,
+): LabelOwnedState | undefined {
+  if (stored === null || stored === undefined) {
+    return undefined;
+  }
+  let document: unknown;
+  try {
+    document = fromStoredJson(stored);
+  } catch {
+    document = undefined;
+  }
+  const { state, unknown } = parseLabelOwnedState(document);
+  if (unknown.length === 0) {
+    return state;
+  }
+  if (overrides === undefined) {
+    // Nothing hides the row's values, so it is as pristine as a row that never had state.
+    return undefined;
+  }
+  const declared = { ...state.declared } as Record<string, unknown>;
+  for (const field of unknown) {
+    if (overrides?.[field] === undefined && flat[field] !== undefined) {
+      declared[field] = structuredClone(flat[field]);
+    }
+  }
+  const inferred = inferDeclaredSources(
+    declared as LabelOwnedDeclared,
+    flat as Pick<container.Container, 'name' | 'labels'>,
+    toDeclaredDependencySource(flat.dependsOnSource),
+  );
+  const declaredSources = { ...state.declaredSources };
+  for (const field of unknown) {
+    declaredSources[field] = inferred[field];
+  }
+  return buildLabelOwnedState(declared as LabelOwnedDeclared, declaredSources, overrides);
 }
 
 /**
@@ -1182,11 +1263,35 @@ function rowToContainer(row: Row): container.Container {
   const dependencyConfig =
     fromStoredJson<{
       dependsOn?: string[];
-      dependsOnSource?: 'label' | 'compose';
+      dependsOnSource?: 'label' | 'compose' | 'override';
       dependsOnAction?: 'update' | 'restart';
     }>(typedRow.dependency_config) ?? {};
   const errorMessage = toOptionalStoredString(typedRow.error_message);
   const groupPolicy = fromStoredJson<container.ContainerGroupPolicySnapshot>(typedRow.group_policy);
+  const flat = {
+    name: String(typedRow.name),
+    labels: fromStoredJson<Record<string, string>>(typedRow.labels),
+    displayName: String(typedRow.display_name),
+    displayIcon: toOptionalStoredString(typedRow.display_icon),
+    dependsOn: dependencyConfig.dependsOn,
+    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnAction: dependencyConfig.dependsOnAction,
+    actionTriggerInclude: triggerConfig.actionTriggerInclude,
+    actionTriggerExclude: triggerConfig.actionTriggerExclude,
+    actionTriggerAuto: triggerConfig.actionTriggerAuto,
+    notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
+    notificationTriggerExclude: triggerConfig.notificationTriggerExclude,
+  };
+  // NULL until an override has ever applied to the row.
+  const labelOwned = readStoredLabelOwned(
+    typedRow.label_owned,
+    flat,
+    getLabelOverrideFieldsFor({
+      ...flat,
+      watcher: String(typedRow.watcher),
+      agent: toOptionalStoredString(typedRow.agent),
+    }),
+  );
 
   const raw: Record<string, unknown> = {
     id: String(typedRow.id),
@@ -1230,11 +1335,13 @@ function rowToContainer(row: Row): container.Container {
     triggerInclude: triggerConfig.triggerInclude,
     triggerExclude: triggerConfig.triggerExclude,
     dependsOn: dependencyConfig.dependsOn,
-    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnSource:
+      labelOwned?.sources.dependsOn === 'override' ? 'override' : dependencyConfig.dependsOnSource,
     dependsOnAction: dependencyConfig.dependsOnAction,
     // Only present when a policy applied, so a record no policy reaches reads back with
     // exactly the keys it had before group policies existed.
     ...(groupPolicy === undefined ? {} : { groupPolicy }),
+    ...(labelOwned === undefined ? {} : { labelOwned }),
   };
 
   return validateContainer(raw);
@@ -1673,6 +1780,102 @@ function finalizeGroupPolicyLayer(containerToFinalize, containerStored?: contain
 }
 
 /**
+ * How a write treats the label-owned fields it carries (spec 7.5).
+ *
+ * An unmarked write never changes the declared layer: its in-scope flat values are a copy
+ * of whatever effective value its caller last read, which may be an override, so taking
+ * them as declared could turn an old override into the container's label. Only a write
+ * marked `declared` reports what the owning watcher saw.
+ */
+interface LabelOwnedWrite {
+  /** The write reports declared values: labels, Compose and watcher config. */
+  declared?: boolean;
+  /** A patch write: the keys the caller named. Absent for an insert or a whole-record write. */
+  patchKeys?: readonly string[];
+}
+
+export interface LabelOwnedWriteOptions {
+  labelOwned?: 'declared';
+}
+
+function getLabelOverrideFieldsFor(
+  record: Pick<container.Container, 'name' | 'watcher' | 'agent' | 'labels'>,
+) {
+  const scope = labelOverrideStore.deriveLabelOverrideScope(record);
+  /* istanbul ignore next -- unreachable: every record here has passed validateContainer,
+     which requires a non-empty watcher and name, so a scope always derives. */
+  return scope === undefined ? undefined : labelOverrideStore.getLabelOverrideFields(scope.key);
+}
+
+function toDeclaredDependencySource(source: unknown): 'label' | 'compose' | undefined {
+  return source === 'label' || source === 'compose' ? source : undefined;
+}
+
+/**
+ * Spec 7.5: the one place the label-owned layer is applied. Every write path runs this on
+ * the validated, trigger-normalized record, so the flat fields every consumer reads hold
+ * the effective values and `labelOwned` holds the declared layer behind them.
+ *
+ * A record whose scope has no override and that never had one is left exactly as it is, so
+ * with zero overrides every write is what it was before this layer existed. `stored` is the
+ * row being replaced; it is absent for an insert, where an incoming `labelOwned` is an
+ * internal round trip and is honored.
+ */
+function applyLabelOwnedLayer(
+  next: container.Container,
+  stored: container.Container | undefined,
+  write: LabelOwnedWrite = {},
+): void {
+  const overrides = getLabelOverrideFieldsFor(next);
+  const priorState: LabelOwnedState | undefined =
+    stored === undefined ? next.labelOwned : stored.labelOwned;
+  if (priorState === undefined && overrides === undefined) {
+    delete next.labelOwned;
+    return;
+  }
+
+  const storedDependencySource = toDeclaredDependencySource(priorState?.declaredSources.dependsOn);
+  const flatDependencySource = toDeclaredDependencySource(next.dependsOnSource);
+  let declared: LabelOwnedDeclared;
+  let dependencySource: 'label' | 'compose' | undefined;
+  if (priorState === undefined) {
+    // First write of a row with no state: its flat values are still pristine.
+    declared = captureDeclaredFromFlat(next);
+    dependencySource = flatDependencySource;
+  } else if (stored === undefined || write.declared !== true) {
+    declared = priorState.declared;
+    dependencySource = storedDependencySource;
+  } else if (write.patchKeys === undefined) {
+    declared = captureDeclaredFromFlat(next);
+    dependencySource = flatDependencySource;
+  } else {
+    const patched = new Set(write.patchKeys);
+    const patchedDeclared = { ...priorState.declared } as Record<string, unknown>;
+    for (const { field } of LABEL_OWNED_FIELDS) {
+      if (patched.has(field)) {
+        const value = next[field];
+        if (value === undefined) {
+          delete patchedDeclared[field];
+        } else {
+          patchedDeclared[field] = structuredClone(value);
+        }
+      }
+    }
+    declared = patchedDeclared as LabelOwnedDeclared;
+    dependencySource = patched.has('dependsOnSource')
+      ? flatDependencySource
+      : storedDependencySource;
+  }
+
+  const state = buildLabelOwnedState(
+    declared,
+    inferDeclaredSources(declared, next, dependencySource),
+    overrides,
+  );
+  applyLabelOwnedState(next, state, overrides);
+}
+
+/**
  * Insert new Container.
  * @param container
  */
@@ -1732,6 +1935,7 @@ export function insertContainer(container, context?: ContainerLifecycleEventCont
   }
   const containerToSave = validateContainer(finalizeGroupPolicyLayer(container));
   normalizeContainerTriggerLabelFields(containerToSave);
+  applyLabelOwnedLayer(containerToSave, undefined);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
   containerToSave.maturityGatePendingSince = getMaturityGatePendingSince(
@@ -1756,7 +1960,7 @@ export function insertContainer(container, context?: ContainerLifecycleEventCont
  */
 export function updateContainer(
   container,
-  options: { authoritativeEmptyOverrides?: boolean } = {},
+  options: { authoritativeEmptyOverrides?: boolean } & LabelOwnedWriteOptions = {},
 ) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
   const hasUpdatePolicyDeclarative = Object.hasOwn(container, 'updatePolicyDeclarative');
@@ -1815,6 +2019,9 @@ export function updateContainer(
     finalizeGroupPolicyLayer(containerMerged, containerCurrent),
   );
   normalizeContainerTriggerLabelFields(containerToReturn);
+  applyLabelOwnedLayer(containerToReturn, containerCurrent, {
+    declared: options.labelOwned === 'declared',
+  });
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
   containerToReturn.maturityGatePendingSince = getMaturityGatePendingSince(
@@ -1902,6 +2109,7 @@ export function updateContainerFields(
   id: string,
   patch: Omit<Partial<container.Container>, 'id'>,
   context?: ContainerLifecycleEventContext,
+  options: LabelOwnedWriteOptions = {},
 ): container.Container | undefined {
   if (!db) {
     return undefined;
@@ -1925,6 +2133,10 @@ export function updateContainerFields(
       finalizeGroupPolicyLayer(containerMerged, containerCurrent),
     );
     normalizeContainerTriggerLabelFields(containerToReturn);
+    applyLabelOwnedLayer(containerToReturn, containerCurrent, {
+      declared: options.labelOwned === 'declared',
+      patchKeys: Object.keys(patch),
+    });
     containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
     containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
     containerToReturn.maturityGatePendingSince = getMaturityGatePendingSince(
@@ -2276,6 +2488,140 @@ export function reconcileGroupPolicySnapshots(): number {
     reconciled += 1;
   }
   return reconciled;
+}
+
+/**
+ * Rewrite every stored container of one override scope with the scope's current overrides,
+ * the rows a mutation just changed the answer for. A row is every record whose identity key
+ * over its canonical name equals the scope key, rollback-named records included, found the
+ * way `findIdentitySiblings` finds them. Writes rows only; the caller emits `collected`
+ * once the surrounding transaction has committed.
+ */
+function refreshLabelOverrideScope(
+  scope: labelOverrideStore.LabelOverrideScope,
+  collected: container.Container[],
+): number {
+  let refreshed = 0;
+  const rows = db
+    .prepare(
+      "SELECT * FROM containers WHERE watcher = ? AND COALESCE(agent, '') = ? ORDER BY rowid",
+    )
+    .all(scope.watcher, scope.agent);
+  for (const row of rows) {
+    const current = rowToContainer(row);
+    if (labelOverrideStore.deriveLabelOverrideScope(current)?.key !== scope.key) {
+      continue;
+    }
+    const next = validateContainer({ ...current });
+    applyLabelOwnedLayer(next, current);
+    if (
+      stableSerialize(pickLabelOwnedFlat(next)) === stableSerialize(pickLabelOwnedFlat(current)) &&
+      stableSerialize(next.labelOwned ?? null) === stableSerialize(current.labelOwned ?? null)
+    ) {
+      continue;
+    }
+    const securityHash = getStoredContainerSecurityStateHash(current);
+    updateContainerRow(next, securityHash);
+    invalidateContainersCacheForMutation(current, next);
+    refreshed += 1;
+    if (
+      !isRollbackContainerName(next.name) &&
+      hasContainerChangedWithSecurityHashes(current, next, securityHash, securityHash)
+    ) {
+      collected.push(next);
+    }
+  }
+  return refreshed;
+}
+
+export interface LabelOverrideMutationResult {
+  /** The override row after the write, or `undefined` when the scope has none left. */
+  record: labelOverrideStore.LabelOverrideRecord | undefined;
+  /** False when `expectedRevision` did not match: nothing was written. */
+  applied: boolean;
+  /** How many stored containers were rewritten. */
+  refreshed: number;
+}
+
+/**
+ * Spec 7.5: set or remove label-owned overrides for the scope of `target`, and rewrite
+ * every affected container row, in one transaction with no await between the revision
+ * check and the commit. Nothing outside the store runs: no Docker call, no Compose write,
+ * no trigger. `container-updated` is emitted once per rewritten row, after the commit.
+ * @param target any container (or a bare name, watcher, agent and labels) in the scope
+ * @param changes at most one per field
+ * @param principal `user:<name>` or `api-key:<keyId>`
+ * @param expectedRevision when given, the write applies only against this revision
+ */
+export function mutateLabelOverrides(
+  target: Pick<container.Container, 'name' | 'watcher' | 'agent' | 'labels'>,
+  changes: readonly labelOverrideStore.LabelOverrideChange[],
+  principal: string,
+  expectedRevision?: number,
+): LabelOverrideMutationResult {
+  const scope = labelOverrideStore.deriveLabelOverrideScope(target);
+  if (scope === undefined) {
+    throw new labelOverrideStore.LabelOverrideValidationError(
+      '*',
+      'A scope needs a watcher and a name',
+    );
+  }
+  const collected: container.Container[] = [];
+  const result = labelOverrideStore.transaction(() => {
+    const write = labelOverrideStore.writeLabelOverrideChanges(
+      scope,
+      changes,
+      principal,
+      expectedRevision,
+    );
+    return {
+      ...write,
+      refreshed: write.applied ? refreshLabelOverrideScope(scope, collected) : 0,
+    };
+  });
+  for (const payload of collected) {
+    emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));
+  }
+  return result;
+}
+
+export interface LabelOverrideDeleteResult {
+  /** The deleted row, or `undefined` when no row with that id was at `expectedRevision`. */
+  record: labelOverrideStore.LabelOverrideRecord | undefined;
+  /** How many stored containers were rewritten. */
+  refreshed: number;
+}
+
+/**
+ * Spec 7.5: delete a whole override row by id and revision, orphans included, and rewrite
+ * every container it applied to, in one transaction. Like `mutateLabelOverrides`,
+ * `container-updated` is emitted per rewritten row, after the commit.
+ * @param id the override row id
+ * @param expectedRevision the delete applies only against this revision
+ */
+export function deleteLabelOverrideAndRefresh(
+  id: string,
+  expectedRevision: number,
+): LabelOverrideDeleteResult {
+  const collected: container.Container[] = [];
+  const result = labelOverrideStore.transaction(() => {
+    const record = labelOverrideStore.deleteLabelOverrideRow(id, expectedRevision);
+    if (record === undefined) {
+      return { record, refreshed: 0 };
+    }
+    const scope: labelOverrideStore.LabelOverrideScope = {
+      key: record.scopeKey,
+      agent: record.agent,
+      watcher: record.watcher,
+      kind: record.scopeKind,
+      name: record.scopeName,
+    };
+    return { record, refreshed: refreshLabelOverrideScope(scope, collected) };
+  });
+  for (const payload of collected) {
+    emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));
+  }
+  return result;
 }
 
 interface DeleteContainerOptions {

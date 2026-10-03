@@ -1044,4 +1044,87 @@ describe('container event update helpers', () => {
       updatePolicySources: { maturityMode: 'label' },
     });
   });
+  describe('with a Drydock override on a label-owned field (spec 7.5)', () => {
+    const declaredSources = {
+      displayName: 'label',
+      displayIcon: 'default',
+      dependsOn: 'unset',
+      dependsOnAction: 'unset',
+      notificationTriggerInclude: 'unset',
+      notificationTriggerExclude: 'unset',
+      actionTriggerInclude: 'unset',
+      actionTriggerExclude: 'unset',
+      actionTriggerAuto: 'unset',
+    };
+    const overridden = (overrides: Record<string, any> = {}) =>
+      createMockContainer({
+        name: 'web',
+        displayName: 'TV',
+        status: 'running',
+        labels: { 'dd.display.name': 'Sonarr' },
+        labelOwned: {
+          v: 1,
+          declared: { displayName: 'Sonarr', displayIcon: 'mdi:docker' },
+          declaredSources,
+          sources: { ...declaredSources, displayName: 'override' },
+        },
+        ...overrides,
+      });
+    const inspect = (name: string, labels: Record<string, string>) => ({
+      Name: `/${name}`,
+      State: { Status: 'running' },
+      Config: { Labels: labels },
+    });
+    const dependencies = (updateContainer: ReturnType<typeof vi.fn>) => ({
+      getCustomDisplayNameFromLabels: (labels: Record<string, string>) => labels['dd.display.name'],
+      updateContainer,
+    });
+
+    test('an event that changes nothing the watcher declared produces no patch', () => {
+      const updateContainer = vi.fn();
+      updateContainerFromInspect(
+        overridden() as any,
+        inspect('web', { 'dd.display.name': 'Sonarr' }),
+        dependencies(updateContainer),
+      );
+      expect(updateContainer).not.toHaveBeenCalled();
+    });
+
+    test('a changed display name label patches the declared value without touching the record', () => {
+      const stored = overridden();
+      const updateContainer = vi.fn();
+      updateContainerFromInspect(
+        stored as any,
+        inspect('web', { 'dd.display.name': 'Sonarr v2' }),
+        dependencies(updateContainer),
+      );
+      expect(updateContainer).toHaveBeenCalledWith('container123', {
+        labels: { 'dd.display.name': 'Sonarr v2' },
+        displayName: 'Sonarr v2',
+      });
+      expect(stored.displayName).toBe('TV');
+    });
+
+    test('rename tracking compares the declared display name, not the override', () => {
+      const updateContainer = vi.fn();
+      updateContainerFromInspect(
+        overridden({
+          name: 'old-name',
+          labels: {},
+          labelOwned: {
+            v: 1,
+            declared: { displayName: 'old-name', displayIcon: 'mdi:docker' },
+            declaredSources: { ...declaredSources, displayName: 'default' },
+            sources: { ...declaredSources, displayName: 'override' },
+          },
+        }) as any,
+        inspect('renamed', {}),
+        { getCustomDisplayNameFromLabels: () => undefined, updateContainer },
+      );
+      expect(updateContainer).toHaveBeenCalledWith('container123', {
+        name: 'renamed',
+        displayName: 'renamed',
+      });
+    });
+  });
 });
