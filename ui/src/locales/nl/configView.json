@@ -137,6 +137,7 @@
       },
       "fields": {
         "version": "Versie",
+        "build": "Build",
         "serverPort": "Serverpoort",
         "containerActions": "Containeracties",
         "webhook": "Webhook",
@@ -210,7 +211,7 @@
     },
     "profile": {
       "loading": "Profiel laden",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Onbekende gebruiker",
       "fields": {
         "username": "Gebruikersnaam",
         "email": "E-mail",
@@ -224,8 +225,8 @@
       "loading": "Logboeken laden...",
       "emptyMessage": "Er zijn geen loggegevens gevonden voor de huidige filters.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Gepauzeerd",
+        "offline": "Niet verbonden"
       },
       "toolbar": {
         "live": "Leef",

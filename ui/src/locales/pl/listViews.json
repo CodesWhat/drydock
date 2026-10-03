@@ -71,7 +71,7 @@
       "agent-disconnect": "Rozłączenie agenta",
       "notification-delivery-failed": "Dostarczenie powiadomienia nie powiodło się",
       "security-alert": "Alert bezpieczeństwa",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Okres oczekiwania zakończony",
       "image-prune": "Czyszczenie obrazu"
     },
     "target": {
@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Nie udało się rozpocząć skanowania.",
+    "scanProgressUnavailable": "Postęp skanowania jest niedostępny. Przyjęte skanowania mogą nadal trwać. Odśwież wyniki przed rozpoczęciem kolejnego skanowania.",
     "loadingVulnerabilityData": "Ładowanie danych o lukach w zabezpieczeniach...",
     "runtimeLoadError": "Nie udało się załadować stanu środowiska wykonawczego zabezpieczeń",
     "scanNow": "Skanuj teraz",
@@ -211,8 +213,8 @@
       "clean": "Czysty"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "obrazy",
+      "scanned": "przeskanowano"
     },
     "fixableBadge": "{count} do naprawy",
     "delta": {
@@ -357,7 +359,7 @@
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żadne wyzwalacze nie pasują do Twoich filtrów",
-    "testContainerName": "Test Container",
+    "testContainerName": "Kontener testowy",
     "columns": {
       "trigger": "Wyzwalacz",
       "type": "Wpisz",

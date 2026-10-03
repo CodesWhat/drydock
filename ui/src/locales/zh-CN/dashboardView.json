@@ -107,9 +107,9 @@
       "digest": "镜像更新"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "当前已开放",
+      "scheduled": "已安排",
+      "openingSoon": "即将开放"
     },
     "dataLoadFailed": "无法加载仪表盘数据",
     "widgets": {

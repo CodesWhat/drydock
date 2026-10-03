@@ -883,20 +883,6 @@ function toWatcherServerRow(
   };
 }
 
-function toLocalServerRow(countsByServer: Map<string, ServerContainerCounts>): DashboardServerRow {
-  const localContainerCounts = toServerContainerCounts(countsByServer, 'Local');
-
-  return {
-    name: 'Local',
-    host: 'unix:///var/run/docker.sock',
-    status: 'connected',
-    containers: {
-      running: localContainerCounts.running,
-      total: localContainerCounts.total,
-    },
-  };
-}
-
 function toAgentServerRow(
   agent: DashboardAgent,
   countsByServer: Map<string, ServerContainerCounts>,
@@ -921,11 +907,7 @@ function buildWatcherServerRows(
   countsByServer: Map<string, ServerContainerCounts>,
 ): DashboardServerRow[] {
   const nonAgentWatchers = watchers.filter(isNonAgentWatcher);
-  if (nonAgentWatchers.length > 0) {
-    return nonAgentWatchers.map((watcher) => toWatcherServerRow(watcher, countsByServer));
-  }
-
-  return [toLocalServerRow(countsByServer)];
+  return nonAgentWatchers.map((watcher) => toWatcherServerRow(watcher, countsByServer));
 }
 
 function buildAgentServerRows(

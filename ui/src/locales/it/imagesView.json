@@ -28,6 +28,8 @@
       "description": "Nessuna immagine corrisponde ai filtri correnti."
     },
     "prune": {
+      "previewLoadFailed": "Impossibile caricare l’anteprima della pulizia",
+      "requestFailed": "Impossibile pulire le immagini",
       "dangling": "Prune delle orfane",
       "unused": "Prune delle inutilizzate",
       "confirm": {

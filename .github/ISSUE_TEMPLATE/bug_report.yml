@@ -11,8 +11,8 @@ body:
     id: version
     attributes:
       label: Drydock version
-      description: Check the UI footer or `DD_VERSION` env var
-      placeholder: "e.g. 1.4.0, 1.3.9"
+      description: Check the About dialog in the UI (include the build if one is shown) or the `DD_VERSION` env var
+      placeholder: "e.g. 1.7.0 (build 1.7.0-rc.17), 1.6.1"
     validations:
       required: true
 

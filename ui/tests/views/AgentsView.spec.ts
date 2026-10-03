@@ -440,6 +440,48 @@ describe('AgentsView', () => {
     expect(mockGetLogEntries).toHaveBeenCalledWith({ agent: 'edge-1', tail: 100 });
   });
 
+  describe('agent build identity', () => {
+    async function openConfigTab(agent: Record<string, unknown>) {
+      mockGetAgents.mockResolvedValue([makeAgent(agent)]);
+
+      const wrapper = await mountAgentsView();
+      await wrapper.find('.row-click-first').trigger('click');
+      await flushPromises();
+
+      const configTab = wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Config'));
+      expect(configTab).toBeDefined();
+      await configTab?.trigger('click');
+      await flushPromises();
+
+      return wrapper.find('.detail-content').text();
+    }
+
+    it('shows the agent build in the config tab when it differs from the version', async () => {
+      const detailContent = await openConfigTab({ version: '1.6.1', build: '1.6.1-rc.15' });
+
+      expect(detailContent).toContain('Agent Version');
+      expect(detailContent).toContain('v1.6.1');
+      expect(detailContent).toContain('Agent Build');
+      expect(detailContent).toContain('1.6.1-rc.15');
+    });
+
+    it('hides the agent build when it matches the version', async () => {
+      const detailContent = await openConfigTab({ version: '1.6.1', build: '1.6.1' });
+
+      expect(detailContent).toContain('v1.6.1');
+      expect(detailContent).not.toContain('Agent Build');
+    });
+
+    it('hides the agent build when an older agent reports none', async () => {
+      const detailContent = await openConfigTab({ version: '1.6.1-rc.15' });
+
+      expect(detailContent).toContain('v1.6.1-rc.15');
+      expect(detailContent).not.toContain('Agent Build');
+    });
+  });
+
   it('route query q filters rows', async () => {
     mockRoute.query = { q: 'edge-2' };
     mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1' }), makeAgent({ name: 'edge-2' })]);

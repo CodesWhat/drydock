@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, type Ref, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
@@ -85,7 +86,36 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
   afterEach(() => {
     useOperationDisplayHold().clearAllOperationDisplayHolds();
     vi.useRealTimers();
+    i18n.global.locale.value = 'en';
   });
+
+  it.each(['fr', 'ar'] as const)(
+    'keeps the row failure reason translated in %s',
+    async (locale) => {
+      i18n.global.locale.value = locale;
+      const containers = ref([makeContainer()]);
+      const { wrapper } = mountPipeline({ containers });
+      try {
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              containerId: 'c1',
+              containerName: 'nginx',
+              operationId: 'op-localized',
+              rollbackReason: 'health-gate-failed',
+              batchId: null,
+            },
+          }),
+        );
+        await flushPromises();
+        expect(containers.value[0]?.lastUpdateFailureReason).toBe(
+          i18n.global.t('containerComponents.backups.operationValues.health-gate-failed'),
+        );
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
 
   it('releases the display hold and clears the row updateOperation on terminal applied event', async () => {
     const activeOperation = makeOperation();

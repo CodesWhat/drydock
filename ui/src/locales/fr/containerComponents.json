@@ -744,9 +744,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explicite",
+        "inherited": "Hérité",
+        "unknown": "Inconnu"
       },
       "timeoutDefault": "60000 ms (par défaut)",
       "preAbortYes": "Annuler la mise à jour en cas d'échec du hook pré-exécution",

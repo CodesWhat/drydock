@@ -71,7 +71,7 @@
       "agent-disconnect": "Agent ngắt kết nối",
       "notification-delivery-failed": "Gửi thông báo thất bại",
       "security-alert": "Cảnh báo bảo mật",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Đã hết thời gian chờ",
       "image-prune": "Dọn dẹp Image"
     },
     "target": {
@@ -172,6 +172,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "Không thể bắt đầu quét.",
+    "scanProgressUnavailable": "Không có thông tin tiến trình quét. Các lượt quét đã được chấp nhận có thể vẫn đang chạy. Hãy làm mới kết quả trước khi bắt đầu lượt quét khác.",
     "loadingVulnerabilityData": "Đang tải dữ liệu lỗ hổng...",
     "runtimeLoadError": "Không thể tải trạng thái runtime bảo mật",
     "scanNow": "Quét ngay",
@@ -211,8 +213,8 @@
       "clean": "Sạch"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "image",
+      "scanned": "đã quét"
     },
     "fixableBadge": "{count} có thể vá",
     "delta": {
@@ -357,7 +359,7 @@
     "filterPlaceholder": "Lọc theo tên...",
     "clear": "Xóa",
     "emptyFiltered": "Không có trigger nào khớp với bộ lọc của bạn",
-    "testContainerName": "Test Container",
+    "testContainerName": "Container thử nghiệm",
     "columns": {
       "trigger": "Trigger",
       "type": "Loại",

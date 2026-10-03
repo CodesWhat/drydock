@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Nie udało się wczytać podsumowania zatwierdzeń",
+      "detailLoadFailed": "Nie udało się wczytać zatwierdzenia",
+      "approveFailed": "Nie udało się zatwierdzić aktualizacji",
+      "rejectFailed": "Nie udało się odrzucić aktualizacji",
+      "deferFailed": "Nie udało się odroczyć aktualizacji"
+    },
     "ofCount": "Wyświetlono: {count}",
     "refresh": "Odśwież",
     "loading": "Ładowanie zatwierdzeń…",

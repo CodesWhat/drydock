@@ -385,6 +385,56 @@ test('rejected and late inventory frames do not emit false stats changes', async
   expect(store.getContainerRaw('late')).toBeUndefined();
 });
 
+// #1280: the inventory pass and the per-container lifecycle stream are separate
+// channels. A pass that sampled a recreate after the old container was removed but
+// before its replacement was listed reports a plain removal, and the replacement
+// then arrives as an ordinary dd:container-added.
+test.each(['HTTP only', 'SSE then HTTP'])(
+  'retains the controller policy when a %s inventory removal precedes the replacement',
+  async (delivery) => {
+    const policy = { snoozeUntil: '2027-01-01T00:00:00.000Z' };
+    store.insertContainer(
+      createContainerFixture({
+        id: 'old',
+        name: 'service',
+        watcher: descriptor.name,
+        agent: 'edge',
+        updatePolicyOverrides: policy,
+      }),
+    );
+    const removed = vi.fn();
+    event.registerContainerRemoved(removed);
+    vi.mocked(axios.post).mockImplementation(async (_url, body) => {
+      const context = {
+        origin: 'inventory',
+        operationId: (body as { operationId: string }).operationId,
+        source: { type: 'docker', name: descriptor.name },
+      };
+      if (delivery === 'SSE then HTTP')
+        await client.handleEvent('dd:inventory-removed', {
+          context,
+          container: { id: 'old', replacementExpected: false },
+        });
+      return {
+        data: { context, containers: [], removedIds: ['old'], errors: [], authoritative: true },
+      };
+    });
+
+    expect((await client.refreshInventory('docker', descriptor.name)).removedIds).toEqual(['old']);
+    expect(store.getContainerRaw('old')).toBeUndefined();
+    expect(removed).toHaveBeenCalledTimes(1);
+    expect(removed.mock.calls[0][0].replacementExpected).toBe(false);
+
+    await client.handleEvent(
+      'dd:container-added',
+      createContainerFixture({ id: 'new', name: 'service', watcher: descriptor.name }),
+    );
+
+    expect(store.getContainerRaw('new')?.updatePolicy).toEqual(policy);
+    expect(store._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+  },
+);
+
 test('ordinary concurrent lifecycle still emits its normal scan report', async () => {
   let resolve!: (data: unknown) => void;
   let operationId!: string;

@@ -15,8 +15,8 @@
     "close": "Schließen",
     "retry": "Erneut versuchen",
     "unknown": "unbekannt",
-    "yes": "yes",
-    "no": "no",
+    "yes": "ja",
+    "no": "nein",
     "errorSummary": {
       "rateLimitHit": "Registry-Rate-Limit erreicht",
       "accessDenied": "Registry-Zugriff verweigert",
@@ -28,7 +28,7 @@
       "signatureFailed": "Signaturprüfung fehlgeschlagen"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Benutzerdefiniert"
     },
     "timeAgo": {
       "justNow": "Gerade eben"

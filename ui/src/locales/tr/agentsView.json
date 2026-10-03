@@ -76,6 +76,7 @@
         "agent": "Temsilci",
         "host": "Sunucu",
         "agentVersion": "Temsilci Sürümü",
+        "agentBuild": "Temsilci Derlemesi",
         "logLevel": "Günlük Düzeyi",
         "pollInterval": "Anket Aralığı",
         "dockerSocket": "Docker Socket",

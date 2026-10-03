@@ -3382,6 +3382,34 @@ describe('executeContainerUpdate', () => {
     );
   });
 
+  test('should not health-gate when the healthcheck is disabled (Test: NONE)', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0', Healthcheck: { Test: ['NONE'] } },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const waitForHealthySpy = vi.spyOn(docker, 'waitForContainerHealthy').mockResolvedValue();
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).resolves.toBe(true);
+
+    const tempName = context.currentContainer.rename.mock.calls[0][0].name;
+    expect(waitForHealthySpy).not.toHaveBeenCalled();
+    expect(docker.removeContainer).toHaveBeenCalledWith(
+      context.currentContainer,
+      tempName,
+      'old-container-id',
+      logContainer,
+    );
+  });
+
   test('should health-gate new container before removing old one when auto-rollback is enabled', async () => {
     const context = createContainerUpdateContext({
       currentContainerSpec: {
@@ -3526,6 +3554,30 @@ describe('executeContainerUpdate', () => {
 });
 
 // --- Self-update ---
+
+describe('hasHealthcheckConfigured', () => {
+  test.each([
+    ['Test NONE (disabled)', { Config: { Healthcheck: { Test: ['NONE'] } } }, false],
+    ['empty Test array', { Config: { Healthcheck: { Test: [] } } }, false],
+    ['interval-only healthcheck', { Config: { Healthcheck: { Interval: 5000000000 } } }, false],
+    ['null Healthcheck', { Config: { Healthcheck: null } }, false],
+    ['undefined spec', undefined, false],
+    ['Test CMD', { Config: { Healthcheck: { Test: ['CMD', 'true'] } } }, true],
+    ['Test CMD-SHELL', { Config: { Healthcheck: { Test: ['CMD-SHELL', 'exit 0'] } } }, true],
+    [
+      'State.Health present with Test NONE',
+      { Config: { Healthcheck: { Test: ['NONE'] } }, State: { Health: { Status: 'healthy' } } },
+      true,
+    ],
+    [
+      'State.Health present without Healthcheck',
+      { State: { Health: { Status: 'starting' } } },
+      true,
+    ],
+  ])('%s', (_name, spec, expected) => {
+    expect(docker.hasHealthcheckConfigured(spec)).toBe(expected);
+  });
+});
 
 describe('isSelfUpdate', () => {
   const originalResolveSelfContainerIdentity =

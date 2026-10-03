@@ -257,3 +257,60 @@ describe('trigger label category re-derivation (#494)', () => {
     );
   });
 });
+
+describe('release-gated migrations on a promoted stable image', () => {
+  const migrations = [
+    {
+      name: '1.6.0 trigger label re-derivation',
+      threshold: '1.6.0',
+      earlier: '1.5.2',
+      later: '1.6.1',
+      laterRc: '1.6.1-rc.15',
+      next: '1.7.0-rc.17',
+    },
+    {
+      name: '1.5.0 tag precision backfill',
+      threshold: '1.5.0',
+      earlier: '1.4.9',
+      later: '1.5.1',
+      laterRc: '1.5.1-rc.2',
+      next: '1.5.2-rc.1',
+    },
+  ];
+
+  describe.each(migrations)('$name', ({ threshold, earlier, later, laterRc, next }) => {
+    beforeEach(() => {
+      container.getContainersRaw.mockReturnValue([{ id: 'c1', image: { tag: { value: '1' } } }]);
+    });
+
+    test.each([
+      [`${earlier} -> ${threshold}-rc.13`, earlier, `${threshold}-rc.13`, true],
+      [
+        `${threshold}-rc.13 -> ${laterRc} (stores that skipped it)`,
+        `${threshold}-rc.13`,
+        laterRc,
+        true,
+      ],
+      [`${laterRc} -> ${next}`, laterRc, next, false],
+      [`${threshold} -> ${later}`, threshold, later, false],
+      [`${earlier} -> ${earlier} (target below threshold)`, earlier, earlier, false],
+      [
+        `${earlier} -> ${threshold}-rc.13 with invalid from`,
+        'not-a-semver',
+        `${threshold}-rc.13`,
+        true,
+      ],
+      [`${earlier} -> undefined`, earlier, undefined, false],
+      [`${earlier} -> not-a-semver`, earlier, 'not-a-semver', false],
+      [`undefined -> ${threshold}-rc.13`, undefined, `${threshold}-rc.13`, false],
+    ])('%s', (_label, from, to, runs) => {
+      migrate.migrate(from, to);
+
+      if (runs) {
+        expect(container.getContainersRaw).toHaveBeenCalled();
+      } else {
+        expect(container.getContainersRaw).not.toHaveBeenCalled();
+      }
+    });
+  });
+});
