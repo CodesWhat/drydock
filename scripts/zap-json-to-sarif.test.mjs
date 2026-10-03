@@ -29,6 +29,33 @@ describe('zap-json-to-sarif', () => {
     );
   });
 
+  test('percent-encodes every colon in an IPv6 host and port', () => {
+    const sarif = convertZapJsonToSarif({
+      site: [
+        {
+          '@name': 'http://[::1]:3333',
+          alerts: [
+            {
+              pluginid: '10055',
+              alertRef: '10055-6',
+              alert: 'CSP: style-src unsafe-inline',
+              name: 'CSP: style-src unsafe-inline',
+              riskcode: '2',
+              confidence: '3',
+              riskdesc: 'Medium (High)',
+              instances: [{ uri: 'http://[::1]:3333/x', method: 'GET' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(
+      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri,
+      '[%3A%3A1]%3A3333/x',
+    );
+  });
+
   test('converts ZAP alerts and instances to SARIF rules and results', () => {
     const sarif = convertZapJsonToSarif({
       site: [

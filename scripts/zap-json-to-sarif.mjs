@@ -172,7 +172,7 @@ function resolveArtifactLocation(rawUri) {
       // GHAS Code Scanning rejects empty artifactLocation.uri values
       // (locationFromSarifResult: expected artifact location).
       const path = parsed.pathname + parsed.search + parsed.hash;
-      return { uri: `${parsed.host.replace(':', '%3A')}${path}` };
+      return { uri: `${parsed.host.replaceAll(':', '%3A')}${path}` };
     }
   } catch {
     // Not a URL — fall through and return as-is.
