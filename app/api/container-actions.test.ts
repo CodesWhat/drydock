@@ -447,6 +447,40 @@ describe('Container Actions Router', () => {
     });
   });
 
+  describe('runtime env redaction', () => {
+    test.each(['start', 'stop', 'restart'])(
+      'redacts sensitive details.env values in the %s response',
+      async (action) => {
+        const container = {
+          id: 'c1',
+          name: 'nginx',
+          image: { name: 'nginx' },
+          details: {
+            env: [
+              { key: 'DB_PASSWORD', value: 'hunter2' },
+              { key: 'LOG_LEVEL', value: 'debug' },
+            ],
+          },
+        };
+        mockGetContainer.mockReturnValue(container);
+        const { trigger } = createDockerTrigger();
+        mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+        const handler = getHandler('post', `/:id/${action}`);
+        const res = createMockResponse();
+        await handler(createMockRequest({ params: { id: 'c1' } }), res);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.result.details.env).toStrictEqual([
+          { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+          { key: 'LOG_LEVEL', value: 'debug', sensitive: false },
+        ]);
+        expect(JSON.stringify(payload)).not.toContain('hunter2');
+      },
+    );
+  });
+
   describe('stopContainer', () => {
     test('should stop container successfully', async () => {
       const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
