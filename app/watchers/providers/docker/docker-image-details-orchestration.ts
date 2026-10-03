@@ -1,4 +1,8 @@
-import { type Container, normalizeContainerHealth } from '../../../model/container.js';
+import {
+  type Container,
+  getCanonicalContainerName,
+  normalizeContainerHealth,
+} from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
@@ -285,6 +289,17 @@ function refreshContainerIdentityFromSummary(
 ) {
   const existingName = containerInStore.name || '';
   if (dockerContainerName === '' || existingName === dockerContainerName) {
+    return;
+  }
+  // The update executor renames the outgoing container to
+  // `${name}-old-${Date.now()}` before creating its replacement, and a full scan
+  // can list it under that name before the cleanup removes it. Persisting the
+  // transient name poisons the record the same way the rename event did (#535,
+  // guarded in updateContainerFromInspect): the replacement no longer matches it
+  // by name, and the update-policy stash skips rollback-named records, so the
+  // replacement loses its update policy (#1280). The rename is provably ours only
+  // when stripping the rollback suffix reconstructs the stored name.
+  if (getCanonicalContainerName(dockerContainerName) === existingName) {
     return;
   }
 
