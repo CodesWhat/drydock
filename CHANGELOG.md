@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop the dashboard from showing a connected Local Docker host when no local watcher is configured. Agent-only fleets show only their configured agents.
+- Apply the configured outbound HTTP timeout to Docker Hub publish-date metadata requests, so a stalled response cannot indefinitely hold up container discovery. Existing bounded retries and publish-date failure handling are unchanged.
+- Keep bulk scan counts and scanner results accurate when a post-scan notification fails. Each completed task is counted once, and notification delivery failures no longer replace a completed scan's status with an error.
+- Keep bulk scan progress accurate for large fleets and busy event streams while HTTP acceptance is delayed. Fresh request correlation and server-owned cumulative counts replace the 500-entry early-event buffer, with bounded client state and explicit recovery for conflicting or lost progress. Duplicate/replayed events do not overcount, and failed tasks still advance progress.
+- Correlate bulk scan progress with the accepted scan cycle, retain early completion events, and ignore duplicate or unrelated scans. The Security page now shows localized request/progress errors and supports an explicit retry without automatically repeating a scan request. Lost progress requires a successful read-only results refresh before starting another scan; refreshing does not establish whether the original scan has finished.
 - Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.
 
 ## [1.7.0-rc.17] — 2026-10-02
