@@ -166,3 +166,11 @@ set.ignored = true
 [[triage]]
 match.rules = ["checkov:CKV_GHA_7"]
 set.ignored = true
+
+# node-forge@1.4.0 (CVE-2026-33894, GHSA-86w9-cpqp-85rv) arrives through
+# @dotenvx/dotenvx in e2e/, a dev-only test helper that never ships in the image.
+# The advisory lists no patched version and 1.4.0 is the latest release as of
+# 2026-10-03. Recheck on 2026-11-02 or as soon as node-forge publishes a fix.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-33894"]
+set.ignored = true
