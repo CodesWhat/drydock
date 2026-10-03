@@ -71,6 +71,7 @@
         "agent": "Агент",
         "host": "Хост",
         "agentVersion": "Версія агента",
+        "agentBuild": "Збірка агента",
         "logLevel": "Рівень журналювання",
         "pollInterval": "Інтервал опитування",
         "dockerSocket": "Docker Socket",

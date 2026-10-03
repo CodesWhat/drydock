@@ -71,6 +71,7 @@
         "agent": "Agent",
         "host": "Gospodarz",
         "agentVersion": "Wersja agenta",
+        "agentBuild": "Kompilacja agenta",
         "logLevel": "Poziom dziennika",
         "pollInterval": "Interwał ankiety",
         "dockerSocket": "Docker Socket",
