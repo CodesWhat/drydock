@@ -107,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Lifecycle-hook variable help follows language changes in open container details without refetching, while keeping the environment variable names unchanged.
+- Runtime process origin badges now translate Explicit, Inherited and Unknown in all 16 non-English languages. Stored origin values and container labels are unchanged.
+- Container detail log controls, stop/restart confirmations and results, update fallbacks, skipped-entry counts, and software-version/uptime captions now fill the remaining English copies in the non-English catalogs. Existing translations, names and numeric placeholders are preserved.
 - General settings show the active SQLite database filename instead of the legacy JSON import filename, including custom database names.
 - Container recheck, delete, policy, dependency-chain, scan, environment-reveal and update-preview HTTP failures use the active interface language while retaining HTTP context and existing server diagnostics. Canonical rollback reasons also keep their translations in update toasts and container rows.
 - Table/card view controls and copy-failure tooltips now use translated labels across all supported interface languages, including when the language changes while feedback is visible.
