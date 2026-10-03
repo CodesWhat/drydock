@@ -50,7 +50,7 @@ curl http://drydock:3000/api/v1/agents
 | `data[].port` | integer | Agent port |
 | `data[].connected` | boolean | Whether the agent is currently connected |
 | `data[].version` | string | Agent drydock version, with any prerelease suffix removed |
-| `data[].build` | string | Agent's full build identity. See [version and build](/docs/api/app#version-and-build). Equals `version` when the agent reports no prerelease suffix, including Portwing edge agents. The controller derives both fields for agents older than 1.7.0 |
+| `data[].build` | string | Agent's full build identity. See [version and build](/docs/api/app#version-and-build). Equals `version` when the agent reports no prerelease suffix. The controller derives both fields from the version a drydock agent or a Portwing edge agent reports, so agents that predate `build` get one too |
 | `data[].os` | string | Operating system |
 | `data[].arch` | string | CPU architecture |
 | `data[].cpus` | integer | Number of CPU cores |
