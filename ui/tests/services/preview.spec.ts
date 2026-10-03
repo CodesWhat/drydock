@@ -118,7 +118,7 @@ describe('preview service', () => {
 
     expect(failure).toMatchObject({
       code: 'preview-http-error',
-      message: 'Unable to prepare this update preview (502 Bad Gateway)',
+      message: 'Failed to generate update preview (HTTP 502): Bad Gateway',
       status: 502,
     });
   });
@@ -146,7 +146,7 @@ describe('preview service', () => {
 
       expect(failure).toMatchObject({
         code: 'preview-http-error',
-        message: `Unable to prepare this update preview (502${statusText ? ` ${statusText}` : ''})`,
+        message: `Failed to generate update preview (HTTP 502)${statusText ? `: ${statusText}` : ''}`,
         status: 502,
         details: undefined,
         action: undefined,

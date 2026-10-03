@@ -187,6 +187,10 @@ async function refreshAllContainers() {
   return readJsonResponse(response, 'Container refresh API');
 }
 
+function actionHttpFailure(response: Response, message: string): string {
+  return `${message} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`;
+}
+
 async function refreshContainer(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/watch`, {
     method: 'POST',
@@ -196,7 +200,14 @@ async function refreshContainer(containerId: string) {
     return undefined;
   }
   if (!response.ok) {
-    throw new Error(`Failed to refresh container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.actionToasts.recheckFailedDetail', {
+          name: containerId,
+        }),
+      ),
+    );
   }
   return readJsonResponse(response, 'Container refresh API');
 }
@@ -210,7 +221,12 @@ async function deleteContainer(containerId: string) {
     },
   });
   if (!response.ok) {
-    throw new Error(`Failed to delete container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.actionToasts.deleteFailedDetail', { name: containerId }),
+      ),
+    );
   }
   return response;
 }
@@ -363,7 +379,7 @@ async function updateContainerPolicy(
       // Ignore parsing error and fallback to status text.
     }
     throw new Error(
-      `Failed to update container policy ${action}: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, `${i18n.global.t('containerComponents.policy.toasts.failedDetail')} (${action})`)}${details}`,
     );
   }
   return readJsonResponse(response, 'Container policy API');
@@ -408,7 +424,12 @@ async function previewUpdateChain(containerId: string): Promise<UpdateChainPrevi
   );
   if (!response.ok) {
     throw new Error(
-      `Failed to preview update chain for container ${containerId}: ${response.statusText}`,
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.confirmDialogs.dependencyGroup.previewFailedDetail', {
+          name: containerId,
+        }),
+      ),
     );
   }
   return readJsonResponse<UpdateChainPreview>(response, 'Container update-chain preview API');
@@ -468,7 +489,7 @@ async function updateDependencyGroup(
       console.debug(`Unable to parse dependency group update response payload: ${errorMessage(e)}`);
     }
     throw new ApiError(
-      `Failed to update dependency group ${rootId}: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, i18n.global.t('containerComponents.confirmDialogs.dependencyGroup.failedDetail', { name: rootId }))}${details}`,
       response.status,
     );
   }
@@ -522,7 +543,7 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
       console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
     }
     throw new ApiError(
-      `Failed to scan container: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, i18n.global.t('containerComponents.actionToasts.scanFailedDetail', { name: containerId }))}${details}`,
       response.status,
     );
   }
@@ -597,7 +618,9 @@ async function revealContainerEnv(containerId: string) {
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to reveal env vars: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(response, i18n.global.t('containerComponents.sideTabContent.revealFailed')),
+    );
   }
   return readJsonResponse<RevealedContainerEnv>(response, 'Container env API');
 }
