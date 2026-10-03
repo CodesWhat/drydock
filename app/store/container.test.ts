@@ -5391,6 +5391,77 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
     });
 
+    // An inventory pass or snapshot that lists the replacement flags the removal as one,
+    // even when the replacement was stored (and inherited) before the pass removed the
+    // old record. The flag still goes out for HA, but a stash nobody takes would hand a
+    // since-cleared policy to the next recreate.
+    test('replacementExpected stashes nothing for an agent-owned record whose replacement is already stored', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'flagged-late-old',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        { data: makePolicyFixture({ id: 'flagged-late-new', agent: 'agent1' }) },
+      ]);
+
+      container.deleteContainer('flagged-late-old', { replacementExpected: true });
+
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+      expect(event.emitContainerRemoved).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'flagged-late-old', replacementExpected: true }),
+      );
+    });
+
+    test('replacementExpected still stashes for an agent-owned record when only another replica is stored', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'flagged-replica-1',
+            name: 'stack-web-1',
+            agent: 'agent1',
+            labels,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        {
+          data: makePolicyFixture({
+            id: 'flagged-replica-2',
+            name: 'stack-web-2',
+            agent: 'agent1',
+            labels,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('flagged-replica-1', { replacementExpected: true });
+
+      expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+        'agent1::local::compose:stack/web',
+      ]);
+    });
+
+    test('replacementExpected still stashes for a controller-local record with a same-name record stored', () => {
+      mountWith([
+        { data: makePolicyFixture({ id: 'flagged-local-old', updatePolicy: MATURITY_POLICY }) },
+        { data: makePolicyFixture({ id: 'flagged-local-new' }) },
+      ]);
+
+      container.deleteContainer('flagged-local-old', { replacementExpected: true });
+
+      expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+        '::local::myapp',
+      ]);
+    });
+
     test('an agent-owned insert inherits from the first live predecessor that holds overrides', () => {
       mountWith([
         { data: makePolicyFixture({ id: 'pred-empty', agent: 'agent1' }) },

@@ -2078,6 +2078,32 @@ interface DeleteContainerOptions {
 }
 
 /**
+ * Whether a delete stashes the record's update policy under its identity key for a
+ * same-identity replacement to inherit.
+ *
+ * #1280: an agent-owned replacement can already be stored when its predecessor is
+ * deleted, because a real-time dd:container-added landed first and the replacement
+ * inherited the policy from the still-stored predecessor on insert. A later inventory
+ * pass or snapshot that lists that replacement still flags the removal as
+ * `replacementExpected`, and HA/MQTT need the flag to keep the replacement's discovery,
+ * but the stash would never be consumed by it. It would sit under the identity key and
+ * hand the policy to the next recreate, even after the user cleared it. Controller-local
+ * records keep the unconditional stash, because their inserts never adopt from a live
+ * predecessor (see getLivePredecessorUpdatePolicyOverrides).
+ */
+function shouldStashUpdatePolicyForReplacement(
+  containerRaw,
+  options: DeleteContainerOptions,
+): boolean {
+  if (options.replacementExpected === true) {
+    return !(isAgentOwnedContainer(containerRaw) && findIdentitySiblings(containerRaw).length > 0);
+  }
+  return (
+    options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0
+  );
+}
+
+/**
  * Delete container by id.
  * @param id
  */
@@ -2089,10 +2115,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     db.prepare(CONTAINER_DELETE_BY_ID_SQL).run(id);
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
-    if (
-      options.replacementExpected === true ||
-      (options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0)
-    ) {
+    if (shouldStashUpdatePolicyForReplacement(containerRaw, options)) {
       stashUpdatePolicyForReplacement(containerRaw);
     }
     if (options.identityChangeExpected === true) {
