@@ -840,10 +840,10 @@ describe('useVulnerabilities', () => {
       securitySortField: ref('critical'),
       securitySortAsc: ref(false),
     });
-    await state.fetchVulnerabilities();
+    expect(await state.fetchVulnerabilities()).toBe(true);
     expect(state.securityVulnerabilities.value).toHaveLength(1);
 
-    await state.fetchVulnerabilities();
+    expect(await state.fetchVulnerabilities()).toBe(false);
 
     expect(state.loading.value).toBe(false);
     expect(state.error.value).toBe('Failed to load vulnerability data');
