@@ -2,6 +2,7 @@ import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
+import { findStub } from '../helpers/find-stub';
 import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute, mockRouterReplace, mockContainerActionsEnabled, mockLoadServerFeatures } =
@@ -1073,7 +1074,7 @@ describe('ContainersView', () => {
     it('keeps DataTable actions enabled in compact mode', async () => {
       mockWindowNarrow.value = true;
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = findStub(wrapper, childStubs.DataTable);
       expect(dataTable.props('showActions')).toBe(true);
     });
 
@@ -1115,7 +1116,7 @@ describe('ContainersView', () => {
 
     it('uses native page scrolling for the containers table so it stretches to viewport bottom', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = findStub(wrapper, childStubs.DataTable);
       expect(dataTable.props('virtualScroll')).toBe(false);
       expect(dataTable.props('maxHeight')).toBeUndefined();
       expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
@@ -1128,7 +1129,7 @@ describe('ContainersView', () => {
 
     it('provides containerViewMode to the list content and forwards it to DataTable preferCards', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = () => findStub(wrapper, childStubs.DataTable);
 
       expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
       expect((wrapper.vm as any).containerViewMode).toBe('table');
@@ -1151,7 +1152,7 @@ describe('ContainersView', () => {
 
     it('wires measured card reflow from DataTable into the toolbar and hoisted card sorting', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = () => findStub(wrapper, childStubs.DataTable);
 
       expect(wrapper.find('.data-filter-bar').attributes('data-hide-view-toggle')).toBe('false');
       expect(dataTable().props('hoistCardSort')).toBe(false);
@@ -1731,7 +1732,7 @@ describe('ContainersView', () => {
         const wrapper = await mountContainersView([makeContainer()]);
         const vm = wrapper.vm as any;
 
-        const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+        const layout = findStub(wrapper, childStubs.DataViewLayout);
         layout.vm.$emit('content-width', 905);
         await flushPromises();
 
@@ -1751,7 +1752,7 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
       expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
 
-      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+      const layout = findStub(wrapper, childStubs.DataViewLayout);
       layout.vm.$emit('content-width', 1111);
       await flushPromises();
 
