@@ -366,7 +366,7 @@ Set `DD_LOG_LEVEL=debug` and look for the cause: a trigger skip (threshold not r
 
 ## A stable release shows a release candidate as its build
 
-That's expected. A stable release is the last release candidate's image, promoted unchanged, so the image published as `1.6.1` is the same image as `1.6.1-rc.15`. Drydock shows `1.6.1` as the version and keeps `1.6.1-rc.15` as the build, in the About dialog, under **Config > General**, in the startup log and in `GET /api/v1/app`.
+That's expected. A stable release is the last release candidate's image, promoted unchanged, so the image published as `1.6.1` is the same image as `1.6.1-rc.15`. Drydock shows `1.6.1` as the version and keeps `1.6.1-rc.15` as the build, in the About dialog, under **Config > General**, in the startup banner and in `GET /api/v1/app`.
 
 You're running the stable release. The build only names the candidate it was promoted from, which is useful in a bug report. Drydock versions that predate `build` showed the full build identity as the version, which is why a `1.6.x` install reports a release candidate version. See [version and build](/docs/api/app#version-and-build).
 
