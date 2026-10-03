@@ -411,10 +411,39 @@ describe('AgentClient', () => {
       });
       const container = { id: 'c1', name: 'test' };
       await client.processContainer(container);
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(container, {
+        labelOwned: 'declared',
+      });
       expect(existing.resultChanged).toHaveBeenCalled();
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: true }),
+      );
+    });
+
+    test('drops label-owned state an agent reports before it reaches the store (spec 7.5)', async () => {
+      const forged = {
+        v: 1,
+        declared: { displayName: 'forged' },
+        declaredSources: {},
+        sources: {},
+      };
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c9' });
+      await client.processContainer({
+        id: 'c9',
+        name: 'test',
+        labelOwned: forged,
+        dependsOnSource: 'override',
+      });
+      const inserted = storeContainer.insertContainer.mock.calls.at(-1)?.[0];
+      expect(inserted).not.toHaveProperty('labelOwned');
+      expect(inserted.dependsOnSource).toBeUndefined();
+
+      storeContainer.getContainer.mockReturnValue({ id: 'c9', resultChanged: vi.fn() });
+      storeContainer.updateContainer.mockReturnValue({ id: 'c9' });
+      await client.processContainer({ id: 'c9', name: 'test', labelOwned: forged });
+      expect(storeContainer.updateContainer.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+        'labelOwned',
       );
     });
 
@@ -544,6 +573,7 @@ describe('AgentClient', () => {
           result: undefined,
           updateAvailable: false,
         }),
+        { labelOwned: 'declared' },
       );
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: false }),
@@ -592,6 +622,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: false,
         }),
+        { labelOwned: 'declared' },
       );
       expect(storeContainer.updateContainer).toHaveBeenNthCalledWith(
         2,
@@ -601,6 +632,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: true,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -634,6 +666,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: true,
         }),
+        { labelOwned: 'declared' },
       );
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: true }),
@@ -977,6 +1010,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c1', name: 'owned-updated', agent: 'test-agent' }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -1056,6 +1090,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c1', watcher: 'new-watcher-name', agent: 'test-agent' }),
+        { labelOwned: 'declared' },
       );
       expect(mockLogChild.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('watcher does not match'),
@@ -1114,6 +1149,7 @@ describe('AgentClient', () => {
           updateAvailable: true,
           updateKind: existing.updateKind,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -4641,6 +4677,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: true,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -4875,6 +4912,7 @@ describe('AgentClient', () => {
             maturityMinAgeDays: 'override',
           },
         }),
+        { labelOwned: 'declared' },
       );
       expect(result.container).toMatchObject({
         updatePolicy: controllerOverrides,
@@ -4930,6 +4968,7 @@ describe('AgentClient', () => {
             skipDigests: 'override',
           },
         }),
+        { labelOwned: 'declared' },
       );
       expect(result.container).toMatchObject({
         updatePolicy: controllerOverrides,
@@ -4978,6 +5017,7 @@ describe('AgentClient', () => {
           updatePolicyOverrides: {},
           updatePolicySources: { skipTags: 'env' },
         }),
+        { labelOwned: 'declared' },
       );
       expect(result.container).toMatchObject({
         updatePolicy: { skipTags: ['stable'] },
@@ -9436,6 +9476,7 @@ describe('AgentClient', () => {
           updateMaturityLevel: existing.updateMaturityLevel,
           updateEligibility: existing.updateEligibility,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -9506,6 +9547,7 @@ describe('AgentClient', () => {
             digest: expect.objectContaining({ watch: true }),
           }),
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -9624,6 +9666,7 @@ describe('AgentClient', () => {
             digest: expect.objectContaining({ watch: false }),
           }),
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -10014,6 +10057,7 @@ describe('AgentClient', () => {
           updateKind: existing.updateKind,
           updateDetectedAt: existing.updateDetectedAt,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -10167,6 +10211,7 @@ describe('AgentClient', () => {
           updateAvailable: false,
           updateKind: { kind: 'unknown' },
         }),
+        { labelOwned: 'declared' },
       );
       expect(vi.mocked(storeContainer.updateContainer).mock.calls[0][0].result).toBeUndefined();
     });

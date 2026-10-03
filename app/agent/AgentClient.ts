@@ -45,6 +45,7 @@ import {
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
 import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
+import { stripAgentLabelOwnedState } from '../model/label-owned.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
@@ -893,6 +894,9 @@ export class AgentClient {
         },
       };
     }
+    // Spec 7.5: an agent reports what it declares. Controller overrides never flow to or
+    // from agents, so any label-owned state in the payload is dropped before the store.
+    container = stripAgentLabelOwnedState(container);
     container.agent = this.name;
     if (
       this.controllerDockerTransportWatchers.has(container.watcher) &&
@@ -931,7 +935,9 @@ export class AgentClient {
     };
 
     if (existing) {
-      containerReport.container = storeContainer.updateContainer(container);
+      containerReport.container = storeContainer.updateContainer(container, {
+        labelOwned: 'declared',
+      });
       // existing is the old state (from store), container is new state (from Agent)
       // But storeContainer.updateContainer returns the NEW state object with validation/methods
       // We use existing.resultChanged() to compare with the new state

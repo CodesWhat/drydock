@@ -6,6 +6,11 @@ import type {
   InventoryRefreshOptions,
   InventoryRefreshResult,
 } from '../model/inventory-refresh.js';
+import {
+  pickLabelOwnedFlat,
+  stripAgentLabelOwnedState,
+  toDeclaredProjection,
+} from '../model/label-owned.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as store from '../store/container.js';
 import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
@@ -151,8 +156,11 @@ export class AgentInventoryRefresh {
     this.dependencies.onMutation?.();
   }
 
-  private upsert(operation: Operation, incoming: Container): void {
+  private upsert(operation: Operation, reported: Container): void {
     if (!operation.current()) return;
+    // Spec 7.5: an agent reports what it declares. Controller overrides never flow to or
+    // from agents, so any label-owned state in the payload is dropped before the store.
+    const incoming = stripAgentLabelOwnedState(reported);
     const current = store.getContainerRaw(incoming.id);
     const baseline = operation.baseline.get(incoming.id);
     if (
@@ -186,11 +194,16 @@ export class AgentInventoryRefresh {
     }
     const patch: Partial<Container> = {};
     const labelsCurrent = isDeepStrictEqual(current.labels, baseline!.labels);
+    // The agent reports declared values, so each field is compared at the declared layer:
+    // a controller override on `current` is neither a change since the baseline nor a
+    // difference from what the agent reports.
+    const currentDeclared = toDeclaredProjection(current);
+    const baselineDeclared = toDeclaredProjection(baseline!);
     for (const field of PATCH_FIELDS) {
       if (!labelsCurrent && !RUNTIME_FIELDS.has(field)) continue;
       if (
-        isDeepStrictEqual(current[field], baseline![field]) &&
-        !isDeepStrictEqual(current[field], incoming[field])
+        isDeepStrictEqual(currentDeclared[field], baselineDeclared[field]) &&
+        !isDeepStrictEqual(currentDeclared[field], incoming[field])
       ) {
         Object.assign(patch, { [field]: incoming[field] });
       }
@@ -210,9 +223,17 @@ export class AgentInventoryRefresh {
       });
     }
     if (Object.keys(patch).length === 0) return;
-    const updated = store.updateContainerFields(incoming.id, patch, operation.context);
+    const updated = store.updateContainerFields(incoming.id, patch, operation.context, {
+      labelOwned: 'declared',
+    });
     if (!updated) return;
-    operation.baseline.set(incoming.id, validate({ ...baseline!, ...patch }));
+    const nextBaseline: Container = validate({ ...baseline!, ...patch });
+    operation.baseline.set(
+      incoming.id,
+      updated.labelOwned
+        ? { ...nextBaseline, ...pickLabelOwnedFlat(updated), labelOwned: updated.labelOwned }
+        : nextBaseline,
+    );
     if (!isDeepStrictEqual(current, updated)) this.dependencies.onMutation?.();
   }
 
