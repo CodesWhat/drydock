@@ -739,7 +739,15 @@ export class AgentClient {
       // The Docker id survives that move even though the identity does not, so stash
       // the update policy under the id the same way DR-112's controller-side prune
       // does, and let the record that reappears under this id inherit it.
-      storeContainer.deleteContainer(c.id, { identityChangeExpected: true });
+      //
+      // #1280: or it is a recreate whose replacement this report does not list yet
+      // (the agent holds a newly discovered container back while it settles). That
+      // one comes back under a new id with the same identity, so retain the policy
+      // under the identity key as well.
+      storeContainer.deleteContainer(c.id, {
+        identityChangeExpected: true,
+        retainUpdatePolicy: true,
+      });
     });
   }
 
@@ -1678,7 +1686,11 @@ export class AgentClient {
     const removedContainerData = data as { id: string };
     this.clearPendingFreshState(removedContainerData.id);
     this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);
-    storeContainer.deleteContainer(removedContainerData.id);
+    // #1280: the event carries only the id (older agents and Portwing send nothing
+    // else), so a recreate is indistinguishable from a removal here. Retain the
+    // controller-set update policy either way; the dd:container-added for the
+    // replacement may land before or after this event.
+    storeContainer.deleteContainer(removedContainerData.id, { retainUpdatePolicy: true });
     this.scheduleStatsChanged();
   }
 
