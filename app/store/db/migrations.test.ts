@@ -1,6 +1,11 @@
 import { createMemoryDatabase } from '../../test/sqlite-db.js';
 import type { Database } from './driver.js';
-import { getAppliedSchemaVersions, MIGRATIONS, migrate } from './migrations.js';
+import {
+  getAppliedSchemaVersions,
+  MIGRATIONS,
+  migrate,
+  TOTP_MIGRATION_VERSION,
+} from './migrations.js';
 
 const { logMock } = vi.hoisted(() => ({
   logMock: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
@@ -34,6 +39,25 @@ describe('store/db/migrations', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get()).toEqual({
       n: MIGRATIONS.length,
     });
+  });
+
+  test('applies the TOTP tables as version 10 even when 7 to 9 are not present yet', () => {
+    expect(TOTP_MIGRATION_VERSION).toBe(10);
+    const withGap = MIGRATIONS.filter(
+      (migration) => migration.version < 7 || migration.version === TOTP_MIGRATION_VERSION,
+    );
+    expect(migrate(db, withGap)).toEqual([1, 2, 3, 4, 5, 6, TOTP_MIGRATION_VERSION]);
+    expect(
+      db.prepare("SELECT name FROM sqlite_schema WHERE name = 'totp_factors'").all(),
+    ).toHaveLength(1);
+  });
+
+  test('a database migrated before TOTP existed picks the tables up later', () => {
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < TOTP_MIGRATION_VERSION),
+    );
+    expect(migrate(db)).toEqual([TOTP_MIGRATION_VERSION]);
   });
 
   test('records the version, the note and when it was applied', () => {

@@ -29,6 +29,7 @@ import * as notificationOutbox from './notification-outbox.js';
 import * as secrets from './secrets.js';
 import * as sessionStore from './session.js';
 import * as settings from './settings.js';
+import * as totp from './totp.js';
 import * as uiPreferences from './ui-preferences.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updateOperation from './update-operation.js';
@@ -170,6 +171,7 @@ function createCollections(): void {
   notificationOutbox.createCollections(sqliteDb as Database);
   secrets.createCollections(sqliteDb as Database);
   sessionStore.createCollections(sqliteDb as Database);
+  totp.createCollections(sqliteDb as Database);
   uiPreferences.createCollections(sqliteDb as Database);
   settings.createCollections(sqliteDb as Database);
   updateOperation.createCollections(sqliteDb as Database);

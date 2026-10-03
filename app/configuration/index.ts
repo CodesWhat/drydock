@@ -634,10 +634,18 @@ export function getRegistryConfigurations() {
 
 /**
  * Get authentication configurations.
+ *
+ * `DD_AUTH_TOTP_*` (the TOTP key ring and active key id, read directly by
+ * `loadTotpKeyringFromEnv`) is not an authentication provider. Excluded here
+ * so it isn't discovered as a provider literally named `totp`, the same reason
+ * `getAgentConfigurations` excludes `DD_AGENT_ALLOW_INSECURE_SECRET`.
  * @returns {*}
  */
 export function getAuthenticationConfigurations() {
-  return get('dd.auth', ddEnvVars);
+  const authEnvVars = Object.fromEntries(
+    Object.entries(ddEnvVars).filter(([key]) => !key.toUpperCase().startsWith('DD_AUTH_TOTP_')),
+  );
+  return get('dd.auth', authEnvVars);
 }
 
 /**

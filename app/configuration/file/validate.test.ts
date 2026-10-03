@@ -25,6 +25,14 @@ describe('validateConfiguration', () => {
     ]);
   });
 
+  test('TOTP key ring variables are not validated as an authentication provider', async () => {
+    const result = await validateConfiguration({
+      DD_AUTH_TOTP_KEYRING: '{"k1":"x"}',
+      DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1',
+    });
+    expect(result.errors).toEqual([]);
+  });
+
   test('an empty candidate map produces no errors', async () => {
     const result = await validateConfiguration({});
     expect(result.errors).toEqual([]);
