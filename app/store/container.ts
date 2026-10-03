@@ -1524,30 +1524,45 @@ function takeIdentityRetainedUpdatePolicyEntry(incoming) {
   return takeRetainedUpdatePolicyEntry(cacheKey);
 }
 
+/**
+ * Take every entry retained for `incoming` and return the overrides of the one stashed
+ * last, ignoring expired ones.
+ *
+ * Both keys are taken: an agent prune stashes under both, and a hit on one must not leave
+ * the other behind to resurrect a since-cleared policy later. The only entry left in
+ * place is one another compose replica stashed (see takeIdentityRetainedUpdatePolicyEntry).
+ *
+ * Neither key is the better match in general. After an agent -> controller -> agent move
+ * the identity entry is the one the first move left behind, and the id entry carries the
+ * policy as the controller last held it. So the later stash wins, and an expired entry
+ * never shadows a live one. Every stash uses the same TTL, so the later `expiresAt` is
+ * the later stash; a tie (one delete stashing both keys) keeps the identity entry.
+ */
 function takeUnexpiredRetainedUpdatePolicyOverrides(
   incoming,
 ): container.ContainerUpdatePolicy | undefined {
-  // Take both keys: an agent prune stashes under both, and a hit on one must not leave
-  // the other behind to resurrect a since-cleared policy later. The only entry left in
-  // place is one another compose replica stashed (see takeIdentityRetainedUpdatePolicyEntry).
-  const identityEntry = takeIdentityRetainedUpdatePolicyEntry(incoming);
-  const idEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
-  const entry = identityEntry ?? idEntry;
-  if (!entry || entry.expiresAt <= Date.now()) {
-    return undefined;
-  }
-  return entry.updatePolicyOverrides;
+  const nowMs = Date.now();
+  const [entry] = [
+    takeIdentityRetainedUpdatePolicyEntry(incoming),
+    takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming)),
+  ]
+    .filter(
+      (candidate): candidate is UpdatePolicyRetentionCacheEntry =>
+        candidate !== undefined && candidate.expiresAt > nowMs,
+    )
+    .sort((first, second) => second.expiresAt - first.expiresAt);
+  return entry?.updatePolicyOverrides;
 }
 
 /**
  * #496: restore a retained updatePolicy onto the record replacing a deleted one.
  *
- * The identity key comes first because it is the narrower match: it names one
- * container under one watcher on one agent, and a recreate is the common case. The
- * Docker id is the DR-112 fallback for the hand-off the identity key cannot see, where
- * the id survives and the identity does not. An agent-reported removal that cannot tell
- * which of the two is happening stashes under both, and the order decides which one a
- * given insert reads.
+ * The identity key carries a recreate: it names one container under one watcher on one
+ * agent, and survives the new Docker id. The Docker id carries the DR-112 hand-off the
+ * identity key cannot see, where the id survives and the identity does not. An
+ * agent-reported removal that cannot tell which of the two is happening stashes under
+ * both, and an insert that finds both takes the later stash (see
+ * takeUnexpiredRetainedUpdatePolicyOverrides).
  *
  * #1280: when neither is stashed, the predecessor may simply not have been deleted yet
  * (see getLivePredecessorUpdatePolicyOverrides).

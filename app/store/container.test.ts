@@ -5905,6 +5905,119 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
         updatePolicyRetentionCacheStore.listRecords().map((record) => record.cacheKey),
       ).toEqual(['id::moved-persist']);
     });
+
+    // An insert can find an entry under both of its keys. Neither key is the better
+    // match in general, so the entry stashed last wins, and an expired one never
+    // shadows a live one.
+    describe('an entry under both keys', () => {
+      const NEWER_POLICY = { skipTags: ['9.9.9'] };
+      const IDENTITY_KEY = 'agent1::local::myapp';
+      const ID_KEY = 'id::both-keys';
+
+      function seedEntries(identityEntry, idEntry) {
+        const cache = container._getUpdatePolicyRetentionCacheForTests();
+        cache.set(IDENTITY_KEY, { containerName: 'myapp', ...identityEntry });
+        cache.set(ID_KEY, { containerName: 'myapp', ...idEntry });
+      }
+
+      function insertAgentRecord() {
+        return container.insertContainer(makePolicyFixture({ id: 'both-keys', agent: 'agent1' }));
+      }
+
+      // agent -> controller -> agent: the first move stashes under both keys, the
+      // controller-local insert takes only the id entry, the user changes the policy, and
+      // the move back stashes the new policy under the id again. The identity entry left
+      // from the first move is older and must not win.
+      test('an agent -> controller -> agent move restores the policy set while the controller held it', () => {
+        vi.useFakeTimers();
+        try {
+          mountPolicyRetentionStore();
+          mountWith([
+            {
+              data: makePolicyFixture({
+                id: 'round-trip',
+                agent: 'agent1',
+                updatePolicy: MATURITY_POLICY,
+              }),
+            },
+          ]);
+          container.deleteContainer('round-trip', {
+            identityChangeExpected: true,
+            retainUpdatePolicy: true,
+          });
+          const local = container.insertContainer(makePolicyFixture({ id: 'round-trip' }));
+          expect(local.updatePolicy).toEqual(MATURITY_POLICY);
+
+          vi.advanceTimersByTime(60_000);
+          container.updateContainer({ ...local, updatePolicy: NEWER_POLICY });
+          container.deleteContainer('round-trip', { identityChangeExpected: true });
+
+          const back = container.insertContainer(
+            makePolicyFixture({ id: 'round-trip', agent: 'agent1' }),
+          );
+
+          expect(back.updatePolicy).toEqual(NEWER_POLICY);
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+          expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      test.each([
+        ['identity', 'id'],
+        ['id', 'identity'],
+      ] as const)('an expired %s entry does not shadow a live %s entry', (expired, live) => {
+        const now = Date.now();
+        const expiredEntry = { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now - 1 };
+        const liveEntry = { updatePolicyOverrides: NEWER_POLICY, expiresAt: now + 60_000 };
+        seedEntries(
+          expired === 'identity' ? expiredEntry : liveEntry,
+          live === 'id' ? liveEntry : expiredEntry,
+        );
+
+        expect(insertAgentRecord().updatePolicy).toEqual(NEWER_POLICY);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      test.each([
+        ['identity', 60_000, 30_000, MATURITY_POLICY],
+        ['id', 30_000, 60_000, NEWER_POLICY],
+      ] as const)(
+        'the %s entry wins when it was stashed later',
+        (_winner, identityRemainingMs, idRemainingMs, expected) => {
+          const now = Date.now();
+          seedEntries(
+            { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now + identityRemainingMs },
+            { updatePolicyOverrides: NEWER_POLICY, expiresAt: now + idRemainingMs },
+          );
+
+          expect(insertAgentRecord().updatePolicy).toEqual(expected);
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+        },
+      );
+
+      test('a tie keeps the identity entry', () => {
+        const expiresAt = Date.now() + 60_000;
+        seedEntries(
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt },
+        );
+
+        expect(insertAgentRecord().updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('two expired entries restore nothing', () => {
+        const expiresAt = Date.now() - 1;
+        seedEntries(
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt },
+        );
+
+        expect(insertAgentRecord().updatePolicy).toBeUndefined();
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+    });
   });
 });
 
