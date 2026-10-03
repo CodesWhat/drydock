@@ -12,7 +12,9 @@ import { UpdateRequestError } from '../../../updates/request-update.js';
 import Hass, { HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT } from './Hass.js';
 import { getHassCommandTopicFromStateTopic } from './hass-commands.js';
 
-const MOCK_VERSION = '1.4.0-test';
+// The configured build is a prerelease; Home Assistant must see the base version.
+const MOCK_VERSION = '1.4.0-rc.3';
+const MOCK_BASE_VERSION = '1.4.0';
 
 vi.mock('../../../event/index.js', () => ({
   registerContainerAdded: vi.fn(),
@@ -144,7 +146,7 @@ test('publishDiscoveryMessage must publish a discovery message expected by HA', 
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: MOCK_VERSION,
+        sw_version: MOCK_BASE_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -270,7 +272,7 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: MOCK_VERSION,
+        sw_version: MOCK_BASE_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -554,7 +556,7 @@ test.each(containerData)(
           manufacturer: 'drydock',
           model: 'drydock',
           name: 'drydock',
-          sw_version: MOCK_VERSION,
+          sw_version: MOCK_BASE_VERSION,
         },
         icon: 'mdi:docker',
         entity_picture:
@@ -576,7 +578,7 @@ test.each(containerData)(
           manufacturer: 'drydock',
           model: 'drydock',
           name: 'drydock',
-          sw_version: MOCK_VERSION,
+          sw_version: MOCK_BASE_VERSION,
         },
         icon: 'mdi:docker',
         entity_picture:
@@ -598,7 +600,7 @@ test.each(containerData)(
           manufacturer: 'drydock',
           model: 'drydock',
           name: 'drydock',
-          sw_version: MOCK_VERSION,
+          sw_version: MOCK_BASE_VERSION,
         },
         icon: 'mdi:docker',
         entity_picture:
@@ -622,7 +624,7 @@ test.each(containerData)(
           manufacturer: 'drydock',
           model: 'drydock',
           name: 'drydock',
-          sw_version: MOCK_VERSION,
+          sw_version: MOCK_BASE_VERSION,
         },
         icon: 'mdi:docker',
         entity_picture:
@@ -644,7 +646,7 @@ test.each(containerData)(
           manufacturer: 'drydock',
           model: 'drydock',
           name: 'drydock',
-          sw_version: MOCK_VERSION,
+          sw_version: MOCK_BASE_VERSION,
         },
         icon: 'mdi:docker',
         entity_picture:
@@ -666,7 +668,7 @@ test.each(containerData)(
           manufacturer: 'drydock',
           model: 'drydock',
           name: 'drydock',
-          sw_version: MOCK_VERSION,
+          sw_version: MOCK_BASE_VERSION,
         },
         icon: 'mdi:docker',
         entity_picture:
@@ -827,7 +829,7 @@ test('updateWatcherSensors must publish all watcher sensor messages expected by 
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: MOCK_VERSION,
+        sw_version: MOCK_BASE_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:

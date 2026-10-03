@@ -1,7 +1,11 @@
 import { renderBanner } from './index.js';
 
+const { mockGetVersion } = vi.hoisted(() => ({
+  mockGetVersion: vi.fn(() => '1.6.0'),
+}));
+
 vi.mock('../configuration/index.js', () => ({
-  getVersion: () => '1.6.0-test',
+  getVersion: mockGetVersion,
   getDnsMode: () => 'ipv4first',
   ddEnvVars: {},
 }));
@@ -23,7 +27,7 @@ describe('renderBanner', () => {
     expect(stream.write).toHaveBeenCalledOnce();
     const output = stream.write.mock.calls[0][0] as string;
     // Should contain the version and mode
-    expect(output).toContain('drydock v1.6.0-test · controller');
+    expect(output).toContain('drydock v1.6.0 · controller');
     // Should have centering padding (200 - 50) / 2 = 75 spaces
     const identityLine = output.split('\n').at(-2) ?? '';
     expect(identityLine.startsWith(' ')).toBe(true);
@@ -35,7 +39,7 @@ describe('renderBanner', () => {
 
     expect(stream.write).toHaveBeenCalledOnce();
     const output = stream.write.mock.calls[0][0] as string;
-    expect(output).toContain('drydock v1.6.0-test · agent');
+    expect(output).toContain('drydock v1.6.0 · agent');
     // No centering: columns not > BANNER_WIDTH
     const identityLine = output.split('\n').at(-2) ?? '';
     expect(identityLine.startsWith('\x1b')).toBe(true);
@@ -47,7 +51,7 @@ describe('renderBanner', () => {
 
     expect(stream.write).toHaveBeenCalledOnce();
     const output = stream.write.mock.calls[0][0] as string;
-    expect(output).toContain('drydock v1.6.0-test · controller');
+    expect(output).toContain('drydock v1.6.0 · controller');
   });
 
   test('does not write when stream is not a TTY', () => {
@@ -74,7 +78,7 @@ describe('renderBanner', () => {
     renderBanner({ mode: 'agent', stream, env: {} });
 
     const output = stream.write.mock.calls[0][0] as string;
-    expect(output).toContain('drydock v1.6.0-test · agent');
+    expect(output).toContain('drydock v1.6.0 · agent');
   });
 
   test('identity line contains version and mode for controller', () => {
@@ -82,7 +86,34 @@ describe('renderBanner', () => {
     renderBanner({ mode: 'controller', stream, env: {} });
 
     const output = stream.write.mock.calls[0][0] as string;
-    expect(output).toContain('drydock v1.6.0-test · controller');
+    expect(output).toContain('drydock v1.6.0 · controller');
+  });
+
+  test('identity line shows the base version and the build for a release candidate image', () => {
+    mockGetVersion.mockReturnValueOnce('1.6.1-rc.15');
+    const stream = makeStream(true, 50);
+    renderBanner({ mode: 'controller', stream, env: {} });
+
+    const output = stream.write.mock.calls[0][0] as string;
+    expect(output).toContain('drydock v1.6.1 (build 1.6.1-rc.15) · controller');
+  });
+
+  test('identity line shows no build when it matches the version', () => {
+    const stream = makeStream(true, 50);
+    renderBanner({ mode: 'controller', stream, env: {} });
+
+    const output = stream.write.mock.calls[0][0] as string;
+    expect(output).not.toContain('build');
+  });
+
+  test('identity line passes a non-semver build version through unchanged', () => {
+    mockGetVersion.mockReturnValueOnce('local');
+    const stream = makeStream(true, 50);
+    renderBanner({ mode: 'agent', stream, env: {} });
+
+    const output = stream.write.mock.calls[0][0] as string;
+    expect(output).toContain('drydock vlocal · agent');
+    expect(output).not.toContain('build');
   });
 
   test('output ends with a trailing newline', () => {
