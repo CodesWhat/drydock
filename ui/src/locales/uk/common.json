@@ -15,8 +15,8 @@
     "close": "Закрити",
     "retry": "Повторити",
     "unknown": "невідомо",
-    "yes": "yes",
-    "no": "no",
+    "yes": "так",
+    "no": "ні",
     "errorSummary": {
       "rateLimitHit": "Перевищено ліміт запитів реєстру",
       "accessDenied": "Доступ до реєстру заборонено",
@@ -28,7 +28,7 @@
       "signatureFailed": "Помилка перевірки підпису"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Власний"
     },
     "timeAgo": {
       "justNow": "Щойно"

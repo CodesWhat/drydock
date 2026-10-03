@@ -107,9 +107,9 @@
       "digest": "تحديث الصورة"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "مفتوحة الآن",
+      "scheduled": "مجدولة",
+      "openingSoon": "ستفتح قريبًا"
     },
     "dataLoadFailed": "فشل تحميل بيانات لوحة التحكم",
     "widgets": {

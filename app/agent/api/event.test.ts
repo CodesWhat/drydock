@@ -442,6 +442,23 @@ describe('agent API event', () => {
       expect(ackPayload).toContain('"images":2');
     });
 
+    test('ack payload should carry the base version and the release candidate as the build', async () => {
+      const configuration = await import('../../configuration/index.js');
+      vi.mocked(configuration.getVersion).mockReturnValueOnce('1.6.1-rc.15');
+
+      eventApi.subscribeEvents(req, res);
+
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('"version":"1.6.1","build":"1.6.1-rc.15"');
+    });
+
+    test('ack payload should repeat the version as the build for a stable build', () => {
+      eventApi.subscribeEvents(req, res);
+
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('"version":"1.0.0","build":"1.0.0"');
+    });
+
     test('ack payload should include logLevel from configuration', () => {
       eventApi.subscribeEvents(req, res);
       const ackPayload = res.write.mock.calls[0][0];

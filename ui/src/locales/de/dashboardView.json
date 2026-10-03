@@ -107,9 +107,9 @@
       "digest": "Image-Update"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Jetzt geöffnet",
+      "scheduled": "Geplant",
+      "openingSoon": "Öffnet in Kürze"
     },
     "dataLoadFailed": "Dashboard-Daten konnten nicht geladen werden",
     "widgets": {

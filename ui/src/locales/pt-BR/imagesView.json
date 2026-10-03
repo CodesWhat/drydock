@@ -28,6 +28,8 @@
       "description": "Nenhuma imagem corresponde aos filtros atuais."
     },
     "prune": {
+      "previewLoadFailed": "Falha ao carregar a prévia da limpeza",
+      "requestFailed": "Falha ao limpar as imagens",
       "dangling": "Limpar órfãs",
       "unused": "Limpar não utilizadas",
       "confirm": {

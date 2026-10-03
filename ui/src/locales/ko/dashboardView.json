@@ -107,9 +107,9 @@
       "digest": "이미지 업데이트"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "현재 열림",
+      "scheduled": "예약됨",
+      "openingSoon": "곧 시작"
     },
     "dataLoadFailed": "대시보드 데이터를 불러오지 못했습니다",
     "widgets": {

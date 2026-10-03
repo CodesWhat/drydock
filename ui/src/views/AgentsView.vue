@@ -21,6 +21,7 @@ import { getLogEntries } from '../services/log';
 import { getAllTriggers } from '../services/trigger';
 import { getAllWatchers } from '../services/watcher';
 import type { ApiAgent, ApiAgentLogEntry, ApiComponent } from '../types/api';
+import { distinctBuild } from '../utils/build-identity';
 import { errorMessage } from '../utils/error';
 
 interface Agent {
@@ -36,6 +37,7 @@ interface Agent {
   images?: number;
   lastSeen?: string;
   version?: string;
+  build?: string;
   uptime?: string;
   logLevel?: string;
   pollInterval?: string;
@@ -166,6 +168,7 @@ async function fetchAgents() {
             ? undefined
             : t('agentsView.detail.fields.never'),
       version: typeof a.version === 'string' ? a.version : undefined,
+      build: distinctBuild(a.version, a.build),
       uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
@@ -513,6 +516,9 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
   ];
   if (agent.version) {
     fields.push({ label: t('agentsView.detail.fields.agentVersion'), value: `v${agent.version}` });
+  }
+  if (agent.build) {
+    fields.push({ label: t('agentsView.detail.fields.agentBuild'), value: agent.build });
   }
   if (agent.logLevel) {
     fields.push({ label: t('agentsView.detail.fields.logLevel'), value: agent.logLevel });

@@ -95,7 +95,7 @@
       "agent-disconnect": "Desconexión de agente",
       "notification-delivery-failed": "Fallo al entregar notificación",
       "security-alert": "Alerta de seguridad",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "Periodo de maduración completado",
       "image-prune": "Depuración de imagen"
     },
     "target": {
@@ -196,6 +196,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "No se pudo iniciar el análisis.",
+    "scanProgressUnavailable": "El progreso del análisis no está disponible. Los análisis aceptados pueden seguir en curso. Actualiza los resultados antes de iniciar otro análisis.",
     "loadingVulnerabilityData": "Cargando datos de vulnerabilidades...",
     "runtimeLoadError": "No se pudo cargar el estado runtime de seguridad",
     "scanNow": "Escanear ahora",
@@ -236,7 +238,7 @@
     },
     "countLabel": {
       "images": "imágenes",
-      "scanned": "scanned"
+      "scanned": "analizados"
     },
     "fixableBadge": "{count} corregibles",
     "delta": {
@@ -381,7 +383,7 @@
     "filterPlaceholder": "Filtrar por nombre...",
     "clear": "Limpiar",
     "emptyFiltered": "Ningún trigger coincide con tus filtros",
-    "testContainerName": "Test Container",
+    "testContainerName": "Contenedor de prueba",
     "columns": {
       "trigger": "Trigger",
       "type": "Tipo",

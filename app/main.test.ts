@@ -78,7 +78,10 @@ async function loadEntryPoint({
     default: { setDefaultResultOrder },
   }));
   vi.doMock('./banner/index.js', () => ({ renderBanner }));
-  vi.doMock('./configuration/index.js', () => ({ getDnsMode, validateStartupConfiguration }));
+  vi.doMock('./configuration/index.js', () => ({
+    getDnsMode,
+    validateStartupConfiguration,
+  }));
   vi.doMock('./configuration/file/watch.js', () => ({ startConfigFileWatch }));
   vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
   vi.doMock('./log/index.js', () => ({

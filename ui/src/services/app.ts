@@ -2,7 +2,10 @@ import { readJsonResponse } from '../utils/api';
 
 interface AppInfos {
   name: string;
+  /** Base version, prerelease suffix removed (1.6.1). */
   version: string;
+  /** Full build identity (1.6.1-rc.15). Absent from a server older than this field. */
+  build?: string;
 }
 
 async function getAppInfos() {

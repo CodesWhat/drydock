@@ -95,7 +95,7 @@
       "agent-disconnect": "قطع اتصال الوكيل",
       "notification-delivery-failed": "فشل تسليم الإشعار",
       "security-alert": "تنبيه أمني",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "انتهت فترة الانتظار",
       "image-prune": "تنظيف الصورة"
     },
     "target": {
@@ -196,6 +196,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "تعذّر بدء الفحص.",
+    "scanProgressUnavailable": "تقدّم الفحص غير متاح. قد تكون الفحوصات المقبولة لا تزال قيد التشغيل. حدّث النتائج قبل بدء فحص آخر.",
     "loadingVulnerabilityData": "جارٍ تحميل بيانات الثغرات...",
     "runtimeLoadError": "فشل تحميل حالة وقت تشغيل الأمان",
     "scanNow": "فحص الآن",
@@ -235,8 +237,8 @@
       "clean": "نظيف"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "صور",
+      "scanned": "تم فحصها"
     },
     "fixableBadge": "{count} قابلة للإصلاح",
     "delta": {
@@ -381,7 +383,7 @@
     "filterPlaceholder": "تصفية حسب الاسم...",
     "clear": "مسح",
     "emptyFiltered": "لا توجد مشغّلات تطابق عوامل التصفية",
-    "testContainerName": "Test Container",
+    "testContainerName": "حاوية اختبار",
     "columns": {
       "trigger": "المشغّل",
       "type": "النوع",

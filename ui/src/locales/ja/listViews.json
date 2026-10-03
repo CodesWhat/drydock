@@ -95,7 +95,7 @@
       "agent-disconnect": "エージェント切断",
       "notification-delivery-failed": "通知送信失敗",
       "security-alert": "セキュリティアラート",
-      "maturity-cleared": "Maturity Cleared",
+      "maturity-cleared": "待機期間が終了",
       "image-prune": "イメージプルーン"
     },
     "target": {
@@ -196,6 +196,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "スキャンを開始できませんでした。",
+    "scanProgressUnavailable": "スキャンの進行状況を取得できません。受け付けられたスキャンはまだ実行中の可能性があります。別のスキャンを開始する前に結果を更新してください。",
     "loadingVulnerabilityData": "脆弱性データを読み込み中...",
     "runtimeLoadError": "セキュリティランタイムステータスの読み込みに失敗しました",
     "scanNow": "今すぐスキャン",
@@ -235,8 +237,8 @@
       "clean": "クリーン"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "イメージ",
+      "scanned": "スキャン済み"
     },
     "fixableBadge": "{count} 件修正可能",
     "delta": {
@@ -381,7 +383,7 @@
     "filterPlaceholder": "名前で絞り込む...",
     "clear": "クリア",
     "emptyFiltered": "フィルターに一致するトリガーがありません",
-    "testContainerName": "Test Container",
+    "testContainerName": "テスト用コンテナ",
     "columns": {
       "trigger": "トリガー",
       "type": "種別",

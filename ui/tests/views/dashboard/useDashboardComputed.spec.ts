@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import type { Container } from '@/types/container';
 import { daysToMs } from '@/utils/maturity-policy';
 import type {
@@ -120,6 +121,40 @@ function createState(overrides: DashboardComputedOverrides = {}) {
 }
 
 describe('useDashboardComputed servers', () => {
+  it.each([
+    { name: 'empty inventory', containers: [] },
+    { name: 'stale local inventory', containers: [makeBaseContainer()] },
+  ])(
+    'does not invent a local host without configured watchers or agents ($name)',
+    ({ containers }) => {
+      const state = createState({ containers, watchers: [], agents: [] });
+
+      expect(state.servers.value).toEqual([]);
+    },
+  );
+
+  it.each([true, false])(
+    'shows only configured agents in an agent-only fleet (connected=%s)',
+    (connected) => {
+      const state = createState({
+        watchers: [
+          { name: 'local', agent: 'edge-a', configuration: { socket: '/var/run/docker.sock' } },
+        ],
+        agents: [{ name: 'edge-a', connected, host: 'edge-a.local' }],
+        containers: [makeBaseContainer({ server: 'edge-a' })],
+      });
+
+      expect(state.servers.value).toEqual([
+        {
+          name: 'edge-a',
+          host: 'edge-a.local',
+          status: connected ? 'connected' : 'disconnected',
+          containers: { running: 1, total: 1 },
+        },
+      ]);
+    },
+  );
+
   it('builds Local and agent rows with grouped counts and normalized agent hosts', () => {
     const agents: DashboardAgent[] = [
       { name: 'edge-a', connected: true, host: '10.0.0.10', port: 2375 },
@@ -148,7 +183,7 @@ describe('useDashboardComputed servers', () => {
         status: 'running',
       }),
     ];
-    const state = createState({ agents, containers });
+    const state = createState({ agents, containers, watchers: [{ name: 'local' }] });
 
     expect(state.servers.value).toEqual([
       {
@@ -193,7 +228,7 @@ describe('useDashboardComputed servers', () => {
       );
     });
 
-    const state = createState({ agents, containers });
+    const state = createState({ agents, containers, watchers: [{ name: 'local' }] });
 
     const rows = state.servers.value;
     const totalContainers = rows.reduce((sum, row) => sum + row.containers.total, 0);
@@ -520,6 +555,68 @@ describe('useDashboardComputed update summary', () => {
 });
 
 describe('useDashboardComputed maintenance countdown', () => {
+  it.each([
+    ['ar', 'مفتوحة الآن', 'مجدولة', 'ستفتح قريبًا'],
+    ['de', 'Jetzt geöffnet', 'Geplant', 'Öffnet in Kürze'],
+    ['es', 'Abierta ahora', 'Programada', 'Se abrirá pronto'],
+    ['fr', 'Ouverte maintenant', 'Planifiée', 'Ouverture prochaine'],
+    ['it', 'Aperta ora', 'Pianificata', 'Apertura a breve'],
+    ['ja', '現在利用可能', '予定済み', 'まもなく開始'],
+    ['ko', '현재 열림', '예약됨', '곧 시작'],
+    ['nl', 'Nu geopend', 'Gepland', 'Opent binnenkort'],
+    ['pl', 'Otwarte teraz', 'Zaplanowane', 'Wkrótce otwarcie'],
+    ['pt-BR', 'Aberta agora', 'Agendada', 'Abrirá em breve'],
+    ['ru', 'Открыто сейчас', 'Запланировано', 'Скоро откроется'],
+    ['tr', 'Şu anda açık', 'Planlandı', 'Yakında açılacak'],
+    ['uk', 'Відкрито зараз', 'Заплановано', 'Незабаром відкриється'],
+    ['vi', 'Đang mở', 'Đã lên lịch', 'Sắp mở'],
+    ['zh-CN', '当前已开放', '已安排', '即将开放'],
+    ['zh-TW', '目前已開放', '已排程', '即將開放'],
+  ] as const)(
+    'updates maintenance state captions in %s without changing watcher data',
+    (locale, open, scheduled, soon) => {
+      setI18nLocale('en');
+      const now = Date.parse('2026-03-01T00:01:00.000Z');
+      const watchers = [
+        {
+          configuration: { maintenanceWindow: 'Sun 02:00-03:00 UTC', maintenanceWindowOpen: true },
+        },
+        { configuration: { maintenanceWindow: 'Sun 02:00-03:00 UTC' } },
+        {
+          configuration: {
+            maintenanceWindow: 'Sun 02:00-03:00 UTC',
+            maintenanceNextWindow: '2026-03-01T00:00:00.000Z',
+          },
+        },
+      ];
+      const before = structuredClone(watchers);
+      const states = watchers.map((watcher) =>
+        createState({ watchers: [watcher], maintenanceCountdownNow: now }),
+      );
+      const empty = createState({ maintenanceCountdownNow: now });
+      try {
+        expect(states.map((state) => state.maintenanceCountdownLabel.value)).toEqual([
+          'Open now',
+          'Scheduled',
+          'Opening soon',
+        ]);
+        setI18nLocale(locale);
+        expect(states.map((state) => state.maintenanceCountdownLabel.value)).toEqual([
+          open,
+          scheduled,
+          soon,
+        ]);
+        expect(empty.maintenanceCountdownLabel.value).toBe('');
+        expect(watchers).toEqual(before);
+        expect(states.map((state) => state.maintenanceWindowWatchers.value)).toEqual(
+          before.map((watcher) => [watcher]),
+        );
+      } finally {
+        setI18nLocale('en');
+      }
+    },
+  );
+
   it('includes maintenance watchers from both configuration and config payloads', () => {
     const watchers = [
       { configuration: { maintenanceWindow: 'Sun 02:00-03:00 UTC' } },

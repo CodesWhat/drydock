@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "Kopyalandı!",
       "clickToCopy": "Kopyalamak için tıklayın",
-      "failed": "Copy failed"
+      "failed": "Kopyalama başarısız"
     },
     "dataFilterBar": {
       "filters": "Filtreler",
@@ -23,8 +23,8 @@
       "viewMode": "Görünüm modu",
       "viewModeLabel": "{label} görünümü",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "Tablo",
+        "cards": "Kartlar"
       }
     },
     "dataTable": {
