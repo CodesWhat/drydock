@@ -210,7 +210,7 @@
     },
     "profile": {
       "loading": "Завантаження профілю",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Невідомий користувач",
       "fields": {
         "username": "Ім'я користувача",
         "email": "Email",
@@ -224,8 +224,8 @@
       "loading": "Завантаження журналів...",
       "emptyMessage": "Записи журналу не знайдено для поточних фільтрів.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Призупинено",
+        "offline": "Не в мережі"
       },
       "toolbar": {
         "live": "В ефірі",

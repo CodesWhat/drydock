@@ -107,9 +107,9 @@
       "digest": "Оновлення образу"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Відкрито зараз",
+      "scheduled": "Заплановано",
+      "openingSoon": "Незабаром відкриється"
     },
     "dataLoadFailed": "Не вдалося завантажити дані панелі керування",
     "widgets": {

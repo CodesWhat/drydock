@@ -15,8 +15,8 @@
     "close": "Fechar",
     "retry": "Tentar novamente",
     "unknown": "desconhecido",
-    "yes": "yes",
-    "no": "no",
+    "yes": "sim",
+    "no": "não",
     "errorSummary": {
       "rateLimitHit": "Limite de taxa do registry atingido",
       "accessDenied": "Acesso ao registry negado",
@@ -28,7 +28,7 @@
       "signatureFailed": "Falha na verificação de assinatura"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Personalizado"
     },
     "timeAgo": {
       "justNow": "Agora"

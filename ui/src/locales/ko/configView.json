@@ -210,7 +210,7 @@
     },
     "profile": {
       "loading": "프로필 불러오는 중",
-      "unknownUser": "Unknown User",
+      "unknownUser": "알 수 없는 사용자",
       "fields": {
         "username": "사용자 이름",
         "email": "이메일",
@@ -224,8 +224,8 @@
       "loading": "로그 불러오는 중...",
       "emptyMessage": "현재 필터에 해당하는 로그가 없습니다.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "일시 중지됨",
+        "offline": "오프라인"
       },
       "toolbar": {
         "live": "실시간",

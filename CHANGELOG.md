@@ -107,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Shared yes/no options, unnamed custom-registry labels, the missing-profile caption and paused/offline log states now translate in the remaining 13 languages, without changing submitted boolean values, registry or user identities, or raw log messages.
+- Maintenance-window state captions, maturity-cleared audit labels and the synthetic container name in test notifications now translate in all supported languages. Spanish maintenance captions describe the current state rather than an action; schedules, audit identities and trigger routing stay unchanged.
 - Lifecycle-hook variable help follows language changes in open container details without refetching, while keeping the environment variable names unchanged.
 - Runtime process origin badges now translate Explicit, Inherited and Unknown in all 16 non-English languages. Stored origin values and container labels are unchanged.
 - Container detail log controls, stop/restart confirmations and results, update fallbacks, skipped-entry counts, and software-version/uptime captions now fill the remaining English copies in the non-English catalogs. Existing translations, names and numeric placeholders are preserved.

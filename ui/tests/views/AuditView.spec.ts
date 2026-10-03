@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
-import { i18n } from '@/boot/i18n';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { getAuditLog } from '@/services/audit';
@@ -215,6 +215,53 @@ describe('AuditView', () => {
     mockRoute.query = {};
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
   });
+
+  it.each([
+    ['ar', 'انتهت فترة الانتظار'],
+    ['de', 'Reifezeit abgelaufen'],
+    ['es', 'Periodo de maduración completado'],
+    ['fr', 'Période de maturation écoulée'],
+    ['it', 'Periodo di maturazione completato'],
+    ['ja', '待機期間が終了'],
+    ['ko', '대기 기간 종료'],
+    ['nl', 'Wachttijd verstreken'],
+    ['pl', 'Okres oczekiwania zakończony'],
+    ['pt-BR', 'Período de maturação concluído'],
+    ['ru', 'Период ожидания завершён'],
+    ['tr', 'Bekleme süresi doldu'],
+    ['uk', 'Період очікування завершено'],
+    ['vi', 'Đã hết thời gian chờ'],
+    ['zh-CN', '等待期已结束'],
+    ['zh-TW', '等待期已結束'],
+  ] as const)(
+    'updates maturity captions in %s while preserving selected audit data',
+    async (locale, expected) => {
+      setI18nLocale('en');
+      const entry = makeEntry({
+        action: 'maturity-cleared',
+        containerName: 'Maturity Cleared',
+        details: 'Maturity Cleared: custom diagnostic',
+      });
+      mockGetAuditLog.mockResolvedValue({ entries: [entry], total: 1, page: 1, limit: 50 });
+      const wrapper = await mountAuditView();
+      try {
+        await wrapper.get('.row-click-first').trigger('click');
+        expect(wrapper.get('.detail-header .truncate').text()).toBe('Maturity Cleared');
+        setI18nLocale(locale);
+        await nextTick();
+        expect(wrapper.get('.detail-header .truncate').text()).toBe(expected);
+        expect(wrapper.get('.data-table-row').text()).toContain(expected);
+        expect(wrapper.get('.detail-content').text()).toContain(entry.details);
+        expect(wrapper.text()).toContain(entry.containerName);
+        expect(wrapper.get('.data-table').attributes('data-selected-key')).toBe(entry.id);
+        expect(entry.action).toBe('maturity-cleared');
+        expect(mockGetAuditLog).toHaveBeenCalledOnce();
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    },
+  );
 
   describe('loading skeleton', () => {
     it('shows noninteractive placeholders and a localized status until the service settles', async () => {
