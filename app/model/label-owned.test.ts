@@ -7,6 +7,7 @@ import {
   inferDeclaredSources,
   LABEL_OWNED_FIELDS,
   type LabelOverrideFields,
+  type LabelOwnedState,
   parseLabelOverrideFields,
   parseLabelOwnedState,
   pickLabelOwnedFlat,

@@ -2585,6 +2585,45 @@ export function mutateLabelOverrides(
   return result;
 }
 
+export interface LabelOverrideDeleteResult {
+  /** The deleted row, or `undefined` when no row with that id was at `expectedRevision`. */
+  record: labelOverrideStore.LabelOverrideRecord | undefined;
+  /** How many stored containers were rewritten. */
+  refreshed: number;
+}
+
+/**
+ * Spec 7.5: delete a whole override row by id and revision, orphans included, and rewrite
+ * every container it applied to, in one transaction. Like `mutateLabelOverrides`,
+ * `container-updated` is emitted per rewritten row, after the commit.
+ * @param id the override row id
+ * @param expectedRevision the delete applies only against this revision
+ */
+export function deleteLabelOverrideAndRefresh(
+  id: string,
+  expectedRevision: number,
+): LabelOverrideDeleteResult {
+  const collected: container.Container[] = [];
+  const result = labelOverrideStore.transaction(() => {
+    const record = labelOverrideStore.deleteLabelOverrideRow(id, expectedRevision);
+    if (record === undefined) {
+      return { record, refreshed: 0 };
+    }
+    const scope: labelOverrideStore.LabelOverrideScope = {
+      key: record.scopeKey,
+      agent: record.agent,
+      watcher: record.watcher,
+      kind: record.scopeKind,
+      name: record.scopeName,
+    };
+    return { record, refreshed: refreshLabelOverrideScope(scope, collected) };
+  });
+  for (const payload of collected) {
+    emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));
+  }
+  return result;
+}
+
 interface DeleteContainerOptions {
   context?: ContainerLifecycleEventContext;
   /** A recreate: same identity, new Docker id. */

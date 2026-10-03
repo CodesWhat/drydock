@@ -869,6 +869,44 @@ describe('label-owned overrides at the store', () => {
     });
   });
 
+  describe('deleting a row', () => {
+    test('refreshes every affected container in the same step and announces each once', () => {
+      container.insertContainer(sonarr('1', { displayName: 'Sonarr' }));
+      container.insertContainer(sonarr('2', { displayName: 'Sonarr' }));
+      const row = setOverrides(sonarr('1'), { displayName: 'TV', dependsOn: ['api'] })
+        .record as labelOverride.LabelOverrideRecord;
+      expect(raw('2').displayName).toBe('TV');
+      emitted().mockClear();
+
+      expect(container.deleteLabelOverrideAndRefresh(row.id, 99)).toEqual({
+        record: undefined,
+        refreshed: 0,
+      });
+      expect(raw('1').displayName).toBe('TV');
+      expect(emitted()).not.toHaveBeenCalled();
+
+      const deleted = container.deleteLabelOverrideAndRefresh(row.id, row.revision);
+
+      expect(deleted.record?.id).toBe(row.id);
+      expect(deleted.refreshed).toBe(2);
+      expect(emitted()).toHaveBeenCalledTimes(2);
+      expect(raw('1')).toMatchObject({ displayName: 'Sonarr' });
+      expect(raw('2').displayName).toBe('Sonarr');
+      expect(raw('1').dependsOn).toBeUndefined();
+      expect(raw('1').labelOwned?.sources.displayName).not.toBe('override');
+      expect(labelOverride.getLabelOverrides()).toEqual([]);
+    });
+
+    test('an orphan row deletes cleanly with nothing to refresh', () => {
+      const row = setOverrides(watched('ghost'), { displayName: 'TV' })
+        .record as labelOverride.LabelOverrideRecord;
+      expect(container.deleteLabelOverrideAndRefresh(row.id, row.revision)).toMatchObject({
+        refreshed: 0,
+      });
+      expect(emitted()).not.toHaveBeenCalled();
+    });
+  });
+
   describe('composition with group policies', () => {
     test('the group layer and the label-owned layer each resolve their own fields', () => {
       const policy = groupPolicy.insertGroupPolicy(

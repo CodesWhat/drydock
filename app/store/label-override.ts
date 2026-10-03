@@ -303,6 +303,8 @@ export function writeLabelOverrideChanges(
 /**
  * Compare-and-set delete of a whole row, orphans included. Returns the deleted row, or
  * `undefined` when no row with this id is at `expectedRevision`.
+ * @internal Rewrites no container. Callers use `deleteLabelOverrideAndRefresh` in
+ * `app/store/container.ts`, which refreshes the affected containers in the same transaction.
  */
 export function deleteLabelOverrideRow(
   id: string,
