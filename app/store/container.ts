@@ -30,15 +30,19 @@ import {
   hasRawUpdate,
   isRollbackContainerName,
 } from '../model/container.js';
+import { getContainerGroup } from '../model/container-group.js';
+import { toContainerGroupPolicySnapshot } from '../model/group-policy.js';
 import { isMaturityGatePending } from '../model/maturity-policy.js';
 import {
   applyDeclarativeUpdatePolicy,
+  applyGroupUpdatePolicyLayer,
   applyUpdatePolicyOverrides,
   getUpdatePolicyOverrides,
 } from '../model/update-policy.js';
 import { ddActionAuto } from '../watchers/providers/docker/label.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import type { Database, Row } from './db/driver.js';
+import * as groupPolicyStore from './group-policy.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 
@@ -778,6 +782,7 @@ function getUpdatePolicyComparisonKey(containerToCompare: container.Container): 
     skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
     skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
   });
+  const groupPolicy = containerToCompare.groupPolicy;
   return JSON.stringify({
     effective: normalizePolicy(containerToCompare.updatePolicy),
     hasDeclarative: containerToCompare.updatePolicyDeclarative !== undefined,
@@ -788,6 +793,11 @@ function getUpdatePolicyComparisonKey(containerToCompare: container.Container): 
     hasOverrides: containerToCompare.updatePolicyOverrides !== undefined,
     overrides: normalizePolicy(containerToCompare.updatePolicyOverrides),
     sources: containerToCompare.updatePolicySources ?? {},
+    // Spec 7.3: an actions-only policy change leaves every field above alone, and the
+    // UI still needs its container-updated event.
+    groupPolicy: groupPolicy
+      ? { id: groupPolicy.id, revision: groupPolicy.revision, actions: groupPolicy.actions }
+      : null,
   });
 }
 
@@ -998,6 +1008,7 @@ const CONTAINER_COLUMNS = [
   'source_repo',
   'current_release_notes',
   'dependency_config',
+  'group_policy',
 ] as const;
 
 type ContainerColumn = (typeof CONTAINER_COLUMNS)[number];
@@ -1017,6 +1028,10 @@ const CONTAINER_DELETE_BY_ID_SQL = 'DELETE FROM containers WHERE id = ?';
 // order, and never touching the large JSON columns (security, details, result).
 const CONTAINER_SELECT_IDENTITY_SIBLING_CANDIDATES_SQL =
   "SELECT id, name, watcher, agent, labels, update_policy, update_policy_declarative, update_policy_overrides FROM containers WHERE watcher = ? AND COALESCE(agent, '') = ? ORDER BY rowid";
+// Spec 7.3: what group-policy re-resolution and startup reconciliation need to decide
+// whether a record is theirs to rewrite, without validating every row in full.
+const CONTAINER_SELECT_GROUP_POLICY_STATE_SQL =
+  'SELECT id, labels, group_policy, update_policy_sources FROM containers ORDER BY rowid';
 
 function toStoredJson(value: unknown): string | null {
   return value === undefined ? null : JSON.stringify(value);
@@ -1112,6 +1127,7 @@ function containerToRow(c: container.Container, securityHash: string): Container
     source_repo: c.sourceRepo ?? null,
     current_release_notes: toStoredJson(c.currentReleaseNotes),
     dependency_config: toStoredJson(dependencyConfig),
+    group_policy: toStoredJson(c.groupPolicy),
   };
 }
 
@@ -1170,6 +1186,7 @@ function rowToContainer(row: Row): container.Container {
       dependsOnAction?: 'update' | 'restart';
     }>(typedRow.dependency_config) ?? {};
   const errorMessage = toOptionalStoredString(typedRow.error_message);
+  const groupPolicy = fromStoredJson<container.ContainerGroupPolicySnapshot>(typedRow.group_policy);
 
   const raw: Record<string, unknown> = {
     id: String(typedRow.id),
@@ -1215,6 +1232,9 @@ function rowToContainer(row: Row): container.Container {
     dependsOn: dependencyConfig.dependsOn,
     dependsOnSource: dependencyConfig.dependsOnSource,
     dependsOnAction: dependencyConfig.dependsOnAction,
+    // Only present when a policy applied, so a record no policy reaches reads back with
+    // exactly the keys it had before group policies existed.
+    ...(groupPolicy === undefined ? {} : { groupPolicy }),
   };
 
   return validateContainer(raw);
@@ -1607,6 +1627,51 @@ function restoreRetainedUpdatePolicy(container) {
   }
 }
 
+/** Whether a record carries any trace of a group layer: a snapshot or a `group` source. */
+function hasGroupPolicyLayer(
+  record: Partial<Pick<container.Container, 'groupPolicy' | 'updatePolicySources'>> | undefined,
+): boolean {
+  return (
+    record?.groupPolicy !== undefined ||
+    Object.values(record?.updatePolicySources ?? {}).includes('group')
+  );
+}
+
+/**
+ * Spec 7.3: the one place the group update-policy layer is applied. Every write path runs
+ * this immediately before `validateContainer`, so `updateAvailable`, the stored
+ * `update_available` and `maturityGatePendingSince` all see the final policy.
+ *
+ * The group comes from the record's own current labels and the policy from the group
+ * policy store, never from an incoming `groupPolicy` or a provisionally resolved
+ * `updatePolicy`, so a stale or forged snapshot cannot survive a write and a recreated
+ * container never inherits its predecessor's group. Overrides stay container-owned
+ * (`getUpdatePolicyOverrides`) and the group layer is never written into them.
+ *
+ * When no policy applies and neither the record nor its stored predecessor carries a group
+ * layer, this returns `containerToFinalize` itself, untouched: with zero policies every
+ * write is exactly what it was before group policies existed. Otherwise it returns a copy
+ * re-resolved with the current layer, or with none, which is how a container leaves a
+ * group or outlives a deleted policy.
+ * @param containerToFinalize the merged record about to be validated and written
+ * @param containerStored the stored record it replaces, if any
+ */
+function finalizeGroupPolicyLayer(containerToFinalize, containerStored?: container.Container) {
+  const group = getContainerGroup(containerToFinalize);
+  const policy = group === null ? undefined : groupPolicyStore.getGroupPolicyForGroup(group);
+  if (
+    policy === undefined &&
+    !hasGroupPolicyLayer(containerToFinalize) &&
+    !hasGroupPolicyLayer(containerStored)
+  ) {
+    return containerToFinalize;
+  }
+  return applyGroupUpdatePolicyLayer(
+    { ...containerToFinalize },
+    policy === undefined ? undefined : toContainerGroupPolicySnapshot(policy),
+  );
+}
+
 /**
  * Insert new Container.
  * @param container
@@ -1665,7 +1730,7 @@ export function insertContainer(container, context?: ContainerLifecycleEventCont
       }
     }
   }
-  const containerToSave = validateContainer(container);
+  const containerToSave = validateContainer(finalizeGroupPolicyLayer(container));
   normalizeContainerTriggerLabelFields(containerToSave);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
@@ -1745,7 +1810,10 @@ export function updateContainer(
     containerMerged.updatePolicyOverrides = undefined;
     containerMerged.updatePolicySources = undefined;
   }
-  const containerToReturn = validateContainer(containerMerged);
+  // After the declarative re-apply above, and also when only labels changed.
+  const containerToReturn = validateContainer(
+    finalizeGroupPolicyLayer(containerMerged, containerCurrent),
+  );
   normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
@@ -1853,7 +1921,9 @@ export function updateContainerFields(
     // that drifted from the lookup key would write a different row or emit
     // an update under an id nothing here actually wrote.
     const containerMerged = { ...containerCurrent, ...patch, id: containerCurrent.id };
-    const containerToReturn = validateContainer(containerMerged);
+    const containerToReturn = validateContainer(
+      finalizeGroupPolicyLayer(containerMerged, containerCurrent),
+    );
     normalizeContainerTriggerLabelFields(containerToReturn);
     containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
     containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
@@ -2128,6 +2198,84 @@ export function clearMaturityGatePendingSince(id: string): boolean {
   const containerAfter = { ...containerBefore, maturityGatePendingSince: undefined };
   invalidateContainersCacheForMutation(containerBefore, containerAfter);
   return true;
+}
+
+interface GroupPolicyStateRow {
+  id: string;
+  group: string | null;
+  layer: Pick<container.Container, 'groupPolicy' | 'updatePolicySources'>;
+}
+
+function readGroupPolicyStateRows(): GroupPolicyStateRow[] {
+  const rows = db.prepare(CONTAINER_SELECT_GROUP_POLICY_STATE_SQL).all() as unknown as Pick<
+    ContainerRow,
+    'id' | 'labels' | 'group_policy' | 'update_policy_sources'
+  >[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    group: getContainerGroup({ labels: fromStoredJson(row.labels) }),
+    layer: {
+      groupPolicy: fromStoredJson(row.group_policy),
+      updatePolicySources: fromStoredJson(row.update_policy_sources),
+    },
+  }));
+}
+
+/**
+ * Spec 7.3: re-resolve every stored member of `group` after its policy was created,
+ * replaced or deleted, through the same `updateContainer` path an override edit takes, so
+ * derived fields and container-updated events follow it exactly. Members are matched on the
+ * group their current labels derive, plus any record whose stored snapshot still names the
+ * group. Agent-owned records are included, connected or not.
+ *
+ * One synchronous loop with no await: nothing else runs until every member is written, so
+ * no request or dispatch can observe a half-applied group. Only a crash interrupts it, and
+ * `reconcileGroupPolicySnapshots` heals that at the next start. Call it after the policy
+ * write has committed. Returns how many records it rewrote.
+ */
+export function reResolveGroupPolicyMembers(group: string): number {
+  let reResolved = 0;
+  for (const row of readGroupPolicyStateRows()) {
+    if (row.group !== group && row.layer.groupPolicy?.group !== group) {
+      continue;
+    }
+    updateContainer(getContainerRaw(row.id));
+    reResolved += 1;
+  }
+  return reResolved;
+}
+
+/**
+ * Spec 7.3: at startup, rewrite every record whose snapshot, effective policy or sources
+ * differ from what the current policies resolve to. That heals a crash part-way through
+ * `reResolveGroupPolicyMembers` and the drift a downgrade to a build without group
+ * policies leaves (it rewrites `update_policy` without the group layer and never touches
+ * `group_policy`). A record no policy reaches and that carries no group layer is skipped
+ * without being read in full, so a store with zero policies does no work and no writes.
+ * Returns how many records it rewrote.
+ */
+export function reconcileGroupPolicySnapshots(): number {
+  const resolutionKey = (record: container.Container) =>
+    stableSerialize({
+      groupPolicy: record.groupPolicy ?? null,
+      updatePolicy: record.updatePolicy ?? null,
+      updatePolicySources: record.updatePolicySources ?? {},
+    });
+  let reconciled = 0;
+  for (const row of readGroupPolicyStateRows()) {
+    const hasPolicy =
+      row.group !== null && groupPolicyStore.getGroupPolicyForGroup(row.group) !== undefined;
+    if (!hasPolicy && !hasGroupPolicyLayer(row.layer)) {
+      continue;
+    }
+    const stored = getContainerRaw(row.id);
+    if (resolutionKey(finalizeGroupPolicyLayer(stored, stored)) === resolutionKey(stored)) {
+      continue;
+    }
+    updateContainer(stored);
+    reconciled += 1;
+  }
+  return reconciled;
 }
 
 interface DeleteContainerOptions {

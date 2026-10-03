@@ -6697,6 +6697,7 @@ describe('dependency field persistence (spec 7.5 slice 1)', () => {
         throw new Error('fixture failed container validation');
       }
       delete row.dependency_config;
+      delete row.group_policy;
       const columns = Object.keys(row);
       legacyDb
         .prepare(
@@ -6704,7 +6705,7 @@ describe('dependency field persistence (spec 7.5 slice 1)', () => {
         )
         .run(...columns.map((column) => row[column] as string | number | null));
 
-      expect(migrate(legacyDb)).toEqual([7]);
+      expect(migrate(legacyDb)).toEqual([7, 8]);
       container.createCollections(legacyDb);
 
       const stored = container.getContainer('deps-pre-migration');

@@ -21,6 +21,12 @@ export interface Migration {
   sql: string;
 }
 
+/**
+ * Spec 7.3 group policies. Named so the tests reference the number through this one
+ * constant: a branch that lands another migration first renumbers this line only.
+ */
+export const GROUP_POLICIES_MIGRATION_VERSION = 8;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -102,6 +108,33 @@ ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
     // next watch cycle or event writes them.
     note: 'add containers.dependency_config (spec 7.5 slice 1)',
     sql: 'ALTER TABLE containers ADD COLUMN dependency_config TEXT;',
+  },
+  {
+    version: GROUP_POLICIES_MIGRATION_VERSION,
+    // Spec 7.3: one Drydock-owned policy per exact group name. group_name is a column
+    // because the store looks policies up by it; BINARY collation keeps the match
+    // case-sensitive and untrimmed, the #1251 group identity rule. The two bodies are
+    // JSON ('{}' when empty) because nothing queries inside them. id is a random UUID,
+    // the API path key, since group names are not URL-safe.
+    //
+    // containers.group_policy is the snapshot of the policy a container's last write
+    // applied, NULL when none did. It lets a container response explain its effective
+    // policy from one write, and lets startup reconciliation find drift without a join.
+    note: 'add group_policies and containers.group_policy (spec 7.3 group policies)',
+    sql: `
+CREATE TABLE group_policies (
+  id            TEXT PRIMARY KEY,
+  group_name    TEXT NOT NULL UNIQUE,
+  revision      INTEGER NOT NULL CHECK (revision >= 1),
+  update_policy TEXT NOT NULL,
+  actions       TEXT NOT NULL,
+  created_at    TEXT NOT NULL,
+  created_by    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  updated_by    TEXT NOT NULL
+) STRICT;
+ALTER TABLE containers ADD COLUMN group_policy TEXT;
+`,
   },
 ];
 
