@@ -281,6 +281,24 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
 
       expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
     });
+
+    // #1280: the replacement reached the controller first and inherited the policy from its
+    // still-stored predecessor. A snapshot that then lists it flags the predecessor's prune
+    // as a replacement, but must not leave a stash for the next recreate to pick up.
+    test('a snapshot listing an already-stored replacement leaves no stash behind (#1280)', async () => {
+      seedOldContainerWithPolicy();
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: WATCHER_NAME, name: WATCHER_NAME },
+        containers: [buildIncomingContainer()],
+      });
+
+      expect(storeContainer.getContainer('old-id')).toBeUndefined();
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
   });
 
   // #1280: per-container SSE events. The agent forwards dd:container-removed as

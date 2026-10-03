@@ -61,6 +61,29 @@ describe('store/db/importers/update-policy-retention-cache', () => {
     });
   });
 
+  // #1280: a legacy store that already recorded the stash's container name keeps it.
+  test('carries a recorded container name across, and stores NULL without one', () => {
+    expect(
+      run([
+        cacheDocument({ cacheKey: 'a::local::compose:stack/web', containerName: 'stack-web-2' }),
+        cacheDocument({ cacheKey: '::local::myapp' }),
+        cacheDocument({ cacheKey: '::local::other', containerName: 42 }),
+      ]),
+    ).toBe(3);
+
+    expect(
+      db
+        .prepare(
+          'SELECT cache_key, container_name FROM update_policy_retention_cache ORDER BY refresh_order ASC',
+        )
+        .all(),
+    ).toEqual([
+      { cache_key: 'a::local::compose:stack/web', container_name: 'stack-web-2' },
+      { cache_key: '::local::myapp', container_name: null },
+      { cache_key: '::local::other', container_name: null },
+    ]);
+  });
+
   test('stores a missing updatePolicyOverrides as NULL', () => {
     const document = cacheDocument();
     delete document.updatePolicyOverrides;

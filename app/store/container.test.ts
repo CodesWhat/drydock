@@ -5006,6 +5006,22 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
   });
 
+  // An insert with no id derives no id key, so the id take is handed undefined. It must
+  // be a no-op rather than key off undefined, and leave unrelated entries in place.
+  test('an insert with no id takes no id-keyed entry and leaves the cache alone', () => {
+    const cache = container._getUpdatePolicyRetentionCacheForTests();
+    cache.set('id::someone-else', {
+      updatePolicyOverrides: MATURITY_POLICY,
+      expiresAt: Date.now() + 60_000,
+    });
+
+    expect(() =>
+      container.insertContainer(makePolicyFixture({ id: '', name: 'no-id-app' })),
+    ).toThrow();
+
+    expect([...cache.keys()]).toEqual(['id::someone-else']);
+  });
+
   test('retained policy is consumed, so a second recreate does not resurrect it', () => {
     const oldFixture = makePolicyFixture({
       id: 'policy-once-old',
@@ -5391,6 +5407,219 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
     });
 
+    // An inventory pass or snapshot that lists the replacement flags the removal as one,
+    // even when the replacement was stored (and inherited) before the pass removed the
+    // old record. The flag still goes out for HA, but a stash nobody takes would hand a
+    // since-cleared policy to the next recreate.
+    test('replacementExpected stashes nothing for an agent-owned record whose replacement is already stored', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'flagged-late-old',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        { data: makePolicyFixture({ id: 'flagged-late-new', agent: 'agent1' }) },
+      ]);
+
+      container.deleteContainer('flagged-late-old', { replacementExpected: true });
+
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+      expect(event.emitContainerRemoved).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'flagged-late-old', replacementExpected: true }),
+      );
+    });
+
+    test('replacementExpected still stashes for an agent-owned record when only another replica is stored', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'flagged-replica-1',
+            name: 'stack-web-1',
+            agent: 'agent1',
+            labels,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        {
+          data: makePolicyFixture({
+            id: 'flagged-replica-2',
+            name: 'stack-web-2',
+            agent: 'agent1',
+            labels,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('flagged-replica-1', { replacementExpected: true });
+
+      expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+        'agent1::local::compose:stack/web',
+      ]);
+    });
+
+    test('replacementExpected still stashes for a controller-local record with a same-name record stored', () => {
+      mountWith([
+        { data: makePolicyFixture({ id: 'flagged-local-old', updatePolicy: MATURITY_POLICY }) },
+        { data: makePolicyFixture({ id: 'flagged-local-new' }) },
+      ]);
+
+      container.deleteContainer('flagged-local-old', { replacementExpected: true });
+
+      expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+        '::local::myapp',
+      ]);
+    });
+
+    // Replicas of one compose service share the `compose:project/service` identity key, so
+    // the key alone cannot say which replica a stash came from. The entry carries the
+    // canonical container name, and an agent-owned insert only takes an entry recorded
+    // under its own name.
+    describe('compose replicas and the recorded container name', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      const COMPOSE_KEY = 'agent1::local::compose:stack/web';
+
+      function replica(id: string, name: string, overrides: Record<string, unknown> = {}) {
+        return makePolicyFixture({ id, name, agent: 'agent1', labels, ...overrides });
+      }
+
+      test.each([
+        ['retainUpdatePolicy', { retainUpdatePolicy: true }],
+        ['replacementExpected', { replacementExpected: true }],
+      ] as const)(
+        'a compose down/up through %s hands the policy only to the replica it came from',
+        (_option, deleteOptions) => {
+          mountPolicyRetentionStore();
+          mountWith([
+            { data: replica('web-1-old', 'stack-web-1') },
+            { data: replica('web-2-old', 'stack-web-2', { updatePolicy: MATURITY_POLICY }) },
+          ]);
+
+          container.deleteContainer('web-1-old', deleteOptions);
+          container.deleteContainer('web-2-old', deleteOptions);
+          expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+            COMPOSE_KEY,
+          ]);
+
+          const first = container.insertContainer(replica('web-1-new', 'stack-web-1'));
+          expect(first.updatePolicy).toBeUndefined();
+          // The entry stays for the replica it belongs to.
+          expect(updatePolicyRetentionCacheStore.listRecords()).toHaveLength(1);
+
+          const second = container.insertContainer(replica('web-2-new', 'stack-web-2'));
+          expect(second.updatePolicy).toEqual(MATURITY_POLICY);
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+          expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+        },
+      );
+
+      test('records the canonical container name with the stash, in memory and on disk', () => {
+        mountPolicyRetentionStore();
+        mountWith([
+          { data: replica('named-old', 'stack-web-2', { updatePolicy: MATURITY_POLICY }) },
+        ]);
+
+        container.deleteContainer('named-old', { retainUpdatePolicy: true });
+
+        expect(container._getUpdatePolicyRetentionCacheForTests().get(COMPOSE_KEY)).toMatchObject({
+          updatePolicyOverrides: MATURITY_POLICY,
+          containerName: 'stack-web-2',
+        });
+        expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([
+          expect.objectContaining({ cacheKey: COMPOSE_KEY, containerName: 'stack-web-2' }),
+        ]);
+      });
+
+      test('the recorded name survives a restart and still decides the replica', () => {
+        mountPolicyRetentionStore();
+        mountWith([
+          { data: replica('restart-old', 'stack-web-2', { updatePolicy: MATURITY_POLICY }) },
+        ]);
+        container.deleteContainer('restart-old', { retainUpdatePolicy: true });
+
+        container._resetContainerStoreStateForTests();
+        container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+        expect(
+          container.insertContainer(replica('restart-web-1', 'stack-web-1')).updatePolicy,
+        ).toBeUndefined();
+        expect(
+          container.insertContainer(replica('restart-web-2', 'stack-web-2')).updatePolicy,
+        ).toEqual(MATURITY_POLICY);
+      });
+
+      // An entry written before the name was recorded cannot say which replica it came
+      // from. Under a shared compose key it is dropped: applying it could hand one
+      // replica's policy to another, and dropping it only loses a policy.
+      test('drops a nameless legacy entry under an agent compose identity key', () => {
+        mountPolicyRetentionStore([
+          {
+            cacheKey: COMPOSE_KEY,
+            updatePolicyOverrides: MATURITY_POLICY,
+            expiresAt: Date.now() + 60_000,
+          },
+        ]);
+        container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+        const inserted = container.insertContainer(replica('legacy-compose-new', 'stack-web-1'));
+
+        expect(inserted.updatePolicy).toBeUndefined();
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+        expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+      });
+
+      // A plain identity key already names the container, so the entry cannot belong to
+      // anyone else and stays usable after the upgrade.
+      test('applies a nameless legacy entry under an agent identity key that names the container', () => {
+        mountPolicyRetentionStore([
+          {
+            cacheKey: 'agent1::local::myapp',
+            updatePolicyOverrides: MATURITY_POLICY,
+            expiresAt: Date.now() + 60_000,
+          },
+        ]);
+        container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+        const inserted = container.insertContainer(
+          makePolicyFixture({ id: 'legacy-plain-new', agent: 'agent1' }),
+        );
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      // Controller-local records keep the name-agnostic restore, which is what lets a
+      // compose service redeployed under a new container name keep its policy.
+      test('a controller-local insert still takes an entry recorded under another name', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'local-compose-old',
+              name: 'stack-web-1',
+              labels,
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        container.deleteContainer('local-compose-old', { replacementExpected: true });
+
+        const inserted = container.insertContainer(
+          makePolicyFixture({ id: 'local-compose-new', name: 'stack-web-renamed', labels }),
+        );
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+    });
+
     test('an agent-owned insert inherits from the first live predecessor that holds overrides', () => {
       mountWith([
         { data: makePolicyFixture({ id: 'pred-empty', agent: 'agent1' }) },
@@ -5504,6 +5733,73 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
         '::local::myapp',
       ]);
+    });
+
+    // The sibling lookup reads every row of one watcher on one agent. A delete with no
+    // overrides to retain cannot stash anything, so it must not pay for the lookup.
+    describe('identity-sibling lookup cost', () => {
+      const SIBLING_LOOKUP_SQL_FRAGMENT = 'FROM containers WHERE watcher = ?';
+
+      function siblingLookupSql(prepare: { mock: { calls: unknown[][] } }): string[] {
+        return prepare.mock.calls
+          .map(([sql]) => String(sql))
+          .filter((sql) => sql.includes(SIBLING_LOOKUP_SQL_FRAGMENT));
+      }
+
+      test.each([
+        ['retainUpdatePolicy', { retainUpdatePolicy: true }],
+        ['replacementExpected', { replacementExpected: true }],
+      ] as const)(
+        '%s looks up no siblings for an agent-owned record with nothing to retain',
+        (_option, deleteOptions) => {
+          mountWith([
+            { data: makePolicyFixture({ id: 'cost-empty', agent: 'agent1' }) },
+            { data: makePolicyFixture({ id: 'cost-other', agent: 'agent1', name: 'redis' }) },
+          ]);
+          const prepare = vi.spyOn(db, 'prepare');
+
+          container.deleteContainer('cost-empty', deleteOptions);
+
+          expect(siblingLookupSql(prepare)).toEqual([]);
+          expect(container.getContainer('cost-empty')).toBeUndefined();
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+        },
+      );
+
+      test('a record with overrides to retain still looks its siblings up', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'cost-policy',
+              agent: 'agent1',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const prepare = vi.spyOn(db, 'prepare');
+
+        container.deleteContainer('cost-policy', { retainUpdatePolicy: true });
+
+        expect(siblingLookupSql(prepare)).toHaveLength(1);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(1);
+      });
+
+      // Every agent-owned insert without a stash hit runs the lookup too, and nothing
+      // gates that one. An index on (watcher, COALESCE(agent, '')) keeps it to the rows
+      // of one watcher on one agent, already in rowid order, so no sort step either.
+      test('the lookup is served by an index on watcher and agent, with no sort step', () => {
+        const prepare = vi.spyOn(db, 'prepare');
+        container.insertContainer(makePolicyFixture({ id: 'cost-insert', agent: 'agent1' }));
+        const [sql] = siblingLookupSql(prepare);
+        prepare.mockRestore();
+
+        const plan = db
+          .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+          .all('local', 'agent1')
+          .map((step) => String(step.detail));
+
+        expect(plan).toEqual([expect.stringContaining('USING INDEX containers_watcher_agent')]);
+      });
     });
 
     test('an agent-owned insert never adopts from the stored record with its own id', () => {
@@ -5691,6 +5987,136 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect(
         updatePolicyRetentionCacheStore.listRecords().map((record) => record.cacheKey),
       ).toEqual(['id::moved-persist']);
+    });
+
+    // An insert can find an entry under both of its keys. Neither key is the better
+    // match in general, so the entry stashed last wins, and an expired one never
+    // shadows a live one.
+    describe('an entry under both keys', () => {
+      const NEWER_POLICY = { skipTags: ['9.9.9'] };
+      const IDENTITY_KEY = 'agent1::local::myapp';
+      const ID_KEY = 'id::both-keys';
+
+      function seedEntries(identityEntry, idEntry) {
+        const cache = container._getUpdatePolicyRetentionCacheForTests();
+        cache.set(IDENTITY_KEY, { containerName: 'myapp', ...identityEntry });
+        cache.set(ID_KEY, { containerName: 'myapp', ...idEntry });
+      }
+
+      function insertAgentRecord() {
+        return container.insertContainer(makePolicyFixture({ id: 'both-keys', agent: 'agent1' }));
+      }
+
+      // agent -> controller -> agent: the first move stashes under both keys, the
+      // controller-local insert takes only the id entry, the user changes the policy, and
+      // the move back stashes the new policy under the id again. The identity entry left
+      // from the first move is older and must not win.
+      test('an agent -> controller -> agent move restores the policy set while the controller held it', () => {
+        vi.useFakeTimers();
+        try {
+          mountPolicyRetentionStore();
+          mountWith([
+            {
+              data: makePolicyFixture({
+                id: 'round-trip',
+                agent: 'agent1',
+                updatePolicy: MATURITY_POLICY,
+              }),
+            },
+          ]);
+          container.deleteContainer('round-trip', {
+            identityChangeExpected: true,
+            retainUpdatePolicy: true,
+          });
+          const local = container.insertContainer(makePolicyFixture({ id: 'round-trip' }));
+          expect(local.updatePolicy).toEqual(MATURITY_POLICY);
+
+          vi.advanceTimersByTime(60_000);
+          container.updateContainer({ ...local, updatePolicy: NEWER_POLICY });
+          container.deleteContainer('round-trip', { identityChangeExpected: true });
+
+          const back = container.insertContainer(
+            makePolicyFixture({ id: 'round-trip', agent: 'agent1' }),
+          );
+
+          expect(back.updatePolicy).toEqual(NEWER_POLICY);
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+          expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      test.each([
+        ['identity', 'id'],
+        ['id', 'identity'],
+      ] as const)('an expired %s entry does not shadow a live %s entry', (expired, live) => {
+        const now = Date.now();
+        const expiredEntry = { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now - 1 };
+        const liveEntry = { updatePolicyOverrides: NEWER_POLICY, expiresAt: now + 60_000 };
+        seedEntries(
+          expired === 'identity' ? expiredEntry : liveEntry,
+          live === 'id' ? liveEntry : expiredEntry,
+        );
+
+        expect(insertAgentRecord().updatePolicy).toEqual(NEWER_POLICY);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      // Seeding order is stash order: a stash deletes then sets, so the Map's insertion
+      // order puts the later stash last. The TTL may differ between the two stashes
+      // (DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS changes across a restart), so the
+      // expiresAt values below deliberately contradict the order.
+      test('the id entry wins when it was stashed after an identity entry with a longer TTL', () => {
+        const now = Date.now();
+        seedEntries(
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now + 600_000 },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt: now + 30_000 },
+        );
+
+        expect(insertAgentRecord().updatePolicy).toEqual(NEWER_POLICY);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      test('the identity entry wins when it was stashed after an id entry with a longer TTL', () => {
+        const now = Date.now();
+        const cache = container._getUpdatePolicyRetentionCacheForTests();
+        cache.set(ID_KEY, {
+          containerName: 'myapp',
+          updatePolicyOverrides: NEWER_POLICY,
+          expiresAt: now + 600_000,
+        });
+        cache.set(IDENTITY_KEY, {
+          containerName: 'myapp',
+          updatePolicyOverrides: MATURITY_POLICY,
+          expiresAt: now + 30_000,
+        });
+
+        expect(insertAgentRecord().updatePolicy).toEqual(MATURITY_POLICY);
+        expect(cache.size).toBe(0);
+      });
+
+      test('an expired later stash does not shadow an earlier live one', () => {
+        const now = Date.now();
+        seedEntries(
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now + 30_000 },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt: now - 1 },
+        );
+
+        expect(insertAgentRecord().updatePolicy).toEqual(MATURITY_POLICY);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      test('two expired entries restore nothing', () => {
+        const expiresAt = Date.now() - 1;
+        seedEntries(
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt },
+        );
+
+        expect(insertAgentRecord().updatePolicy).toBeUndefined();
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
     });
   });
 });

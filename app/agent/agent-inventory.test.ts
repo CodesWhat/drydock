@@ -281,25 +281,57 @@ describe('removal without a replacement in the same pass (#1280)', () => {
     expect(store.getContainerRaw('other')?.updatePolicy).toBeUndefined();
   });
 
-  test.each(['HTTP', 'SSE'] as const)(
-    'a late %s removal stashes nothing when the replacement is already stored',
-    async (delivery) => {
+  // The pass either leaves the replacement out or lists it. Listing it flags the removal
+  // as a replacement, which must still keep the HA discovery alive, but must not stash
+  // a policy the stored replacement already took.
+  test.each([
+    ['HTTP', false],
+    ['HTTP', true],
+    ['SSE', false],
+    ['SSE', true],
+  ] as const)(
+    'a late %s removal stashes nothing when the replacement is already stored (listed: %s)',
+    async (delivery, listed) => {
       seed('old', { updatePolicyOverrides: policy });
       // The replacement reached the controller first, as a real-time dd:container-added,
       // and inherited the policy from its still-stored predecessor.
       seed('new');
       expect(store.getContainerRaw('new')?.updatePolicy).toEqual(policy);
+      const removed = vi.fn();
+      event.registerContainerRemoved(removed);
 
       const pending = inventory.refresh('docker', 'local');
-      if (delivery === 'SSE') frame('removed', { id: 'old', replacementExpected: false });
-      resolve(result([], { removedIds: ['old'] }));
+      if (delivery === 'SSE') frame('removed', { id: 'old', replacementExpected: listed });
+      resolve(result(listed ? [remote('new')] : [], { removedIds: ['old'] }));
       await pending;
 
       expect(store.getContainerRaw('old')).toBeUndefined();
       expect(store.getContainerRaw('new')?.updatePolicy).toEqual(policy);
       expect(store._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      expect(removed).toHaveBeenCalledTimes(1);
+      expect(removed.mock.calls[0][0].replacementExpected).toBe(listed);
     },
   );
+
+  test('a cleared override stays cleared across the next recreate after a pass that listed the stored replacement', async () => {
+    seed('old', { updatePolicyOverrides: policy });
+    seed('new');
+    const pending = inventory.refresh('docker', 'local');
+    resolve(result([remote('new')], { removedIds: ['old'] }));
+    await pending;
+
+    // The user clears the override on the replacement, then the agent recreates it again.
+    store.updateContainer(
+      { ...store.getContainerRaw('new'), updatePolicy: undefined, updatePolicyOverrides: {} },
+      { authoritativeEmptyOverrides: true },
+    );
+    expect(store.getContainerRaw('new')?.updatePolicy).toBeUndefined();
+    store.deleteContainer('new', { retainUpdatePolicy: true });
+    const recreated = seed('new2');
+
+    expect(recreated.updatePolicy).toBeUndefined();
+    expect(recreated.updatePolicyOverrides).toBeUndefined();
+  });
 });
 
 test.each([undefined, 'true', 1])(
