@@ -94,6 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Docker Konteyner Güncelleme Yöneticisi",
+        "build": "Derleme",
         "documentation": "Dokümantasyon",
         "github": "GitHub",
         "changelog": "Değişiklik günlüğü",

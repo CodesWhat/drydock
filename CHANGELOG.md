@@ -60,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A stable release shows its own version instead of the release candidate it was promoted from.** A stable release is the last release candidate's image, promoted unchanged, so the `1.6.1` image reported `1.6.1-rc.15` in the UI, the API and Home Assistant. Drydock now shows the base version (`1.6.1`) and keeps the full build identity as a separate build field. The build appears in the About dialog, under Config > General and in the agent detail panel when it differs from the version, and the startup banner (shown on a TTY) reads `version 1.6.1 (build 1.6.1-rc.15)`. The `drydock is starting` log line carries no version. `GET /api/v1/app` and `GET /api/v1/agents` keep `version` as the base version and add `build`, the agent `dd:ack` event carries both, the debug dump adds `drydockBuild` next to `drydockVersion`, and Home Assistant's `sw_version` and the OpenAPI document version use the base version. API clients that parsed a prerelease suffix out of `version` should read `build` instead. Values that aren't a semver with a prerelease suffix, such as `local` or `ci`, are reported unchanged. The controller applies the same split to the version an older agent or a Portwing edge agent reports, so those agents show their base version too. Reported in [#1284](https://github.com/CodesWhat/drydock/issues/1284).
 - Replaced the deprecated Prometheus client with its official `@prometheus-io/client` successor and removed redundant YAML type definitions. Existing Drydock metric names, labels and values are preserved; the default Node.js metrics also include event-loop utilization.
 
 - **Container update split buttons now share one component**, keeping the existing blocked, warning and ready styles, dimensions and independent action/menu disabled states. Enter and Space on either half no longer activate the surrounding table row; native button activation and arrow-key behavior are unchanged.
@@ -107,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.
 - Shared yes/no options, unnamed custom-registry labels, the missing-profile caption and paused/offline log states now translate in the remaining 13 languages, without changing submitted boolean values, registry or user identities, or raw log messages.
 - Maintenance-window state captions, maturity-cleared audit labels and the synthetic container name in test notifications now translate in all supported languages. Spanish maintenance captions describe the current state rather than an action; schedules, audit identities and trigger routing stay unchanged.
 - Lifecycle-hook variable help follows language changes in open container details without refetching, while keeping the environment variable names unchanged.

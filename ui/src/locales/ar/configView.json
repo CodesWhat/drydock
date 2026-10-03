@@ -137,6 +137,7 @@
       },
       "fields": {
         "version": "الإصدار",
+        "build": "البنية",
         "serverPort": "منفذ الخادم",
         "containerActions": "إجراءات الحاوية",
         "webhook": "Webhook",

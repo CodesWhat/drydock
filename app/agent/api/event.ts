@@ -1,6 +1,7 @@
 import os from 'node:os';
 import type { Request, Response } from 'express';
 import { getLogLevel, getVersion } from '../../configuration/index.js';
+import { deriveVersionIdentity } from '../../configuration/version-identity.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
@@ -389,8 +390,12 @@ function getAgentWatcherCron(): string | undefined {
 function getAckPayloadData() {
   const summary = getContainerSummary();
   const pollInterval = getAgentWatcherCron();
+  // version is the base version the controller shows; build is the full
+  // identity, which differs on a stable release (a promoted release candidate).
+  const { version, build } = deriveVersionIdentity(getVersion());
   return {
-    version: getVersion(),
+    version,
+    build,
     os: os.platform(),
     arch: os.arch(),
     cpus: os.cpus().length,

@@ -68,8 +68,41 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   assert.match(readme, new RegExp(`v${escapedRcVersion} highlights`, 'u'));
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
-  assert.match(appApi, new RegExp(`"version":"${escapedRcVersion}"`, 'u'));
-  assert.match(agentApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
+  // The app and agent APIs report the base version as `version` and the full build
+  // identity as `build`. A GA image is the promoted candidate, so at the GA cut the
+  // build example keeps naming a candidate of that base version rather than the base.
+  const escapedBaseVersion = escapeRegExp(RC_VERSION.replace(/-rc\.\d+$/u, ''));
+  const buildPattern = rcSuffixMatch ? escapedRcVersion : `${escapedBaseVersion}-rc\\.\\d+`;
+  assert.match(
+    appApi,
+    new RegExp(`"version":"${escapedBaseVersion}"`, 'u'),
+    'the app API example must show the base version',
+  );
+  assert.match(
+    appApi,
+    new RegExp(`"build":"${buildPattern}"`, 'u'),
+    'the app API example build must name a release candidate (at GA, the one it was promoted from)',
+  );
+  assert.equal(
+    agentApi.match(new RegExp(`"version": "${escapedBaseVersion}"`, 'gu'))?.length,
+    2,
+    'the agent list and dd:ack examples must both show the base version',
+  );
+  assert.equal(
+    agentApi.match(new RegExp(`"build": "${buildPattern}"`, 'gu'))?.length,
+    2,
+    'the agent list and dd:ack examples must both show the build identity',
+  );
+  for (const [name, page] of [
+    ['app', appApi],
+    ['agent', agentApi],
+  ]) {
+    assert.doesNotMatch(
+      page,
+      /"version":\s*"\d+\.\d+\.\d+-/u,
+      `${name} API examples must not show a prerelease as the version`,
+    );
+  }
   assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
   assert.match(

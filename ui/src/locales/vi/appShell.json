@@ -94,6 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Trình quản lý cập nhật Docker Container",
+        "build": "Bản dựng",
         "documentation": "Tài liệu",
         "github": "GitHub",
         "changelog": "Nhật ký thay đổi",

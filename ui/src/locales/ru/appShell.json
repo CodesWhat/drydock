@@ -94,6 +94,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "Менеджер обновлений Docker-контейнеров",
+        "build": "Сборка",
         "documentation": "Документация",
         "github": "GitHub",
         "changelog": "История изменений",

@@ -1,4 +1,5 @@
 import { getVersion } from '../configuration/index.js';
+import { deriveVersionIdentity, formatVersionIdentity } from '../configuration/version-identity.js';
 import { BANNER_ART, BANNER_WIDTH } from './art.js';
 
 export function renderBanner(
@@ -13,7 +14,7 @@ export function renderBanner(
     return;
   }
 
-  const version = getVersion();
+  const version = formatVersionIdentity(deriveVersionIdentity(getVersion()));
   const pad =
     typeof stream.columns === 'number' && stream.columns > BANNER_WIDTH
       ? ' '.repeat(Math.floor((stream.columns - BANNER_WIDTH) / 2))
