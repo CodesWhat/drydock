@@ -450,6 +450,20 @@ CREATE TABLE totp_subject_versions (
 ) STRICT;
 `;
 
+/** Migration 11: which username a subject version row belongs to. */
+export const TOTP_SUBJECT_USERNAME_SQL = `
+ALTER TABLE totp_subject_versions ADD COLUMN username TEXT;
+
+UPDATE totp_subject_versions
+   SET username = (
+     SELECT totp_factors.username FROM totp_factors
+      WHERE totp_factors.subject_id = totp_subject_versions.subject_id
+   );
+
+CREATE INDEX totp_subject_versions_username
+  ON totp_subject_versions(username, factor_version);
+`;
+
 /** Every table TOTP_TABLES_SQL creates. */
 export const TOTP_TABLES: readonly string[] = [
   'totp_enrollments',

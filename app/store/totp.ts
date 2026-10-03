@@ -221,18 +221,40 @@ function readSubjectVersion(database: Database, subjectId: string): number {
   return row ? Number(row.factor_version) : 0;
 }
 
-function writeSubjectVersion(database: Database, subjectId: string, version: number): void {
+function writeSubjectVersion(
+  database: Database,
+  subjectId: string,
+  username: string,
+  version: number,
+): void {
   database
     .prepare(
-      `INSERT INTO totp_subject_versions (subject_id, factor_version) VALUES (?, ?)
-       ON CONFLICT(subject_id) DO UPDATE SET factor_version = excluded.factor_version`,
+      `INSERT INTO totp_subject_versions (subject_id, factor_version, username) VALUES (?, ?, ?)
+       ON CONFLICT(subject_id) DO UPDATE SET
+         factor_version = excluded.factor_version, username = excluded.username`,
     )
-    .run(subjectId, version);
+    .run(subjectId, version, username);
 }
 
 /** The subject's current factor version; 0 for a subject that never enrolled. */
 export function getSubjectVersion(subjectId: string): number {
   return readSubjectVersion(requireDb(), subjectId);
+}
+
+/**
+ * Has any subject for this exact username ever enrolled a factor? A row with
+ * an unknown username counts for everyone: it cannot be ruled out, and the
+ * caller fails closed. The version never returns to 0, so this stays true after
+ * a removal.
+ */
+export function hasEnrolledUsername(username: string): boolean {
+  const row = requireDb()
+    .prepare(
+      `SELECT 1 AS present FROM totp_subject_versions
+        WHERE factor_version > 0 AND (username = ? OR username IS NULL) LIMIT 1`,
+    )
+    .get(username);
+  return row !== undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -340,7 +362,7 @@ export function removeFactor(input: { subjectId: string; expectedFactorVersion: 
     database.prepare('DELETE FROM totp_factors WHERE factor_id = ?').run(factor.factorId);
     database.prepare('DELETE FROM totp_enrollments WHERE subject_id = ?').run(input.subjectId);
     const next = input.expectedFactorVersion + 1;
-    writeSubjectVersion(database, input.subjectId, next);
+    writeSubjectVersion(database, input.subjectId, factor.username, next);
     return next;
   });
   if (typeof outcome === 'string') {
@@ -547,7 +569,7 @@ export function activateEnrollment(input: ActivateEnrollmentInput): ActivatedFac
     database
       .prepare('DELETE FROM totp_enrollments WHERE enrollment_id = ?')
       .run(enrollment.enrollmentId);
-    writeSubjectVersion(database, enrollment.subjectId, factorVersion);
+    writeSubjectVersion(database, enrollment.subjectId, enrollment.username, factorVersion);
 
     const stored = readFactorBySubject(database, enrollment.subjectId) as TotpFactorRecord;
     return { factor: stored, recoveryCodeIds };
