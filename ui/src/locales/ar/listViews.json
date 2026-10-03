@@ -167,6 +167,8 @@
     }
   },
   "securityView": {
+    "scanFailed": "تعذّر بدء الفحص.",
+    "scanProgressUnavailable": "تقدّم الفحص غير متاح. قد تكون الفحوصات المقبولة لا تزال قيد التشغيل. حدّث النتائج قبل بدء فحص آخر.",
     "loadingVulnerabilityData": "جارٍ تحميل بيانات الثغرات...",
     "runtimeLoadError": "فشل تحميل حالة وقت تشغيل الأمان",
     "scanNow": "فحص الآن",

@@ -13,7 +13,7 @@ import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useSbomDetail } from '../composables/useSbomDetail';
-import { useScanProgress } from '../composables/useScanProgress';
+import { ScanProgressUnavailableError, useScanProgress } from '../composables/useScanProgress';
 import { useVulnerabilities, type ImageSummary } from '../composables/useVulnerabilities';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
@@ -24,7 +24,7 @@ import { getAllContainers } from '../services/container';
 import { getSecurityRuntime, manageSecurityAsset } from '../services/server';
 import type { Container, UpdateEligibility } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
-import { errorMessage } from '../utils/error';
+import { ApiError, errorMessage } from '../utils/error';
 import { ROUTES } from '../router/routes';
 import { getPrimaryHardBlocker } from '../utils/update-eligibility';
 import SecurityContainerChooser from './security/SecurityContainerChooser.vue';
@@ -65,6 +65,9 @@ const chooserSummary = ref<ImageSummary | null>(null);
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
+const scanError = ref<string | null>(null);
+const scanRecoveryNeeded = ref(false);
+const refreshingScanResults = ref(false);
 
 const containers = ref<Container[]>([]);
 
@@ -160,6 +163,7 @@ const scannerSetupNeeded = computed(() => {
 });
 
 const scanDisabledReason = computed(() => {
+  if (scanRecoveryNeeded.value) return t('securityView.scanProgressUnavailable');
   if (runtimeLoading.value) {
     return t('securityView.checkingScanner');
   }
@@ -432,12 +436,31 @@ function handleSseContainerChanged() {
 }
 
 async function scanAllContainers() {
-  await runScanAll({
-    scannerReady: scannerReady.value,
-    runtimeLoading: runtimeLoading.value,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  await fetchVulnerabilities();
+  if (scanRecoveryNeeded.value) return;
+  scanError.value = null;
+  try {
+    await runScanAll({
+      scannerReady: scannerReady.value,
+      runtimeLoading: runtimeLoading.value,
+    });
+    await fetchVulnerabilities();
+  } catch (caught) {
+    scanRecoveryNeeded.value = caught instanceof ScanProgressUnavailableError;
+    scanError.value = caught instanceof ApiError ? caught.message : t('securityView.scanFailed');
+  }
+}
+
+async function refreshScanResults() {
+  if (refreshingScanResults.value) return;
+  refreshingScanResults.value = true;
+  try {
+    if (await fetchVulnerabilities()) {
+      scanRecoveryNeeded.value = false;
+      scanError.value = null;
+    }
+  } finally {
+    refreshingScanResults.value = false;
+  }
 }
 
 const tableColumns = computed(() => [
@@ -571,6 +594,15 @@ onUnmounted(() => {
 
 <template>
   <DataViewLayout>
+      <div v-if="scanError" role="alert"
+           class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        {{ scanError }}
+        <AppButton v-if="scanRecoveryNeeded" size="sm" variant="muted" class="ml-2"
+                   :disabled="refreshingScanResults" @click="refreshScanResults">
+          {{ t('containerComponents.fullPageOverview.refresh') }}
+        </AppButton>
+      </div>
       <div v-if="error"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
@@ -708,21 +740,21 @@ onUnmounted(() => {
             <AppIconButton v-if="isCompact"
                     icon="restart" size="toolbar" variant="plain"
                     :class="[
-                      scanning || runtimeLoading || !scannerReady
+                      scanning || runtimeLoading || !scannerReady || scanRecoveryNeeded
                         ? 'dd-text-muted'
                         : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
                     ]"
                     :loading="scanning"
                     :aria-label="t('securityView.scanAllAriaLabel')"
-                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    :disabled="scanning || runtimeLoading || !scannerReady || scanRecoveryNeeded"
                     @click="scanAllContainers" />
             <AppButton v-else size="md" variant="muted" weight="semibold" class="flex items-center justify-center gap-1.5 h-8"
                     :class="[
-                      scanning || runtimeLoading || !scannerReady
+                      scanning || runtimeLoading || !scannerReady || scanRecoveryNeeded
                         ? 'cursor-not-allowed'
                         : '',
                     ]"
-                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    :disabled="scanning || runtimeLoading || !scannerReady || scanRecoveryNeeded"
                     @click="scanAllContainers">
               <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" v-tooltip.top="scanning ? t('securityView.scanning') : undefined" />
               <span>{{ t('securityView.scanNow') }}</span>
@@ -967,7 +999,7 @@ onUnmounted(() => {
             :scan-disabled-reason="scanDisabledReason"
             :scanning="scanning"
             :runtime-loading="runtimeLoading"
-            :scanner-ready="scannerReady"
+            :scanner-ready="scannerReady && !scanRecoveryNeeded"
             :scan-progress="scanProgress"
             :boxed="false"
             @clear-filters="clearSecFilters"

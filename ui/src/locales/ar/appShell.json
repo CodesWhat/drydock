@@ -92,6 +92,7 @@
       "about": {
         "title": "Drydock",
         "subtitle": "مدير تحديثات حاويات Docker",
+        "build": "البنية",
         "documentation": "التوثيق",
         "github": "GitHub",
         "changelog": "سجل التغييرات",
