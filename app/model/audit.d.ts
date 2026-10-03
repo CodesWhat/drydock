@@ -45,6 +45,8 @@ export interface AuditEntry {
     | 'auto-update-blocked'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'
+    | 'label-override-set'
+    | 'label-override-cleared'
     | 'update-approved'
     | 'update-rejected'
     | 'update-deferred'
