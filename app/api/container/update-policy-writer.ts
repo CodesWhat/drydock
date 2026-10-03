@@ -13,14 +13,14 @@ import * as storeContainer from '../../store/container.js';
 import { getErrorMessage } from '../../util/error.js';
 import { uniqStrings } from '../../util/string-array.js';
 import { recordAuditEvent } from '../audit-events.js';
-import { redactContainerRuntimeEnv } from './shared.js';
+import { toApiContainer } from './shared.js';
 import { createUpdatePolicyHandlers } from './update-policy.js';
 
 export const updatePolicyHandlers = createUpdatePolicyHandlers({
   storeContainer,
   uniqStrings,
   getErrorMessage,
-  redactContainerRuntimeEnv,
+  redactContainerRuntimeEnv: toApiContainer,
   recordAuditEvent,
 });
 

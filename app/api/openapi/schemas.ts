@@ -1,6 +1,8 @@
 import { emptyObjectSchema, genericArraySchema, genericObjectSchema } from './common.js';
+import { labelOverrideSchemas } from './label-override-schemas.js';
 
 export const openApiSchemas = {
+  ...labelOverrideSchemas,
   ErrorResponse: {
     type: 'object',
     properties: {
@@ -739,6 +741,9 @@ export const openApiSchemas = {
         description:
           'Deprecated compat mirror of actionTriggerExclude/notificationTriggerExclude, kept for old API/agent consumers. Matching code no longer reads this field — use actionTriggerExclude/notificationTriggerExclude.',
       },
+      labelOwnedSources: {
+        $ref: '#/components/schemas/LabelOwnedSources',
+      },
     },
     required: ['id', 'name'],
     additionalProperties: true,
@@ -1066,7 +1071,12 @@ export const openApiSchemas = {
       from: { type: 'string', description: "The dependent container's id." },
       to: { type: 'string', description: 'The dependency (must dispatch first).' },
       action: { type: 'string', enum: ['update', 'restart'] },
-      source: { type: 'string', enum: ['label', 'compose'] },
+      source: {
+        type: 'string',
+        enum: ['label', 'compose', 'override'],
+        description:
+          'Where the dependency was declared: a Docker label, Compose depends_on, or a Drydock label override.',
+      },
     },
     required: ['from', 'to', 'action', 'source'],
     additionalProperties: false,

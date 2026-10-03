@@ -151,6 +151,32 @@ function classifyContainersRuntimeEnv<T>(containers: T): T {
 export const redactContainerRuntimeEnv = classifyContainerRuntimeEnv;
 export const redactContainersRuntimeEnv = classifyContainersRuntimeEnv;
 
+/**
+ * Spec 7.5: the API and SSE show where each label-owned field comes from
+ * (`labelOwnedSources`) and never the declared layer behind it, which only the label
+ * override editor endpoint serves. A container with no state is returned as is.
+ */
+export function projectLabelOwnedForApi<T>(container: T): T {
+  if (!container || typeof container !== 'object') {
+    return container;
+  }
+  const { labelOwned, ...rest } = container as { labelOwned?: Container['labelOwned'] };
+  return labelOwned === undefined
+    ? container
+    : ({ ...rest, labelOwnedSources: labelOwned.sources } as T);
+}
+
+/** A container as the API serves it: runtime env classified, label-owned state projected. */
+export function toApiContainer<T>(container: T): T {
+  return projectLabelOwnedForApi(classifyContainerRuntimeEnv(container));
+}
+
+export function toApiContainers<T>(containers: T): T {
+  return Array.isArray(containers)
+    ? (containers.map((container) => toApiContainer(container)) as T)
+    : containers;
+}
+
 export function resolveContainerImageFullName(
   container: Container,
   registryState: Record<string, RegistryComponentLike>,

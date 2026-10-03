@@ -17,6 +17,7 @@ import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
 import { dependencyGroupPaths } from './dependency-groups.js';
 import { imagePaths } from './images.js';
+import { labelOverridePaths } from './label-overrides.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
@@ -357,6 +358,7 @@ export const openApiPaths = {
     },
   },
   ...configPaths,
+  ...labelOverridePaths,
   '/api/v1/server': {
     get: {
       tags: ['System'],

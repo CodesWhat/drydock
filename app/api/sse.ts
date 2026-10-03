@@ -33,6 +33,7 @@ import { findApiKeyById, isApiKeyExpired } from '../store/api-key.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
 import { stripContainerDetailOnlySecurityFields } from './container/container-projection.js';
+import { projectLabelOwnedForApi } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
 import {
@@ -844,7 +845,7 @@ function projectContainerLifecyclePayload(
   if (!payload || typeof payload !== 'object') {
     return payload;
   }
-  const projected = stripContainerDetailOnlySecurityFields(payload);
+  const projected = projectLabelOwnedForApi(stripContainerDetailOnlySecurityFields(payload));
   if (!projected.security) {
     return { ...projected };
   }

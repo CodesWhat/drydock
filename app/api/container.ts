@@ -30,10 +30,10 @@ import { createLogHandlers } from './container/logs.js';
 import { createSecurityHandlers } from './container/security.js';
 import {
   getErrorStatusCode,
-  redactContainerRuntimeEnv,
-  redactContainersRuntimeEnv,
   resolveContainerImageFullName,
   resolveContainerRegistryAuth,
+  toApiContainer,
+  toApiContainers,
 } from './container/shared.js';
 import { type ContainerSortMode, sortContainers } from './container/sorting.js';
 import { createStatsHandlers } from './container/stats.js';
@@ -182,8 +182,8 @@ const crudHandlers = createCrudHandlers({
     getErrorStatusCode,
   },
   securityApi: {
-    redactContainerRuntimeEnv,
-    redactContainersRuntimeEnv,
+    redactContainerRuntimeEnv: toApiContainer,
+    redactContainersRuntimeEnv: toApiContainers,
     auditStore,
   },
 });
@@ -215,7 +215,7 @@ const securityHandlers = createSecurityHandlers({
   fullName,
   broadcastScanStarted,
   broadcastScanCompleted,
-  redactContainerRuntimeEnv,
+  redactContainerRuntimeEnv: toApiContainer,
   getErrorMessage,
   getContainerImageFullName,
   getContainerRegistryAuth,

@@ -114,4 +114,26 @@ describe('action-policy OpenAPI schemas (spec-6.0.1-action-policy.md)', () => {
       type: 'string',
     });
   });
+
+  test('documents label override ownership on containers and the override dependency source', () => {
+    expect(openApiSchemas.ContainerResource.properties.labelOwnedSources).toEqual({
+      $ref: '#/components/schemas/LabelOwnedSources',
+    });
+    expect(Object.keys(openApiSchemas.LabelOwnedSources.properties)).toHaveLength(9);
+    expect(openApiSchemas.LabelOwnedSources.properties.displayName.enum).toContain('override');
+    expect(openApiSchemas.DependencyGraphEdge.properties.source.enum).toEqual([
+      'label',
+      'compose',
+      'override',
+    ]);
+  });
+
+  test('a label override patch allows at most nine changes and no extra properties', () => {
+    expect(openApiSchemas.LabelOverridePatchRequest).toMatchObject({
+      additionalProperties: false,
+      required: ['revision', 'changes'],
+      properties: { changes: { minItems: 1, maxItems: 9 } },
+    });
+    expect(openApiSchemas.LabelOverrideChangeResult.required).toContain('changed');
+  });
 });
