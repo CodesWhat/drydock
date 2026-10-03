@@ -3,6 +3,7 @@ import {
   applyLabelOwnedState,
   buildLabelOwnedState,
   captureDeclaredFromFlat,
+  describeRoutingOrigin,
   getLabelOwnedFieldSpec,
   inferDeclaredSources,
   LABEL_OWNED_FIELDS,
@@ -424,5 +425,40 @@ describe('model/label-owned', () => {
       expect(stripped).not.toHaveProperty('labelOwned');
       expect(stripped.dependsOnSource).toBe('compose');
     });
+  });
+});
+
+describe('describeRoutingOrigin', () => {
+  const withSources = (sources: Record<string, string>) =>
+    ({ labelOwned: { v: 1, declared: {}, declaredSources: {}, sources } }) as unknown as Container;
+
+  test('names the Drydock override when the field is overridden', () => {
+    expect(
+      describeRoutingOrigin(
+        withSources({ actionTriggerExclude: 'override' }),
+        'actionTriggerExclude',
+      ),
+    ).toBe('by the Drydock override of dd.action.exclude');
+    expect(
+      describeRoutingOrigin(
+        withSources({ actionTriggerInclude: 'override' }),
+        'actionTriggerInclude',
+      ),
+    ).toBe('by the Drydock override of dd.action.include');
+  });
+
+  test('names the container label for every other source and for a record with no state', () => {
+    expect(
+      describeRoutingOrigin(withSources({ actionTriggerExclude: 'label' }), 'actionTriggerExclude'),
+    ).toBe('by container label dd.action.exclude');
+    expect(
+      describeRoutingOrigin(
+        withSources({ actionTriggerInclude: 'override' }),
+        'actionTriggerExclude',
+      ),
+    ).toBe('by container label dd.action.exclude');
+    expect(describeRoutingOrigin({} as Container, 'actionTriggerInclude')).toBe(
+      'by container label dd.action.include',
+    );
   });
 });

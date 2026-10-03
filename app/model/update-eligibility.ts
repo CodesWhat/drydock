@@ -13,6 +13,7 @@ import {
 } from './action-policy.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
+import { describeRoutingOrigin } from './label-owned.js';
 import {
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityClock,
@@ -604,7 +605,7 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'trigger-excluded',
-          message: `Trigger excluded by container label dd.action.exclude='${triggerExclude}'.`,
+          message: `Trigger excluded ${describeRoutingOrigin(container, 'actionTriggerExclude')}='${triggerExclude}'.`,
           actionable: true,
           actionHint:
             'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
@@ -622,8 +623,8 @@ export function computeUpdateEligibility(
           reason: 'trigger-not-included',
           message:
             triggerInclude === undefined
-              ? 'Trigger not matched by container label dd.action.include.'
-              : `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
+              ? `Trigger not matched ${describeRoutingOrigin(container, 'actionTriggerInclude')}.`
+              : `Trigger not matched ${describeRoutingOrigin(container, 'actionTriggerInclude')}='${triggerInclude}'.`,
           actionable: true,
           // References dd.action.auto alongside dd.action.include/exclude (locked-button
           // tooltip copy, spec-6.0.1-action-policy.md): under a trigger's AUTO=onauto,

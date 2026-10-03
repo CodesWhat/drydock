@@ -373,6 +373,21 @@ export function toAgentPayload(container: Container): Container {
   return stripAgentLabelOwnedState(toDeclaredProjection(container));
 }
 
+/**
+ * How an admission message names where an action routing value came from: the Docker label,
+ * or the Drydock override that replaced it ("by container label dd.action.exclude", "by the
+ * Drydock override of dd.action.exclude").
+ */
+export function describeRoutingOrigin(
+  container: Pick<Container, 'labelOwned'>,
+  field: 'actionTriggerInclude' | 'actionTriggerExclude',
+): string {
+  const labelKey = field === 'actionTriggerInclude' ? ddActionInclude : ddActionExclude;
+  return container.labelOwned?.sources[field] === 'override'
+    ? `by the Drydock override of ${labelKey}`
+    : `by container label ${labelKey}`;
+}
+
 /** The label-owned slice of a record, for change detection and write-backs. */
 export function pickLabelOwnedFlat(container: Container): LabelOwnedFlat {
   const picked = Object.fromEntries(
