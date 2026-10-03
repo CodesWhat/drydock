@@ -455,8 +455,11 @@ describe('verifyApiKey ancestry', () => {
   });
 
   test('refuses a live key when an ancestor has expired', () => {
-    const root = createUserKey({ name: 'root', expiresAt: '2026-10-01T00:00:00.000Z' });
-    const child = mintChild(root.record.keyId, { expiresAt: '2026-12-01T00:00:00.000Z' });
+    // Minted against a fixed clock: both expiries are literal dates, and createApiKey
+    // rejects an expiry that is not in the future of the clock it is given.
+    const now = new Date('2026-09-01T00:00:00.000Z');
+    const root = createUserKey({ name: 'root', expiresAt: '2026-10-01T00:00:00.000Z', now });
+    const child = mintChild(root.record.keyId, { expiresAt: '2026-12-01T00:00:00.000Z', now });
 
     // The API refuses a child that outlives its parent; the store does not, so
     // this is the state a hand-edited store file can hold.

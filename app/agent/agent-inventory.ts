@@ -136,7 +136,16 @@ export class AgentInventoryRefresh {
       this.fail(operation, 'ownership', id);
       return;
     }
-    store.deleteContainer(id, { replacementExpected, context: operation.context });
+    // #1280: a pass with no replacement for this container can still have sampled a
+    // recreate between the removal and the listing of the new container, which then
+    // arrives later (another pass, or a real-time dd:container-added). Retain the
+    // controller-set update policy for it without flagging the removal as a
+    // replacement, so HA/MQTT cleanup still runs for a container that is really gone.
+    store.deleteContainer(id, {
+      replacementExpected,
+      retainUpdatePolicy: !replacementExpected,
+      context: operation.context,
+    });
     operation.removed.add(id);
     operation.baseline.delete(id);
     this.dependencies.onMutation?.();
