@@ -102,7 +102,9 @@ function failSessionPersistence(session: any, message: string) {
 
 /** Assert the callback persisted the identity under the session user key. */
 function expectPersistedUser(session: any, username: string) {
-  expect(session.passport).toEqual({ user: JSON.stringify({ username }) });
+  expect(session.passport).toEqual({
+    user: JSON.stringify({ v: 2, kind: 'oidc', username }),
+  });
 }
 
 /** Set up a successful grant + userInfo mock on the openidClientMock */

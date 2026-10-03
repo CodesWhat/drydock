@@ -32,6 +32,20 @@ vi.mock('node:crypto', async () => {
   };
 });
 
+var { mockResolveLocalIdentity, mockRegisterLocalSubject, mockUnregisterLocalSubject } = vi.hoisted(
+  () => ({
+    mockResolveLocalIdentity: vi.fn(),
+    mockRegisterLocalSubject: vi.fn(),
+    mockUnregisterLocalSubject: vi.fn(),
+  }),
+);
+
+vi.mock('../../../api/totp-identity.js', () => ({
+  resolveLocalIdentity: mockResolveLocalIdentity,
+  registerLocalSubject: mockRegisterLocalSubject,
+  unregisterLocalSubject: mockUnregisterLocalSubject,
+}));
+
 vi.mock('../../../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   observeAuthLoginDuration: mockObserveAuthLoginDuration,
@@ -123,6 +137,15 @@ describe('Basic Authentication', () => {
     mockRecordAuthLogin.mockClear();
     mockObserveAuthLoginDuration.mockClear();
     mockRecordAuthUsernameMismatch.mockClear();
+    mockResolveLocalIdentity.mockReset();
+    mockResolveLocalIdentity.mockImplementation((providerId: string) => ({
+      subjectId: 's'.repeat(64),
+      providerId,
+      assurance: 'password',
+      factorVersion: 0,
+    }));
+    mockRegisterLocalSubject.mockClear();
+    mockUnregisterLocalSubject.mockClear();
   });
 
   test('should create instance', async () => {
@@ -635,7 +658,37 @@ describe('Basic Authentication', () => {
         authenticator.authenticate({
           headers: { authorization: encodeBasic('testuser:password') },
         } as never),
-      ).resolves.toEqual({ kind: 'basic', username: 'testuser' });
+      ).resolves.toEqual({
+        kind: 'basic',
+        username: 'testuser',
+        identity: {
+          subjectId: 's'.repeat(64),
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+        },
+      });
+      expect(mockResolveLocalIdentity).toHaveBeenCalledWith('basic.default', 'testuser');
+    });
+
+    test('declines when the local identity cannot be resolved, never admitting without a subject', async () => {
+      mockResolveLocalIdentity.mockImplementation(() => {
+        throw new Error('totp collection not initialized');
+      });
+
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('registers its configured user as a local subject on init and forgets it on deregister', async () => {
+      expect(mockRegisterLocalSubject).toHaveBeenCalledWith('basic.default', 'testuser');
+
+      await basic.deregister();
+
+      expect(mockUnregisterLocalSubject).toHaveBeenCalledWith('basic.default');
     });
 
     test('declines a wrong password', async () => {

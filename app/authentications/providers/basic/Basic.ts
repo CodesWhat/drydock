@@ -3,10 +3,16 @@ import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
 import {
+  registerLocalSubject,
+  resolveLocalIdentity,
+  unregisterLocalSubject,
+} from '../../../api/totp-identity.js';
+import {
   observeAuthLoginDuration,
   recordAuthLogin,
   recordAuthUsernameMismatch,
 } from '../../../prometheus/auth.js';
+import { getErrorMessage } from '../../../util/error.js';
 import Authentication from '../Authentication.js';
 import {
   getBasicAuthorizationFailureStatus,
@@ -322,6 +328,18 @@ class Basic extends Authentication<BasicConfiguration> {
   }
 
   /**
+   * Record this provider's configured user as a local subject, so a legacy
+   * session (which names only a username) can be matched to it.
+   */
+  initAuthentication(): void {
+    registerLocalSubject(this.getId(), this.configuration.user);
+  }
+
+  async deregisterComponent(): Promise<void> {
+    unregisterLocalSubject(this.getId());
+  }
+
+  /**
    * Return the authenticator this provider contributes to the chain.
    *
    * persistsSession is false: a credential presented in a header proves the
@@ -352,9 +370,28 @@ class Basic extends Authentication<BasicConfiguration> {
 
     return new Promise((resolve) => {
       this.authenticate(authorization.userid, authorization.password, (_error, user) => {
-        resolve(user ? { kind: 'basic', username: user.username } : undefined);
+        resolve(user ? this.toBasicPrincipal(user.username) : undefined);
       });
     });
+  }
+
+  /**
+   * The verified identity as a principal carrying its stable subject. A
+   * credential that cannot be tied to a subject version is declined rather than
+   * admitted without one, because the session it would mint could not be
+   * checked later.
+   */
+  private toBasicPrincipal(username: string): AuthenticatedPrincipal | undefined {
+    try {
+      return {
+        kind: 'basic',
+        username,
+        identity: resolveLocalIdentity(this.getId(), username),
+      };
+    } catch (error: unknown) {
+      this.log.warn(`Unable to resolve the local identity (${getErrorMessage(error)})`);
+      return undefined;
+    }
   }
 
   getStrategyDescription() {
