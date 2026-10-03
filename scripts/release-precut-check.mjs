@@ -78,9 +78,10 @@ export function validateReleaseMetadata(root, tag) {
   }
 
   // README version badges read live from shields' github/v/release endpoint,
-  // so there is no static badge string to bump or validate per cut.
+  // so there is no static badge string to bump or validate per cut. The README
+  // carries no per-release highlights; those live in CHANGELOG.md and the
+  // GitHub Releases page, so nothing in README.md is checked here.
   const publicChecks = [
-    ['README.md', [`v${version} highlights`]],
     ['apps/web/src/lib/site-config.ts', [`version: "${version}"`]],
     [
       'apps/web/scripts/docs-versions.mjs',
