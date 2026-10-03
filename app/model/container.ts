@@ -14,6 +14,7 @@ import type {
   ActiveContainerUpdateOperationStatus,
   ContainerUpdateOperationKind,
 } from './container-update-operation.js';
+import type { LabelOwnedState } from './label-owned.js';
 import {
   getMaturityStartMs,
   getUpdateAgeMs,
@@ -244,7 +245,7 @@ export interface Container {
   // trigger_config. See app/dependencies/dependency-graph.ts for how these
   // are consumed.
   dependsOn?: string[];
-  dependsOnSource?: 'label' | 'compose';
+  dependsOnSource?: 'label' | 'compose' | 'override';
   dependsOnAction?: 'update' | 'restart';
   tagPinned?: boolean;
   tagPinGated?: boolean;
@@ -253,6 +254,8 @@ export interface Container {
   updatePolicyOverrides?: ContainerUpdatePolicy;
   updatePolicySources?: ContainerUpdatePolicySources;
   groupPolicy?: ContainerGroupPolicySnapshot;
+  /** Spec 7.5: the declared layer and effective sources behind the label-owned fields. */
+  labelOwned?: LabelOwnedState;
   security?: ContainerSecurityState;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
@@ -415,7 +418,7 @@ const schema = joi.object({
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   dependsOn: joi.array().items(joi.string()).optional(),
-  dependsOnSource: joi.string().valid('label', 'compose').optional(),
+  dependsOnSource: joi.string().valid('label', 'compose', 'override').optional(),
   dependsOnAction: joi.string().valid('update', 'restart').optional(),
   tagPinned: joi.boolean(),
   tagPinGated: joi.boolean(),
@@ -457,6 +460,13 @@ const schema = joi.object({
     revision: joi.number().integer().min(1).required(),
     updatePolicy: containerDeclarativeUpdatePolicySchema.required(),
     actions: containerGroupPolicyActionsSchema.required(),
+  }),
+  // Spec 7.5. Built and read by the store (`model/label-owned.ts`), so only its shape is checked.
+  labelOwned: joi.object({
+    v: joi.number().valid(1).required(),
+    declared: joi.object().required(),
+    declaredSources: joi.object().required(),
+    sources: joi.object().required(),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,

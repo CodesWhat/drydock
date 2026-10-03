@@ -214,6 +214,7 @@ const {
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', () => createContainerMock(overrides.container));
     vi.doMock('./group-policy', createCollectionsMock);
+    vi.doMock('./label-override', createCollectionsMock);
     vi.doMock('./mqtt-hass', createCollectionsMock);
     vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createNotificationMock);
@@ -264,6 +265,7 @@ vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createContainerMock);
 vi.mock('./group-policy', createCollectionsMock);
+vi.mock('./label-override', createCollectionsMock);
 vi.mock('./mqtt-hass', createCollectionsMock);
 vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createNotificationMock);
@@ -372,6 +374,12 @@ describe('Store Module', () => {
     );
     expect(app.completeStartupInitialization.mock.invocationCallOrder[0]).toBeLessThan(
       container.reconcileGroupPolicySnapshots.mock.invocationCallOrder[0],
+    );
+
+    // Spec 7.5: label overrides are loaded before the container collection can write.
+    const labelOverride = await import('./label-override.js');
+    expect(labelOverride.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      container.createCollections.mock.invocationCallOrder[0],
     );
   });
 
