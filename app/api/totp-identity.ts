@@ -14,7 +14,7 @@
 
 import { createHash } from 'node:crypto';
 import log from '../log/index.js';
-import { getFactorBySubject, getSubjectVersion } from '../store/totp.js';
+import { getFactorBySubject, getSubjectVersion, hasEnrolledUsername } from '../store/totp.js';
 import { getErrorMessage } from '../util/error.js';
 import type { SessionUser } from './auth-types.js';
 
@@ -32,34 +32,6 @@ export type SessionIdentityCheck = 'valid' | 'stale' | 'unavailable';
 /** The opaque, immutable subject for one Basic provider and its exact username. */
 export function deriveSubjectId(providerId: string, username: string): string {
   return createHash('sha256').update(`${providerId}\0${username}`, 'utf8').digest('hex');
-}
-
-/**
- * Basic providers currently configured, by provider id. A legacy session
- * records only a username, so this is how its candidate subjects are found.
- */
-const localSubjects = new Map<string, string>();
-
-export function registerLocalSubject(providerId: string, username: string): void {
-  localSubjects.set(providerId, username);
-}
-
-export function unregisterLocalSubject(providerId: string): void {
-  localSubjects.delete(providerId);
-}
-
-export function clearLocalSubjects(): void {
-  localSubjects.clear();
-}
-
-export function listLocalSubjectIds(username: string): string[] {
-  const subjectIds: string[] = [];
-  for (const [providerId, configuredUsername] of localSubjects) {
-    if (configuredUsername === username) {
-      subjectIds.push(deriveSubjectId(providerId, username));
-    }
-  }
-  return subjectIds;
 }
 
 /**
@@ -106,9 +78,12 @@ function checkLocalIdentity(
  * the caller should drop it; `unavailable` means the store could not answer, so
  * the session is refused for now but kept.
  *
- * A legacy session names no subject, so it is valid only while every configured
- * Basic subject for its username has never enrolled. The version never returns
- * to 0, which is what stops removing a factor from resurrecting old sessions.
+ * A legacy session names no subject, so it is valid only while no stored
+ * subject version row for its username (or with an unknown username) is above
+ * 0. That is decided from persisted rows, never from which Basic providers are
+ * registered, so renaming a provider, a failed registration or the shutdown
+ * window cannot revive one. The version never returns to 0, which is what stops
+ * removing a factor from resurrecting old sessions.
  */
 export function checkSessionIdentity(user: SessionUser): SessionIdentityCheck {
   const { identity } = user;
@@ -121,12 +96,7 @@ export function checkSessionIdentity(user: SessionUser): SessionIdentityCheck {
       return checkLocalIdentity(user.username, identity);
     }
 
-    for (const subjectId of listLocalSubjectIds(user.username)) {
-      if (getSubjectVersion(subjectId) > 0) {
-        return 'stale';
-      }
-    }
-    return 'valid';
+    return hasEnrolledUsername(user.username) ? 'stale' : 'valid';
   } catch (error: unknown) {
     log.warn(`Unable to check session subject version (${getErrorMessage(error)})`);
     return 'unavailable';

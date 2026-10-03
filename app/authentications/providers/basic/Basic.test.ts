@@ -32,18 +32,12 @@ vi.mock('node:crypto', async () => {
   };
 });
 
-var { mockResolveLocalIdentity, mockRegisterLocalSubject, mockUnregisterLocalSubject } = vi.hoisted(
-  () => ({
-    mockResolveLocalIdentity: vi.fn(),
-    mockRegisterLocalSubject: vi.fn(),
-    mockUnregisterLocalSubject: vi.fn(),
-  }),
-);
+var { mockResolveLocalIdentity } = vi.hoisted(() => ({
+  mockResolveLocalIdentity: vi.fn(),
+}));
 
 vi.mock('../../../api/totp-identity.js', () => ({
   resolveLocalIdentity: mockResolveLocalIdentity,
-  registerLocalSubject: mockRegisterLocalSubject,
-  unregisterLocalSubject: mockUnregisterLocalSubject,
 }));
 
 vi.mock('../../../prometheus/auth.js', () => ({
@@ -144,8 +138,6 @@ describe('Basic Authentication', () => {
       assurance: 'password',
       factorVersion: 0,
     }));
-    mockRegisterLocalSubject.mockClear();
-    mockUnregisterLocalSubject.mockClear();
   });
 
   test('should create instance', async () => {
@@ -671,7 +663,7 @@ describe('Basic Authentication', () => {
       expect(mockResolveLocalIdentity).toHaveBeenCalledWith('basic.default', 'testuser');
     });
 
-    test('declines when the local identity cannot be resolved, never admitting without a subject', async () => {
+    test('lets a store failure propagate instead of answering as a wrong password', async () => {
       mockResolveLocalIdentity.mockImplementation(() => {
         throw new Error('totp collection not initialized');
       });
@@ -680,15 +672,7 @@ describe('Basic Authentication', () => {
         basic.authenticateRequest({
           headers: { authorization: encodeBasic('testuser:password') },
         } as never),
-      ).resolves.toBeUndefined();
-    });
-
-    test('registers its configured user as a local subject on init and forgets it on deregister', async () => {
-      expect(mockRegisterLocalSubject).toHaveBeenCalledWith('basic.default', 'testuser');
-
-      await basic.deregister();
-
-      expect(mockUnregisterLocalSubject).toHaveBeenCalledWith('basic.default');
+      ).rejects.toThrow('totp collection not initialized');
     });
 
     test('declines a wrong password', async () => {

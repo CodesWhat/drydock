@@ -245,6 +245,32 @@ describe('auth-lockout', () => {
     expect(mockAuthenticateRequest).toHaveBeenCalledTimes(2);
   });
 
+  test('a store fault during login is never counted as a failed attempt', async () => {
+    const storeError = new Error('totp collection not initialized');
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      mockAuthenticateRequest.mockRejectedValueOnce(storeError);
+      const next = vi.fn();
+      const res = createResponse();
+      await authenticateLogin(
+        { body: { username: 'storefault' }, ip: '203.0.113.77' } as any,
+        res as any,
+        next,
+      );
+      expect(next).toHaveBeenCalledWith(storeError);
+      expect(mockSendErrorResponse).not.toHaveBeenCalled();
+    }
+
+    makeAuthenticatorSuccess('storefault');
+    const next = vi.fn();
+    await authenticateLogin(
+      { body: { username: 'storefault' }, ip: '203.0.113.77', headers: {} } as any,
+      createResponse() as any,
+      next,
+    );
+    expect(next).toHaveBeenCalledWith();
+    expect(mockRecordAuthLogin).not.toHaveBeenCalledWith('locked', 'basic');
+  });
+
   test('rejects excess concurrent login verifications before the authenticator chain runs', async () => {
     const pendingResolvers: Array<(principal: unknown) => void> = [];
     mockAuthenticateRequest.mockImplementation(

@@ -2,17 +2,12 @@ import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
-import {
-  registerLocalSubject,
-  resolveLocalIdentity,
-  unregisterLocalSubject,
-} from '../../../api/totp-identity.js';
+import { resolveLocalIdentity } from '../../../api/totp-identity.js';
 import {
   observeAuthLoginDuration,
   recordAuthLogin,
   recordAuthUsernameMismatch,
 } from '../../../prometheus/auth.js';
-import { getErrorMessage } from '../../../util/error.js';
 import Authentication from '../Authentication.js';
 import {
   getBasicAuthorizationFailureStatus,
@@ -328,18 +323,6 @@ class Basic extends Authentication<BasicConfiguration> {
   }
 
   /**
-   * Record this provider's configured user as a local subject, so a legacy
-   * session (which names only a username) can be matched to it.
-   */
-  initAuthentication(): void {
-    registerLocalSubject(this.getId(), this.configuration.user);
-  }
-
-  async deregisterComponent(): Promise<void> {
-    unregisterLocalSubject(this.getId());
-  }
-
-  /**
    * Return the authenticator this provider contributes to the chain.
    *
    * persistsSession is false: a credential presented in a header proves the
@@ -368,30 +351,29 @@ class Basic extends Authentication<BasicConfiguration> {
       return Promise.resolve(undefined);
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.authenticate(authorization.userid, authorization.password, (_error, user) => {
-        resolve(user ? this.toBasicPrincipal(user.username) : undefined);
+        try {
+          resolve(user ? this.toBasicPrincipal(user.username) : undefined);
+        } catch (error: unknown) {
+          reject(error);
+        }
       });
     });
   }
 
   /**
-   * The verified identity as a principal carrying its stable subject. A
-   * credential that cannot be tied to a subject version is declined rather than
-   * admitted without one, because the session it would mint could not be
-   * checked later.
+   * The verified identity as a principal carrying its stable subject. When the
+   * subject version cannot be read this throws rather than answering as a wrong
+   * password: a store fault is the server's, so it must not count toward the
+   * caller's lockout, and the session it would mint could not be checked later.
    */
-  private toBasicPrincipal(username: string): AuthenticatedPrincipal | undefined {
-    try {
-      return {
-        kind: 'basic',
-        username,
-        identity: resolveLocalIdentity(this.getId(), username),
-      };
-    } catch (error: unknown) {
-      this.log.warn(`Unable to resolve the local identity (${getErrorMessage(error)})`);
-      return undefined;
-    }
+  private toBasicPrincipal(username: string): AuthenticatedPrincipal {
+    return {
+      kind: 'basic',
+      username,
+      identity: resolveLocalIdentity(this.getId(), username),
+    };
   }
 
   getStrategyDescription() {

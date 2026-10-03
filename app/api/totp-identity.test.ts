@@ -1,29 +1,24 @@
 import { createHash } from 'node:crypto';
 
-const { mockGetSubjectVersion, mockGetFactorBySubject, mockWarn } = vi.hoisted(() => ({
-  mockGetSubjectVersion: vi.fn(),
-  mockGetFactorBySubject: vi.fn(),
-  mockWarn: vi.fn(),
-}));
+const { mockGetSubjectVersion, mockGetFactorBySubject, mockHasEnrolledUsername, mockWarn } =
+  vi.hoisted(() => ({
+    mockGetSubjectVersion: vi.fn(),
+    mockHasEnrolledUsername: vi.fn(),
+    mockGetFactorBySubject: vi.fn(),
+    mockWarn: vi.fn(),
+  }));
 
 vi.mock('../store/totp.js', () => ({
   getSubjectVersion: mockGetSubjectVersion,
   getFactorBySubject: mockGetFactorBySubject,
+  hasEnrolledUsername: mockHasEnrolledUsername,
 }));
 
 vi.mock('../log/index.js', () => ({
   default: { warn: mockWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
 
-import {
-  checkSessionIdentity,
-  clearLocalSubjects,
-  deriveSubjectId,
-  listLocalSubjectIds,
-  registerLocalSubject,
-  resolveLocalIdentity,
-  unregisterLocalSubject,
-} from './totp-identity.js';
+import { checkSessionIdentity, deriveSubjectId, resolveLocalIdentity } from './totp-identity.js';
 
 function digest(providerId: string, username: string): string {
   return createHash('sha256').update(`${providerId}\0${username}`, 'utf8').digest('hex');
@@ -43,7 +38,7 @@ function localIdentity(overrides: Record<string, unknown> = {}) {
 describe('totp-identity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearLocalSubjects();
+    mockHasEnrolledUsername.mockReturnValue(false);
     mockGetSubjectVersion.mockReturnValue(0);
     mockGetFactorBySubject.mockReturnValue(undefined);
   });
@@ -67,34 +62,6 @@ describe('totp-identity', () => {
     });
   });
 
-  describe('local subject registry', () => {
-    test('lists the subject of every provider configured with the username', () => {
-      registerLocalSubject('basic.one', 'alice');
-      registerLocalSubject('basic.two', 'alice');
-      registerLocalSubject('basic.three', 'bob');
-
-      expect(listLocalSubjectIds('alice').sort()).toEqual(
-        [deriveSubjectId('basic.one', 'alice'), deriveSubjectId('basic.two', 'alice')].sort(),
-      );
-      expect(listLocalSubjectIds('nobody')).toEqual([]);
-    });
-
-    test('re-registering a provider replaces its username', () => {
-      registerLocalSubject('basic.one', 'alice');
-      registerLocalSubject('basic.one', 'bob');
-
-      expect(listLocalSubjectIds('alice')).toEqual([]);
-      expect(listLocalSubjectIds('bob')).toEqual([deriveSubjectId('basic.one', 'bob')]);
-    });
-
-    test('unregistering forgets the provider', () => {
-      registerLocalSubject('basic.one', 'alice');
-      unregisterLocalSubject('basic.one');
-
-      expect(listLocalSubjectIds('alice')).toEqual([]);
-    });
-  });
-
   describe('resolveLocalIdentity', () => {
     test('returns password assurance at the stored subject version', () => {
       mockGetSubjectVersion.mockReturnValue(3);
@@ -115,33 +82,14 @@ describe('totp-identity', () => {
       expect(mockGetSubjectVersion).not.toHaveBeenCalled();
     });
 
-    test('a legacy session with no local provider for the username is valid without a store read', () => {
+    test('a legacy session is valid while no stored row for its username has a version', () => {
       expect(checkSessionIdentity({ username: 'alice' })).toBe('valid');
+      expect(mockHasEnrolledUsername).toHaveBeenCalledWith('alice');
       expect(mockGetSubjectVersion).not.toHaveBeenCalled();
     });
 
-    test('a legacy session is valid while its candidate subjects never enrolled', () => {
-      registerLocalSubject('basic.one', 'alice');
-      registerLocalSubject('basic.two', 'alice');
-
-      expect(checkSessionIdentity({ username: 'alice' })).toBe('valid');
-      expect(mockGetSubjectVersion).toHaveBeenCalledTimes(2);
-    });
-
-    test('a legacy session is stale once any candidate subject has a version', () => {
-      registerLocalSubject('basic.one', 'alice');
-      registerLocalSubject('basic.two', 'alice');
-      mockGetSubjectVersion.mockImplementation((id: string) =>
-        id === deriveSubjectId('basic.two', 'alice') ? 1 : 0,
-      );
-
-      expect(checkSessionIdentity({ username: 'alice' })).toBe('stale');
-    });
-
-    test('a legacy session stays stale after the factor was removed (version never returns to 0)', () => {
-      registerLocalSubject('basic.one', 'alice');
-      mockGetSubjectVersion.mockReturnValue(2);
-      mockGetFactorBySubject.mockReturnValue(undefined);
+    test('a legacy session is stale once a stored row for its username has a version, whatever providers are configured', () => {
+      mockHasEnrolledUsername.mockReturnValue(true);
 
       expect(checkSessionIdentity({ username: 'alice' })).toBe('stale');
     });
@@ -208,8 +156,7 @@ describe('totp-identity', () => {
     });
 
     test('a store failure is unavailable, warns, and never leaks the error text', () => {
-      registerLocalSubject('basic.one', 'alice');
-      mockGetSubjectVersion.mockImplementation(() => {
+      mockHasEnrolledUsername.mockImplementation(() => {
         throw new Error('totp collection not initialized');
       });
 
