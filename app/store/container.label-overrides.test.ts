@@ -648,6 +648,26 @@ describe('label-owned overrides at the store', () => {
       ).toEqual([]);
     });
 
+    test('removing an override from a row that never had state leaves the row alone', () => {
+      seedRow(watched('seeded', { displayName: 'Sonarr' }));
+      const scope = labelOverride.deriveLabelOverrideScope(
+        watched('x'),
+      ) as labelOverride.LabelOverrideScope;
+      labelOverride.writeLabelOverrideChanges(
+        scope,
+        [{ field: 'displayName', op: 'set', value: 'TV' }],
+        'user:admin',
+      );
+      emitted().mockClear();
+
+      const result = resetOverrides(watched('x'));
+
+      expect(result).toMatchObject({ applied: true, refreshed: 0 });
+      expect(storedLabelOwned('seeded')).toBeNull();
+      expect(raw('seeded').displayName).toBe('Sonarr');
+      expect(emitted()).not.toHaveBeenCalled();
+    });
+
     test('a stale revision writes nothing and rewrites nothing', () => {
       container.insertContainer(watched('web-1', { displayName: 'Sonarr' }));
       setOverrides(watched('web-1'), { displayName: 'TV' });

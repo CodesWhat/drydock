@@ -1734,6 +1734,8 @@ export interface LabelOwnedWriteOptions {
 
 function getLabelOverrideFieldsFor(record: container.Container) {
   const scope = labelOverrideStore.deriveLabelOverrideScope(record);
+  /* istanbul ignore next -- unreachable: every record here has passed validateContainer,
+     which requires a non-empty watcher and name, so a scope always derives. */
   return scope === undefined ? undefined : labelOverrideStore.getLabelOverrideFields(scope.key);
 }
 

@@ -10,6 +10,7 @@ import {
   parseLabelOverrideFields,
   parseLabelOwnedState,
   pickLabelOwnedFlat,
+  stripAgentLabelOwnedState,
   toDeclaredProjection,
 } from './label-owned.js';
 
@@ -357,6 +358,37 @@ describe('model/label-owned', () => {
           declaredSources: { ...state?.declaredSources, displayName: 'bogus' },
         }),
       ).toBeUndefined();
+    });
+  });
+
+  describe('agent payloads', () => {
+    test('a payload with no state and no override source is returned as is', () => {
+      const container = containerWith({ dependsOnSource: 'label' });
+      expect(stripAgentLabelOwnedState(container)).toBe(container);
+    });
+
+    test('state and a claimed override source are stripped without touching the original', () => {
+      const payload = resolve(containerWith({ dependsOn: ['db'] }), {
+        dependsOn: override(['x']),
+      });
+      expect(payload.dependsOnSource).toBe('override');
+
+      const stripped = stripAgentLabelOwnedState(payload);
+
+      expect(stripped).not.toHaveProperty('labelOwned');
+      expect(stripped.dependsOnSource).toBeUndefined();
+      expect(stripped.dependsOn).toEqual(['x']);
+      expect(payload.labelOwned).toBeDefined();
+    });
+
+    test('state alone is stripped and a real source is kept', () => {
+      const payload = {
+        ...resolve(containerWith({ dependsOn: ['db'], dependsOnSource: 'compose' })),
+      };
+      expect(payload.labelOwned).toBeDefined();
+      const stripped = stripAgentLabelOwnedState(payload);
+      expect(stripped).not.toHaveProperty('labelOwned');
+      expect(stripped.dependsOnSource).toBe('compose');
     });
   });
 });

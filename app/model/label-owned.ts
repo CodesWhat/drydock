@@ -344,6 +344,21 @@ export function toDeclaredProjection(container: Container): Container {
   return projected;
 }
 
+/**
+ * An agent reports what it declares, never what the controller overrides, so any state it
+ * sends is ignored and a claimed `override` dependency source is not a source it can have.
+ * Returns the payload itself when there is nothing to strip.
+ */
+export function stripAgentLabelOwnedState(container: Container): Container {
+  if (container.labelOwned === undefined && container.dependsOnSource !== 'override') {
+    return container;
+  }
+  const { labelOwned: _labelOwned, ...rest } = container;
+  return (
+    rest.dependsOnSource === 'override' ? { ...rest, dependsOnSource: undefined } : rest
+  ) as Container;
+}
+
 /** The label-owned slice of a record, for change detection and write-backs. */
 export function pickLabelOwnedFlat(container: Container): LabelOwnedFlat {
   const picked = Object.fromEntries(

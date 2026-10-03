@@ -233,6 +233,21 @@ describe('store/label-override', () => {
       expect(labelOverride.getLabelOverrideFields('::local::none')).toBeUndefined();
     });
 
+    test('rows come back ordered by scope key whatever order they were written in', () => {
+      for (const name of ['c', 'a', 'b']) {
+        labelOverride.writeLabelOverrideChanges(
+          scopeOf({ ...WEB, name }),
+          [{ field: 'displayName', op: 'set', value: name }],
+          'u',
+        );
+      }
+      expect(labelOverride.getLabelOverrides().map((row) => row.scopeName)).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+    });
+
     test('deleting a row needs its revision, and an orphan can be deleted', () => {
       const row = labelOverride.writeLabelOverrideChanges(
         scopeOf(WEB),
