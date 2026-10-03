@@ -29,6 +29,9 @@
 # or any other finding, so the suppression no longer applies and was removed.
 # Re-add a scoped entry (by CVE and package name, not by location) if a future
 # base-image or pin change reintroduces it.
+# Verified upstream backport, scoped to its unique local APK revision and CVE.
+vex-documents:
+  - docker/zlib/fixed.vex.json
 ignore:
   - package:
       location: "/usr/bin/cosign"

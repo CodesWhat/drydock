@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import logger from '../log/index.js';
 import { classifyTagPrecision } from '../tag/precision.js';
 import * as storeContainer from './container.js';
@@ -29,11 +30,18 @@ function backfillMissingTagPrecision() {
   }
 }
 
+// A stable image is the promoted release candidate, so `to` can read
+// `1.6.0-rc.13`, which semver orders below `1.6.0`. The target is compared by
+// its base version so a gate at X.Y.0 opens on that release's stable image.
+// `from` stays prerelease-aware: a store last written by an rc of the threshold
+// release may have skipped the migration under the old gate. Gated migrations
+// must stay idempotent because they can re-run across release-candidate hops;
+// both here skip containers they already handled, so a second run is a no-op.
 function shouldBackfillMissingTagPrecision(from?: string, to?: string) {
   if (
     typeof to !== 'string' ||
     !semver.valid(to) ||
-    semver.lt(to, TAG_PRECISION_BACKFILL_VERSION)
+    semver.lt(deriveVersionIdentity(to).version, TAG_PRECISION_BACKFILL_VERSION)
   ) {
     return false;
   }
@@ -76,7 +84,7 @@ function shouldRederiveTriggerLabelCategoryFields(from?: string, to?: string) {
   if (
     typeof to !== 'string' ||
     !semver.valid(to) ||
-    semver.lt(to, TRIGGER_LABEL_CATEGORY_RESCOPE_VERSION)
+    semver.lt(deriveVersionIdentity(to).version, TRIGGER_LABEL_CATEGORY_RESCOPE_VERSION)
   ) {
     return false;
   }

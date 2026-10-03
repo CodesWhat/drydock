@@ -4,6 +4,7 @@ import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
+import { addImageDetailsToContainerOrchestration } from '../watchers/providers/docker/docker-image-details-orchestration.js';
 import * as container from './container.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
@@ -6252,6 +6253,247 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
   });
 
+  // #1280: an agent reports a recreate as an id-only dd:container-removed plus a
+  // dd:container-added, in either order. retainUpdatePolicy is the removal half;
+  // the live-predecessor lookup in insertContainer is the add-first half.
+  describe('agent-reported removal of unknown intent (#1280)', () => {
+    test('retainUpdatePolicy stashes under the identity key without flagging a replacement', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'retain-old',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('retain-old', { retainUpdatePolicy: true });
+
+      expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+        'agent1::local::myapp',
+      ]);
+      expect(event.emitContainerRemoved).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'retain-old', replacementExpected: undefined }),
+      );
+
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'retain-new', agent: 'agent1' }),
+      );
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('retainUpdatePolicy combined with identityChangeExpected stashes under both keys', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'retain-both',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('retain-both', {
+        identityChangeExpected: true,
+        retainUpdatePolicy: true,
+      });
+
+      expect([...container._getUpdatePolicyRetentionCacheForTests().keys()].sort()).toEqual([
+        'agent1::local::myapp',
+        'id::retain-both',
+      ]);
+    });
+
+    test('a same-id return consumes both stash keys, so the id entry cannot linger', () => {
+      mountPolicyRetentionStore();
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'retain-both-take',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+      container.deleteContainer('retain-both-take', {
+        identityChangeExpected: true,
+        retainUpdatePolicy: true,
+      });
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(2);
+
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'retain-both-take', agent: 'agent1' }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
+
+    test('retainUpdatePolicy skips the stash when another replica shares the compose identity', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'replica-1',
+            name: 'stack-web-1',
+            agent: 'agent1',
+            labels,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        {
+          data: makePolicyFixture({
+            id: 'replica-2',
+            name: 'stack-web-2',
+            agent: 'agent1',
+            labels,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('replica-1', { retainUpdatePolicy: true });
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+
+      container.deleteContainer('replica-2', { retainUpdatePolicy: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({
+          id: 'replica-2-new',
+          name: 'stack-web-2',
+          agent: 'agent1',
+          labels,
+        }),
+      );
+      expect(inserted.updatePolicy).toBeUndefined();
+    });
+
+    test('retainUpdatePolicy still stashes for a sole compose service container', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'solo-old',
+            name: 'stack-web-1',
+            agent: 'agent1',
+            labels,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      container.deleteContainer('solo-old', { retainUpdatePolicy: true });
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'solo-new', name: 'stack-web-1', agent: 'agent1', labels }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('retainUpdatePolicy stashes nothing when the replacement is already stored', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'retain-late-old',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        { data: makePolicyFixture({ id: 'retain-late-new', agent: 'agent1' }) },
+      ]);
+
+      container.deleteContainer('retain-late-old', { retainUpdatePolicy: true });
+
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    });
+
+    test('an agent-owned insert inherits from the first live predecessor that holds overrides', () => {
+      mountWith([
+        { data: makePolicyFixture({ id: 'pred-empty', agent: 'agent1' }) },
+        {
+          data: makePolicyFixture({
+            id: 'pred-policy',
+            agent: 'agent1',
+            name: 'myapp-old-1752019200000',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+        {
+          data: makePolicyFixture({
+            id: 'pred-other-agent',
+            agent: 'agent2',
+            updatePolicy: { skipTags: ['9.9.9'] },
+          }),
+        },
+      ]);
+
+      const inserted = container.insertContainer(
+        makePolicyFixture({ id: 'pred-new', agent: 'agent1' }),
+      );
+
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('an agent-owned insert layers the live predecessor overrides over declarative policy', () => {
+      mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'pred-declarative-old',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+
+      const inserted = container.insertContainer(
+        makePolicyFixture({
+          id: 'pred-declarative-new',
+          agent: 'agent1',
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+        }),
+      );
+
+      expect(inserted.updatePolicyOverrides).toEqual(MATURITY_POLICY);
+      expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    test('a controller-local insert does not read a live same-name record', () => {
+      mountWith([{ data: makePolicyFixture({ id: 'local-old', updatePolicy: MATURITY_POLICY }) }]);
+
+      const inserted = container.insertContainer(makePolicyFixture({ id: 'local-new' }));
+
+      expect(inserted.updatePolicy).toBeUndefined();
+    });
+
+    test('an agent-owned insert without a derivable identity looks nothing up', () => {
+      const collection = mountWith([
+        {
+          data: makePolicyFixture({
+            id: 'no-identity-old',
+            agent: 'agent1',
+            updatePolicy: MATURITY_POLICY,
+          }),
+        },
+      ]);
+      collection.find.mockClear();
+
+      expect(() =>
+        container.insertContainer(
+          makePolicyFixture({ id: 'no-identity-new', agent: 'agent1', name: '' }),
+        ),
+      ).toThrow('Error when validating container properties');
+      expect(collection.find).not.toHaveBeenCalled();
+    });
+  });
+
   // DR-112: the mirror image of the recreate case above. Here the Docker id is
   // untouched and the *identity* changes: a container handed from the controller's
   // local watcher to an agent that now watches the same daemon, or a watcher renamed
@@ -6442,6 +6684,90 @@ describe('rollback rename policy retention regression (#535)', () => {
     const inserted = container.insertContainer(
       createContainerFixture({
         id: 'rename-policy-replacement',
+        watcher: 'docker',
+        name: 'app1',
+      }),
+    );
+
+    expect(inserted.updatePolicy).toEqual(updatePolicy);
+  });
+
+  // #1280: #537 guarded the rename *event*; a full scan that lists the outgoing
+  // container between the executor's rename and its cleanup went through
+  // refreshContainerIdentityFromSummary instead and poisoned the name the same way.
+  test('preserves updatePolicy when a scan observes the rollback name before the replacement arrives', async () => {
+    const updatePolicy = { maturityMode: 'mature' as const, maturityMinAgeDays: 5 };
+    const oldContainer = createContainerFixture({
+      id: 'scan-rename-old',
+      watcher: 'docker',
+      name: 'app1',
+      displayName: 'app1',
+      status: 'running',
+      labels: {},
+      details: { ports: [], volumes: [], env: [] },
+      updatePolicy,
+    });
+    const collection = createFilterableCollection([{ data: oldContainer }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    const inspect = vi.fn().mockResolvedValue({});
+    const watcher = {
+      name: 'docker',
+      configuration: { watchevents: true },
+      dockerApi: {
+        getContainer: vi.fn().mockReturnValue({ inspect }),
+        getImage: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockResolvedValue({
+            Id: oldContainer.image.id,
+            Architecture: oldContainer.image.architecture,
+            Os: oldContainer.image.os,
+            Created: oldContainer.image.created,
+          }),
+        }),
+      },
+      log: { warn: vi.fn(), debug: vi.fn() },
+      ensureLogger: vi.fn(),
+      ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+    };
+    const helpers = {
+      resolveLabelsFromContainer: vi.fn(() => ({})),
+      mergeConfigWithImgset: vi.fn(() => ({})),
+      normalizeContainer: vi.fn((c) => c),
+      resolveImageName: vi.fn(),
+      resolveTagName: vi.fn(),
+      getMatchingImgsetConfiguration: vi.fn().mockReturnValue(undefined),
+    };
+
+    const scanned = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      {
+        Id: 'scan-rename-old',
+        Image: oldContainer.image.name,
+        State: 'running',
+        Labels: {},
+        Names: ['/app1-old-1752019200000'],
+        Ports: [],
+        Mounts: [],
+      } as any,
+      {},
+      helpers as any,
+    );
+    expect(scanned?.name).toBe('app1');
+    container.updateContainer(scanned);
+
+    const dockerApi = {
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      }),
+    };
+    await pruneOldContainers(
+      [],
+      [container.getContainer('scan-rename-old')] as any,
+      dockerApi as any,
+    );
+    const inserted = container.insertContainer(
+      createContainerFixture({
+        id: 'scan-rename-replacement',
         watcher: 'docker',
         name: 'app1',
       }),

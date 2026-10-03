@@ -219,6 +219,15 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.17 highlights</strong></summary>
+
+Cette version candidate corrige CVE-2026-85091 dans zlib et met libexpat à jour vers 2.8.5-r0 pour CVE-2026-93990. Les analyses de vulnérabilités par lots acceptées continuent après la fin de la requête HTTP. La publication GA est autorisée après vérification, sans nouvelle période de test de sept jours.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.17/CHANGELOG.md#170-rc17--2026-10-02)
+
+</details>
+
+<details>
 <summary><strong>Points forts de la v1.7.0-rc.16</strong></summary>
 
 La découverte Home Assistant et la publication d’état utilisent désormais le même sujet MQTT pour les conteneurs des agents. La valeur par défaut `HASS_AGENTTOPICSEGMENT=true` est conservée ; les noms canoniques des conteneurs et les sujets MQTT sans intégration Home Assistant ne changent pas. Merci à [@depuits](https://github.com/depuits) pour les détails de reproduction dans la [discussion #1201](https://github.com/CodesWhat/drydock/discussions/1201).

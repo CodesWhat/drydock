@@ -1,0 +1,46 @@
+# Maintainer: CodesWhat <security@getdrydock.com>
+# Based on Alpine 3.24 main/zlib, with the upstream CVE fix only.
+pkgname=zlib
+pkgver=1.3.2
+pkgrel=2026092401
+pkgdesc="A compression/decompression library (Drydock CVE-2026-85091 backport)"
+arch="all"
+license="Zlib"
+url="https://zlib.net/"
+subpackages="$pkgname-static $pkgname-dev $pkgname-doc"
+source="https://zlib.net/fossils/zlib-$pkgver.tar.gz
+	CVE-2026-85091.patch
+	write-error-state.c
+	"
+
+# secfixes:
+#   1.3.2-r2026092401:
+#     - CVE-2026-85091
+#   1.3.2-r0:
+#     - CVE-2026-22184
+#     - CVE-2026-27171
+
+build() {
+	export CFLAGS="$CFLAGS -O2"
+	CHOST="$CHOST" ./configure \
+		--prefix=/usr \
+		--shared \
+		--disable-crcvx
+	make
+}
+
+check() {
+	make check
+	${CC:-cc} -Wall -Wextra -Werror -I. "$srcdir/write-error-state.c" libz.a -o write-error-state
+	./write-error-state
+}
+
+package() {
+	make install DESTDIR="$pkgdir"
+}
+
+sha512sums="
+70963771ea5d763614278a69b474f09b7d237ef8f53b675a10fe31d9923aeef601504b35d7ebd1b1e7f347e9ebb048e6b3b47fffdf137e7bdc7e8d5eb4ec4692  zlib-1.3.2.tar.gz
+2fd69e6f5e408aadb558a6ade4cbee6ee0dac554ba739c3582e6f957db99967566c317ca72db0bde4ffa41ffd01facfae42613173ea7d5eb59ddbc7285cd9e7e  CVE-2026-85091.patch
+e2b9dd18debee5a69e6fb6a12ca028041ccafb8aa187f030f4a61659ef56a2ff52e268772f8dcbac85ea73b072522e469875798311bf96899f09f11c67c38ec6  write-error-state.c
+"
