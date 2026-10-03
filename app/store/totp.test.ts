@@ -31,6 +31,7 @@ vi.mock('../log/index.js', () => ({ default: { child: vi.fn(() => mockLog) } }))
 import * as totp from './totp.js';
 
 const NOW = new Date('2026-10-03T12:00:00.000Z');
+const CONFIRM_COUNTER = totpCounterAt(NOW.getTime()) - 1;
 const LATER = new Date(NOW.getTime() + 60 * 60 * 1000);
 const keyring = parseTotpKeyring(
   JSON.stringify({ k1: Buffer.alloc(32, 1).toString('base64') }),
@@ -100,6 +101,7 @@ function activate(subjectId = 'subject-a', now = NOW) {
   const factor = factorFor(enrollment);
   const result = totp.activateEnrollment({
     enrollmentId: enrollment.enrollmentId,
+    acceptedCounter: CONFIRM_COUNTER,
     factor,
     recoveryCodeDigests: codes.map(digestRecoveryCode),
     now,
@@ -245,7 +247,7 @@ describe('activation', () => {
       subjectId: 'subject-a',
       factorVersion: 1,
       recoveryGeneration: 1,
-      lastAcceptedCounter: null,
+      lastAcceptedCounter: CONFIRM_COUNTER,
       updatedAt: NOW.toISOString(),
     });
     expect(result.recoveryCodeIds).toHaveLength(codes.length);
@@ -280,6 +282,7 @@ describe('activation', () => {
         () =>
           totp.activateEnrollment({
             enrollmentId: id(),
+            acceptedCounter: CONFIRM_COUNTER,
             factor: factorFor(enrollment),
             recoveryCodeDigests: [],
             now: NOW,
@@ -296,6 +299,7 @@ describe('activation', () => {
       () =>
         totp.activateEnrollment({
           enrollmentId: enrollment.enrollmentId,
+          acceptedCounter: CONFIRM_COUNTER,
           factor: factorFor(enrollment),
           recoveryCodeDigests: [],
           now: LATER,
@@ -316,6 +320,7 @@ describe('activation', () => {
       () =>
         totp.activateEnrollment({
           enrollmentId: enrollment.enrollmentId,
+          acceptedCounter: CONFIRM_COUNTER,
           factor: { ...factorFor(enrollment), ...override },
           recoveryCodeDigests: [],
           now: NOW,
@@ -336,6 +341,7 @@ describe('activation', () => {
       () =>
         totp.activateEnrollment({
           enrollmentId: enrollment.enrollmentId,
+          acceptedCounter: CONFIRM_COUNTER,
           factor: factorFor(enrollment),
           recoveryCodeDigests: [],
           now: NOW,
@@ -357,6 +363,7 @@ describe('activation', () => {
       () =>
         totp.activateEnrollment({
           enrollmentId: 'e2',
+          acceptedCounter: CONFIRM_COUNTER,
           factor: factorFor(replacement, 'factor-2'),
           recoveryCodeDigests: [],
           now: NOW,
@@ -372,6 +379,7 @@ describe('activation', () => {
     expect(() =>
       totp.activateEnrollment({
         enrollmentId: enrollment.enrollmentId,
+        acceptedCounter: CONFIRM_COUNTER,
         factor: factorFor(enrollment),
         recoveryCodeDigests: [digest, digest],
         now: NOW,
@@ -393,6 +401,7 @@ describe('activation', () => {
     const newCodes = generateRecoveryCodes();
     const result = totp.activateEnrollment({
       enrollmentId: 'e2',
+      acceptedCounter: CONFIRM_COUNTER,
       factor: factorFor(replacement, 'factor-2'),
       recoveryCodeDigests: newCodes.map(digestRecoveryCode),
       now: NOW,
@@ -433,6 +442,7 @@ describe('removal', () => {
     totp.createEnrollment(again, NOW);
     const result = totp.activateEnrollment({
       enrollmentId: 'e9',
+      acceptedCounter: CONFIRM_COUNTER,
       factor: factorFor(again, 'factor-9'),
       recoveryCodeDigests: [],
       now: NOW,
@@ -476,37 +486,58 @@ describe('accepted counter replay', () => {
 
   test('the first acceptance wins and the same counter cannot be taken again', () => {
     const { factor } = activate();
-    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter)).toBe(true);
-    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter)).toBe(false);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter, 1)).toBe(true);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter, 1)).toBe(false);
     expect(totp.getFactor(factor.factorId)?.lastAcceptedCounter).toBe(counter);
   });
 
   test('refuses a lower counter after a higher one (clock rollback)', () => {
     const { factor } = activate();
-    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter + 1)).toBe(true);
-    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter)).toBe(false);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter + 1, 1)).toBe(true);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter, 1)).toBe(false);
     expect(totp.getFactor(factor.factorId)?.lastAcceptedCounter).toBe(counter + 1);
   });
 
   test('accepts a higher counter', () => {
     const { factor } = activate();
-    totp.advanceLastAcceptedCounter(factor.factorId, counter);
-    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter + 1)).toBe(true);
+    totp.advanceLastAcceptedCounter(factor.factorId, counter, 1);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter + 1, 1)).toBe(true);
   });
 
-  test('accepts counter zero on a factor that has accepted nothing', () => {
+  test('the confirmation code counter is already spent at activation', () => {
     const { factor } = activate();
-    expect(totp.advanceLastAcceptedCounter(factor.factorId, 0)).toBe(true);
+    expect(totp.getFactor(factor.factorId)?.lastAcceptedCounter).toBe(CONFIRM_COUNTER);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, CONFIRM_COUNTER, 1)).toBe(false);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, CONFIRM_COUNTER + 1, 1)).toBe(true);
+  });
+
+  test('a stale factor version cannot advance the counter', () => {
+    const { factor } = activate();
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter + 5, 0)).toBe(false);
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, counter + 5, 2)).toBe(false);
+    expect(totp.getFactor(factor.factorId)?.lastAcceptedCounter).toBe(CONFIRM_COUNTER);
+  });
+
+  test('rejects an invalid factor version', () => {
+    const { factor } = activate();
+    expectCode(
+      () => totp.advanceLastAcceptedCounter(factor.factorId, counter, -1),
+      'INVALID_ARGUMENT',
+    );
+    expectCode(
+      () => totp.advanceLastAcceptedCounter(factor.factorId, counter, 1.5),
+      'INVALID_ARGUMENT',
+    );
   });
 
   test('returns false for an unknown factor', () => {
-    expect(totp.advanceLastAcceptedCounter('nope', counter)).toBe(false);
+    expect(totp.advanceLastAcceptedCounter('nope', counter, 1)).toBe(false);
   });
 
   test('rejects an invalid counter', () => {
     const { factor } = activate();
-    expectCode(() => totp.advanceLastAcceptedCounter(factor.factorId, -1), 'INVALID_ARGUMENT');
-    expectCode(() => totp.advanceLastAcceptedCounter(factor.factorId, 1.5), 'INVALID_ARGUMENT');
+    expectCode(() => totp.advanceLastAcceptedCounter(factor.factorId, -1, 1), 'INVALID_ARGUMENT');
+    expectCode(() => totp.advanceLastAcceptedCounter(factor.factorId, 1.5, 1), 'INVALID_ARGUMENT');
   });
 
   test('two concurrent verifications of one code produce exactly one winner', async () => {
@@ -529,7 +560,7 @@ describe('accepted counter replay', () => {
         lastAcceptedCounter: stored.lastAcceptedCounter,
       });
       await Promise.resolve();
-      return verdict.valid && totp.advanceLastAcceptedCounter(factor.factorId, verdict.counter);
+      return verdict.valid && totp.advanceLastAcceptedCounter(factor.factorId, verdict.counter, 1);
     };
 
     const outcomes = await Promise.all([attempt(), attempt(), attempt(), attempt()]);
@@ -715,6 +746,7 @@ describe('default clock', () => {
     totp.createEnrollment(enrollment);
     const { factor } = totp.activateEnrollment({
       enrollmentId: enrollment.enrollmentId,
+      acceptedCounter: CONFIRM_COUNTER,
       factor: factorFor(enrollment),
       recoveryCodeDigests: [digestRecoveryCode(generateRecoveryCodes(1)[0])],
     });
@@ -772,6 +804,7 @@ describe('persistence and plaintext', () => {
       const factor = factorFor(enrollment, 'factor-subject-a', seed);
       totp.activateEnrollment({
         enrollmentId: enrollment.enrollmentId,
+        acceptedCounter: CONFIRM_COUNTER,
         factor,
         recoveryCodeDigests: codes.map(digestRecoveryCode),
         now: NOW,
@@ -815,6 +848,7 @@ describe('persistence and plaintext', () => {
     const codes = generateRecoveryCodes();
     totp.activateEnrollment({
       enrollmentId: enrollment.enrollmentId,
+      acceptedCounter: CONFIRM_COUNTER,
       factor: factorFor(enrollment, 'factor-subject-a', seed),
       recoveryCodeDigests: codes.map(digestRecoveryCode),
       now: NOW,
@@ -833,5 +867,116 @@ describe('persistence and plaintext', () => {
       expect(text).not.toContain(enrollment.secretCiphertext);
       expect(text).not.toContain(codes[0]);
     }
+  });
+});
+
+describe('activation confirmation counter validation', () => {
+  test.each([[-1], [1.5], [Number.NaN], [Number.MAX_SAFE_INTEGER + 1]])(
+    'rejects acceptedCounter %s',
+    (acceptedCounter) => {
+      const enrollment = enrollmentFor();
+      totp.createEnrollment(enrollment, NOW);
+      expectCode(
+        () =>
+          totp.activateEnrollment({
+            enrollmentId: enrollment.enrollmentId,
+            acceptedCounter,
+            factor: factorFor(enrollment),
+            recoveryCodeDigests: [],
+            now: NOW,
+          }),
+        'INVALID_ARGUMENT',
+      );
+      expect(totp.getEnrollment(enrollment.enrollmentId, NOW)).toBeDefined();
+    },
+  );
+});
+
+describe('recovery digest validation', () => {
+  const insertRaw = (digest: string) =>
+    db
+      .prepare(
+        `INSERT INTO totp_recovery_codes (code_id, schema_version, factor_id, subject_id, generation,
+           code_digest, created_at) VALUES ('raw', 1, ?, 'subject-a', 1, ?, 'x')`,
+      )
+      .run(activate().factor.factorId, digest);
+
+  test.each([['short'], ['A'.repeat(64)], ['g'.repeat(64)], ['a'.repeat(63)], ['a'.repeat(65)]])(
+    'the schema refuses digest %s',
+    (digest) => {
+      expect(() => insertRaw(digest)).toThrow(
+        expect.objectContaining({ code: 'SQLITE_CONSTRAINT_CHECK' }),
+      );
+    },
+  );
+
+  test('activation refuses a malformed digest and writes nothing', () => {
+    const enrollment = enrollmentFor();
+    totp.createEnrollment(enrollment, NOW);
+    expectCode(
+      () =>
+        totp.activateEnrollment({
+          enrollmentId: enrollment.enrollmentId,
+          acceptedCounter: CONFIRM_COUNTER,
+          factor: factorFor(enrollment),
+          recoveryCodeDigests: ['not-a-digest'],
+          now: NOW,
+        }),
+      'INVALID_ARGUMENT',
+    );
+    expect(totp.getFactorBySubject('subject-a')).toBeUndefined();
+    expect(totp.getEnrollment(enrollment.enrollmentId, NOW)).toBeDefined();
+  });
+
+  test('replacement refuses a malformed digest and keeps the old generation', () => {
+    const { factor } = activate();
+    expectCode(
+      () =>
+        totp.replaceRecoveryCodes({
+          factorId: factor.factorId,
+          expectedGeneration: 1,
+          recoveryCodeDigests: ['ABC'],
+          now: NOW,
+        }),
+      'INVALID_ARGUMENT',
+    );
+    expect(totp.getFactor(factor.factorId)?.recoveryGeneration).toBe(1);
+    expect(totp.countUnusedRecoveryCodes(factor.factorId)).toBe(10);
+  });
+});
+
+describe('stored factor parameters', () => {
+  test('reads the stored parameters when they are the supported set', () => {
+    const { factor } = activate();
+    expect(totp.getFactor(factor.factorId)).toMatchObject({
+      algorithm: 'SHA1',
+      digits: 6,
+      periodSeconds: 30,
+      allowedSkewSteps: 1,
+    });
+  });
+
+  test('a row that never accepted a code reads back with a null counter and can advance', () => {
+    const { factor } = activate();
+    db.prepare('UPDATE totp_factors SET last_accepted_counter = NULL WHERE factor_id = ?').run(
+      factor.factorId,
+    );
+    expect(totp.getFactor(factor.factorId)?.lastAcceptedCounter).toBeNull();
+    expect(totp.advanceLastAcceptedCounter(factor.factorId, 0, 1)).toBe(true);
+  });
+
+  test.each([
+    ['algorithm', "'SHA256'"],
+    ['digits', '8'],
+    ['period_seconds', '60'],
+    ['allowed_skew_steps', '2'],
+  ])('a row with unsupported %s is refused with a fixed error', (column, value) => {
+    const { factor } = activate();
+    db.prepare(`UPDATE totp_factors SET ${column} = ${value} WHERE factor_id = ?`).run(
+      factor.factorId,
+    );
+    expectCode(() => totp.getFactor(factor.factorId), 'INVALID_ARGUMENT');
+    expectCode(() => totp.getFactorBySubject('subject-a'), 'INVALID_ARGUMENT');
+    expectCode(() => totp.listFactors(), 'INVALID_ARGUMENT');
   });
 });

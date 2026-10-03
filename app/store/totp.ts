@@ -108,6 +108,8 @@ export interface TotpRecoveryCodeRecord {
 export interface ActivateEnrollmentInput {
   enrollmentId: string;
   factor: NewTotpFactor;
+  /** Counter of the confirmation code, recorded as spent so it cannot be replayed. */
+  acceptedCounter: number;
   recoveryCodeDigests: readonly string[];
   now?: Date;
 }
@@ -138,7 +140,21 @@ function randomId(): string {
   return crypto.randomUUID();
 }
 
+function isValidCounter(counter: number): boolean {
+  return Number.isSafeInteger(counter) && counter >= 0;
+}
+
+const RECOVERY_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+
 function toFactor(row: Row): TotpFactorRecord {
+  if (
+    row.algorithm !== 'SHA1' ||
+    Number(row.digits) !== 6 ||
+    Number(row.period_seconds) !== 30 ||
+    Number(row.allowed_skew_steps) !== 1
+  ) {
+    throw new TotpStoreError('INVALID_ARGUMENT');
+  }
   return {
     schemaVersion: 1,
     factorId: String(row.factor_id),
@@ -150,7 +166,7 @@ function toFactor(row: Row): TotpFactorRecord {
     secretNonce: String(row.secret_nonce),
     secretCiphertext: String(row.secret_ciphertext),
     secretAuthTag: String(row.secret_auth_tag),
-    algorithm: 'SHA1',
+    algorithm: row.algorithm,
     digits: 6,
     periodSeconds: 30,
     allowedSkewSteps: 1,
@@ -246,17 +262,24 @@ export function listFactors(): TotpFactorRecord[] {
  * Record `counter` as the newest accepted code, but only if it is strictly
  * newer than what is stored. The single UPDATE is the compare-and-set: of any
  * number of callers presenting the same counter, exactly one sees `true`.
+ * `factorVersion` is the version the code was verified against, so a code
+ * checked against an earlier seed cannot advance a factor that replaced it.
  */
-export function advanceLastAcceptedCounter(factorId: string, counter: number): boolean {
-  if (!Number.isSafeInteger(counter) || counter < 0) {
+export function advanceLastAcceptedCounter(
+  factorId: string,
+  counter: number,
+  factorVersion: number,
+): boolean {
+  if (!isValidCounter(counter) || !isValidCounter(factorVersion)) {
     throw new TotpStoreError('INVALID_ARGUMENT');
   }
   const result = requireDb()
     .prepare(
       `UPDATE totp_factors SET last_accepted_counter = ?
-       WHERE factor_id = ? AND (last_accepted_counter IS NULL OR last_accepted_counter < ?)`,
+       WHERE factor_id = ? AND factor_version = ?
+         AND (last_accepted_counter IS NULL OR last_accepted_counter < ?)`,
     )
-    .run(counter, factorId, counter);
+    .run(counter, factorId, factorVersion, counter);
   return result.changes === 1;
 }
 
@@ -446,6 +469,9 @@ export function sweepExpiredEnrollments(now: Date = new Date()): number {
  * data binds the row it lives in and the enrollment row has a different id.
  */
 export function activateEnrollment(input: ActivateEnrollmentInput): ActivatedFactor {
+  if (!isValidCounter(input.acceptedCounter)) {
+    throw new TotpStoreError('INVALID_ARGUMENT');
+  }
   const database = requireDb();
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
@@ -488,7 +514,7 @@ export function activateEnrollment(input: ActivateEnrollmentInput): ActivatedFac
            encryption_key_id, secret_nonce, secret_ciphertext, secret_auth_tag, algorithm, digits,
            period_seconds, allowed_skew_steps, created_at, activated_at, updated_at,
            last_accepted_counter, recovery_generation
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       )
       .run(
         factor.factorId,
@@ -508,6 +534,7 @@ export function activateEnrollment(input: ActivateEnrollmentInput): ActivatedFac
         factor.createdAt,
         factor.activatedAt,
         nowIso,
+        input.acceptedCounter,
       );
     const recoveryCodeIds = insertRecoveryCodes(
       database,
@@ -547,6 +574,9 @@ function insertRecoveryCodes(
   digests: readonly string[],
   createdAt: string,
 ): string[] {
+  if (!digests.every((digest) => RECOVERY_DIGEST_PATTERN.test(digest))) {
+    throw new TotpStoreError('INVALID_ARGUMENT');
+  }
   const insert = database.prepare(
     `INSERT INTO totp_recovery_codes (
        code_id, schema_version, factor_id, subject_id, generation, code_digest, created_at

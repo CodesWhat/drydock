@@ -435,7 +435,7 @@ CREATE TABLE totp_recovery_codes (
   factor_id      TEXT NOT NULL REFERENCES totp_factors(factor_id) ON DELETE CASCADE,
   subject_id     TEXT NOT NULL,
   generation     INTEGER NOT NULL,
-  code_digest    TEXT NOT NULL,
+  code_digest    TEXT NOT NULL CHECK (length(code_digest) = 64 AND code_digest NOT GLOB '*[^0-9a-f]*'),
   created_at     TEXT NOT NULL,
   used_at        TEXT,
   UNIQUE (factor_id, generation, code_digest)
