@@ -1,5 +1,6 @@
 import type { Container } from '../../../model/container.js';
 import type { CrudHandlerContext } from '../crud-context.js';
+import { toApiContainer } from '../shared.js';
 import {
   attachInProgressUpdateOperation,
   attachUpdateEligibility,
@@ -1828,5 +1829,41 @@ describe('createGetContainersHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid request' });
+  });
+});
+
+describe('eligibility on a container projected for the API', () => {
+  test('still names the Drydock override that blocks the trigger', () => {
+    const overridden = createContainer({
+      result: { tag: '1.1.0' },
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+      actionTriggerInclude: 'other.trigger',
+      labelOwned: {
+        v: 1,
+        declared: {},
+        declaredSources: {},
+        sources: { actionTriggerInclude: 'override' },
+      },
+    } as Partial<Container>);
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getTriggers: () =>
+        ({
+          'docker.update': {
+            type: 'docker',
+            configuration: { auto: 'oninclude', threshold: 'all' },
+            getId: () => 'docker.update',
+          },
+        }) as never,
+    };
+
+    const projected = toApiContainer(overridden);
+    expect((projected as { labelOwned?: unknown }).labelOwned).toBeUndefined();
+    const result = attachUpdateEligibility(context, projected) as any;
+
+    expect(
+      result.updateEligibility.blockers.find((b: any) => b.reason === 'trigger-not-included')
+        ?.message,
+    ).toBe("Trigger not matched by the Drydock override of dd.action.include='other.trigger'.");
   });
 });

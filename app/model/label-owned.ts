@@ -528,11 +528,15 @@ export function toAgentPayload(container: Container): Container {
  * Drydock override of dd.action.exclude").
  */
 export function describeRoutingOrigin(
-  container: Pick<Container, 'labelOwned'>,
+  container: Pick<Container, 'labelOwned'> & {
+    /** The API projection of `labelOwned.sources`, which is all an API container carries. */
+    labelOwnedSources?: Partial<Record<string, string>>;
+  },
   field: 'actionTriggerInclude' | 'actionTriggerExclude',
 ): string {
   const labelKey = field === 'actionTriggerInclude' ? ddActionInclude : ddActionExclude;
-  return container.labelOwned?.sources[field] === 'override'
+  const source = container.labelOwned?.sources[field] ?? container.labelOwnedSources?.[field];
+  return source === 'override'
     ? `by the Drydock override of ${labelKey}`
     : `by container label ${labelKey}`;
 }

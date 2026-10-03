@@ -454,6 +454,20 @@ describe('describeRoutingOrigin', () => {
     ).toBe('by the Drydock override of dd.action.include');
   });
 
+  test('reads the projected sources an API container carries instead of the state', () => {
+    const projected = (sources: Record<string, string>) =>
+      ({ labelOwnedSources: sources }) as unknown as Container;
+    expect(
+      describeRoutingOrigin(
+        projected({ actionTriggerExclude: 'override' }),
+        'actionTriggerExclude',
+      ),
+    ).toBe('by the Drydock override of dd.action.exclude');
+    expect(
+      describeRoutingOrigin(projected({ actionTriggerInclude: 'label' }), 'actionTriggerInclude'),
+    ).toBe('by container label dd.action.include');
+  });
+
   test('names the container label for every other source and for a record with no state', () => {
     expect(
       describeRoutingOrigin(withSources({ actionTriggerExclude: 'label' }), 'actionTriggerExclude'),

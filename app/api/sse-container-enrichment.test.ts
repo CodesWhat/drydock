@@ -25,6 +25,7 @@ vi.mock('../store/update-operation.js', () => ({
   getActiveOperationByContainerIdentity: mockGetActiveOperationByContainerIdentity,
 }));
 
+import { toApiContainer } from './container/shared.js';
 import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 
 describe('enrichContainerLifecyclePayloadWithEligibility', () => {
@@ -97,6 +98,49 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       expect(result.status).toBe('running');
       expect(result.extra).toBe(42);
       expect(result.updateEligibility).toBeDefined();
+    });
+  });
+
+  describe('projected payload', () => {
+    test('names the Drydock override in the eligibility message', () => {
+      mockGetState.mockReturnValue({
+        trigger: {
+          'docker.update': {
+            type: 'docker',
+            configuration: { auto: 'oninclude', threshold: 'all' },
+            getId: () => 'docker.update',
+          },
+        },
+        watcher: {},
+      } as never);
+      const projected = toApiContainer({
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: {
+          registry: { name: 'hub', url: 'docker.io' },
+          name: 'library/nginx',
+          tag: { value: '1.0.0', semver: true },
+          digest: { watch: false },
+        },
+        result: { tag: '1.1.0' },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+        actionTriggerInclude: 'other.trigger',
+        labelOwned: {
+          v: 1,
+          declared: {},
+          declaredSources: {},
+          sources: { actionTriggerInclude: 'override' },
+        },
+      }) as any;
+
+      const result = enrichContainerLifecyclePayloadWithEligibility(projected) as any;
+
+      expect(
+        result.updateEligibility.blockers.find((b: any) => b.reason === 'trigger-not-included')
+          ?.message,
+      ).toBe("Trigger not matched by the Drydock override of dd.action.include='other.trigger'.");
     });
   });
 
