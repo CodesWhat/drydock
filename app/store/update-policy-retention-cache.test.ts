@@ -2,9 +2,12 @@
  * Tests for the update-policy-retention-cache store — the durable backing for
  * container.ts's in-memory updatePolicyRetentionCache Map (#565).
  */
-import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import { createMemoryDatabase, createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import type { Database } from './db/driver.js';
+import { MIGRATIONS, migrate } from './db/migrations.js';
 import * as updatePolicyRetentionCache from './update-policy-retention-cache.js';
+
+const CONTAINER_NAME_MIGRATION_VERSION = 5;
 
 let db: Database;
 
@@ -191,6 +194,83 @@ describe('listRecords', () => {
     // entry and must sort first — the Map-insertion-order eviction in
     // container.ts evicts index 0 first, which must be B, not A.
     expect(keysInOrder).toEqual(['B', 'A']);
+  });
+});
+
+// #1280: the canonical name of the container a stash came from, which tells compose
+// replicas sharing one identity key apart.
+describe('containerName', () => {
+  test('persists the container name and reads it back', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'agent1::local::compose:stack/web',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 1_000,
+      containerName: 'stack-web-2',
+    });
+
+    expect(updatePolicyRetentionCache.listRecords()).toEqual([
+      {
+        cacheKey: 'agent1::local::compose:stack/web',
+        updatePolicyOverrides: { maturityMode: 'mature' },
+        expiresAt: 1_000,
+        containerName: 'stack-web-2',
+      },
+    ]);
+  });
+
+  test('a refresh replaces the recorded name, and a refresh without one clears it', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    const base = {
+      cacheKey: 'agent1::local::compose:stack/web',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 1_000,
+    };
+    updatePolicyRetentionCache.upsertRecord({ ...base, containerName: 'stack-web-1' });
+    updatePolicyRetentionCache.upsertRecord({ ...base, containerName: 'stack-web-2' });
+    expect(updatePolicyRetentionCache.listRecords()[0].containerName).toBe('stack-web-2');
+
+    updatePolicyRetentionCache.upsertRecord(base);
+    expect(updatePolicyRetentionCache.listRecords()[0]).not.toHaveProperty('containerName');
+  });
+
+  test('a record without a name lists without one', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: '::local::myapp',
+      updatePolicyOverrides: { maturityMode: 'mature' },
+      expiresAt: 1_000,
+    });
+
+    expect(updatePolicyRetentionCache.listRecords()[0]).not.toHaveProperty('containerName');
+  });
+
+  // A database written before the column existed upgrades in place: its rows read back
+  // with no name, which container.ts treats as a legacy entry.
+  test('a row stored before the column existed reads back without a name after migrating', () => {
+    const legacyDb = createMemoryDatabase();
+    migrate(
+      legacyDb,
+      MIGRATIONS.filter((migration) => migration.version < CONTAINER_NAME_MIGRATION_VERSION),
+    );
+    legacyDb
+      .prepare(
+        'INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order) VALUES (?, ?, ?, ?)',
+      )
+      .run('agent1::local::compose:stack/web', '{"maturityMode":"mature"}', 1_000, 1);
+
+    expect(migrate(legacyDb)).toEqual([CONTAINER_NAME_MIGRATION_VERSION]);
+    updatePolicyRetentionCache.createCollections(legacyDb);
+
+    expect(updatePolicyRetentionCache.listRecords()).toEqual([
+      {
+        cacheKey: 'agent1::local::compose:stack/web',
+        updatePolicyOverrides: { maturityMode: 'mature' },
+        expiresAt: 1_000,
+      },
+    ]);
+    expect(updatePolicyRetentionCache.listRecords()[0]).not.toHaveProperty('containerName');
+    legacyDb.close();
   });
 });
 

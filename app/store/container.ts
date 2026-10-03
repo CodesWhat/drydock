@@ -25,6 +25,7 @@ import {
   deriveContainerIdRetentionKey,
   getCandidateIdentityFields,
   getCanonicalContainerName,
+  getComposeProjectService,
   hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
@@ -113,6 +114,13 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 type UpdatePolicyRetentionCacheEntry = {
   updatePolicyOverrides: container.ContainerUpdatePolicy;
   expiresAt: number;
+  /**
+   * #1280: canonical name of the container the entry was stashed from. Replicas of one
+   * compose service share the identity key, and this is what tells them apart (see
+   * takeIdentityRetainedUpdatePolicyEntry). Absent on an entry stashed before it was
+   * recorded.
+   */
+  containerName?: string;
 };
 
 const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
@@ -1300,6 +1308,8 @@ function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
   const entry: UpdatePolicyRetentionCacheEntry = {
     updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+    // Already canonical: a rollback-renamed record returned above.
+    containerName: containerRaw.name,
   };
   updatePolicyRetentionCache.set(cacheKey, entry);
   // #565: write-through to the durable store so this stash survives the
@@ -1479,12 +1489,48 @@ function getLivePredecessorUpdatePolicyOverrides(
   return undefined;
 }
 
+/**
+ * #1280: take the entry retained under `incoming`'s identity key, if it is this
+ * container's to take.
+ *
+ * Replicas of one compose service share the identity key (`compose:project/service`),
+ * so after a compose down/up the entry one replica stashed is equally reachable from
+ * every other. An agent-owned insert therefore takes only an entry recorded under its
+ * own name and leaves another replica's entry where it is, for that replica to take.
+ *
+ * An entry stashed before names were recorded cannot be attributed. Under a compose key
+ * it is consumed and discarded: applying it could hand one replica's policy to another,
+ * while dropping it only loses a policy that was in flight across the upgrade. Under a
+ * plain identity key the key itself names the container, so it is taken as before.
+ *
+ * Controller-local inserts keep the name-agnostic match, which is what carries a policy
+ * across a compose service redeployed under a new container name.
+ */
+function takeIdentityRetainedUpdatePolicyEntry(incoming) {
+  const cacheKey = deriveContainerIdentityKey(incoming);
+  const entry = cacheKey === undefined ? undefined : updatePolicyRetentionCache.get(cacheKey);
+  if (!entry) {
+    return undefined;
+  }
+  if (isAgentOwnedContainer(incoming)) {
+    if (entry.containerName !== undefined && entry.containerName !== incoming.name) {
+      return undefined;
+    }
+    if (entry.containerName === undefined && getComposeProjectService(incoming) !== undefined) {
+      takeRetainedUpdatePolicyEntry(cacheKey);
+      return undefined;
+    }
+  }
+  return takeRetainedUpdatePolicyEntry(cacheKey);
+}
+
 function takeUnexpiredRetainedUpdatePolicyOverrides(
   incoming,
 ): container.ContainerUpdatePolicy | undefined {
-  // Take both keys unconditionally: an agent prune stashes under both, and a hit on one
-  // must not leave the other behind to resurrect a since-cleared policy later.
-  const identityEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(incoming));
+  // Take both keys: an agent prune stashes under both, and a hit on one must not leave
+  // the other behind to resurrect a since-cleared policy later. The only entry left in
+  // place is one another compose replica stashed (see takeIdentityRetainedUpdatePolicyEntry).
+  const identityEntry = takeIdentityRetainedUpdatePolicyEntry(incoming);
   const idEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
   const entry = identityEntry ?? idEntry;
   if (!entry || entry.expiresAt <= Date.now()) {
@@ -2258,6 +2304,7 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
     updatePolicyRetentionCache.set(record.cacheKey, {
       updatePolicyOverrides: record.updatePolicyOverrides as container.ContainerUpdatePolicy,
       expiresAt: record.expiresAt,
+      containerName: record.containerName,
     });
   }
 }

@@ -67,6 +67,18 @@ ALTER TABLE containers ADD COLUMN source_repo TEXT;
 ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
 `,
   },
+  {
+    version: 5,
+    // #1280: replicas of one compose service share the identity key a stash is
+    // written under, so the key alone cannot say which replica the stashed policy
+    // came from. The canonical container name tells them apart. It is a column
+    // rather than part of update_policy_overrides because that column is an opaque
+    // policy blob (spec section 2.1, rule 2) applied to the replacement as-is.
+    // Nullable: rows written before this migration have no name, which
+    // app/store/container.ts reads as a legacy entry.
+    note: 'add update_policy_retention_cache.container_name (#1280)',
+    sql: 'ALTER TABLE update_policy_retention_cache ADD COLUMN container_name TEXT;',
+  },
 ];
 
 /** Versions already recorded in `schema_migrations`, ascending. */

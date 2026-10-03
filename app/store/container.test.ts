@@ -5462,6 +5462,148 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       ]);
     });
 
+    // Replicas of one compose service share the `compose:project/service` identity key, so
+    // the key alone cannot say which replica a stash came from. The entry carries the
+    // canonical container name, and an agent-owned insert only takes an entry recorded
+    // under its own name.
+    describe('compose replicas and the recorded container name', () => {
+      const labels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+      };
+      const COMPOSE_KEY = 'agent1::local::compose:stack/web';
+
+      function replica(id: string, name: string, overrides: Record<string, unknown> = {}) {
+        return makePolicyFixture({ id, name, agent: 'agent1', labels, ...overrides });
+      }
+
+      test.each([
+        ['retainUpdatePolicy', { retainUpdatePolicy: true }],
+        ['replacementExpected', { replacementExpected: true }],
+      ] as const)(
+        'a compose down/up through %s hands the policy only to the replica it came from',
+        (_option, deleteOptions) => {
+          mountPolicyRetentionStore();
+          mountWith([
+            { data: replica('web-1-old', 'stack-web-1') },
+            { data: replica('web-2-old', 'stack-web-2', { updatePolicy: MATURITY_POLICY }) },
+          ]);
+
+          container.deleteContainer('web-1-old', deleteOptions);
+          container.deleteContainer('web-2-old', deleteOptions);
+          expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+            COMPOSE_KEY,
+          ]);
+
+          const first = container.insertContainer(replica('web-1-new', 'stack-web-1'));
+          expect(first.updatePolicy).toBeUndefined();
+          // The entry stays for the replica it belongs to.
+          expect(updatePolicyRetentionCacheStore.listRecords()).toHaveLength(1);
+
+          const second = container.insertContainer(replica('web-2-new', 'stack-web-2'));
+          expect(second.updatePolicy).toEqual(MATURITY_POLICY);
+          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+          expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+        },
+      );
+
+      test('records the canonical container name with the stash, in memory and on disk', () => {
+        mountPolicyRetentionStore();
+        mountWith([
+          { data: replica('named-old', 'stack-web-2', { updatePolicy: MATURITY_POLICY }) },
+        ]);
+
+        container.deleteContainer('named-old', { retainUpdatePolicy: true });
+
+        expect(container._getUpdatePolicyRetentionCacheForTests().get(COMPOSE_KEY)).toMatchObject({
+          updatePolicyOverrides: MATURITY_POLICY,
+          containerName: 'stack-web-2',
+        });
+        expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([
+          expect.objectContaining({ cacheKey: COMPOSE_KEY, containerName: 'stack-web-2' }),
+        ]);
+      });
+
+      test('the recorded name survives a restart and still decides the replica', () => {
+        mountPolicyRetentionStore();
+        mountWith([
+          { data: replica('restart-old', 'stack-web-2', { updatePolicy: MATURITY_POLICY }) },
+        ]);
+        container.deleteContainer('restart-old', { retainUpdatePolicy: true });
+
+        container._resetContainerStoreStateForTests();
+        container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+        expect(
+          container.insertContainer(replica('restart-web-1', 'stack-web-1')).updatePolicy,
+        ).toBeUndefined();
+        expect(
+          container.insertContainer(replica('restart-web-2', 'stack-web-2')).updatePolicy,
+        ).toEqual(MATURITY_POLICY);
+      });
+
+      // An entry written before the name was recorded cannot say which replica it came
+      // from. Under a shared compose key it is dropped: applying it could hand one
+      // replica's policy to another, and dropping it only loses a policy.
+      test('drops a nameless legacy entry under an agent compose identity key', () => {
+        mountPolicyRetentionStore([
+          {
+            cacheKey: COMPOSE_KEY,
+            updatePolicyOverrides: MATURITY_POLICY,
+            expiresAt: Date.now() + 60_000,
+          },
+        ]);
+        container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+        const inserted = container.insertContainer(replica('legacy-compose-new', 'stack-web-1'));
+
+        expect(inserted.updatePolicy).toBeUndefined();
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+        expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+      });
+
+      // A plain identity key already names the container, so the entry cannot belong to
+      // anyone else and stays usable after the upgrade.
+      test('applies a nameless legacy entry under an agent identity key that names the container', () => {
+        mountPolicyRetentionStore([
+          {
+            cacheKey: 'agent1::local::myapp',
+            updatePolicyOverrides: MATURITY_POLICY,
+            expiresAt: Date.now() + 60_000,
+          },
+        ]);
+        container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+        const inserted = container.insertContainer(
+          makePolicyFixture({ id: 'legacy-plain-new', agent: 'agent1' }),
+        );
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      // Controller-local records keep the name-agnostic restore, which is what lets a
+      // compose service redeployed under a new container name keep its policy.
+      test('a controller-local insert still takes an entry recorded under another name', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'local-compose-old',
+              name: 'stack-web-1',
+              labels,
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        container.deleteContainer('local-compose-old', { replacementExpected: true });
+
+        const inserted = container.insertContainer(
+          makePolicyFixture({ id: 'local-compose-new', name: 'stack-web-renamed', labels }),
+        );
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+    });
+
     test('an agent-owned insert inherits from the first live predecessor that holds overrides', () => {
       mountWith([
         { data: makePolicyFixture({ id: 'pred-empty', agent: 'agent1' }) },
