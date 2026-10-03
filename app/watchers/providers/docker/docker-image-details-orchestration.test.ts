@@ -2806,6 +2806,9 @@ describe('docker image details orchestration module', () => {
         },
       };
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
       const { watcher } = createWatcher();
 
       const result = await addImageDetailsToContainerOrchestration(
@@ -2817,6 +2820,14 @@ describe('docker image details orchestration module', () => {
 
       expect(result?.dependsOn).toEqual(['new-target']);
       expect(result?.dependsOnSource).toBe('label');
+      expect(updateContainerFields).toHaveBeenCalledWith(
+        'container-1',
+        expect.objectContaining({
+          dependsOn: ['new-target'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'update',
+        }),
+      );
     });
 
     test('already-stored containers clear a stale label-sourced dependsOn once the label is removed', async () => {
@@ -2839,6 +2850,9 @@ describe('docker image details orchestration module', () => {
         },
       };
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
       const { watcher } = createWatcher();
 
       const result = await addImageDetailsToContainerOrchestration(
@@ -2850,6 +2864,9 @@ describe('docker image details orchestration module', () => {
 
       expect(result?.dependsOn).toBeUndefined();
       expect(result?.dependsOnSource).toBeUndefined();
+      const patch = updateContainerFields.mock.calls[0]?.[1];
+      expect(patch).toHaveProperty('dependsOn', undefined);
+      expect(patch).toHaveProperty('dependsOnSource', undefined);
     });
   });
 });
