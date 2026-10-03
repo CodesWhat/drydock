@@ -101,8 +101,20 @@ async function call(
   return { status: response.status, json: text ? JSON.parse(text) : undefined };
 }
 
+/** A save past revision 0 names the row it read, as the endpoint requires. */
+const withRowId = (body: unknown) => {
+  const candidate = body as { revision?: number; overrideId?: string };
+  return typeof candidate?.revision === 'number' &&
+    candidate.revision > 0 &&
+    candidate.overrideId === undefined
+    ? { ...candidate, overrideId: labelOverrideStore.getLabelOverrides().at(0)?.id }
+    : body;
+};
 const patch = (id: string, body: unknown, principal?: Principal) =>
-  call('PATCH', `/api/v1/containers/${id}/label-overrides`, { body, principal });
+  call('PATCH', `/api/v1/containers/${id}/label-overrides`, {
+    body: withRowId(body),
+    principal,
+  });
 const get = (id: string, principal?: Principal) =>
   call('GET', `/api/v1/containers/${id}/label-overrides`, { principal });
 const currentOverrideId = () => labelOverrideStore.getLabelOverrides().at(0)?.id;
@@ -137,7 +149,7 @@ function set(field: string, value: unknown) {
 
 /** A PATCH that must succeed, contract-checked on both sides. */
 async function save(id: string, revision: number, ...changes: unknown[]) {
-  const body = { revision, changes };
+  const body = withRowId({ revision, changes });
   expect(requestValidator(body)).toBe(true);
   const result = await patch(id, body);
   expect(result.status).toBe(200);
@@ -802,6 +814,42 @@ describe('PATCH /containers/:id/label-overrides', () => {
     expect(dockerode).not.toHaveBeenCalled();
     expect(fsWrite).not.toHaveBeenCalled();
     expect(triggerCalls).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH overrideId', () => {
+  test('a stale tab cannot write into a newer row that restarted at the same revision', async () => {
+    storeContainer.insertContainer(watched('1'));
+    await save('1', 0, set('displayName', 'First'));
+    const staleId = labelOverrideStore.getLabelOverrides()[0].id;
+    await save('1', 1, { field: 'displayName', op: 'remove' });
+    await save('1', 0, set('displayName', 'Second'));
+    const [fresh] = labelOverrideStore.getLabelOverrides();
+    expect(fresh).toMatchObject({ revision: 1 });
+
+    const stale = await patch('1', {
+      revision: 1,
+      overrideId: staleId,
+      changes: [set('displayName', 'Stale write')],
+    });
+
+    expect(stale.status).toBe(409);
+    expectContract(CONTAINER_PATH, 'patch', 409, stale.json);
+    expect(stale.json.snapshot.overrideId).toBe(fresh.id);
+    expect(storeContainer.getContainer('1')?.displayName).toBe('Second');
+  });
+
+  test('a save past revision 0 without the id is a 400, and revision 0 needs none', async () => {
+    storeContainer.insertContainer(watched('1'));
+    await save('1', 0, set('displayName', 'First'));
+    for (const overrideId of [undefined, '', 7]) {
+      const result = await call('PATCH', '/api/v1/containers/1/label-overrides', {
+        body: { revision: 1, overrideId, changes: [set('displayName', 'x')] },
+      });
+      expect(result.status).toBe(400);
+      expect(result.json.errors).toEqual([{ field: 'overrideId', code: 'invalid-override-id' }]);
+      expectContract(CONTAINER_PATH, 'patch', 400, result.json);
+    }
   });
 });
 

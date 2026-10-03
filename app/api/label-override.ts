@@ -282,7 +282,10 @@ function patchContainerLabelOverrides(req: Request, res: Response) {
     if (!context) {
       return;
     }
-    if (parsed.revision !== (context.record?.revision ?? 0)) {
+    if (
+      parsed.revision !== (context.record?.revision ?? 0) ||
+      (parsed.revision > 0 && parsed.overrideId !== context.record?.id)
+    ) {
       sendStale(res, context);
       return;
     }

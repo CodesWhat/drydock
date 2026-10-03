@@ -533,7 +533,7 @@ The snapshot lists all nine fields. Each has the `labelKey`, the raw `label` val
 curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides
 ```
 
-`PATCH` takes the revision you last read and up to nine changes, one per field. A change is `{ "field": "...", "op": "set", "value": ... }` or `{ "field": "...", "op": "remove" }`. `remove` returns that field to its label, and removing the last field deletes the row. A change that would alter nothing is dropped, so repeating a save is safe.
+`PATCH` takes the revision and `overrideId` you last read (`overrideId` is required once `revision` is above 0) and up to nine changes, one per field. A change is `{ "field": "...", "op": "set", "value": ... }` or `{ "field": "...", "op": "remove" }`. `remove` returns that field to its label, and removing the last field deletes the row. A change that would alter nothing is dropped, so repeating a save is safe.
 
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides \
@@ -553,7 +553,7 @@ Errors:
 
 - `400` with `errors: [{ field, code }]` for an invalid request. Codes include `unknown-field`, `duplicate-field`, `invalid-icon`, `display-name-invalid-characters`, `unknown-trigger-reference`, `wrong-trigger-category`, `depends-on-self`, `invalid-override-id` and `agent-enforced-widening`. List codes carry the offending `entries`.
 - `403` when an API key lacks the scope, `404` for an unknown container or row.
-- `409` for a stale `revision`, or for a reset whose `overrideId` is no longer the container's row, with the current `snapshot` (or `current` row) in the body and nothing written, or for a rollback container.
+- `409` for a stale `revision`, or for a save or reset whose `overrideId` is no longer the container's row, with the current `snapshot` (or `current` row) in the body and nothing written, or for a rollback container.
 - `422` with `cycle` (container names) when the dependencies would create a dependency cycle. A cycle that already existed does not block a save.
 
 On a traditional agent, action routing overrides can only narrow what the container's labels allow, because the agent checks its own labels again before it acts. An exclude override has to start with the label's exclusions in the same order and may add more after them. An include or auto entry has to name a reference the label also lists, with no wider threshold, so a container whose labels declare no include accepts no include entry. Entries are matched first-match, the way the agent matches them, and the effective value is composed against the labels each time the container is written, so a later label change is never cancelled by a stored override. Resetting is always allowed. Portwing controller-transport and controller-local containers are not restricted. Notification routing, display and dependencies always apply on the controller.

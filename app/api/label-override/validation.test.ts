@@ -6,7 +6,11 @@ function set(field: string, value: unknown) {
 }
 
 function parse(changes: unknown, ...revision: unknown[]) {
-  return parsePatchBody({ revision: revision.length > 0 ? revision[0] : 0, changes });
+  return parsePatchBody({
+    revision: revision.length > 0 ? revision[0] : 0,
+    overrideId: 'row-1',
+    changes,
+  });
 }
 
 function errorsOf(result: ReturnType<typeof parsePatchBody>) {
@@ -22,6 +26,7 @@ describe('api/label-override/validation', () => {
       ).toEqual({
         ok: true,
         revision: 3,
+        overrideId: 'row-1',
         changes: [
           { field: 'displayName', op: 'set', value: 'TV' },
           { field: 'actionTriggerAuto', op: 'remove' },
@@ -59,6 +64,16 @@ describe('api/label-override/validation', () => {
         field: 'changes',
         code: 'too-many-changes',
       });
+    });
+
+    test('names the row once the revision is above 0', () => {
+      const changes = [set('displayName', 'x')];
+      for (const overrideId of [undefined, '', 7]) {
+        expect(errorsOf(parsePatchBody({ revision: 2, overrideId, changes }))).toEqual([
+          { field: 'overrideId', code: 'invalid-override-id' },
+        ]);
+      }
+      expect(parsePatchBody({ revision: 0, changes })).toMatchObject({ ok: true });
     });
 
     test('reports revision and changes problems together', () => {

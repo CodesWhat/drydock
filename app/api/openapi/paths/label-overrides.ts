@@ -66,7 +66,7 @@ export const labelOverridePaths = {
         200: jsonResponse('Updated label override snapshot', {
           $ref: '#/components/schemas/LabelOverrideChangeResult',
         }),
-        400: jsonResponse('Invalid change', {
+        400: jsonResponse('Invalid change or missing override id', {
           $ref: '#/components/schemas/LabelOverrideInvalidRequest',
         }),
         401: errorResponse('Authentication required'),

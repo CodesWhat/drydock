@@ -27,7 +27,7 @@ export type ParsedChange =
   | { field: LabelOwnedField; op: 'remove' };
 
 type ParsedPatchBody =
-  | { ok: true; revision: number; changes: ParsedChange[] }
+  | { ok: true; revision: number; overrideId: string | undefined; changes: ParsedChange[] }
   | { ok: false; errors: FieldError[] };
 
 type ValueResult = { value: LabelOverrideValue } | { code: string; entries?: string[] };
@@ -233,7 +233,8 @@ function parseChange(
 }
 
 /**
- * Parse a PATCH body into typed changes, or every problem found. At most nine changes, one
+ * Parse a PATCH body into typed changes, or every problem found. Past revision 0 it also
+ * needs the `overrideId` of the row the caller read. At most nine changes, one
  * per field; a duplicate, an unknown field, a value on a remove and a set with no value are
  * all rejected.
  */
@@ -245,6 +246,12 @@ export function parsePatchBody(body: unknown): ParsedPatchBody {
   const revision = body.revision;
   if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) {
     errors.push({ field: 'revision', code: 'invalid-revision' });
+  }
+  // A row deleted and saved again restarts at revision 1, so past revision 0 the revision
+  // alone cannot tell the row the caller read from a newer one: the caller names it too.
+  const overrideId = typeof body.overrideId === 'string' ? body.overrideId : undefined;
+  if (typeof revision === 'number' && revision > 0 && !overrideId) {
+    errors.push({ field: 'overrideId', code: 'invalid-override-id' });
   }
   const rawChanges = body.changes;
   const changes: ParsedChange[] = [];
@@ -263,5 +270,5 @@ export function parsePatchBody(body: unknown): ParsedPatchBody {
   }
   return errors.length > 0
     ? { ok: false, errors }
-    : { ok: true, revision: revision as number, changes };
+    : { ok: true, revision: revision as number, overrideId: overrideId || undefined, changes };
 }

@@ -160,6 +160,11 @@ export const labelOverrideSchemas = {
     type: 'object',
     properties: {
       revision: { type: 'integer', minimum: 0 },
+      overrideId: {
+        type: 'string',
+        description:
+          'The `overrideId` the caller last read. Required when `revision` is above 0: a row deleted and saved again restarts at revision 1, so the id is what tells a stale row from a new one.',
+      },
       changes: {
         type: 'array',
         minItems: 1,
