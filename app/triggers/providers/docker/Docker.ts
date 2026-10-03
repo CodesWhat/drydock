@@ -1635,7 +1635,15 @@ class Docker<
   }
 
   hasHealthcheckConfigured(containerSpec) {
-    return !!(containerSpec?.Config?.Healthcheck || containerSpec?.State?.Health);
+    if (containerSpec?.State?.Health) {
+      return true;
+    }
+    // Test ['NONE'], [] or a missing Test means the healthcheck is disabled or inherited-off.
+    const healthcheckTest = containerSpec?.Config?.Healthcheck?.Test;
+    return (
+      Array.isArray(healthcheckTest) &&
+      (healthcheckTest[0] === 'CMD' || healthcheckTest[0] === 'CMD-SHELL')
+    );
   }
 
   async waitForContainerHealthy(containerToCheck, containerName, logContainer, timeoutMs?) {

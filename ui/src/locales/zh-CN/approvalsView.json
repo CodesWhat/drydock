@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "无法加载审批摘要",
+      "detailLoadFailed": "无法加载审批",
+      "approveFailed": "无法批准更新",
+      "rejectFailed": "无法拒绝更新",
+      "deferFailed": "无法推迟更新"
+    },
     "ofCount": "已显示 {count} 项",
     "refresh": "刷新",
     "loading": "正在加载审批…",

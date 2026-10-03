@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Onay özeti yüklenemedi",
+      "detailLoadFailed": "Onay yüklenemedi",
+      "approveFailed": "Güncelleme onaylanamadı",
+      "rejectFailed": "Güncelleme reddedilemedi",
+      "deferFailed": "Güncelleme ertelenemedi"
+    },
     "ofCount": "Gösterilen: {count}",
     "refresh": "Yenile",
     "loading": "Onaylar yükleniyor…",
