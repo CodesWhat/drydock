@@ -1,3 +1,5 @@
+import { readSessionUsername } from '../api/session-user.js';
+
 interface SessionStoreLike {
   all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
   destroy?: (sid: string, callback: (error?: unknown) => void) => void;
@@ -65,26 +67,7 @@ function extractSessionUsername(sessionPayload: Record<string, unknown>): string
     return undefined;
   }
 
-  const user = (passport as Record<string, unknown>).user;
-  if (user && typeof user === 'object') {
-    const username = (user as Record<string, unknown>).username;
-    return typeof username === 'string' && username.length > 0 ? username : undefined;
-  }
-
-  if (typeof user !== 'string') {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(user);
-    if (!parsed || typeof parsed !== 'object') {
-      return undefined;
-    }
-    const username = (parsed as Record<string, unknown>).username;
-    return typeof username === 'string' && username.length > 0 ? username : undefined;
-  } catch {
-    return undefined;
-  }
+  return readSessionUsername((passport as Record<string, unknown>).user);
 }
 
 function extractSortTimestamp(sessionPayload: Record<string, unknown>): number {

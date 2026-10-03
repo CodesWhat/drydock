@@ -8,10 +8,11 @@
 import type { NextFunction, Request, Response } from 'express';
 import log from '../log/index.js';
 import { getErrorMessage } from '../util/error.js';
-import type { AuthRequest } from './auth-types.js';
+import type { AuthRequest, SessionUser } from './auth-types.js';
 import type { Authenticator } from './authenticator-chain.js';
-import type { AuthenticatedPrincipal } from './principal.js';
-import { deserializeSessionUser } from './session-user.js';
+import type { AuthenticatedPrincipal, SessionIdentity } from './principal.js';
+import { deserializeSessionUser, serializeSessionUser } from './session-user.js';
+import { checkSessionIdentity } from './totp-identity.js';
 
 /**
  * Key the serialized user is stored under inside the session payload.
@@ -22,6 +23,9 @@ import { deserializeSessionUser } from './session-user.js';
  * slice 11, see `app/store/session.ts`) and log every user out on upgrade, so
  * the name stays: it is an on-disk format, not a dependency.
  * `util/session-limit.ts` and `api/ws-upgrade-utils.ts` read the same key.
+ *
+ * The serialized value under it is schema v2 (see `session-user.ts`); legacy
+ * `{ username }` payloads stay readable.
  */
 export const SESSION_USER_KEY = 'passport';
 
@@ -44,14 +48,59 @@ function getSessionUserContainer(req: AuthRequest): SessionUserContainer | undef
   return container as SessionUserContainer;
 }
 
+function sessionIdentityOf(principal: AuthenticatedPrincipal): SessionIdentity | undefined {
+  switch (principal.kind) {
+    case 'basic':
+      return principal.identity ? { type: 'local', ...principal.identity } : undefined;
+    case 'oidc':
+      return { type: 'oidc' };
+    case 'session':
+      return principal.identity;
+    default:
+      return undefined;
+  }
+}
+
 function serializePrincipal(principal: AuthenticatedPrincipal): string {
-  return JSON.stringify({ username: principal.username });
+  return serializeSessionUser({
+    username: principal.username,
+    identity: sessionIdentityOf(principal),
+  });
+}
+
+export type SessionUserValidation =
+  | { status: 'valid'; user: SessionUser }
+  | { status: 'malformed'; message: string }
+  | { status: 'stale' }
+  | { status: 'unavailable' };
+
+/**
+ * The one validator for a stored session user. HTTP restoration and the
+ * WebSocket upgrade both call it, because an upgrade bypasses the
+ * authenticator chain and a second, looser reader is how a revoked session
+ * keeps working on a stream.
+ *
+ * `malformed` and `stale` are permanent and the caller may drop the session
+ * user; `unavailable` is the store failing to answer, so it is refused now but
+ * not destroyed.
+ */
+export function validateSessionUser(rawUser: unknown): SessionUserValidation {
+  let user: SessionUser;
+  try {
+    user = deserializeSessionUser(rawUser);
+  } catch (error: unknown) {
+    return { status: 'malformed', message: getErrorMessage(error) };
+  }
+
+  const check = checkSessionIdentity(user);
+  return check === 'valid' ? { status: 'valid', user } : { status: check };
 }
 
 /**
  * Restore the identity a previous login persisted, or undefined when there is
- * none. A payload that no longer deserializes is dropped from the session so
- * the next request starts clean, which is what Passport's SessionStrategy did.
+ * none. A payload that no longer deserializes, or whose subject version has
+ * moved on, is dropped from the session so the next request starts clean,
+ * which is what Passport's SessionStrategy did for the former.
  */
 export function readSessionPrincipal(req: AuthRequest): AuthenticatedPrincipal | undefined {
   const container = getSessionUserContainer(req);
@@ -59,12 +108,24 @@ export function readSessionPrincipal(req: AuthRequest): AuthenticatedPrincipal |
     return undefined;
   }
 
-  try {
-    return { kind: 'session', username: deserializeSessionUser(container.user).username };
-  } catch (error: unknown) {
-    log.warn(`Unable to deserialize session user (${getErrorMessage(error)})`);
-    delete container.user;
-    return undefined;
+  const validation = validateSessionUser(container.user);
+  switch (validation.status) {
+    case 'valid': {
+      const { user } = validation;
+      return user.identity === undefined
+        ? { kind: 'session', username: user.username }
+        : { kind: 'session', username: user.username, identity: user.identity };
+    }
+    case 'malformed':
+      log.warn(`Unable to deserialize session user (${validation.message})`);
+      delete container.user;
+      return undefined;
+    case 'stale':
+      log.debug('Dropped a session whose subject version is stale');
+      delete container.user;
+      return undefined;
+    default:
+      return undefined;
   }
 }
 

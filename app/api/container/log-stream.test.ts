@@ -2460,7 +2460,7 @@ describe('api/container/log-stream', () => {
         attachContainerLogStreamWebSocketServer({
           server: server as any,
           sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
-            req.session = { passport: { user: '{}' } };
+            req.session = { passport: { user: '{"username":" "}' } };
             next();
           },
           serverConfiguration: {

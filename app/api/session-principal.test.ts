@@ -1,14 +1,15 @@
-const { mockDeserializeSessionUser, mockWarn } = vi.hoisted(() => ({
-  mockDeserializeSessionUser: vi.fn(),
+const { mockCheckSessionIdentity, mockWarn, mockDebug } = vi.hoisted(() => ({
+  mockCheckSessionIdentity: vi.fn(),
   mockWarn: vi.fn(),
+  mockDebug: vi.fn(),
 }));
 
-vi.mock('./session-user.js', () => ({
-  deserializeSessionUser: mockDeserializeSessionUser,
+vi.mock('./totp-identity.js', () => ({
+  checkSessionIdentity: mockCheckSessionIdentity,
 }));
 
 vi.mock('../log/index.js', () => ({
-  default: { warn: mockWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
+  default: { warn: mockWarn, info: vi.fn(), debug: mockDebug, error: vi.fn() },
 }));
 
 import type { AuthRequest } from './auth-types.js';
@@ -19,8 +20,21 @@ import {
   SESSION_AUTHENTICATOR_ID,
   SESSION_USER_KEY,
   sessionAuthenticator,
+  validateSessionUser,
   writeSessionPrincipal,
 } from './session-principal.js';
+
+const SUBJECT_ID = 'b'.repeat(64);
+const V2_LOCAL = JSON.stringify({
+  v: 2,
+  kind: 'local',
+  username: 'admin',
+  subjectId: SUBJECT_ID,
+  providerId: 'basic.default',
+  assurance: 'password',
+  factorVersion: 0,
+});
+const V2_OIDC = '{"v":2,"kind":"oidc","username":"admin"}';
 
 function createRequest(session?: unknown): AuthRequest {
   return { session } as unknown as AuthRequest;
@@ -29,9 +43,7 @@ function createRequest(session?: unknown): AuthRequest {
 describe('session-principal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDeserializeSessionUser.mockImplementation((serialized: unknown) =>
-      JSON.parse(serialized as string),
-    );
+    mockCheckSessionIdentity.mockReturnValue('valid');
   });
 
   test('stores the user under the key Passport wrote, so live sessions survive', () => {
@@ -64,9 +76,6 @@ describe('session-principal', () => {
     });
 
     test('drops a payload that no longer deserializes and warns', () => {
-      mockDeserializeSessionUser.mockImplementation(() => {
-        throw new Error('Serialized user JSON is malformed');
-      });
       const session = { [SESSION_USER_KEY]: { user: 'not-json' } };
 
       expect(readSessionPrincipal(createRequest(session))).toBeUndefined();
@@ -74,6 +83,69 @@ describe('session-principal', () => {
       expect(mockWarn).toHaveBeenCalledWith(
         'Unable to deserialize session user (Serialized user JSON is malformed)',
       );
+    });
+
+    test('restores a v2 local session with its subject identity', () => {
+      const identity = {
+        type: 'local',
+        subjectId: SUBJECT_ID,
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+      };
+      const req = createRequest({ [SESSION_USER_KEY]: { user: V2_LOCAL } });
+
+      expect(readSessionPrincipal(req)).toEqual({ kind: 'session', username: 'admin', identity });
+      expect(mockCheckSessionIdentity).toHaveBeenCalledWith({ username: 'admin', identity });
+    });
+
+    test('restores a v2 OIDC session', () => {
+      const req = createRequest({ [SESSION_USER_KEY]: { user: V2_OIDC } });
+
+      expect(readSessionPrincipal(req)).toEqual({
+        kind: 'session',
+        username: 'admin',
+        identity: { type: 'oidc' },
+      });
+    });
+
+    test('drops a stale session so it can never come back', () => {
+      mockCheckSessionIdentity.mockReturnValue('stale');
+      const session = { [SESSION_USER_KEY]: { user: V2_LOCAL } };
+
+      expect(readSessionPrincipal(createRequest(session))).toBeUndefined();
+      expect(session[SESSION_USER_KEY].user).toBeUndefined();
+      expect(mockDebug).toHaveBeenCalledWith('Dropped a session whose subject version is stale');
+    });
+
+    test('refuses but keeps a session when the store cannot answer', () => {
+      mockCheckSessionIdentity.mockReturnValue('unavailable');
+      const session = { [SESSION_USER_KEY]: { user: V2_LOCAL } };
+
+      expect(readSessionPrincipal(createRequest(session))).toBeUndefined();
+      expect(session[SESSION_USER_KEY].user).toBe(V2_LOCAL);
+    });
+  });
+
+  describe('validateSessionUser', () => {
+    test('is valid for a deserializable, current session', () => {
+      expect(validateSessionUser('{"username":"admin"}')).toEqual({
+        status: 'valid',
+        user: { username: 'admin' },
+      });
+    });
+
+    test('reports malformed with the deserialize error', () => {
+      expect(validateSessionUser('not-json')).toEqual({
+        status: 'malformed',
+        message: 'Serialized user JSON is malformed',
+      });
+    });
+
+    test.each(['stale', 'unavailable'] as const)('passes a %s check through', (status) => {
+      mockCheckSessionIdentity.mockReturnValue(status);
+
+      expect(validateSessionUser('{"username":"admin"}')).toEqual({ status });
     });
   });
 
@@ -108,6 +180,51 @@ describe('session-principal', () => {
       expect(() =>
         writeSessionPrincipal(createRequest(undefined), { kind: 'basic', username: 'admin' }),
       ).not.toThrow();
+    });
+
+    test('persists a Basic principal as a v2 local session', () => {
+      const session: Record<string, unknown> = {};
+
+      writeSessionPrincipal(createRequest(session), {
+        kind: 'basic',
+        username: 'admin',
+        identity: {
+          subjectId: SUBJECT_ID,
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+        },
+      });
+
+      expect(session[SESSION_USER_KEY]).toEqual({ user: V2_LOCAL });
+    });
+
+    test('persists an OIDC principal as a v2 OIDC session', () => {
+      const session: Record<string, unknown> = {};
+
+      writeSessionPrincipal(createRequest(session), { kind: 'oidc', username: 'admin' });
+
+      expect(session[SESSION_USER_KEY]).toEqual({ user: V2_OIDC });
+    });
+
+    test('rewrites a restored v2 session identically, so the session stays clean', () => {
+      const container = { user: V2_LOCAL };
+      const session = { [SESSION_USER_KEY]: container };
+      const req = createRequest(session);
+      const principal = readSessionPrincipal(req);
+
+      writeSessionPrincipal(req, principal as never);
+
+      expect(container.user).toBe(V2_LOCAL);
+    });
+
+    test('keeps a restored legacy session legacy', () => {
+      const session = { [SESSION_USER_KEY]: { user: '{"username":"admin"}' } };
+      const req = createRequest(session);
+
+      writeSessionPrincipal(req, readSessionPrincipal(req) as never);
+
+      expect(session[SESSION_USER_KEY].user).toBe('{"username":"admin"}');
     });
 
     test('persists only the username, never the principal kind', () => {

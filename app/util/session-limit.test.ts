@@ -457,3 +457,50 @@ test('enforceConcurrentSessionLimit should tolerate concurrent index pruning whe
   expect(sessionStore.destroy).toHaveBeenCalledTimes(2);
   expect(sessionStore.destroy).toHaveBeenCalledWith('existing-session', expect.any(Function));
 });
+
+test('enforceConcurrentSessionLimit counts v2 local and OIDC sessions against the username', async () => {
+  const v2Local = JSON.stringify({
+    v: 2,
+    kind: 'local',
+    username: 'john',
+    subjectId: 'd'.repeat(64),
+    providerId: 'basic.default',
+    assurance: 'password',
+    factorVersion: 0,
+  });
+  const v2Oidc = JSON.stringify({ v: 2, kind: 'oidc', username: 'john' });
+  const sessionStore = {
+    all: vi.fn((done) =>
+      done(null, {
+        'session-legacy': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-01T00:00:00.000Z' },
+        },
+        'session-v2-local': {
+          passport: { user: v2Local },
+          cookie: { expires: '2026-01-02T00:00:00.000Z' },
+        },
+        'session-v2-oidc': {
+          passport: { user: v2Oidc },
+          cookie: { expires: '2026-01-03T00:00:00.000Z' },
+        },
+        'session-v2-invalid': {
+          passport: { user: JSON.stringify({ v: 2, kind: 'local', username: 'john' }) },
+          cookie: { expires: '2025-12-01T00:00:00.000Z' },
+        },
+      }),
+    ),
+    destroy: vi.fn((_sid, done) => done()),
+  };
+
+  const destroyedCount = await enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 2,
+    currentSessionId: 'session-new',
+    sessionStore,
+  });
+
+  expect(destroyedCount).toBe(2);
+  expect(sessionStore.destroy).toHaveBeenNthCalledWith(1, 'session-legacy', expect.any(Function));
+  expect(sessionStore.destroy).toHaveBeenNthCalledWith(2, 'session-v2-local', expect.any(Function));
+});
