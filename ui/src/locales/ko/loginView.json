@@ -8,8 +8,8 @@
     "password": {
       "label": "비밀번호",
       "placeholder": "비밀번호를 입력하세요",
-      "show": "Show password",
-      "hide": "Hide password"
+      "show": "비밀번호 표시",
+      "hide": "비밀번호 숨기기"
     },
     "submit": {
       "signIn": "로그인",
