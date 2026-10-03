@@ -31,7 +31,7 @@ import type { Database, Row } from './db/driver.js';
 
 const log = logger.child({ component: 'store.label-override' });
 
-export type LabelOverrideScopeKind = 'container' | 'compose-service';
+type LabelOverrideScopeKind = 'container' | 'compose-service';
 
 /** What identifies a container for overrides: the same key the retention stash uses. */
 export interface LabelOverrideScope {

@@ -25,9 +25,9 @@ import {
 } from '../watchers/providers/docker/label.js';
 import type { Container } from './container.js';
 
-export type LabelOwnedFamily = 'display' | 'dependencies' | 'routing';
-export type LabelOwnedKind = 'text' | 'icon' | 'name-list' | 'action' | 'trigger-list';
-export type LabelOwnedCategory = 'action' | 'notification';
+type LabelOwnedFamily = 'display' | 'dependencies' | 'routing';
+type LabelOwnedKind = 'text' | 'icon' | 'name-list' | 'action' | 'trigger-list';
+type LabelOwnedCategory = 'action' | 'notification';
 
 export interface LabelOwnedFieldSpec {
   field: LabelOwnedField;
@@ -91,18 +91,18 @@ export function getLabelOwnedFieldSpec(field: string): LabelOwnedFieldSpec | und
   return FIELD_SPECS.get(field);
 }
 
-export const DEPENDS_ON_ACTIONS = ['update', 'restart'] as const;
+const DEPENDS_ON_ACTIONS = ['update', 'restart'] as const;
 
-export type LabelOwnedSource = 'override' | 'label' | 'compose' | 'watcher' | 'default' | 'unset';
-export type LabelOwnedDeclaredSource = Exclude<LabelOwnedSource, 'override'>;
+type LabelOwnedSource = 'override' | 'label' | 'compose' | 'watcher' | 'default' | 'unset';
+type LabelOwnedDeclaredSource = Exclude<LabelOwnedSource, 'override'>;
 
 /** A declared value in the Container field's own form: routing fields are strings. */
-export type LabelOwnedDeclaredValue = string | string[];
+type LabelOwnedDeclaredValue = string | string[];
 /** An override value: lists stay lists, `[]` being an explicit "none". */
 export type LabelOverrideValue = string | string[];
 
 export type LabelOwnedDeclared = Partial<Record<LabelOwnedField, LabelOwnedDeclaredValue>>;
-export type LabelOwnedSources = Record<LabelOwnedField, LabelOwnedSource>;
+type LabelOwnedSources = Record<LabelOwnedField, LabelOwnedSource>;
 export type LabelOwnedDeclaredSources = Record<LabelOwnedField, LabelOwnedDeclaredSource>;
 
 export interface LabelOverrideEntry {
