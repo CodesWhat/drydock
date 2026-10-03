@@ -14,6 +14,13 @@ const { mockRecordAuthLogin, mockObserveAuthLoginDuration, mockUndiciFetch } = v
   mockUndiciFetch: vi.fn(),
 }));
 
+// The session limit validates stored legacy users against the TOTP store.
+vi.mock('../../../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
+
 vi.mock('../../../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   observeAuthLoginDuration: mockObserveAuthLoginDuration,

@@ -1,3 +1,11 @@
+// Legacy session users now consult the stored subject rows, so these tests
+// that sit above the session validator answer from an empty TOTP store.
+vi.mock('../../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
+
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import * as configuration from '../../configuration/index.js';

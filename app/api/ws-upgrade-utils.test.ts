@@ -14,6 +14,13 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+// Legacy session users consult the stored subject rows; answer from an empty store.
+vi.mock('../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
+
 import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   applySessionMiddleware,
