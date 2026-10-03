@@ -110,7 +110,117 @@ describe('api/container/bulk-security', () => {
     vi.clearAllMocks();
   });
 
+  describe('post-scan notification failures', () => {
+    test.each([
+      { status: 'passed', requestId: undefined },
+      { status: 'blocked', requestId: undefined },
+      { status: 'passed', requestId: 'a'.repeat(32) },
+      { status: 'blocked', requestId: 'a'.repeat(32) },
+    ])('preserves scan status and counts each task once (%j)', async ({ status, requestId }) => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }] });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(
+          createScanResult({
+            status,
+            summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+          }),
+        )
+        .mockRejectedValueOnce(new Error('scanner unavailable'));
+      harness.deps.emitSecurityAlert.mockRejectedValueOnce(new Error('notification unavailable'));
+
+      const { res } = await callScanAll(harness.handlers, requestId ? { requestId } : undefined);
+      await waitForCycleComplete(harness.deps);
+
+      const accepted = res.json.mock.calls[0][0];
+      const completions = harness.deps.broadcastScanCompleted.mock.calls;
+      expect
+        .soft(harness.deps.emitSecurityScanCycleComplete)
+        .toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ cycleId: accepted.cycleId, scannedCount: 3, alertCount: 0 }),
+        );
+      expect.soft(completions.find(([id]) => id === 'c1')?.[1]).toBe(status);
+      expect(completions.find(([id]) => id === 'c2')?.[1]).toBe('error');
+      expect(completions.find(([id]) => id === 'c3')?.[1]).toBe('passed');
+      expect(completions).toHaveLength(3);
+      expect(harness.storeContainer.getContainerRaw('c1')).toEqual(
+        expect.objectContaining({
+          security: expect.objectContaining({ scan: expect.objectContaining({ status }) }),
+        }),
+      );
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('notification unavailable'),
+      );
+      if (requestId) {
+        expect(completions.map((call) => call[3])).toEqual(
+          [1, 2, 3].map((completedCount) => ({ requestId, completedCount, scheduledCount: 3 })),
+        );
+      } else {
+        expect(completions.every((call) => call.length === 3)).toBe(true);
+      }
+    });
+  });
+
   describe('request validation', () => {
+    test('emits one monotonic count per task for a large cached fleet', async () => {
+      const total = 1200;
+      const requestId = 'c'.repeat(32);
+      const harness = createHarness({
+        containers: Array.from({ length: total }, (_, index) => ({ id: `c${index}` })),
+      });
+      const { res } = await callScanAll(harness.handlers, { requestId });
+      expect(res.status).toHaveBeenCalledWith(202);
+      await waitForCycleComplete(harness.deps);
+      const progress = harness.deps.broadcastScanCompleted.mock.calls.map((call) => call[3]);
+      expect(progress).toEqual(
+        Array.from({ length: total }, (_, index) => ({
+          requestId,
+          completedCount: index + 1,
+          scheduledCount: total,
+        })),
+      );
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(total);
+    });
+
+    test('echoes request correlation and emits cumulative counts for every completed task', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }] });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult({ summary: { high: 1, critical: 0 } }))
+        .mockRejectedValueOnce(new Error('scan failed'));
+      harness.deps.emitSecurityAlert.mockRejectedValueOnce(new Error('notification failed'));
+      const requestId = 'a'.repeat(32);
+      const { res } = await callScanAll(harness.handlers, { requestId });
+      expect(res.status).toHaveBeenCalledWith(202);
+      const accepted = res.json.mock.calls[0][0];
+      expect(accepted).toEqual({
+        cycleId: expect.stringMatching(UUID_V7_PATTERN),
+        requestId,
+        scheduledCount: 3,
+      });
+      await waitForCycleComplete(harness.deps);
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledTimes(3);
+      expect(harness.deps.broadcastScanCompleted.mock.calls.map((call) => call[3])).toEqual(
+        [1, 2, 3].map((completedCount) => ({ requestId, completedCount, scheduledCount: 3 })),
+      );
+      expect(harness.deps.broadcastScanCompleted.mock.calls.map((call) => call[2])).toEqual([
+        accepted.cycleId,
+        accepted.cycleId,
+        accepted.cycleId,
+      ]);
+    });
+
+    test.each(['', 'x'.repeat(32), 'a'.repeat(31), 'a'.repeat(33), null, 12])(
+      'rejects malformed request correlation %j without starting scans',
+      async (requestId) => {
+        const harness = createHarness();
+        const { res } = await callScanAll(harness.handlers, { requestId });
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'requestId must be 32 lowercase hexadecimal characters',
+        });
+        expect(harness.deps.scanImageForVulnerabilities).not.toHaveBeenCalled();
+      },
+    );
+
     test('returns 400 when security scanner is not configured', async () => {
       const harness = createHarness();
       harness.deps.getSecurityConfiguration.mockReturnValueOnce({
@@ -573,11 +683,29 @@ describe('api/container/bulk-security', () => {
       await callScanAll(harness.handlers);
       await waitForCycleComplete(harness.deps);
 
-      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith(
+        'c1',
+        'error',
+        expect.any(String),
+      );
     });
   });
 
   describe('error resilience', () => {
+    test('correlates successful and failed scans with the accepted cycle', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult())
+        .mockRejectedValueOnce(new Error('scan failed'));
+      const { res } = await callScanAll(harness.handlers);
+      const { cycleId } = res.json.mock.calls[0][0];
+      await waitForCycleComplete(harness.deps);
+      expect(harness.deps.broadcastScanStarted).toHaveBeenCalledWith('c1', cycleId);
+      expect(harness.deps.broadcastScanStarted).toHaveBeenCalledWith('c2', cycleId);
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed', cycleId);
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c2', 'error', cycleId);
+    });
+
     test('other containers still complete when one scan throws', async () => {
       const harness = createHarness({
         containers: [
@@ -698,7 +826,7 @@ describe('api/container/bulk-security', () => {
   });
 
   describe('abort on client disconnect', () => {
-    test.each([undefined, '{}'])(
+    test.each([undefined, '{}', JSON.stringify({ requestId: 'a'.repeat(32) })])(
       'completes every accepted scan after a normal HTTP request closes (body %s)',
       async (body) => {
         const total = MAX_CONCURRENT_BULK_SCANS + 2;
@@ -733,6 +861,7 @@ describe('api/container/bulk-security', () => {
           expect(response.status).toBe(202);
           const accepted = await response.json();
           expect(accepted.scheduledCount).toBe(total);
+          expect(accepted.requestId).toBe(body ? JSON.parse(body).requestId : undefined);
           expect(await completedRequest.promise).toBe(true);
           releaseScans.resolve();
           await waitForCycleComplete(harness.deps);
@@ -740,6 +869,15 @@ describe('api/container/bulk-security', () => {
           expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledWith(
             expect.objectContaining({ cycleId: accepted.cycleId, scannedCount: total }),
           );
+          if (accepted.requestId) {
+            expect(harness.deps.broadcastScanCompleted.mock.calls.map((call) => call[3])).toEqual(
+              Array.from({ length: total }, (_, index) => ({
+                requestId: accepted.requestId,
+                completedCount: index + 1,
+                scheduledCount: total,
+              })),
+            );
+          }
         } finally {
           releaseScans.resolve();
           server.closeAllConnections();
@@ -1070,7 +1208,11 @@ describe('api/container/bulk-security', () => {
       await waitForCycleComplete(harness.deps);
 
       expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
-      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith(
+        'c1',
+        'passed',
+        expect.any(String),
+      );
     });
   });
 
