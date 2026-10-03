@@ -230,6 +230,7 @@ export function writeLabelOverrideChanges(
   const now = new Date().toISOString();
   const fields = new Map<string, LabelOverrideEntry>(Object.entries(existing?.fields ?? {}));
   const seen = new Set<string>();
+  let changed = false;
   for (const change of changes) {
     if (seen.has(change.field)) {
       throw new LabelOverrideValidationError(change.field, `Duplicate change for ${change.field}`);
@@ -241,14 +242,20 @@ export function writeLabelOverrideChanges(
         updatedAt: now,
         updatedBy: principal,
       });
+      changed = true;
     } else if (getLabelOwnedFieldSpec(change.field) === undefined) {
       throw new LabelOverrideValidationError(
         change.field,
         `Unknown label-owned field ${change.field}`,
       );
     } else {
-      fields.delete(change.field);
+      changed = fields.delete(change.field) || changed;
     }
+  }
+
+  // Removing only fields the row never had changes nothing, so it must not bump the revision.
+  if (existing !== undefined && !changed) {
+    return { record: structuredClone(existing), applied: true };
   }
 
   if (fields.size === 0) {

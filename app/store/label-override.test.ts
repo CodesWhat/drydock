@@ -179,6 +179,9 @@ describe('store/label-override', () => {
       ['empty text', { field: 'displayName', op: 'set', value: '' }],
       ['a bad action', { field: 'dependsOnAction', op: 'set', value: 'explode' }],
       ['text where a list belongs', { field: 'actionTriggerInclude', op: 'set', value: 'a' }],
+      ['an empty trigger list entry', { field: 'actionTriggerInclude', op: 'set', value: [''] }],
+      ['an empty dependency name', { field: 'dependsOn', op: 'set', value: ['db', ''] }],
+      ['a non-string list entry', { field: 'notificationTriggerExclude', op: 'set', value: [1] }],
     ])('rejects %s without writing', (_name, change) => {
       expect(() =>
         labelOverride.writeLabelOverrideChanges(
@@ -190,6 +193,27 @@ describe('store/label-override', () => {
       expect(db.prepare('SELECT COUNT(*) AS n FROM container_label_overrides').get()).toEqual({
         n: 0,
       });
+    });
+
+    test('an empty change list, or removing only unset fields, does not bump the revision', () => {
+      const scope = scopeOf(WEB);
+      const first = labelOverride.writeLabelOverrideChanges(
+        scope,
+        [{ field: 'displayName', op: 'set', value: 'TV' }],
+        'u',
+      );
+      const before = first.record as labelOverride.LabelOverrideRecord;
+
+      const empty = labelOverride.writeLabelOverrideChanges(scope, [], 'u', 1);
+      const unset = labelOverride.writeLabelOverrideChanges(
+        scope,
+        [{ field: 'displayIcon', op: 'remove' }],
+        'u',
+      );
+
+      expect(empty).toMatchObject({ applied: true, record: { revision: 1 } });
+      expect(unset).toMatchObject({ applied: true, record: { revision: 1 } });
+      expect(labelOverride.getLabelOverrideForScope(scope.key)).toEqual(before);
     });
 
     test('rejects two changes to one field', () => {
@@ -294,6 +318,22 @@ describe('store/label-override', () => {
       ]);
       expect(labelOverride.getLabelOverrideFields('::local::garbled')).toEqual({});
       expect(logMock.warn).toHaveBeenCalledTimes(2);
+    });
+
+    test('a stored value the container reader would reject is unreadable, not loaded', () => {
+      db.prepare(
+        `INSERT INTO container_label_overrides
+           (id, scope_key, agent, watcher, scope_kind, scope_name, fields, revision, created_at, updated_at)
+         VALUES ('e', '::local::e', '', 'local', 'container', 'e', ?, 1, 'now', 'now')`,
+      ).run(
+        JSON.stringify({
+          actionTriggerInclude: { value: [''], updatedAt: 'a', updatedBy: 'b' },
+          dependsOn: { value: ['db', ''], updatedAt: 'a', updatedBy: 'b' },
+        }),
+      );
+      labelOverride.createCollections(db);
+      expect(labelOverride.getLabelOverrideFields('::local::e')).toEqual({});
+      expect(labelOverride.getLabelOverrideForScope('::local::e')?.invalid).toHaveLength(2);
     });
 
     test('a rolled back transaction leaves the cache as the table is', () => {

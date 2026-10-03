@@ -568,6 +568,45 @@ describe('label-owned overrides at the store', () => {
     });
   });
 
+  describe('bad override values', () => {
+    test('a list entry the container schema rejects is refused at the write', () => {
+      container.insertContainer(watched('web-1'));
+      expect(() => setOverrides(watched('x'), { actionTriggerInclude: [''] })).toThrow(
+        labelOverride.LabelOverrideValidationError,
+      );
+      expect(() => setOverrides(watched('x'), { dependsOn: ['db', ''] })).toThrow(
+        labelOverride.LabelOverrideValidationError,
+      );
+      expect(container.getContainers()).toHaveLength(1);
+      expect(labelOverride.getLabelOverrides()).toEqual([]);
+    });
+
+    test('a stored override row the reader would reject never breaks a read, across restarts', () => {
+      container.insertContainer(watched('web-1', { displayName: 'Web' }));
+      db.prepare(
+        `INSERT INTO container_label_overrides
+           (id, scope_key, agent, watcher, scope_kind, scope_name, fields, revision, created_at, updated_at)
+         VALUES ('bad', '::local::web', '', 'local', 'container', 'web', ?, 1, 'now', 'now')`,
+      ).run(
+        JSON.stringify({
+          actionTriggerInclude: { value: [''], updatedAt: 'a', updatedBy: 'b' },
+          dependsOn: { value: [''], updatedAt: 'a', updatedBy: 'b' },
+          displayName: { value: 'TV', updatedAt: 'a', updatedBy: 'b' },
+        }),
+      );
+      labelOverride.createCollections(db);
+      container._resetContainerStoreStateForTests();
+      container.createCollections(db);
+
+      const read = container.getContainers();
+      expect(read).toHaveLength(1);
+      const written = container.updateContainerFields('web-1', { health: 'healthy' });
+      expect(written).toMatchObject({ health: 'healthy', displayName: 'TV' });
+      expect(written?.actionTriggerInclude).toBeUndefined();
+      expect(container.getContainers()).toHaveLength(1);
+    });
+  });
+
   describe('mutation', () => {
     test('rewrites every affected row, announces each once, and reset restores the declared values', () => {
       container.insertContainer(

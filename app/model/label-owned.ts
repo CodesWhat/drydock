@@ -133,19 +133,24 @@ const FIELD_NAMES: readonly LabelOwnedField[] = LABEL_OWNED_FIELDS.map((spec) =>
 type LabelOwnedFlat = Pick<Container, LabelOwnedField | 'dependsOnSource'>;
 type LabelOwnedContext = Pick<Container, 'name' | 'labels'>;
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+/**
+ * The rules the Container schema applies to the flat field (`joi.string()`, and
+ * `joi.array().items(joi.string())` for `dependsOn`): a stored override has to be a value
+ * the container reader will accept, or one bad row would fail every container read.
+ */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function isOverrideValueValid(kind: LabelOwnedKind, value: unknown): value is LabelOverrideValue {
   switch (kind) {
     case 'text':
     case 'icon':
-      return typeof value === 'string' && value.length > 0;
+      return isNonEmptyString(value);
     case 'action':
       return (DEPENDS_ON_ACTIONS as readonly unknown[]).includes(value);
     default:
-      return isStringArray(value);
+      return Array.isArray(value) && value.every(isNonEmptyString);
   }
 }
 
