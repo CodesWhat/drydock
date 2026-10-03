@@ -48,17 +48,28 @@ function getSessionUserContainer(req: AuthRequest): SessionUserContainer | undef
   return container as SessionUserContainer;
 }
 
+/**
+ * The stored identity for a principal that may be persisted. A kind that must
+ * never reach a session, or a Basic principal that lost its subject, throws:
+ * falling back to the legacy `{ username }` shape would mint a session no
+ * later check can tie to a subject. A restored session principal may still be
+ * legacy, which is how an unchanged legacy session is written back as it was.
+ */
 function sessionIdentityOf(principal: AuthenticatedPrincipal): SessionIdentity | undefined {
   switch (principal.kind) {
     case 'basic':
-      return principal.identity ? { type: 'local', ...principal.identity } : undefined;
+      if (principal.identity) {
+        return { type: 'local', ...principal.identity };
+      }
+      break;
     case 'oidc':
       return { type: 'oidc' };
     case 'session':
       return principal.identity;
     default:
-      return undefined;
+      break;
   }
+  throw new Error(`A ${principal.kind} principal is never persisted as a session`);
 }
 
 function serializePrincipal(principal: AuthenticatedPrincipal): string {

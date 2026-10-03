@@ -153,9 +153,26 @@ describe('session-principal', () => {
     test('creates the container when the session has none', () => {
       const session: Record<string, unknown> = {};
 
-      writeSessionPrincipal(createRequest(session), { kind: 'basic', username: 'admin' });
+      writeSessionPrincipal(createRequest(session), {
+        kind: 'basic',
+        username: 'admin',
+        identity: {
+          subjectId: 'a'.repeat(64),
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+        },
+      });
 
-      expect(session[SESSION_USER_KEY]).toEqual({ user: '{"username":"admin"}' });
+      expect(JSON.parse(session[SESSION_USER_KEY].user as string)).toEqual({
+        v: 2,
+        kind: 'local',
+        username: 'admin',
+        subjectId: 'a'.repeat(64),
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+      });
     });
 
     test('replaces a stale payload', () => {
@@ -227,17 +244,31 @@ describe('session-principal', () => {
       expect(session[SESSION_USER_KEY].user).toBe('{"username":"admin"}');
     });
 
-    test('persists only the username, never the principal kind', () => {
+    test.each([
+      ['api-key', { kind: 'api-key', username: 'ci', keyId: 'k1', scopes: ['read'] }],
+      ['anonymous', { kind: 'anonymous', username: 'anonymous' }],
+    ] as const)(
+      'refuses to persist a %s principal and leaves the session untouched',
+      (_kind, principal) => {
+        const session: Record<string, unknown> = {};
+
+        expect(() => writeSessionPrincipal(createRequest(session), principal as never)).toThrow(
+          /never persisted/,
+        );
+        expect(session[SESSION_USER_KEY]).toBeUndefined();
+      },
+    );
+
+    test('refuses a Basic principal that carries no local identity rather than writing a legacy session', () => {
       const session: Record<string, unknown> = {};
 
-      writeSessionPrincipal(createRequest(session), {
-        kind: 'api-key',
-        username: 'ci',
-        keyId: 'k1',
-        scopes: ['read'],
-      });
-
-      expect(session[SESSION_USER_KEY]).toEqual({ user: '{"username":"ci"}' });
+      expect(() =>
+        writeSessionPrincipal(createRequest(session), {
+          kind: 'basic',
+          username: 'admin',
+        } as never),
+      ).toThrow(/never persisted/);
+      expect(session[SESSION_USER_KEY]).toBeUndefined();
     });
   });
 

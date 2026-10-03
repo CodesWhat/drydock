@@ -85,6 +85,11 @@ vi.mock('../store', () => ({
   })),
 }));
 
+vi.mock('../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
 vi.mock('../store/secrets.js', () => ({
   getStoredSessionSecret: vi.fn(() => null),
   setStoredSessionSecret: vi.fn(),
@@ -136,6 +141,25 @@ import { requireSameOriginForMutations } from './csrf.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 import * as sessionPrincipal from './session-principal.js';
 import { restoreSessionPrincipal } from './session-principal.js';
+
+const BASIC_IDENTITY = {
+  subjectId: 'a'.repeat(64),
+  providerId: 'basic.default',
+  assurance: 'password',
+  factorVersion: 0,
+} as const;
+
+function persistedBasicUser(username: string): string {
+  return JSON.stringify({
+    v: 2,
+    kind: 'local',
+    username,
+    subjectId: BASIC_IDENTITY.subjectId,
+    providerId: BASIC_IDENTITY.providerId,
+    assurance: BASIC_IDENTITY.assurance,
+    factorVersion: BASIC_IDENTITY.factorVersion,
+  });
+}
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
@@ -325,7 +349,7 @@ describe('Auth Router', () => {
     test('should authenticate via the chain when no principal is present', async () => {
       registerChainAuthenticator();
       mockAuthenticate.mockImplementation(async (authRequest) => {
-        authRequest.principal = { kind: 'basic', username: 'john' };
+        authRequest.principal = { kind: 'basic', username: 'john', identity: BASIC_IDENTITY };
         return authRequest.principal;
       });
 
@@ -336,7 +360,7 @@ describe('Auth Router', () => {
       await auth.requireAuthentication(req, res, next);
 
       expect(mockAuthenticate).toHaveBeenCalledWith(req);
-      expect(req.principal).toEqual({ kind: 'basic', username: 'john' });
+      expect(req.principal).toEqual({ kind: 'basic', username: 'john', identity: BASIC_IDENTITY });
       expect(next).toHaveBeenCalled();
     });
 
@@ -372,7 +396,7 @@ describe('Auth Router', () => {
     test('should not special-case POST /login (handled by route-level middleware)', async () => {
       registerChainAuthenticator();
       mockAuthenticate.mockImplementation(async (authRequest) => {
-        authRequest.principal = { kind: 'basic', username: 'john' };
+        authRequest.principal = { kind: 'basic', username: 'john', identity: BASIC_IDENTITY };
         return authRequest.principal;
       });
 
@@ -432,7 +456,7 @@ describe('Auth Router', () => {
 
     test('should set req.principal and continue to the login handler when credentials are valid', async () => {
       mockAuthenticate.mockImplementation(async (authRequest) => {
-        authRequest.principal = { kind: 'basic', username: 'john' };
+        authRequest.principal = { kind: 'basic', username: 'john', identity: BASIC_IDENTITY };
         return authRequest.principal;
       });
 
@@ -443,7 +467,7 @@ describe('Auth Router', () => {
 
       await authenticateLoginFn(req, res, next);
 
-      expect(req.principal).toEqual({ kind: 'basic', username: 'john' });
+      expect(req.principal).toEqual({ kind: 'basic', username: 'john', identity: BASIC_IDENTITY });
       expect(next).toHaveBeenCalled();
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
       expect(res.sendStatus).not.toHaveBeenCalled();
@@ -474,7 +498,11 @@ describe('Auth Router', () => {
     );
 
     test('should allow a Basic Authorization principal to continue to login', async () => {
-      mockAuthenticate.mockResolvedValue({ kind: 'basic', username: 'basic-user' });
+      mockAuthenticate.mockResolvedValue({
+        kind: 'basic',
+        username: 'basic-user',
+        identity: BASIC_IDENTITY,
+      });
 
       const authenticateLoginFn = getLoginMiddleware();
       const req = { headers: { authorization: 'Basic credentials' } };
@@ -1067,7 +1095,11 @@ describe('Auth Router', () => {
 
     test('should continue successful authentication when identity keys have no existing lockout entries', async () => {
       mockAuthenticate.mockImplementation(async (authRequest) => {
-        authRequest.principal = { kind: 'basic', username: 'clear-branch-user' };
+        authRequest.principal = {
+          kind: 'basic',
+          username: 'clear-branch-user',
+          identity: BASIC_IDENTITY,
+        };
         return authRequest.principal;
       });
 
@@ -1081,7 +1113,11 @@ describe('Auth Router', () => {
       await authenticateLoginFn(req, createResponse(), next);
 
       expect(next).toHaveBeenCalledTimes(1);
-      expect(req.principal).toEqual({ kind: 'basic', username: 'clear-branch-user' });
+      expect(req.principal).toEqual({
+        kind: 'basic',
+        username: 'clear-branch-user',
+        identity: BASIC_IDENTITY,
+      });
       expect(mockFs.writeFileSync).not.toHaveBeenCalled();
     });
 
@@ -1089,7 +1125,7 @@ describe('Auth Router', () => {
       mockAuthenticate
         .mockResolvedValueOnce(undefined)
         .mockImplementationOnce(async (authRequest) => {
-          authRequest.principal = { kind: 'basic', username: 'alice' };
+          authRequest.principal = { kind: 'basic', username: 'alice', identity: BASIC_IDENTITY };
           return authRequest.principal;
         });
 
@@ -1749,7 +1785,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       const req = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
       };
       await handler(req, res);
@@ -1768,7 +1804,7 @@ describe('Auth Router', () => {
       const res = createResponse();
       const req: any = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn() },
       };
       req.session.regenerate.mockImplementation((done) => done());
@@ -1776,7 +1812,7 @@ describe('Auth Router', () => {
       await handler(req, res);
 
       expect(req.session.regenerate).toHaveBeenCalledTimes(1);
-      expect(req.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
+      expect(req.session.passport).toEqual({ user: persistedBasicUser('john') });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });
@@ -1805,7 +1841,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => {
@@ -1817,7 +1853,7 @@ describe('Auth Router', () => {
 
       await handler(req, res);
 
-      expect(req.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
+      expect(req.session.passport).toEqual({ user: persistedBasicUser('john') });
     });
 
     test('login should not create a session for an anonymous principal', async () => {
@@ -1864,7 +1900,7 @@ describe('Auth Router', () => {
     test('login should continue without session-limit enforcement for blank usernames', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic', username: '   ' },
+        principal: { kind: 'basic', username: '   ', identity: BASIC_IDENTITY },
         session: { regenerate: vi.fn((done) => done()) },
         sessionStore: {
           all: vi.fn(),
@@ -1884,7 +1920,7 @@ describe('Auth Router', () => {
     test('login should continue without session-limit enforcement when username is missing', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic' } as any,
+        principal: { kind: 'basic', identity: BASIC_IDENTITY } as any,
         session: { regenerate: vi.fn((done) => done()) },
         sessionStore: {
           all: vi.fn(),
@@ -1951,7 +1987,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
       };
       const res = createResponse();
@@ -1968,7 +2004,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: false },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           rememberMe: true,
           cookie: { maxAge: 12345, expires: new Date() },
@@ -1997,7 +2033,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         sessionID: 'newly-regenerated-session',
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
@@ -2038,7 +2074,7 @@ describe('Auth Router', () => {
 
       expect(req.sessionStore.destroy).toHaveBeenCalledTimes(1);
       expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-oldest', expect.any(Function));
-      expect(req.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
+      expect(req.session.passport).toEqual({ user: persistedBasicUser('john') });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });
@@ -2091,7 +2127,7 @@ describe('Auth Router', () => {
         });
         return {
           body: { remember: true },
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           sessionID: sessionId,
           session,
           sessionStore,
@@ -2116,8 +2152,8 @@ describe('Auth Router', () => {
         }
       });
 
-      expect(req1.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
-      expect(req2.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
+      expect(req1.session.passport).toEqual({ user: persistedBasicUser('john') });
+      expect(req2.session.passport).toEqual({ user: persistedBasicUser('john') });
       expect(sessionStore.destroy).toHaveBeenCalledTimes(1);
       expect(sessionStore.destroy).toHaveBeenCalledWith('session-existing', expect.any(Function));
       expect(userSessions).toHaveLength(2);
@@ -2172,7 +2208,7 @@ describe('Auth Router', () => {
         });
         return {
           body: { remember: true },
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           sessionID: sessionId,
           session,
           sessionStore,
@@ -2200,8 +2236,8 @@ describe('Auth Router', () => {
         .map(([sid]) => sid)
         .sort();
 
-      expect(req1.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
-      expect(req2.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
+      expect(req1.session.passport).toEqual({ user: persistedBasicUser('john') });
+      expect(req2.session.passport).toEqual({ user: persistedBasicUser('john') });
       expect(sessionStore.destroy).toHaveBeenCalledTimes(2);
       expect(sessionStore.destroy).toHaveBeenNthCalledWith(
         1,
@@ -2231,7 +2267,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         sessionID: 'newly-regenerated-session',
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
@@ -2277,7 +2313,7 @@ describe('Auth Router', () => {
         const handler = getRouteHandler('post', '/login');
         const req = {
           body: { remember: true },
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           session: { cookie: {}, regenerate: vi.fn((done) => done()) },
           sessionStore: {
             all: vi.fn(),
@@ -2302,7 +2338,7 @@ describe('Auth Router', () => {
     test('login should record failed login audit when session is unavailable', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
       };
       const res = createResponse();
 
@@ -2322,7 +2358,7 @@ describe('Auth Router', () => {
     test('login should record failed login audit when session regeneration fails', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => done(new Error('regenerate failed'))),
@@ -2346,7 +2382,7 @@ describe('Auth Router', () => {
     test('login should record failed login audit when session regeneration throws synchronously', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn(() => {
@@ -2372,7 +2408,7 @@ describe('Auth Router', () => {
     test('login should resolve when session regenerate callback is invoked more than once', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => {
@@ -2399,7 +2435,7 @@ describe('Auth Router', () => {
     test('login should fail when session is unavailable after regenerate callback', async () => {
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => {
@@ -2433,7 +2469,7 @@ describe('Auth Router', () => {
       try {
         const handler = getRouteHandler('post', '/login');
         const req = {
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           session: {
             cookie: {},
             regenerate: vi.fn((done) => done()),
@@ -2467,7 +2503,7 @@ describe('Auth Router', () => {
       try {
         const handler = getRouteHandler('post', '/login');
         const req = {
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           session: {
             cookie: {},
             regenerate: vi.fn((done) => done()),
@@ -2581,7 +2617,7 @@ describe('Auth Router', () => {
       // Line 47: StringLiteral "" mutant
       const handler = getRouteHandler('post', '/login');
       const req = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
       };
       const res = createResponse();
@@ -2630,7 +2666,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
       };
       const res = createResponse();
@@ -2646,7 +2682,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req: any = {
         body: { remember: false },
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           rememberMe: true,
           cookie: { maxAge: 12345, expires: new Date() },
@@ -2665,7 +2701,7 @@ describe('Auth Router', () => {
       // Line 92: req.session?.rememberMe === true — ConditionalExpression/BooleanLiteral mutants
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           rememberMe: true,
           cookie: {},
@@ -2687,7 +2723,7 @@ describe('Auth Router', () => {
       // Line 92: req.session?.rememberMe === true — mutant: !== true means always true
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => done()),
@@ -2713,7 +2749,7 @@ describe('Auth Router', () => {
       });
       const req: any = {
         body: { remember: true },
-        principal: { kind: 'basic', username: '  john  ' },
+        principal: { kind: 'basic', username: '  john  ', identity: BASIC_IDENTITY },
         sessionID: 'test-sid',
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
@@ -2738,7 +2774,7 @@ describe('Auth Router', () => {
       });
       const req: any = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 42 } as any, // not a string
+        principal: { kind: 'basic', username: 42, identity: BASIC_IDENTITY } as any, // not a string
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
           all: vi.fn((done) => done(null, {})),
@@ -2760,7 +2796,7 @@ describe('Auth Router', () => {
       // Line 102: ConditionalExpression false mutant — completed check removed
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => {
@@ -2784,7 +2820,7 @@ describe('Auth Router', () => {
       // Line 123: options?.logWarning !== false — ConditionalExpression true mutant
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => done(new Error('regen failed default warn'))),
@@ -2817,7 +2853,7 @@ describe('Auth Router', () => {
         });
         const req: any = {
           body: { remember: true },
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           session: { cookie: {}, regenerate: vi.fn((done) => done()) },
           login: vi.fn(),
         };
@@ -2848,7 +2884,7 @@ describe('Auth Router', () => {
       try {
         const handler = getRouteHandler('post', '/login');
         const req: any = {
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           session: {
             cookie: {},
             regenerate: vi.fn((done) => done()),
@@ -2874,7 +2910,7 @@ describe('Auth Router', () => {
       });
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: '' },
+        principal: { kind: 'basic', username: '', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
           all: vi.fn((done) => done(null, {})),
@@ -2898,7 +2934,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req: any = {
         body: { remember: true },
-        principal: { kind: 'basic', username: 'alice' },
+        principal: { kind: 'basic', username: 'alice', identity: BASIC_IDENTITY },
         sessionID: 'new-session',
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
@@ -2931,7 +2967,7 @@ describe('Auth Router', () => {
       // Line 189: !req.session ConditionalExpression false mutant
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         // No session property at all
       };
       const res = createResponse();
@@ -2946,7 +2982,7 @@ describe('Auth Router', () => {
       // Line 189: typeof req.session.regenerate !== 'function' check
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: 'not-a-function' },
       };
       const res = createResponse();
@@ -2961,7 +2997,7 @@ describe('Auth Router', () => {
       // Line 196/199: settled check — ConditionalExpression false mutant
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => {
@@ -3252,7 +3288,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const req: any = {
         body: { remember: true },
-        principal: { kind: 'basic', username: '  trimmed-user  ' },
+        principal: { kind: 'basic', username: '  trimmed-user  ', identity: BASIC_IDENTITY },
         sessionID: 'test-trim-sid',
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
@@ -3277,7 +3313,7 @@ describe('Auth Router', () => {
       });
       const handler = getRouteHandler('post', '/login');
       const req: any = {
-        principal: { kind: 'basic', username: '   ' },
+        principal: { kind: 'basic', username: '   ', identity: BASIC_IDENTITY },
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         sessionStore: {
           all: vi.fn((done) => done(null, {})),
@@ -3298,7 +3334,7 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const _resolveCallCount = { n: 0 };
       const req: any = {
-        principal: { kind: 'basic', username: 'john' },
+        principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
         session: {
           cookie: {},
           regenerate: vi.fn((done) => {
@@ -3332,7 +3368,7 @@ describe('Auth Router', () => {
       try {
         const handler = getRouteHandler('post', '/login');
         const req: any = {
-          principal: { kind: 'basic', username: 'john' },
+          principal: { kind: 'basic', username: 'john', identity: BASIC_IDENTITY },
           session: { cookie: {}, regenerate: vi.fn((done) => done()) },
           sessionStore: {
             all: vi.fn(),

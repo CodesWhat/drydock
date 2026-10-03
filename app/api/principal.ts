@@ -35,7 +35,7 @@ interface SessionPrincipal extends PrincipalBase {
  */
 interface BasicPrincipal extends PrincipalBase {
   readonly kind: 'basic';
-  readonly identity?: LocalIdentityFields;
+  readonly identity: LocalIdentityFields;
 }
 
 /** Identity proven by an `Authorization: Bearer` OIDC access token. */
