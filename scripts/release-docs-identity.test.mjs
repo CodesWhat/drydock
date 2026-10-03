@@ -72,7 +72,7 @@ test('public release surfaces identify the v1.7 release candidate', () => {
     ),
     'README must carry the live release badge',
   );
-  assert.match(readme, new RegExp(`v${escapedRcVersion} highlights`, 'u'));
+  assert.doesNotMatch(readme, /<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/u);
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
   assert.match(appApi, new RegExp(`"version":"${escapedRcVersion}"`, 'u'));
@@ -192,14 +192,6 @@ test('rc.15 notes identify the ownership fix and immutable changelog', () => {
       `https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`,
     ),
   );
-  const readmeHighlights = read('README.md')
-    .split(`<summary><strong>v${RC_VERSION} highlights</strong></summary>`)[1]
-    ?.split('</details>')[0];
-  assert.ok(
-    readmeHighlights?.includes(
-      `[Full changelog](https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE})`,
-    ),
-  );
 });
 
 test('credit links require an exact Markdown destination', () => {
@@ -228,17 +220,8 @@ test('rc.16 notes retain MQTT credit and the original soak record', () => {
   assert.match(updates, /fresh seven-day soak/u);
   assert.match(updates, /not deleted automatically/u);
   assert.ok(updates.includes(changelogUrl));
-  for (const suffix of ['', '.de', '.es', '.fr', '.pl', '.pt-BR', '.zh-CN']) {
-    const readme = read(`README${suffix}.md`);
-    const currentHighlights = readme
-      .split('<details>')
-      .find((section) => section.split('</summary>')[0].includes(`v${RC_VERSION}`))
-      ?.split('</details>')[0];
-    assert.ok(currentHighlights, suffix);
-    assert.ok(currentHighlights?.includes(changelogUrl), suffix);
-    assertMarkdownLink(currentHighlights, 'https://github.com/depuits');
-    assertMarkdownLink(currentHighlights, 'https://github.com/CodesWhat/drydock/discussions/1201');
-  }
+  assertMarkdownLink(updates, 'https://github.com/depuits');
+  assertMarkdownLink(updates, 'https://github.com/CodesWhat/drydock/discussions/1201');
 });
 
 test('security policy names active v1.7 and maintained v1.6 without supporting old candidates', () => {
@@ -259,14 +242,12 @@ test('security policy names active v1.7 and maintained v1.6 without supporting o
 });
 
 test('v1.6.0 is released and public release routing advances to v1.7', () => {
-  const readme = read('README.md');
   const siteContent = read('apps/web/src/lib/site-content.ts');
   const docsVersions = read('apps/web/scripts/docs-versions.mjs');
   const v16Changelog = read('content/docs/v1.6/changelog/index.mdx');
   const archivedChangelog = read('content/docs/v1.5/changelog/index.mdx');
   const docsReadme = read('content/docs/README.md');
 
-  assert.match(readme, /<summary><strong>v1\.5\.2 highlights<\/strong><\/summary>/u);
   assert.match(
     siteContent,
     /version: "v1\.6\.0",[\s\S]{0,500}?status: "released",[\s\S]{0,100}?border-emerald-500/u,
