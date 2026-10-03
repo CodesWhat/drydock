@@ -1,8 +1,11 @@
 import type { Request } from 'express';
 import type { Session, SessionData } from 'express-session';
+import type { SessionIdentity } from './principal.js';
 
 export interface SessionUser {
   username: string;
+  /** Absent on a legacy `{ username }` session. */
+  identity?: SessionIdentity;
 }
 
 export type SessionWithRememberMe = Session & Partial<SessionData> & { rememberMe?: boolean };
