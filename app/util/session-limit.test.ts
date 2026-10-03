@@ -1,4 +1,22 @@
+const { mockHasEnrolledUsername } = vi.hoisted(() => ({ mockHasEnrolledUsername: vi.fn() }));
+
+vi.mock('../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(),
+  hasEnrolledUsername: mockHasEnrolledUsername,
+}));
+
+vi.mock('../log/index.js', () => ({
+  default: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() },
+}));
+
+import { deriveSubjectId } from '../api/totp-identity.js';
 import { enforceConcurrentSessionLimit } from './session-limit.js';
+
+beforeEach(() => {
+  mockHasEnrolledUsername.mockReset();
+  mockHasEnrolledUsername.mockReturnValue(false);
+});
 
 test('enforceConcurrentSessionLimit should return 0 for invalid input', async () => {
   await expect(
@@ -463,7 +481,7 @@ test('enforceConcurrentSessionLimit counts v2 local and OIDC sessions against th
     v: 2,
     kind: 'local',
     username: 'john',
-    subjectId: 'd'.repeat(64),
+    subjectId: deriveSubjectId('basic.default', 'john'),
     providerId: 'basic.default',
     assurance: 'password',
     factorVersion: 0,
@@ -503,4 +521,131 @@ test('enforceConcurrentSessionLimit counts v2 local and OIDC sessions against th
   expect(destroyedCount).toBe(2);
   expect(sessionStore.destroy).toHaveBeenNthCalledWith(1, 'session-legacy', expect.any(Function));
   expect(sessionStore.destroy).toHaveBeenNthCalledWith(2, 'session-v2-local', expect.any(Function));
+});
+
+describe('stale sessions', () => {
+  const legacy = (username: string) => JSON.stringify({ username });
+  const local = (username: string, factorVersion = 0) =>
+    JSON.stringify({
+      v: 2,
+      kind: 'local',
+      username,
+      subjectId: deriveSubjectId('basic.default', username),
+      providerId: 'basic.default',
+      assurance: 'password',
+      factorVersion,
+    });
+
+  function storeOf(sessions: Record<string, unknown>) {
+    return {
+      all: vi.fn((done) => done(null, sessions)),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+  }
+
+  test('destroys stale sessions and does not let them occupy slots', async () => {
+    mockHasEnrolledUsername.mockReturnValue(true);
+    const sessionStore = storeOf({
+      'valid-oidc': {
+        passport: { user: JSON.stringify({ v: 2, kind: 'oidc', username: 'john' }) },
+        cookie: { expires: '2026-01-01T00:00:00.000Z' },
+      },
+      'stale-legacy-a': {
+        passport: { user: legacy('john') },
+        cookie: { expires: '2026-01-02T00:00:00.000Z' },
+      },
+      'stale-legacy-b': {
+        passport: { user: legacy('john') },
+        cookie: { expires: '2026-01-03T00:00:00.000Z' },
+      },
+    });
+
+    const destroyed = await enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 2,
+      currentSessionId: 'new',
+      sessionStore,
+    });
+
+    expect(destroyed).toBe(2);
+    expect(sessionStore.destroy.mock.calls.map(([sid]) => sid).sort()).toEqual([
+      'stale-legacy-a',
+      'stale-legacy-b',
+    ]);
+  });
+
+  test('evicts the oldest valid session only when valid ones alone overflow', async () => {
+    const sessionStore = storeOf({
+      'valid-old': {
+        passport: { user: local('john') },
+        cookie: { expires: '2026-01-01T00:00:00.000Z' },
+      },
+      'valid-new': {
+        passport: { user: local('john') },
+        cookie: { expires: '2026-01-02T00:00:00.000Z' },
+      },
+    });
+
+    await enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 2,
+      currentSessionId: 'new',
+      sessionStore,
+    });
+
+    expect(sessionStore.destroy).toHaveBeenCalledTimes(1);
+    expect(sessionStore.destroy).toHaveBeenCalledWith('valid-old', expect.any(Function));
+  });
+
+  test('revalidates a cached index so a session that went stale since is dropped, not counted', async () => {
+    const oidc = JSON.stringify({ v: 2, kind: 'oidc', username: 'john' });
+    const sessionStore = storeOf({
+      oldest: { passport: { user: oidc }, cookie: { expires: '2026-01-01T00:00:00.000Z' } },
+      a: { passport: { user: legacy('john') }, cookie: { expires: '2026-01-02T00:00:00.000Z' } },
+      b: { passport: { user: legacy('john') }, cookie: { expires: '2026-01-03T00:00:00.000Z' } },
+    });
+    await enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 5,
+      currentSessionId: 'first',
+      sessionStore,
+    });
+    expect(sessionStore.destroy).not.toHaveBeenCalled();
+
+    mockHasEnrolledUsername.mockReturnValue(true);
+    const destroyed = await enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 4,
+      currentSessionId: 'second',
+      sessionStore,
+    });
+
+    expect(sessionStore.all).toHaveBeenCalledTimes(1);
+    expect(destroyed).toBe(2);
+    expect(sessionStore.destroy.mock.calls.map(([sid]) => sid).sort()).toEqual(['a', 'b']);
+  });
+
+  test('with the store unavailable it destroys nothing at all, stale or valid', async () => {
+    mockHasEnrolledUsername.mockImplementation(() => {
+      throw new Error('totp collection not initialized');
+    });
+    const sessionStore = storeOf({
+      a: { passport: { user: legacy('john') }, cookie: { expires: '2026-01-01T00:00:00.000Z' } },
+      b: { passport: { user: local('john') }, cookie: { expires: '2026-01-02T00:00:00.000Z' } },
+      oidc: {
+        passport: { user: JSON.stringify({ v: 2, kind: 'oidc', username: 'john' }) },
+        cookie: { expires: '2026-01-03T00:00:00.000Z' },
+      },
+    });
+
+    const destroyed = await enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 1,
+      currentSessionId: 'new',
+      sessionStore,
+    });
+
+    expect(destroyed).toBe(0);
+    expect(sessionStore.destroy).not.toHaveBeenCalled();
+  });
 });
