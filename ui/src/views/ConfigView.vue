@@ -156,7 +156,7 @@ const webhookBaseUrl = computed(() => {
 });
 const webhookExample = computed(
   () =>
-    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
+    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`, // gitleaks:allow placeholder in the webhook example, not a credential
 );
 
 // Settings state
