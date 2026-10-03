@@ -110,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The audit event picker and shared URL filters now support every backend audit action, including container health, maturity, approvals, configuration, scanner preparation and API-key events. Missing action captions are translated in all 17 locales; filtering still sends the original action IDs and keeps the existing read permissions.
 - Container dependency settings (`dd.depends_on`, `dd.depends_on.action` and compose `depends_on`) were dropped by the 1.8 SQLite store and are now kept, so dependency-ordered updates, list-view dependency counts and the dependency graph work again. Containers imported from a 1.7 store keep their dependencies too.
 - The login password visibility button now uses localized screen-reader labels in every supported language. Showing, hiding, and switching languages preserve the entered value and never submit the form.
 - Stop the dashboard from showing a connected Local Docker host when no local watcher is configured. Agent-only fleets show only their configured agents.
