@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { replaceSecrets } from '../configuration/index.js';
 import {
   computeHotp,
   decryptTotpSeed,
@@ -270,55 +271,46 @@ describe('keyring', () => {
 
   describe('loadTotpKeyringFromEnv', () => {
     test('returns undefined when no key ring is configured', () => {
-      expect(loadTotpKeyringFromEnv({}, vi.fn())).toBeUndefined();
+      expect(loadTotpKeyringFromEnv({})).toBeUndefined();
     });
 
-    test('reads the file named by DD_AUTH_TOTP_KEYRING__FILE', () => {
-      const read = vi.fn(() => keyringJson({ k1: key(1) }));
-      const loaded = loadTotpKeyringFromEnv(
-        { DD_AUTH_TOTP_KEYRING__FILE: '/run/secrets/ring', DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1' },
-        read,
-      );
-      expect(read).toHaveBeenCalledWith('/run/secrets/ring');
+    test('reads the resolved DD_AUTH_TOTP_KEYRING value', () => {
+      const loaded = loadTotpKeyringFromEnv({
+        DD_AUTH_TOTP_KEYRING: keyringJson({ k1: key(1) }),
+        DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1',
+      });
       expect(loaded?.activeKeyId).toBe('k1');
+      expect(loaded?.keys.get('k1')?.equals(key(1))).toBe(true);
     });
 
-    test('requires the active key id when a file is configured', () => {
+    test('requires the active key id when a key ring is configured', () => {
       expect(() =>
-        loadTotpKeyringFromEnv({ DD_AUTH_TOTP_KEYRING__FILE: '/run/secrets/ring' }, () =>
-          keyringJson({ k1: key(1) }),
-        ),
+        loadTotpKeyringFromEnv({ DD_AUTH_TOTP_KEYRING: keyringJson({ k1: key(1) }) }),
       ).toThrow(expect.objectContaining({ code: 'KEYRING_INVALID' }));
     });
 
-    test('reports an unreadable file without leaking the OS error', () => {
-      const read = vi.fn(() => {
-        throw new Error('EACCES: permission denied, open /run/secrets/ring');
-      });
-      expect(() =>
-        loadTotpKeyringFromEnv(
-          { DD_AUTH_TOTP_KEYRING__FILE: '/run/secrets/ring', DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1' },
-          read,
-        ),
-      ).toThrow(expect.objectContaining({ code: 'KEYRING_UNAVAILABLE' }));
-    });
-
-    test('an active key id with no file is a misconfiguration', () => {
-      expect(() => loadTotpKeyringFromEnv({ DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1' }, vi.fn())).toThrow(
+    test('an active key id with no key ring is a misconfiguration', () => {
+      expect(() => loadTotpKeyringFromEnv({ DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1' })).toThrow(
         expect.objectContaining({ code: 'KEYRING_UNAVAILABLE' }),
       );
     });
 
-    test('defaults to process.env and the real filesystem', () => {
+    test('defaults to the live configuration map', () => {
       expect(loadTotpKeyringFromEnv()).toBeUndefined();
+    });
+
+    test('loads a key ring file resolved by DD_AUTH_TOTP_KEYRING__FILE', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-totp-ring-'));
       try {
         const file = path.join(dir, 'ring.json');
-        fs.writeFileSync(file, keyringJson({ k1: key(1) }), { mode: 0o600 });
-        const loaded = loadTotpKeyringFromEnv({
+        fs.writeFileSync(file, `${keyringJson({ k1: key(1) })}\n`, { mode: 0o600 });
+        const env: Record<string, string | undefined> = {
           DD_AUTH_TOTP_KEYRING__FILE: file,
           DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1',
-        });
+        };
+        await replaceSecrets(env);
+        expect(env.DD_AUTH_TOTP_KEYRING__FILE).toBeUndefined();
+        const loaded = loadTotpKeyringFromEnv(env);
         expect(loaded?.keys.get('k1')?.equals(key(1))).toBe(true);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });

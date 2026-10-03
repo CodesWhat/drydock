@@ -12,7 +12,7 @@
  *   digests, and verification does the same work whether or not it matches.
  */
 import crypto from 'node:crypto';
-import fs from 'node:fs';
+import { ddEnvVars } from '../configuration/index.js';
 
 export type TotpCryptoErrorCode =
   | 'INVALID_ARGUMENT'
@@ -204,33 +204,33 @@ export function parseTotpKeyring(json: string, activeKeyId: string): TotpKeyring
 }
 
 /**
- * Load the key ring from `DD_AUTH_TOTP_KEYRING__FILE` and
+ * Load the key ring from the resolved `DD_AUTH_TOTP_KEYRING` value and
  * `DD_AUTH_TOTP_ACTIVE_KEY_ID`. Returns undefined when neither is set (the
- * feature is simply not configured). Reads process.env directly, not the config
- * tree, so key material never lands in anything that dumps configuration.
+ * feature is simply not configured).
+ *
+ * Reads the post-`replaceSecrets()` configuration map, like the session secret
+ * does: when `DD_AUTH_TOTP_KEYRING__FILE` is set, startup has already read that
+ * file (bounded, regular-file and permission checked) and substituted its
+ * contents into `DD_AUTH_TOTP_KEYRING`. So the key ring text does sit in the
+ * in-memory configuration map; it is never persisted to the store, and
+ * `getAuthenticationConfigurations()` skips `DD_AUTH_TOTP_*` so it is not
+ * discovered as a provider.
  */
 export function loadTotpKeyringFromEnv(
-  env: Record<string, string | undefined> = process.env,
-  readFile: (path: string) => string = (path) => fs.readFileSync(path, 'utf8'),
+  env: Record<string, string | undefined> = ddEnvVars,
 ): TotpKeyring | undefined {
-  const file = env.DD_AUTH_TOTP_KEYRING__FILE;
+  const keyring = env.DD_AUTH_TOTP_KEYRING;
   const activeKeyId = env.DD_AUTH_TOTP_ACTIVE_KEY_ID;
-  if (!file && !activeKeyId) {
+  if (!keyring && !activeKeyId) {
     return undefined;
   }
-  if (!file) {
-    throw new TotpCryptoError('KEYRING_UNAVAILABLE', 'TOTP key ring file is not configured');
+  if (!keyring) {
+    throw new TotpCryptoError('KEYRING_UNAVAILABLE', 'TOTP key ring is not configured');
   }
   if (!activeKeyId) {
     throw invalidKeyring();
   }
-  let body: string;
-  try {
-    body = readFile(file);
-  } catch {
-    throw new TotpCryptoError('KEYRING_UNAVAILABLE', 'TOTP key ring file could not be read');
-  }
-  return parseTotpKeyring(body, activeKeyId);
+  return parseTotpKeyring(keyring, activeKeyId);
 }
 
 /* ------------------------------------------------------------------ */
