@@ -354,7 +354,7 @@ function parseRevisionQuery(query: unknown, minimum: number): number | undefined
 
 /** The `overrideId` query value, which is a plain string or absent. */
 function parseOverrideIdQuery(query: unknown): string | undefined {
-  const raw = (query as { overrideId?: unknown } | undefined)?.overrideId;
+  const raw = (query as { overrideId?: unknown }).overrideId;
   const text = Array.isArray(raw) ? raw[0] : raw;
   return typeof text === 'string' && text.length > 0 ? text : undefined;
 }

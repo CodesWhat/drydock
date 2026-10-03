@@ -844,6 +844,17 @@ describe('DELETE /containers/:id/label-overrides', () => {
     expect(unnamed.status).toBe(400);
     expect(unnamed.json.errors).toEqual([{ field: 'overrideId', code: 'invalid-override-id' }]);
     expectContract(CONTAINER_PATH, 'delete', 400, unnamed.json);
+    const blank = await call(
+      'DELETE',
+      '/api/v1/containers/1/label-overrides?revision=1&overrideId=',
+    );
+    expect(blank.status).toBe(400);
+    // A repeated key reads as its first value.
+    const repeated = await call(
+      'DELETE',
+      `/api/v1/containers/1/label-overrides?revision=1&overrideId=nope&overrideId=${currentOverrideId()}`,
+    );
+    expect(repeated.status).toBe(409);
 
     const stale = await reset('1', 7);
     expect(stale.status).toBe(409);
