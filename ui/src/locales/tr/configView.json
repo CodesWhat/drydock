@@ -76,6 +76,7 @@
       },
       "fields": {
         "version": "Sürüm",
+        "build": "Derleme",
         "serverPort": "Sunucu Bağlantı Noktası",
         "containerActions": "Konteyner Eylemleri",
         "webhook": "Web kancası",

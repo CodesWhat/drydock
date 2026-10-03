@@ -2,6 +2,7 @@ import type { MqttClient } from 'mqtt';
 import { recordAuditEvent } from '../../../api/audit-events.js';
 import { providers as iconProviders, normalizeSlug } from '../../../api/icons/providers.js';
 import { getVersion } from '../../../configuration/index.js';
+import { deriveVersionIdentity } from '../../../configuration/version-identity.js';
 import {
   type ContainerLifecycleEventPayload,
   registerContainerAdded,
@@ -129,7 +130,7 @@ function getHaDevice() {
     manufacturer: HASS_MANUFACTURER,
     model: HASS_DEVICE_ID,
     name: HASS_DEVICE_NAME,
-    sw_version: getVersion(),
+    sw_version: deriveVersionIdentity(getVersion()).version,
   };
 }
 

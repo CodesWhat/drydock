@@ -4,6 +4,7 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
+import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type {
   BatchUpdateCompletedEventPayload,
   ContainerUpdateAppliedEventPayload,
@@ -92,6 +93,8 @@ export interface AgentClientConfig {
 
 interface AgentClientRuntimeInfo {
   version?: string;
+  // Full build identity reported next to the base version (1.6.1-rc.15 for 1.6.1).
+  build?: string;
   os?: string;
   arch?: string;
   cpus?: number;
@@ -196,6 +199,7 @@ function isControllerDockerTransportWatcher(descriptor: AgentComponentDescriptor
 
 interface AgentRuntimeAckPayload {
   version?: unknown;
+  build?: unknown;
   os?: unknown;
   arch?: unknown;
   cpus?: unknown;
@@ -1450,9 +1454,23 @@ export class AgentClient {
 
   private buildRuntimeInfoFromAck(data: unknown): AgentClientRuntimeInfo {
     const runtimeData = data as AgentRuntimeAckPayload;
+    // An agent on an older image reports its full build (an rc) as `version` and
+    // no `build`, so derive the base version and build from whichever it sent.
+    const reportedBuild =
+      typeof runtimeData?.build === 'string' && runtimeData.build ? runtimeData.build : undefined;
+    const reportedVersion =
+      typeof runtimeData?.version === 'string' && runtimeData.version
+        ? runtimeData.version
+        : undefined;
+    const identitySource = reportedBuild ?? reportedVersion;
+    const identity =
+      identitySource === undefined ? undefined : deriveVersionIdentity(identitySource);
     return {
       ...this.info,
-      version: typeof runtimeData?.version === 'string' ? runtimeData.version : this.info.version,
+      version: identity?.version ?? this.info.version,
+      // Never carried over from a previous ack: an agent that reports neither
+      // a build nor a version must not inherit the one its predecessor reported.
+      build: identity?.build,
       os: typeof runtimeData?.os === 'string' ? runtimeData.os : this.info.os,
       arch: typeof runtimeData?.arch === 'string' ? runtimeData.arch : this.info.arch,
       cpus: Number.isFinite(runtimeData?.cpus) ? Number(runtimeData.cpus) : this.info.cpus,
@@ -1480,7 +1498,9 @@ export class AgentClient {
   private handleAckEvent(data: unknown) {
     this.info = this.buildRuntimeInfoFromAck(data);
     const ackData = data as AgentRuntimeAckPayload;
-    this.log.info(`Agent ${this.name} connected (version: ${ackData.version})`);
+    const { build } = this.info;
+    const buildSuffix = build && build !== ackData.version ? `, build: ${build}` : '';
+    this.log.info(`Agent ${this.name} connected (version: ${ackData.version}${buildSuffix})`);
     void this.handshake().catch((error: unknown) => {
       this.log.error(`Handshake failed after dd:ack: ${getErrorMessage(error)}`);
     });
