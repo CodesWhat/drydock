@@ -11,16 +11,16 @@ describe('images service', () => {
   });
 
   describe.each([
-    ['list', () => getImages(), 'Failed to load images: Service Unavailable'],
+    ['list', () => getImages(), 'Failed to load images (HTTP 503): Service Unavailable'],
     [
       'preview',
       () => getPrunePreview({ host: 'local', mode: 'dangling' }),
-      'Failed to load prune preview: Service Unavailable',
+      'Failed to load prune preview (HTTP 503): Service Unavailable',
     ],
     [
       'prune',
       () => pruneImages({ host: 'local', mode: 'unused' }),
-      'Failed to prune images: Service Unavailable',
+      'Failed to prune images (HTTP 503): Service Unavailable',
     ],
   ] as const)('%s error responses', (_name, request, fallback) => {
     it.each([
@@ -152,7 +152,9 @@ describe('images service', () => {
 
       const err = await getImages().catch((e: unknown) => e);
 
-      expect((err as ApiError).message).toBe('Failed to load images: Internal Server Error');
+      expect((err as ApiError).message).toBe(
+        'Failed to load images (HTTP 500): Internal Server Error',
+      );
     });
   });
 
@@ -219,7 +221,9 @@ describe('images service', () => {
         (e: unknown) => e,
       );
 
-      expect((err as ApiError).message).toBe('Failed to load prune preview: Internal Server Error');
+      expect((err as ApiError).message).toBe(
+        'Failed to load prune preview (HTTP 500): Internal Server Error',
+      );
     });
   });
 
@@ -270,7 +274,9 @@ describe('images service', () => {
 
       const err = await pruneImages({ host: 'host-1', mode: 'unused' }).catch((e: unknown) => e);
 
-      expect((err as ApiError).message).toBe('Failed to prune images: Internal Server Error');
+      expect((err as ApiError).message).toBe(
+        'Failed to prune images (HTTP 500): Internal Server Error',
+      );
     });
   });
 });
