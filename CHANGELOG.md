@@ -107,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Images inventory and prune failures use localized fallback messages when a proxy or API supplies no usable error text, while preserving HTTP status, server diagnostics, confirmation and timeout handling.
 - Container Stats only shows Live after its stream opens, disables Pause when no stream exists, and clears stale connection feedback during reconnect. Closing the panel or switching containers retires pending reads and old stream callbacks so they cannot reopen or overwrite the selected container's stats.
 - Container stats, trigger-list and update-history HTTP failures use the selected language while preserving container identity, status codes and server reason text. Stats offers a read-only Retry button after a failed load.
 - Trigger tests show a translated failure and HTTP status for JSON `null` or unusable error messages instead of a JavaScript exception. Provider diagnostics, successful responses and execution routing are unchanged; failed tests are not retried automatically.

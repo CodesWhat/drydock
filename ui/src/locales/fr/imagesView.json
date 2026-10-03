@@ -28,6 +28,8 @@
       "description": "Aucune image ne correspond aux filtres actuels."
     },
     "prune": {
+      "previewLoadFailed": "Impossible de charger l’aperçu du nettoyage",
+      "requestFailed": "Impossible de nettoyer les images",
       "dangling": "Nettoyer les orphelines",
       "unused": "Nettoyer les inutilisées",
       "confirm": {
