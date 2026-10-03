@@ -5006,6 +5006,22 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
   });
 
+  // An insert with no id derives no id key, so the id take is handed undefined. It must
+  // be a no-op rather than key off undefined, and leave unrelated entries in place.
+  test('an insert with no id takes no id-keyed entry and leaves the cache alone', () => {
+    const cache = container._getUpdatePolicyRetentionCacheForTests();
+    cache.set('id::someone-else', {
+      updatePolicyOverrides: MATURITY_POLICY,
+      expiresAt: Date.now() + 60_000,
+    });
+
+    expect(() =>
+      container.insertContainer(makePolicyFixture({ id: '', name: 'no-id-app' })),
+    ).toThrow();
+
+    expect([...cache.keys()]).toEqual(['id::someone-else']);
+  });
+
   test('retained policy is consumed, so a second recreate does not resurrect it', () => {
     const oldFixture = makePolicyFixture({
       id: 'policy-once-old',
