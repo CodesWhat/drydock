@@ -107,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Translate malformed HTTP error responses in settings, preference sync and notification editing while retaining the HTTP status and preserving server-provided diagnostics.
 - Translate the app-shell user fallback in 13 locales and align dashboard fallback captions with their existing navigation translations, while preserving supplied usernames and display names.
 - Translate the custom-registry fallback in container tables, cards and details, including changes to the active language, while preserving registry hostnames, configured names and provider brands.
 - Images inventory and prune failures use localized fallback messages when a proxy or API supplies no usable error text, while preserving HTTP status, server diagnostics, confirmation and timeout handling.
