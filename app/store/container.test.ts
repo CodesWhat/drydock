@@ -6063,31 +6063,48 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
         expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
       });
 
-      test.each([
-        ['identity', 60_000, 30_000, MATURITY_POLICY],
-        ['id', 30_000, 60_000, NEWER_POLICY],
-      ] as const)(
-        'the %s entry wins when it was stashed later',
-        (_winner, identityRemainingMs, idRemainingMs, expected) => {
-          const now = Date.now();
-          seedEntries(
-            { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now + identityRemainingMs },
-            { updatePolicyOverrides: NEWER_POLICY, expiresAt: now + idRemainingMs },
-          );
-
-          expect(insertAgentRecord().updatePolicy).toEqual(expected);
-          expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
-        },
-      );
-
-      test('a tie keeps the identity entry', () => {
-        const expiresAt = Date.now() + 60_000;
+      // Seeding order is stash order: a stash deletes then sets, so the Map's insertion
+      // order puts the later stash last. The TTL may differ between the two stashes
+      // (DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS changes across a restart), so the
+      // expiresAt values below deliberately contradict the order.
+      test('the id entry wins when it was stashed after an identity entry with a longer TTL', () => {
+        const now = Date.now();
         seedEntries(
-          { updatePolicyOverrides: MATURITY_POLICY, expiresAt },
-          { updatePolicyOverrides: NEWER_POLICY, expiresAt },
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now + 600_000 },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt: now + 30_000 },
+        );
+
+        expect(insertAgentRecord().updatePolicy).toEqual(NEWER_POLICY);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      test('the identity entry wins when it was stashed after an id entry with a longer TTL', () => {
+        const now = Date.now();
+        const cache = container._getUpdatePolicyRetentionCacheForTests();
+        cache.set(ID_KEY, {
+          containerName: 'myapp',
+          updatePolicyOverrides: NEWER_POLICY,
+          expiresAt: now + 600_000,
+        });
+        cache.set(IDENTITY_KEY, {
+          containerName: 'myapp',
+          updatePolicyOverrides: MATURITY_POLICY,
+          expiresAt: now + 30_000,
+        });
+
+        expect(insertAgentRecord().updatePolicy).toEqual(MATURITY_POLICY);
+        expect(cache.size).toBe(0);
+      });
+
+      test('an expired later stash does not shadow an earlier live one', () => {
+        const now = Date.now();
+        seedEntries(
+          { updatePolicyOverrides: MATURITY_POLICY, expiresAt: now + 30_000 },
+          { updatePolicyOverrides: NEWER_POLICY, expiresAt: now - 1 },
         );
 
         expect(insertAgentRecord().updatePolicy).toEqual(MATURITY_POLICY);
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
       });
 
       test('two expired entries restore nothing', () => {

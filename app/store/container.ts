@@ -1535,23 +1535,27 @@ function takeIdentityRetainedUpdatePolicyEntry(incoming) {
  * Neither key is the better match in general. After an agent -> controller -> agent move
  * the identity entry is the one the first move left behind, and the id entry carries the
  * policy as the controller last held it. So the later stash wins, and an expired entry
- * never shadows a live one. Every stash uses the same TTL, so the later `expiresAt` is
- * the later stash; a tie (one delete stashing both keys) keeps the identity entry.
+ * never shadows a live one. Stash order is the Map's insertion order: a stash deletes
+ * then sets its key, and rehydrate inserts in `refresh_order`, so the later position is
+ * the later stash. `expiresAt` is no proxy for it, because the TTL is configurable
+ * (DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS) and may differ between two stashes across a
+ * restart.
  */
 function takeUnexpiredRetainedUpdatePolicyOverrides(
   incoming,
 ): container.ContainerUpdatePolicy | undefined {
   const nowMs = Date.now();
-  const [entry] = [
-    takeIdentityRetainedUpdatePolicyEntry(incoming),
-    takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming)),
+  const identityKey = deriveContainerIdentityKey(incoming);
+  const idKey = deriveContainerIdRetentionKey(incoming);
+  const keys = [...updatePolicyRetentionCache.keys()];
+  const positionOf = (key: string | undefined) => (key === undefined ? -1 : keys.indexOf(key));
+  const [candidate] = [
+    { entry: takeIdentityRetainedUpdatePolicyEntry(incoming), position: positionOf(identityKey) },
+    { entry: takeRetainedUpdatePolicyEntry(idKey), position: positionOf(idKey) },
   ]
-    .filter(
-      (candidate): candidate is UpdatePolicyRetentionCacheEntry =>
-        candidate !== undefined && candidate.expiresAt > nowMs,
-    )
-    .sort((first, second) => second.expiresAt - first.expiresAt);
-  return entry?.updatePolicyOverrides;
+    .filter(({ entry }) => entry !== undefined && entry.expiresAt > nowMs)
+    .sort((first, second) => second.position - first.position);
+  return candidate?.entry?.updatePolicyOverrides;
 }
 
 /**
