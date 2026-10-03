@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **ZAP alerts in code scanning are now keyed per scanned site.** `scripts/zap-json-to-sarif.mjs` stripped the origin from every location, so getdrydock.com, the demo and the app scan shared one alert per rule and path, and dismissing it for the public site hid the same finding on the app. Locations now read `getdrydock.com/robots.txt`. Expect one round of reopened and closed alerts when the next scans upload.
 - **The weekly DAST scans of getdrydock.com and the demo can now pass.** The two public-site ZAP jobs read a new `.zap/rules-public-site.tsv`, which adds IGNORE entries for the reviewed false positives (SQL, private IP, timestamp, eval, debug-error and application-error text matched in docs prose, plus proxy, user-agent and public-file CORS notices) and the accepted CORP and COEP choices. The app scan in `ci-verify.yml` keeps the stricter `.zap/rules.tsv`, and a workflow test pins both.
 
 ### Security

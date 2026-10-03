@@ -79,16 +79,18 @@ describe('zap-json-to-sarif', () => {
     assert.equal(sarif.runs[0].results.length, 2);
     assert.equal(sarif.runs[0].results[0].ruleId, '10055-6');
     assert.equal(sarif.runs[0].results[0].level, 'warning');
-    // http URIs must be relativised: origin goes into originalUriBaseIds, path into uri.
-    // Root path must be '/' not '' — GHAS rejects empty artifactLocation.uri.
-    assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri, '/');
+    // http URIs lose the scheme but keep the host so alerts stay per-site.
+    // The root path keeps its '/' — GHAS rejects empty artifactLocation.uri.
+    // The port colon is percent-encoded so the value isn't parsed as a scheme.
     assert.equal(
-      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId,
-      'TARGET',
+      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri,
+      'localhost%3A3333/',
     );
-    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
-      TARGET: { uri: 'http://localhost:3333/' },
-    });
+    assert.equal(
+      'uriBaseId' in sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation,
+      false,
+    );
+    assert.equal('originalUriBaseIds' in sarif.runs[0], false);
     assert.match(sarif.runs[0].results[0].message.text, /Evidence:/);
     // automationDetails.id must stay absent so upload-sarif's `category:` input
     // is the only thing that sets the run's code-scanning category. GitHub
@@ -148,18 +150,10 @@ describe('zap-json-to-sarif', () => {
     assert.equal(sarif.runs[0].tool.driver.rules.length, 1);
     assert.equal(sarif.runs[0].results.length, 1);
     assert.equal(sarif.runs[0].results[0].ruleId, 'singleton-alert');
-    // http URI → absolute-path-reference + uriBaseId; origin hoisted to originalUriBaseIds.
     assert.equal(
       sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri,
-      '/singleton',
+      'localhost%3A3333/singleton',
     );
-    assert.equal(
-      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId,
-      'TARGET',
-    );
-    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
-      TARGET: { uri: 'http://localhost:3333/' },
-    });
   });
 
   test('suppresses invalid CWE and WASC tags', () => {
@@ -204,42 +198,30 @@ describe('zap-json-to-sarif', () => {
       ],
     });
 
-    // http URIs become absolute-path-references (leading slash preserved);
+    // http URIs become host-prefixed paths (leading slash preserved);
     // non-http fallbacks ('zap-target') pass through unchanged.
     assert.deepEqual(
       sarif.runs[0].results.map(
         (result) => result.locations[0].physicalLocation.artifactLocation.uri,
       ),
-      ['/node', '/', 'zap-target'],
+      ['fallback.example/node', 'fallback.example/', 'zap-target'],
     );
-    assert.deepEqual(
-      sarif.runs[0].results.map(
-        (result) => result.locations[0].physicalLocation.artifactLocation.uriBaseId,
-      ),
-      ['TARGET', 'TARGET', undefined],
-    );
-    // Both http results share the same origin so only one key is needed.
-    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
-      TARGET: { uri: 'http://fallback.example/' },
-    });
-    // The non-http result must not carry a uriBaseId at all.
-    assert.equal(
-      'uriBaseId' in sarif.runs[0].results[2].locations[0].physicalLocation.artifactLocation,
-      false,
-    );
+    assert.equal('originalUriBaseIds' in sarif.runs[0], false);
   });
 
-  test('assigns each distinct http origin to the matching SARIF uriBaseId', () => {
+  test('keeps the scanned host in the location so each site gets its own alert', () => {
     const sarif = convertZapJsonToSarif({
       site: [
         {
           alerts: [
             {
-              alertRef: 'multiple-origins',
-              alert: 'Multiple origins',
+              alertRef: '90004-2',
+              alert: 'Missing COEP',
               instances: [
-                { uri: 'http://first.example/one' },
-                { uri: 'https://second.example/two' },
+                { uri: 'https://getdrydock.com/' },
+                { uri: 'https://demo.getdrydock.com/' },
+                { uri: 'http://localhost:3333/' },
+                { uri: 'https://getdrydock.com/robots.txt?a=1' },
               ],
             },
           ],
@@ -247,16 +229,18 @@ describe('zap-json-to-sarif', () => {
       ],
     });
 
-    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
-      TARGET: { uri: 'http://first.example/' },
-      TARGET_1: { uri: 'https://second.example/' },
-    });
     assert.deepEqual(
       sarif.runs[0].results.map(
-        (result) => result.locations[0].physicalLocation.artifactLocation.uriBaseId,
+        (result) => result.locations[0].physicalLocation.artifactLocation.uri,
       ),
-      ['TARGET', 'TARGET_1'],
+      [
+        'getdrydock.com/',
+        'demo.getdrydock.com/',
+        'localhost%3A3333/',
+        'getdrydock.com/robots.txt?a=1',
+      ],
     );
+    assert.equal('originalUriBaseIds' in sarif.runs[0], false);
   });
 
   test('writes SARIF from the CLI entry point', () => {
