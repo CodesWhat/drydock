@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "承認の概要を読み込めませんでした",
+      "detailLoadFailed": "承認を読み込めませんでした",
+      "approveFailed": "更新を承認できませんでした",
+      "rejectFailed": "更新を拒否できませんでした",
+      "deferFailed": "更新を延期できませんでした"
+    },
     "ofCount": "{count} 件表示",
     "refresh": "再読み込み",
     "loading": "承認を読み込み中…",

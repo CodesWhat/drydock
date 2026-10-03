@@ -1,5 +1,12 @@
 {
   "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Impossibile caricare il riepilogo delle approvazioni",
+      "detailLoadFailed": "Impossibile caricare l’approvazione",
+      "approveFailed": "Impossibile approvare l’aggiornamento",
+      "rejectFailed": "Impossibile rifiutare l’aggiornamento",
+      "deferFailed": "Impossibile posticipare l’aggiornamento"
+    },
     "ofCount": "Elementi mostrati: {count}",
     "refresh": "Aggiorna",
     "loading": "Caricamento delle approvazioni…",
