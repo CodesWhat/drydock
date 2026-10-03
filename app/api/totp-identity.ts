@@ -18,7 +18,7 @@ import { getFactorBySubject, getSubjectVersion, hasEnrolledUsername } from '../s
 import { getErrorMessage } from '../util/error.js';
 import type { SessionUser } from './auth-types.js';
 
-export type LocalAssurance = 'password' | 'totp' | 'recovery';
+type LocalAssurance = 'password' | 'totp' | 'recovery';
 
 export interface LocalIdentityFields {
   subjectId: string;
