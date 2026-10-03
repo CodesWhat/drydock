@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The website docs pages `/docs/v1.6/changelog`, `/docs/v1.6/configuration/ui`, `/docs/v1.7/changelog` and `/docs/v1.7/configuration/ui` no longer return a 500. A remark plugin renders bare `{column}`, `{date}` and `{countdown}` in prose as literal text instead of evaluating them as JS expressions.
 - Stop the dashboard from showing a connected Local Docker host when no local watcher is configured. Agent-only fleets show only their configured agents.
 - Apply the configured outbound HTTP timeout to Docker Hub publish-date metadata requests, so a stalled response cannot indefinitely hold up container discovery. Existing bounded retries and publish-date failure handling are unchanged.
 - Keep bulk scan counts and scanner results accurate when a post-scan notification fails. Each completed task is counted once, and notification delivery failures no longer replace a completed scan's status with an error.
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.
+- Add `Cross-Origin-Opener-Policy: same-origin` and a static strict CSP on `/api` responses to the website, and stop sending `X-Powered-By`.
 
 ## [1.7.0-rc.17] — 2026-10-02
 
