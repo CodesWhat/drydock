@@ -18,6 +18,10 @@ test("next config does not enable experimental SRI (it blocks hydration)", () =>
   assert.equal(nextConfig.experimental?.sri, undefined);
 });
 
+test("next config does not advertise X-Powered-By", () => {
+  assert.equal(nextConfig.poweredByHeader, false);
+});
+
 test("production build uses Turbopack without --webpack", () => {
   const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   const buildScript = packageJson.scripts?.build ?? "";
