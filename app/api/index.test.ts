@@ -260,6 +260,11 @@ function mockActualApiRouterStatsLifecycle() {
       init: vi.fn(() => ({ router: `${modulePath}-router` })),
     }));
   }
+  // Two routers in one module: the container-scoped routes and the top-level collection.
+  vi.doMock('./label-override.js', () => ({
+    init: vi.fn(() => ({ router: './label-override.js-router' })),
+    initCollection: vi.fn(() => ({ router: './label-override.js-collection-router' })),
+  }));
 
   return { mockCreateContainerStatsAggregator, mockStatsAggregator };
 }
