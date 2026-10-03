@@ -343,21 +343,38 @@ describe('model/label-owned', () => {
       expect(({} as Record<string, unknown>).value).toBeUndefined();
     });
 
-    test('parseLabelOwnedState accepts a state it built and rejects anything else', () => {
+    test('parseLabelOwnedState reads a state it built back whole', () => {
       const state = resolve(containerWith()).labelOwned;
-      expect(parseLabelOwnedState(JSON.parse(JSON.stringify(state)))).toEqual(state);
-      expect(parseLabelOwnedState(undefined)).toBeUndefined();
-      expect(parseLabelOwnedState('x')).toBeUndefined();
-      expect(parseLabelOwnedState({ ...state, v: 2 })).toBeUndefined();
-      expect(parseLabelOwnedState({ ...state, declared: null })).toBeUndefined();
-      expect(parseLabelOwnedState({ ...state, sources: { displayName: 'label' } })).toBeUndefined();
-      expect(parseLabelOwnedState({ ...state, sources: null })).toBeUndefined();
-      expect(
-        parseLabelOwnedState({
-          ...state,
-          declaredSources: { ...state?.declaredSources, displayName: 'bogus' },
-        }),
-      ).toBeUndefined();
+      expect(parseLabelOwnedState(JSON.parse(JSON.stringify(state)))).toEqual({
+        state,
+        unknown: [],
+      });
+    });
+
+    test.each([
+      ['undefined', undefined],
+      ['a string', 'x'],
+      ['an array', []],
+      ['an unknown version', { v: 2 }],
+    ])('parseLabelOwnedState reads %s as every field unknown, never throwing', (_name, raw) => {
+      const { state, unknown } = parseLabelOwnedState(raw);
+      expect(unknown).toHaveLength(9);
+      expect(state.declared).toEqual({});
+      expect(Object.values(state.sources)).toEqual(Array(9).fill('unset'));
+    });
+
+    test('parseLabelOwnedState flags only the fields it cannot read', () => {
+      const state = resolve(containerWith({ displayName: 'Sonarr' })).labelOwned as LabelOwnedState;
+      const raw = JSON.parse(JSON.stringify(state));
+      delete raw.sources.dependsOn;
+      raw.declaredSources.displayIcon = 'bogus';
+      raw.declared.dependsOnAction = 7;
+      const parsed = parseLabelOwnedState(raw);
+      expect(parsed.unknown.sort()).toEqual(['dependsOn', 'dependsOnAction', 'displayIcon']);
+      expect(parsed.state.declared.displayName).toBe('Sonarr');
+      expect(parsed.state.declared.dependsOnAction).toBeUndefined();
+      expect(parsed.state.declaredSources.displayIcon).toBe('unset');
+      expect(parseLabelOwnedState({ ...raw, declared: null }).unknown).toHaveLength(9);
     });
   });
 

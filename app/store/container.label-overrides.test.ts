@@ -607,6 +607,135 @@ describe('label-owned overrides at the store', () => {
     });
   });
 
+  describe('unreadable stored state', () => {
+    function corruptState(id: string, edit: (state: Record<string, any>) => unknown) {
+      const state = storedLabelOwned(id);
+      db.prepare('UPDATE containers SET label_owned = ? WHERE id = ?').run(
+        JSON.stringify(edit(state)),
+        id,
+      );
+      container._resetContainerStoreStateForTests();
+      container.createCollections(db);
+    }
+
+    function overriddenRow() {
+      container.insertContainer(
+        watched('web-1', {
+          displayName: 'Sonarr',
+          labels: { 'dd.display.name': 'Sonarr' },
+          actionTriggerExclude: 'docker.keep',
+        }),
+      );
+      setOverrides(watched('x'), { displayName: 'TV' });
+    }
+
+    test.each([
+      [
+        'a field missing from a source record',
+        (state: Record<string, any>) => {
+          delete state.declaredSources.dependsOnAction;
+          return state;
+        },
+      ],
+      [
+        'a field a newer build added',
+        (state: Record<string, any>) => ({
+          ...state,
+          declaredSources: { ...state.declaredSources, newField: 'label' },
+        }),
+      ],
+      ['an unknown version', (state: Record<string, any>) => ({ ...state, v: 2 })],
+      ['a garbage document', () => 'nonsense'],
+      [
+        'a declared document of the wrong type',
+        (state: Record<string, any>) => ({ ...state, declared: 4 }),
+      ],
+    ])('%s never promotes the override to the label value', (_name, edit) => {
+      overriddenRow();
+      corruptState('web-1', edit);
+
+      expect(container.getContainers()).toHaveLength(1);
+      const written = container.updateContainerFields('web-1', { health: 'healthy' });
+
+      expect(written?.displayName).toBe('TV');
+      expect(written?.labelOwned?.sources.displayName).toBe('override');
+      expect(written?.labelOwned?.declared.displayName).not.toBe('TV');
+      // A field with no override still shows what it showed, and stays declared.
+      expect(written?.actionTriggerExclude).toBe('docker.keep');
+      expect(written?.labelOwned?.declared.actionTriggerExclude).toBe('docker.keep');
+    });
+
+    test('reset after the next declared write shows the real label value', () => {
+      overriddenRow();
+      corruptState('web-1', (state) => ({ ...state, v: 2 }));
+      container.updateContainerFields('web-1', { health: 'healthy' });
+
+      container.updateContainerFields(
+        'web-1',
+        { displayName: 'Sonarr', labels: { 'dd.display.name': 'Sonarr' } },
+        undefined,
+        { labelOwned: 'declared' },
+      );
+      expect(raw('web-1').labelOwned?.declared.displayName).toBe('Sonarr');
+      expect(raw('web-1').displayName).toBe('TV');
+
+      resetOverrides(watched('x'));
+      expect(raw('web-1').displayName).toBe('Sonarr');
+    });
+
+    test('a field missing from the declared layer reads as unset', () => {
+      overriddenRow();
+      corruptState('web-1', (state) => {
+        delete state.declaredSources.actionTriggerExclude;
+        delete state.sources.actionTriggerExclude;
+        delete state.declared.actionTriggerExclude;
+        return state;
+      });
+      expect(raw('web-1').labelOwned?.declaredSources.actionTriggerExclude).toBeDefined();
+      expect(raw('web-1').actionTriggerExclude).toBe('docker.keep');
+    });
+  });
+
+  describe('downgrade safety', () => {
+    test('the stored dependency column never holds the override source, and reads still report it', () => {
+      container.insertContainer(
+        sonarr('1', { displayName: 'Sonarr', dependsOn: ['db'], dependsOnSource: 'compose' }),
+      );
+      setOverrides(sonarr('1'), { dependsOn: ['api'] });
+
+      const column = (id: string) =>
+        String(
+          db.prepare('SELECT dependency_config FROM containers WHERE id = ?').get(id)
+            ?.dependency_config,
+        );
+      expect(column('1')).not.toContain('override');
+      expect(JSON.parse(column('1'))).toMatchObject({
+        dependsOn: ['api'],
+        dependsOnSource: 'compose',
+      });
+      expect(raw('1').dependsOnSource).toBe('override');
+
+      // Written again by an ordinary update, still not stored as override.
+      container.updateContainerFields('1', { health: 'healthy' });
+      expect(column('1')).not.toContain('override');
+      expect(raw('1').dependsOnSource).toBe('override');
+
+      resetOverrides(sonarr('1'));
+      expect(column('1')).not.toContain('override');
+      expect(raw('1').dependsOnSource).toBe('compose');
+    });
+
+    test('an override on a container with no declared dependency source stores none', () => {
+      container.insertContainer(watched('web-1'));
+      setOverrides(watched('x'), { dependsOn: ['api'] });
+      const stored = db
+        .prepare('SELECT dependency_config FROM containers WHERE id = ?')
+        .get('web-1');
+      expect(String(stored?.dependency_config)).not.toContain('override');
+      expect(raw('web-1').dependsOnSource).toBe('override');
+    });
+  });
+
   describe('mutation', () => {
     test('rewrites every affected row, announces each once, and reset restores the declared values', () => {
       container.insertContainer(

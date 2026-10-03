@@ -1114,7 +1114,12 @@ function containerToRow(c: container.Container, securityHash: string): Container
   };
   const dependencyConfig = {
     dependsOn: c.dependsOn,
-    dependsOnSource: c.dependsOnSource,
+    // The column keeps the declared source, as builds before overrides read it: an
+    // `override` here would fail their schema on every read. The read derives it.
+    dependsOnSource:
+      c.dependsOnSource === 'override'
+        ? toDeclaredDependencySource(c.labelOwned?.declaredSources.dependsOn)
+        : c.dependsOnSource,
     dependsOnAction: c.dependsOnAction,
   };
 
@@ -1173,13 +1178,51 @@ function updateContainerRow(c: container.Container, securityHash: string): void 
   );
 }
 
-/** A stored state document that cannot be read is treated as absent, never thrown. */
-function readStoredLabelOwned(stored: string | number | null): LabelOwnedState | undefined {
-  try {
-    return parseLabelOwnedState(fromStoredJson(stored));
-  } catch {
+/**
+ * Read a stored state document without ever throwing. A NULL column is a row no override
+ * has reached and has no state. Anything else is a row an override applied to, so what
+ * cannot be read is rebuilt rather than dropped: a field with no override reads its value
+ * from the row (that is the declared value), and a field an override is hiding stays unset
+ * until the next declared write, because the row's value there is the override, not the label.
+ */
+function readStoredLabelOwned(
+  stored: string | number | null,
+  flat: Record<string, unknown>,
+  overrides: ReturnType<typeof getLabelOverrideFieldsFor>,
+): LabelOwnedState | undefined {
+  if (stored === null || stored === undefined) {
     return undefined;
   }
+  let document: unknown;
+  try {
+    document = fromStoredJson(stored);
+  } catch {
+    document = undefined;
+  }
+  const { state, unknown } = parseLabelOwnedState(document);
+  if (unknown.length === 0) {
+    return state;
+  }
+  if (overrides === undefined) {
+    // Nothing hides the row's values, so it is as pristine as a row that never had state.
+    return undefined;
+  }
+  const declared = { ...state.declared } as Record<string, unknown>;
+  for (const field of unknown) {
+    if (overrides?.[field] === undefined && flat[field] !== undefined) {
+      declared[field] = structuredClone(flat[field]);
+    }
+  }
+  const inferred = inferDeclaredSources(
+    declared as LabelOwnedDeclared,
+    flat as Pick<container.Container, 'name' | 'labels'>,
+    toDeclaredDependencySource(flat.dependsOnSource),
+  );
+  const declaredSources = { ...state.declaredSources };
+  for (const field of unknown) {
+    declaredSources[field] = inferred[field];
+  }
+  return buildLabelOwnedState(declared as LabelOwnedDeclared, declaredSources, overrides);
 }
 
 /**
@@ -1220,13 +1263,35 @@ function rowToContainer(row: Row): container.Container {
   const dependencyConfig =
     fromStoredJson<{
       dependsOn?: string[];
-      dependsOnSource?: 'label' | 'compose';
+      dependsOnSource?: 'label' | 'compose' | 'override';
       dependsOnAction?: 'update' | 'restart';
     }>(typedRow.dependency_config) ?? {};
   const errorMessage = toOptionalStoredString(typedRow.error_message);
   const groupPolicy = fromStoredJson<container.ContainerGroupPolicySnapshot>(typedRow.group_policy);
-  // NULL until an override has ever applied to the row; an unreadable document reads as NULL.
-  const labelOwned = readStoredLabelOwned(typedRow.label_owned);
+  const flat = {
+    name: String(typedRow.name),
+    labels: fromStoredJson<Record<string, string>>(typedRow.labels),
+    displayName: String(typedRow.display_name),
+    displayIcon: toOptionalStoredString(typedRow.display_icon),
+    dependsOn: dependencyConfig.dependsOn,
+    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnAction: dependencyConfig.dependsOnAction,
+    actionTriggerInclude: triggerConfig.actionTriggerInclude,
+    actionTriggerExclude: triggerConfig.actionTriggerExclude,
+    actionTriggerAuto: triggerConfig.actionTriggerAuto,
+    notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
+    notificationTriggerExclude: triggerConfig.notificationTriggerExclude,
+  };
+  // NULL until an override has ever applied to the row.
+  const labelOwned = readStoredLabelOwned(
+    typedRow.label_owned,
+    flat,
+    getLabelOverrideFieldsFor({
+      ...flat,
+      watcher: String(typedRow.watcher),
+      agent: toOptionalStoredString(typedRow.agent),
+    }),
+  );
 
   const raw: Record<string, unknown> = {
     id: String(typedRow.id),
@@ -1270,7 +1335,8 @@ function rowToContainer(row: Row): container.Container {
     triggerInclude: triggerConfig.triggerInclude,
     triggerExclude: triggerConfig.triggerExclude,
     dependsOn: dependencyConfig.dependsOn,
-    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnSource:
+      labelOwned?.sources.dependsOn === 'override' ? 'override' : dependencyConfig.dependsOnSource,
     dependsOnAction: dependencyConfig.dependsOnAction,
     // Only present when a policy applied, so a record no policy reaches reads back with
     // exactly the keys it had before group policies existed.
@@ -1732,7 +1798,9 @@ export interface LabelOwnedWriteOptions {
   labelOwned?: 'declared';
 }
 
-function getLabelOverrideFieldsFor(record: container.Container) {
+function getLabelOverrideFieldsFor(
+  record: Pick<container.Container, 'name' | 'watcher' | 'agent' | 'labels'>,
+) {
   const scope = labelOverrideStore.deriveLabelOverrideScope(record);
   /* istanbul ignore next -- unreachable: every record here has passed validateContainer,
      which requires a non-empty watcher and name, so a scope always derives. */

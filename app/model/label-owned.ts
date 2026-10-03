@@ -381,26 +381,74 @@ const STATE_SOURCES: readonly LabelOwnedSource[] = [
   'unset',
 ];
 
-/** Read a stored state document, or `undefined` when it is absent or unreadable. */
-export function parseLabelOwnedState(raw: unknown): LabelOwnedState | undefined {
-  if (raw === null || typeof raw !== 'object') {
-    return undefined;
+const DECLARED_SOURCES: readonly LabelOwnedSource[] = [
+  'label',
+  'compose',
+  'watcher',
+  'default',
+  'unset',
+];
+
+export interface ParsedLabelOwnedState {
+  /** Always well formed: a field that could not be read is unset in it. */
+  state: LabelOwnedState;
+  /** The fields whose declared value or source could not be read from the document. */
+  unknown: LabelOwnedField[];
+}
+
+function isDeclaredValue(value: unknown): value is LabelOwnedDeclaredValue {
+  return (
+    typeof value === 'string' || (Array.isArray(value) && value.every((v) => typeof v === 'string'))
+  );
+}
+
+/**
+ * Read a stored state document tolerantly, never throwing. A field whose source or declared
+ * value is missing or malformed reads as unset and is reported in `unknown`; a document that
+ * is not an object, or carries a version this build does not know, has every field unknown.
+ * The caller decides how to rebuild an unknown field: it must not guess the declared value
+ * of a field an override is hiding.
+ */
+export function parseLabelOwnedState(raw: unknown): ParsedLabelOwnedState {
+  const document =
+    raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : undefined;
+  const readable =
+    document?.v === 1 && document.declared !== null && typeof document.declared === 'object';
+  const declaredDocument = readable ? (document.declared as Record<string, unknown>) : {};
+  const sourceDocument =
+    readable && document?.declaredSources !== null && typeof document?.declaredSources === 'object'
+      ? (document.declaredSources as Record<string, unknown>)
+      : {};
+  const effectiveDocument =
+    readable && document?.sources !== null && typeof document?.sources === 'object'
+      ? (document.sources as Record<string, unknown>)
+      : {};
+  const declared: LabelOwnedDeclared = {};
+  const unknown: LabelOwnedField[] = [];
+  const declaredSources = {} as Record<LabelOwnedField, LabelOwnedDeclaredSource>;
+  const sources = {} as Record<LabelOwnedField, LabelOwnedSource>;
+  for (const field of FIELD_NAMES) {
+    const source = sourceDocument[field] as LabelOwnedSource;
+    const value = declaredDocument[field];
+    const valueReadable = value === undefined || isDeclaredValue(value);
+    const effective = effectiveDocument[field] as LabelOwnedSource;
+    if (
+      !DECLARED_SOURCES.includes(source) ||
+      !STATE_SOURCES.includes(effective) ||
+      !valueReadable
+    ) {
+      unknown.push(field);
+      declaredSources[field] = 'unset';
+      sources[field] = 'unset';
+    } else {
+      declaredSources[field] = source as LabelOwnedDeclaredSource;
+      sources[field] = effective;
+      if (value !== undefined) {
+        declared[field] = value as LabelOwnedDeclaredValue;
+      }
+    }
   }
-  const state = raw as Partial<LabelOwnedState>;
-  const isRecordOfSources = (value: unknown) =>
-    value !== null &&
-    typeof value === 'object' &&
-    FIELD_NAMES.every((field) =>
-      STATE_SOURCES.includes((value as Record<string, LabelOwnedSource>)[field]),
-    );
-  if (
-    state.v !== 1 ||
-    state.declared === null ||
-    typeof state.declared !== 'object' ||
-    !isRecordOfSources(state.declaredSources) ||
-    !isRecordOfSources(state.sources)
-  ) {
-    return undefined;
-  }
-  return state as LabelOwnedState;
+  return { state: { v: 1, declared, declaredSources, sources }, unknown };
 }
