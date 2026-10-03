@@ -502,6 +502,69 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
   -d '{"action":"revert-to-declarative"}'
 ```
 
+## Label overrides
+
+Drydock can store its own value for nine fields that Docker labels normally set, so you can change them without editing a Compose file or recreating the container. An override applies on top of the label, survives container recreation, restarts and Drydock updates, and never expires. Saving only updates Drydock's own records: it never calls Docker, writes a Compose file or runs a trigger.
+
+| Field | Label it overrides | Value |
+| --- | --- | --- |
+| `displayName` | `dd.display.name` | Text, 1 to 128 characters, no control, bidirectional-control, `<` or `>` characters |
+| `displayIcon` | `dd.display.icon` | `sh:<slug>`, `hl:<slug>` or `si:<slug>` (`-` also works as the separator). URLs, `mdi:` and Font Awesome names are not accepted |
+| `dependsOn` | `dd.depends_on` | Up to 32 container names. An empty list means no dependencies |
+| `dependsOnAction` | `dd.depends_on.action` | `update` or `restart` |
+| `notificationTriggerInclude`, `notificationTriggerExclude` | `dd.notification.include`, `dd.notification.exclude` | Up to 32 trigger references, each `reference` or `reference:threshold` |
+| `actionTriggerInclude`, `actionTriggerExclude`, `actionTriggerAuto` | `dd.action.include`, `dd.action.exclude`, `dd.action.auto` | The same, for action triggers |
+
+An override belongs to a container identity: the watcher, the agent and the container name, or the Compose project and service for a Compose container, so every replica of a service shares it. Lists replace the label whole and never merge. An empty routing list is an explicit "none": it removes the label's value instead of falling back to it.
+
+| Endpoint | Scope | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/containers/{id}/label-overrides` | `read` | Snapshot for one container |
+| `PATCH /api/v1/containers/{id}/label-overrides` | `admin` | Set or remove fields |
+| `DELETE /api/v1/containers/{id}/label-overrides?revision=N` | `admin` | Reset every field to its labels |
+| `GET /api/v1/label-overrides` | `read` | Every stored row, with the containers each one matches |
+| `DELETE /api/v1/label-overrides/{overrideId}?revision=N` | `admin` | Delete a row, including one with no matching container |
+
+Writes need `admin` rather than `containers:update` because a routing override can grant automatic execution and redirect notifications. Sessions are not limited by scopes.
+
+The snapshot lists all nine fields. Each has the `labelKey`, the raw `label` value, the `declared` value and its source, the `override` (with `updatedAt` and `updatedBy`) when there is one, and the `effective` value with its source. Sources are `override`, `label`, `compose`, `watcher`, `default` and `unset`. `revision` is `0` and `overrideId` is `null` while the scope has no stored override. `scope.appliesTo` lists the containers the override covers. `readOnlyReason` is `rollback-container` for a temporary rollback container, which answers `409` to writes. `agentEnforcedActionRouting` is `true` when the container runs on a traditional agent that re-checks action routing against its own labels. Container responses and events also carry `labelOwnedSources`, the `effective.source` of each field, so a client can show ownership without a second request.
+
+```bash
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides
+```
+
+`PATCH` takes the revision you last read and up to nine changes, one per field. A change is `{ "field": "...", "op": "set", "value": ... }` or `{ "field": "...", "op": "remove" }`. `remove` returns that field to its label, and removing the last field deletes the row. A change that would alter nothing is dropped, so repeating a save is safe.
+
+```bash
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides \
+  -H 'Content-Type: application/json' \
+  -d '{"revision":0,"changes":[{"field":"displayName","op":"set","value":"TV"},{"field":"actionTriggerAuto","op":"remove"}]}'
+```
+
+The response is the snapshot plus `changed` (the fields that changed) and `warnings`:
+
+- `unresolved-dependency`: no container has that name yet. The dependency is saved and starts working when one appears.
+- `cross-host-dependency`: the name only exists on another agent, so the dependency is ignored.
+- `trigger-agent-mismatch`: an action reference only matches triggers that belong to another agent.
+- `auto-inert`: no matching trigger runs with `AUTO=onauto`, so an auto reference does nothing yet.
+- `stale-trigger-reference`: a stored override names a trigger that no longer exists. It is kept and reported.
+
+Errors:
+
+- `400` with `errors: [{ field, code }]` for an invalid request. Codes include `unknown-field`, `duplicate-field`, `invalid-icon`, `display-name-invalid-characters`, `unknown-trigger-reference`, `wrong-trigger-category`, `depends-on-self` and `agent-enforced-widening`. List codes carry the offending `entries`.
+- `403` when an API key lacks the scope, `404` for an unknown container or row.
+- `409` for a stale `revision`, with the current `snapshot` (or `current` row) in the body and nothing written, or for a rollback container.
+- `422` with `cycle` (container names) when the dependencies would create a dependency cycle. A cycle that already existed does not block a save.
+
+On a traditional agent, action include and auto overrides can only narrow what the container's labels allow, and an action exclude override can only add to the label's exclusions, because the agent checks its own labels again before it acts. Resetting is always allowed. Portwing controller-transport and controller-local containers are not restricted. Notification routing, display and dependencies always apply on the controller.
+
+Every successful change writes `label-override-set` or `label-override-cleared` to the [audit log](/docs/api#audit-trail) in the same transaction as the change. The details carry the operation (`patch`, `reset-all` or `delete-row`), the scope, and for each field the label value, declared value, previous and new override and the effective source, each cut to 256 characters. Rejected requests are not audited.
+
+```bash
+# Reset every override of one container to its labels (revision from the last snapshot)
+curl -X DELETE 'http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides?revision=3'
+```
+
 ## Get security vulnerability overview
 
 This operation returns pre-aggregated vulnerability data grouped by image across all scanned containers.

@@ -169,6 +169,10 @@ A dismissible banner appears at the top of the dashboard to surface release note
 
 Clicking any row in a data view opens a slide-in detail panel with contextual information and actions. Detail panels are available on all views: Containers, Watchers, Registries, Triggers, Auth, Agents, and Security.
 
+### Labels tab and label overrides
+
+The container **Labels** tab always shows the labels exactly as Docker reports them. A Drydock [label override](/docs/configuration/watchers#override-labels-with-the-api) never changes that list, label search or label grouping. It only changes the effective value Drydock uses for the display name, icon, dependencies and notification or action routing, so the container name, icon and dependency markers elsewhere in the UI show the override once one is set. There is no override editor in the UI yet: set and reset overrides through the [API](/docs/api/container#label-overrides).
+
 ## Language / Locale
 
 Drydock ships with 17 locales in v1.5.0. Switch language in **Config > Appearance**.
