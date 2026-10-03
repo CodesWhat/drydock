@@ -1,5 +1,6 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import * as requestUpdate from '../updates/request-update.js';
+import { toApiContainer } from './container/shared.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
@@ -612,6 +613,25 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ action: auditAction, status: 'error' }),
       );
       expect(actionCounter).toHaveBeenCalledOnce();
+    });
+
+    test('serves the same redacted, projected container as the detail route', async () => {
+      const stored = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        details: { env: [{ key: 'DB_PASSWORD', value: 'hunter2' }] },
+      };
+      mockGetContainer.mockReturnValue(stored);
+      const { trigger } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const res = createMockResponse();
+
+      await getHandler('post', route)(createMockRequest({ params: { id: 'c1' } }), res);
+
+      const { result } = res.json.mock.calls[0][0];
+      expect(result).toEqual(toApiContainer(stored));
+      expect(JSON.stringify(result)).not.toContain('hunter2');
     });
 
     test('serves the projected label-owned sources, never the declared layer', async () => {

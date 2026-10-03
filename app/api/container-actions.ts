@@ -13,7 +13,7 @@ import {
   requestContainerUpdates,
 } from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
-import { projectLabelOwnedForApi } from './container/shared.js';
+import { toApiContainer } from './container/shared.js';
 import {
   areContainerActionsEnabled,
   CONTAINER_ACTIONS_DISABLED_MESSAGE,
@@ -194,7 +194,7 @@ async function executeAction(
 
   res.status(200).json({
     message: ACTION_MESSAGES[method],
-    result: projectLabelOwnedForApi(responseContainer),
+    result: toApiContainer(responseContainer),
   });
 }
 
