@@ -2,13 +2,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
-import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
+import {
+  createMemoryDatabase,
+  createMigratedMemoryDatabase,
+  createTemporaryStoreDirectory,
+  removeTemporaryStoreDirectory,
+} from '../test/sqlite-db.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import { mapContainerToContainerReport } from '../watchers/providers/docker/container-processing.js';
 import { addImageDetailsToContainerOrchestration } from '../watchers/providers/docker/docker-image-details-orchestration.js';
 import * as container from './container.js';
 import type { Database } from './db/driver.js';
+import { MIGRATIONS, migrate } from './db/migrations.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 
@@ -6586,5 +6592,217 @@ describe('field-level write interleave (roadmap 7-STORE slice 9 / spec 4.3)', ()
     const stored = container.getContainer('interleave-scan-then-rename');
     expect(stored?.result?.tag).toBe('newer');
     expect(stored?.name).toBe('new-name');
+  });
+});
+
+describe('dependency field persistence (spec 7.5 slice 1)', () => {
+  const dependencyFields = {
+    dependsOn: ['db', 'cache'],
+    dependsOnSource: 'label',
+    dependsOnAction: 'restart',
+  } as const;
+
+  function readDependencyFields(stored: Record<string, unknown> | undefined) {
+    return {
+      dependsOn: stored?.dependsOn,
+      dependsOnSource: stored?.dependsOnSource,
+      dependsOnAction: stored?.dependsOnAction,
+    };
+  }
+
+  test('insertContainer keeps the dependency fields through every read path', () => {
+    container.insertContainer(createContainerFixture({ id: 'deps-insert', ...dependencyFields }));
+
+    expect(readDependencyFields(container.getContainer('deps-insert'))).toEqual(dependencyFields);
+    expect(readDependencyFields(container.getContainerRaw('deps-insert'))).toEqual(
+      dependencyFields,
+    );
+    expect(readDependencyFields(container.getContainers()[0])).toEqual(dependencyFields);
+  });
+
+  test('keeps an explicitly empty dependsOn list', () => {
+    container.insertContainer(
+      createContainerFixture({
+        id: 'deps-empty',
+        dependsOn: [],
+        dependsOnSource: 'label',
+        dependsOnAction: 'update',
+      }),
+    );
+
+    expect(container.getContainer('deps-empty')?.dependsOn).toEqual([]);
+  });
+
+  test('updateContainer persists the dependency fields of a whole-record write', () => {
+    container.insertContainer(createContainerFixture({ id: 'deps-update' }));
+
+    container.updateContainer(
+      createContainerFixture({
+        id: 'deps-update',
+        dependsOn: ['db'],
+        dependsOnSource: 'compose',
+        dependsOnAction: 'update',
+      }),
+    );
+
+    expect(readDependencyFields(container.getContainer('deps-update'))).toEqual({
+      dependsOn: ['db'],
+      dependsOnSource: 'compose',
+      dependsOnAction: 'update',
+    });
+  });
+
+  test('updateContainerFields persists a dependency patch and an unrelated patch keeps it', () => {
+    container.insertContainer(createContainerFixture({ id: 'deps-patch', ...dependencyFields }));
+
+    container.updateContainerFields('deps-patch', {
+      dependsOn: ['redis'],
+      dependsOnSource: 'compose',
+    });
+    container.updateContainerFields('deps-patch', { status: 'exited' });
+
+    expect(readDependencyFields(container.getContainer('deps-patch'))).toEqual({
+      dependsOn: ['redis'],
+      dependsOnSource: 'compose',
+      dependsOnAction: 'restart',
+    });
+  });
+
+  test('updateContainerFields clears dependency fields patched to undefined', () => {
+    container.insertContainer(createContainerFixture({ id: 'deps-clear', ...dependencyFields }));
+
+    container.updateContainerFields('deps-clear', {
+      dependsOn: undefined,
+      dependsOnSource: undefined,
+    });
+
+    expect(readDependencyFields(container.getContainer('deps-clear'))).toEqual({
+      dependsOn: undefined,
+      dependsOnSource: undefined,
+      dependsOnAction: 'restart',
+    });
+  });
+
+  test('a row stored before migration 7 reads back with no dependency fields after the upgrade', () => {
+    const legacyDb = createMemoryDatabase();
+    try {
+      migrate(
+        legacyDb,
+        MIGRATIONS.filter((migration) => migration.version < 7),
+      );
+      const row: Record<string, unknown> | undefined = container.buildImportedContainerRow(
+        createContainerFixture({ id: 'deps-pre-migration', ...dependencyFields }),
+      );
+      if (!row) {
+        throw new Error('fixture failed container validation');
+      }
+      delete row.dependency_config;
+      const columns = Object.keys(row);
+      legacyDb
+        .prepare(
+          `INSERT INTO containers (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        )
+        .run(...columns.map((column) => row[column] as string | number | null));
+
+      expect(migrate(legacyDb)).toEqual([7]);
+      container.createCollections(legacyDb);
+
+      const stored = container.getContainer('deps-pre-migration');
+      expect(stored?.name).toBe('test');
+      expect(readDependencyFields(stored)).toEqual({
+        dependsOn: undefined,
+        dependsOnSource: undefined,
+        dependsOnAction: undefined,
+      });
+    } finally {
+      container.createCollections(db);
+      legacyDb.close();
+    }
+  });
+
+  test('a compose-derived dependency change observed by a full scan is persisted', async () => {
+    const composeDirectory = createTemporaryStoreDirectory();
+    try {
+      const composeFilePath = path.join(composeDirectory, 'compose.yml');
+      fs.writeFileSync(
+        composeFilePath,
+        [
+          'services:',
+          '  web:',
+          '    image: organization/image',
+          '    depends_on:',
+          '      - db',
+          '  db:',
+          '    image: postgres',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      const composeLabels = {
+        'com.docker.compose.project': 'stack',
+        'com.docker.compose.service': 'web',
+        'com.docker.compose.project.config_files': composeFilePath,
+      };
+      const storedContainer = createContainerFixture({
+        id: 'deps-full-scan',
+        watcher: 'docker',
+        name: 'web',
+        displayName: 'web',
+        status: 'running',
+        labels: composeLabels,
+        details: { ports: [], volumes: [], env: [] },
+      });
+      seedContainer(storedContainer);
+
+      const watcher = {
+        name: 'docker',
+        configuration: { watchevents: true },
+        dockerApi: {
+          getContainer: vi.fn().mockReturnValue({ inspect: vi.fn().mockResolvedValue({}) }),
+          getImage: vi.fn().mockReturnValue({
+            inspect: vi.fn().mockResolvedValue({
+              Id: storedContainer.image.id,
+              Architecture: storedContainer.image.architecture,
+              Os: storedContainer.image.os,
+              Created: storedContainer.image.created,
+            }),
+          }),
+        },
+        log: { warn: vi.fn(), debug: vi.fn() },
+        ensureLogger: vi.fn(),
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+      };
+      const helpers = {
+        resolveLabelsFromContainer: vi.fn(() => ({})),
+        mergeConfigWithImgset: vi.fn(() => ({})),
+        normalizeContainer: vi.fn((c) => c),
+        resolveImageName: vi.fn(),
+        resolveTagName: vi.fn(),
+        getMatchingImgsetConfiguration: vi.fn().mockReturnValue(undefined),
+      };
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        {
+          Id: 'deps-full-scan',
+          Image: storedContainer.image.name,
+          State: 'running',
+          Labels: composeLabels,
+          Names: ['/web'],
+          Ports: [],
+          Mounts: [],
+        } as any,
+        {},
+        helpers as any,
+      );
+
+      expect(readDependencyFields(container.getContainer('deps-full-scan'))).toEqual({
+        dependsOn: ['db'],
+        dependsOnSource: 'compose',
+        dependsOnAction: 'update',
+      });
+    } finally {
+      removeTemporaryStoreDirectory(composeDirectory);
+    }
   });
 });

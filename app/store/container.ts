@@ -997,6 +997,7 @@ const CONTAINER_COLUMNS = [
   'trigger_config',
   'source_repo',
   'current_release_notes',
+  'dependency_config',
 ] as const;
 
 type ContainerColumn = (typeof CONTAINER_COLUMNS)[number];
@@ -1068,6 +1069,11 @@ function containerToRow(c: container.Container, securityHash: string): Container
     triggerInclude: c.triggerInclude,
     triggerExclude: c.triggerExclude,
   };
+  const dependencyConfig = {
+    dependsOn: c.dependsOn,
+    dependsOnSource: c.dependsOnSource,
+    dependsOnAction: c.dependsOnAction,
+  };
 
   return {
     id: c.id,
@@ -1105,6 +1111,7 @@ function containerToRow(c: container.Container, securityHash: string): Container
     trigger_config: toStoredJson(triggerConfig),
     source_repo: c.sourceRepo ?? null,
     current_release_notes: toStoredJson(c.currentReleaseNotes),
+    dependency_config: toStoredJson(dependencyConfig),
   };
 }
 
@@ -1123,7 +1130,7 @@ function updateContainerRow(c: container.Container, securityHash: string): void 
 
 /**
  * Reconstruct the pre-`validate()` shape of a container from a stored row:
- * every canonical (non-derived) field the row carries, with the three
+ * every canonical (non-derived) field the row carries, with the four
  * grouped JSON columns unpacked back onto their individual fields. Passed
  * straight to `validateContainer`, which recomputes every derived field
  * (`identityKey`, `updateAvailable`, `updateKind`, `link`, `tagPinned`,
@@ -1155,6 +1162,13 @@ function rowToContainer(row: Row): container.Container {
       triggerInclude?: string;
       triggerExclude?: string;
     }>(typedRow.trigger_config) ?? {};
+  // NULL on a row written before migration 7 added the column.
+  const dependencyConfig =
+    fromStoredJson<{
+      dependsOn?: string[];
+      dependsOnSource?: 'label' | 'compose';
+      dependsOnAction?: 'update' | 'restart';
+    }>(typedRow.dependency_config) ?? {};
   const errorMessage = toOptionalStoredString(typedRow.error_message);
 
   const raw: Record<string, unknown> = {
@@ -1198,6 +1212,9 @@ function rowToContainer(row: Row): container.Container {
     actionTriggerAuto: triggerConfig.actionTriggerAuto,
     triggerInclude: triggerConfig.triggerInclude,
     triggerExclude: triggerConfig.triggerExclude,
+    dependsOn: dependencyConfig.dependsOn,
+    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnAction: dependencyConfig.dependsOnAction,
   };
 
   return validateContainer(raw);
