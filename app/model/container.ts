@@ -238,10 +238,11 @@ export interface Container {
   triggerInclude?: string;
   /** @deprecated compat mirror. */
   triggerExclude?: string;
-  // Dependency-ordering fields (#219). Derived, not persisted independently —
-  // re-resolved from the container's labels/compose file every watch cycle,
-  // same pattern as actionTriggerInclude/includeTags above. See
-  // app/dependencies/dependency-graph.ts for how these are consumed.
+  // Dependency-ordering fields (#219). Re-resolved from the container's
+  // labels/compose file every watch cycle, and persisted in the store's
+  // containers.dependency_config column the way actionTriggerInclude is in
+  // trigger_config. See app/dependencies/dependency-graph.ts for how these
+  // are consumed.
   dependsOn?: string[];
   dependsOnSource?: 'label' | 'compose';
   dependsOnAction?: 'update' | 'restart';

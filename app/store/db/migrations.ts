@@ -98,6 +98,18 @@ ALTER TABLE containers ADD COLUMN current_release_notes TEXT;
     sql: "CREATE INDEX containers_watcher_agent ON containers(watcher, COALESCE(agent, ''));",
   },
   {
+    version: 7,
+    // Spec 7.5 slice 1: the containers table shipped with no home for
+    // `dependsOn`/`dependsOnSource`/`dependsOnAction`, so every read dropped
+    // them and the dependency graph, list-view edges and batch waves saw no
+    // edges. They are read together and never queried on their own, so they
+    // share one grouped JSON column like trigger_config. Nullable: a row
+    // written before this migration reads back with no dependencies until the
+    // next watch cycle or event writes them.
+    note: 'add containers.dependency_config (spec 7.5 slice 1)',
+    sql: 'ALTER TABLE containers ADD COLUMN dependency_config TEXT;',
+  },
+  {
     version: GROUP_POLICIES_MIGRATION_VERSION,
     // Spec 7.3: one Drydock-owned policy per exact group name. group_name is a column
     // because the store looks policies up by it; BINARY collation keeps the match

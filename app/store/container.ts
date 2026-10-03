@@ -1007,6 +1007,7 @@ const CONTAINER_COLUMNS = [
   'trigger_config',
   'source_repo',
   'current_release_notes',
+  'dependency_config',
   'group_policy',
 ] as const;
 
@@ -1083,6 +1084,11 @@ function containerToRow(c: container.Container, securityHash: string): Container
     triggerInclude: c.triggerInclude,
     triggerExclude: c.triggerExclude,
   };
+  const dependencyConfig = {
+    dependsOn: c.dependsOn,
+    dependsOnSource: c.dependsOnSource,
+    dependsOnAction: c.dependsOnAction,
+  };
 
   return {
     id: c.id,
@@ -1120,6 +1126,7 @@ function containerToRow(c: container.Container, securityHash: string): Container
     trigger_config: toStoredJson(triggerConfig),
     source_repo: c.sourceRepo ?? null,
     current_release_notes: toStoredJson(c.currentReleaseNotes),
+    dependency_config: toStoredJson(dependencyConfig),
     group_policy: toStoredJson(c.groupPolicy),
   };
 }
@@ -1139,7 +1146,7 @@ function updateContainerRow(c: container.Container, securityHash: string): void 
 
 /**
  * Reconstruct the pre-`validate()` shape of a container from a stored row:
- * every canonical (non-derived) field the row carries, with the three
+ * every canonical (non-derived) field the row carries, with the four
  * grouped JSON columns unpacked back onto their individual fields. Passed
  * straight to `validateContainer`, which recomputes every derived field
  * (`identityKey`, `updateAvailable`, `updateKind`, `link`, `tagPinned`,
@@ -1171,6 +1178,13 @@ function rowToContainer(row: Row): container.Container {
       triggerInclude?: string;
       triggerExclude?: string;
     }>(typedRow.trigger_config) ?? {};
+  // NULL on a row written before migration 7 added the column.
+  const dependencyConfig =
+    fromStoredJson<{
+      dependsOn?: string[];
+      dependsOnSource?: 'label' | 'compose';
+      dependsOnAction?: 'update' | 'restart';
+    }>(typedRow.dependency_config) ?? {};
   const errorMessage = toOptionalStoredString(typedRow.error_message);
   const groupPolicy = fromStoredJson<container.ContainerGroupPolicySnapshot>(typedRow.group_policy);
 
@@ -1215,6 +1229,9 @@ function rowToContainer(row: Row): container.Container {
     actionTriggerAuto: triggerConfig.actionTriggerAuto,
     triggerInclude: triggerConfig.triggerInclude,
     triggerExclude: triggerConfig.triggerExclude,
+    dependsOn: dependencyConfig.dependsOn,
+    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnAction: dependencyConfig.dependsOnAction,
     // Only present when a policy applied, so a record no policy reaches reads back with
     // exactly the keys it had before group policies existed.
     ...(groupPolicy === undefined ? {} : { groupPolicy }),
