@@ -97,19 +97,45 @@ describe('isAuthenticatedSession uses the shared v2 session validator', () => {
 });
 
 describe('upgrade rate-limit principal from a v2 session', () => {
-  test('keys the upgrade by the v2 session username', () => {
-    const resolve = createIdentityAwareUpgradeRateLimitKeyResolver({
-      ratelimit: { identitykeying: true },
-    });
+  const resolve = createIdentityAwareUpgradeRateLimitKeyResolver({
+    ratelimit: { identitykeying: true },
+  });
+
+  test('charges the v2 session username when the request has no session id', () => {
+    const request = {
+      socket: { remoteAddress: '10.0.0.1' },
+      session: { passport: { user: V2_LOCAL } },
+    } as never;
+
+    expect(resolve(request, true)).toBe('user:alice');
+  });
+
+  test('charges the v2 OIDC session username the same way', () => {
+    const request = {
+      socket: { remoteAddress: '10.0.0.1' },
+      session: { passport: { user: '{"v":2,"kind":"oidc","username":"bob@example.com"}' } },
+    } as never;
+
+    expect(resolve(request, true)).toBe('user:bob@example.com');
+  });
+
+  test('a session id takes precedence over the username, as it does for HTTP', () => {
     const request = {
       socket: { remoteAddress: '10.0.0.1' },
       sessionID: 'sid-1',
       session: { passport: { user: V2_LOCAL } },
     } as never;
 
-    const key = resolve(request, true);
+    expect(resolve(request, true)).toBe('session:sid-1');
+  });
 
-    expect(typeof key).toBe('string');
-    expect(key).not.toBe('ip:10.0.0.1');
+  test('an unauthenticated upgrade is charged to its address, not the stored username', () => {
+    const request = {
+      socket: { remoteAddress: '10.0.0.1' },
+      sessionID: 'sid-1',
+      session: { passport: { user: V2_LOCAL } },
+    } as never;
+
+    expect(resolve(request, false)).toBe('ip:10.0.0.1');
   });
 });
