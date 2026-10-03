@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
+import { i18n } from '@/boot/i18n';
 import {
   UPDATE_TOAST_FALLBACK_DELAY_MS,
   useGlobalUpdateToast,
@@ -41,6 +42,29 @@ describe('useGlobalUpdateToast', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    i18n.global.locale.value = 'en';
+  });
+
+  it.each(['fr', 'ar'] as const)('renders the canonical rollback reason in %s', async (locale) => {
+    i18n.global.locale.value = locale;
+    const { wrapper, toast } = mountGlobalToast();
+    try {
+      dispatch('dd:sse-update-failed', {
+        containerName: 'nginx',
+        operationId: 'op-localized',
+        rollbackReason: 'health-gate-failed',
+        batchId: null,
+      });
+      await settle();
+      expect(toast.toasts.value.at(-1)?.title).toBe(
+        i18n.global.t('containersView.toast.rolledBackWithReason', {
+          name: 'nginx',
+          reason: i18n.global.t('containerComponents.backups.operationValues.health-gate-failed'),
+        }),
+      );
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   describe('dd:sse-update-applied', () => {

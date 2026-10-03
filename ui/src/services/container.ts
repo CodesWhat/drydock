@@ -187,6 +187,10 @@ async function refreshAllContainers() {
   return readJsonResponse(response, 'Container refresh API');
 }
 
+function actionHttpFailure(response: Response, message: string): string {
+  return `${message} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`;
+}
+
 async function refreshContainer(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/watch`, {
     method: 'POST',
@@ -196,7 +200,14 @@ async function refreshContainer(containerId: string) {
     return undefined;
   }
   if (!response.ok) {
-    throw new Error(`Failed to refresh container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.actionToasts.recheckFailedDetail', {
+          name: containerId,
+        }),
+      ),
+    );
   }
   return readJsonResponse(response, 'Container refresh API');
 }
@@ -210,7 +221,12 @@ async function deleteContainer(containerId: string) {
     },
   });
   if (!response.ok) {
-    throw new Error(`Failed to delete container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.actionToasts.deleteFailedDetail', { name: containerId }),
+      ),
+    );
   }
   return response;
 }
@@ -241,7 +257,9 @@ async function getContainerTriggersWithReasons(containerId: string): Promise<{
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.triggers.toasts.loadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
   const envelope = payload as { unassociatedTriggers?: unknown };
@@ -291,7 +309,7 @@ async function getContainerUpdateOperations(
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to get update operations for container ${containerId}: ${response.statusText}`,
+      `${i18n.global.t('containerComponents.backups.operationHistoryLoadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   const payload = await readJsonResponse(response, 'Container update operations API');
@@ -361,7 +379,7 @@ async function updateContainerPolicy(
       // Ignore parsing error and fallback to status text.
     }
     throw new Error(
-      `Failed to update container policy ${action}: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, `${i18n.global.t('containerComponents.policy.toasts.failedDetail')} (${action})`)}${details}`,
     );
   }
   return readJsonResponse(response, 'Container policy API');
@@ -406,7 +424,12 @@ async function previewUpdateChain(containerId: string): Promise<UpdateChainPrevi
   );
   if (!response.ok) {
     throw new Error(
-      `Failed to preview update chain for container ${containerId}: ${response.statusText}`,
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.confirmDialogs.dependencyGroup.previewFailedDetail', {
+          name: containerId,
+        }),
+      ),
     );
   }
   return readJsonResponse<UpdateChainPreview>(response, 'Container update-chain preview API');
@@ -466,7 +489,7 @@ async function updateDependencyGroup(
       console.debug(`Unable to parse dependency group update response payload: ${errorMessage(e)}`);
     }
     throw new ApiError(
-      `Failed to update dependency group ${rootId}: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, i18n.global.t('containerComponents.confirmDialogs.dependencyGroup.failedDetail', { name: rootId }))}${details}`,
       response.status,
     );
   }
@@ -476,27 +499,31 @@ async function updateDependencyGroup(
 interface BulkScanResponse {
   cycleId: string;
   scheduledCount: number;
+  requestId?: string;
 }
 
-async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanResponse> {
+async function scanAllContainersApi(
+  signal?: AbortSignal,
+  requestId?: string,
+): Promise<BulkScanResponse> {
   const response = await fetch('/api/v1/containers/scan-all', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
+    ...(requestId ? { body: JSON.stringify({ requestId }) } : {}),
     ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
-    let details = '';
+    let message = i18n.global.t('securityView.scanFailed');
     try {
       const body = await readJsonResponse<{ error?: unknown }>(response, 'Container scan API');
-      details = body?.error ? ` (${body.error})` : '';
+      if (typeof body?.error === 'string' && body.error.trim()) {
+        message = body.error;
+      }
     } catch (e: unknown) {
       console.debug(`Unable to parse scan-all response payload: ${errorMessage(e)}`);
     }
-    throw new ApiError(
-      `Failed to scan all containers: ${response.statusText}${details}`,
-      response.status,
-    );
+    throw new ApiError(message, response.status);
   }
   return readJsonResponse<BulkScanResponse>(response, 'Container scan API');
 }
@@ -516,7 +543,7 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
       console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
     }
     throw new ApiError(
-      `Failed to scan container: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, i18n.global.t('containerComponents.actionToasts.scanFailedDetail', { name: containerId }))}${details}`,
       response.status,
     );
   }
@@ -591,7 +618,9 @@ async function revealContainerEnv(containerId: string) {
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to reveal env vars: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(response, i18n.global.t('containerComponents.sideTabContent.revealFailed')),
+    );
   }
   return readJsonResponse<RevealedContainerEnv>(response, 'Container env API');
 }

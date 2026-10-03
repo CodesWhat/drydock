@@ -47,15 +47,15 @@
       "switchTo": "التبديل إلى سمة {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "فاتحة",
+        "system": "النظام",
+        "dark": "داكنة"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "لوحة التحكم",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "لوحة التحكم",
         "containers": "الحاويات",
         "security": "الأمان",
         "approvals": "الموافقات",
@@ -89,7 +89,7 @@
         "userMenu": "قائمة المستخدم",
         "profile": "الملف الشخصي",
         "signOut": "تسجيل الخروج",
-        "userFallback": "User"
+        "userFallback": "مستخدم"
       },
       "about": {
         "title": "Drydock",
@@ -109,13 +109,15 @@
         "prefixScopeHint": "النطاق ببادئة نشط؛ استخدم ",
         "typeHint": "اكتب",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": "، أو",
         "hashSemicolon": "؛ استخدم",
         "useTab": " لتغيير النطاق",
         "moveHint": "تنقل",
         "openHint": "فتح",
         "recentGroup": "الأخيرة",
         "unknownHost": "مضيف غير معروف",
+        "unknownImage": "صورة غير معروفة",
+        "localHost": "محلي",
         "containerSubtitle": "حاوية · {image} · {status} · {host}",
         "agentSubtitle": "وكيل · {status} · {host}",
         "triggerSubtitle": "مشغّل · {type}",
@@ -124,17 +126,17 @@
         "authSubtitle": "مصادقة · {type}",
         "notificationSubtitle": "قاعدة إشعار · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "الكل",
+          "pages": "الصفحات",
+          "containers": "الحاويات",
+          "runtime": "التشغيل",
+          "config": "الإعدادات"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "التنقل",
+          "containers": "الحاويات",
+          "runtime": "التشغيل",
+          "configuration": "الإعدادات"
         },
         "settings": {
           "appearanceTitle": "إعدادات المظهر",
