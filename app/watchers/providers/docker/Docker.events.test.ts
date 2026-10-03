@@ -593,10 +593,15 @@ describe('Docker Watcher', () => {
 
       expect(existingContainer.name).toBe('renamed-container');
       expect(existingContainer.displayName).toBe('renamed-container');
-      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith('container123', {
-        name: 'renamed-container',
-        displayName: 'renamed-container',
-      });
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'container123',
+        {
+          name: 'renamed-container',
+          displayName: 'renamed-container',
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('should ignore removed wud display-name labels when processing events', async () => {
@@ -620,16 +625,21 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from('{"Action":"rename","id":"container123"}\n'));
 
       expect(existingContainer.displayName).toBe('renamed-container');
-      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith('container123', {
-        name: 'renamed-container',
-        labels: { 'wud.display.name': 'Custom Label Name' },
-        displayName: 'renamed-container',
-        tagFamily: 'strict',
-        tagPinInfo: true,
-        updatePolicyDeclarative: { env: {}, label: {} },
-        updatePolicyOverrides: {},
-        updatePolicySources: {},
-      });
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'container123',
+        {
+          name: 'renamed-container',
+          labels: { 'wud.display.name': 'Custom Label Name' },
+          displayName: 'renamed-container',
+          tagFamily: 'strict',
+          tagPinInfo: true,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('should skip store update when inspect payload does not change tracked fields', async () => {
@@ -950,21 +960,26 @@ describe('Docker Watcher', () => {
       expect(existing.excludeTags).toBe('^alpha');
       expect(existing.tagFamily).toBe('loose');
       expect(existing.tagPinInfo).toBe(false);
-      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith('c-wiring', {
-        labels: {
-          'dd.tag.include': '^3\\.',
-          'dd.tag.exclude': '^alpha',
-          'dd.tag.family': 'loose',
-          'dd.tag.pin.info': 'false',
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'c-wiring',
+        {
+          labels: {
+            'dd.tag.include': '^3\\.',
+            'dd.tag.exclude': '^alpha',
+            'dd.tag.family': 'loose',
+            'dd.tag.pin.info': 'false',
+          },
+          includeTags: '^3\\.',
+          excludeTags: '^alpha',
+          tagFamily: 'loose',
+          tagPinInfo: false,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
         },
-        includeTags: '^3\\.',
-        excludeTags: '^alpha',
-        tagFamily: 'loose',
-        tagPinInfo: false,
-        updatePolicyDeclarative: { env: {}, label: {} },
-        updatePolicyOverrides: {},
-        updatePolicySources: {},
-      });
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('restores watcher tag-policy defaults when direct labels are removed on an event', async () => {
@@ -1036,15 +1051,20 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from('{"Action":"update","id":"c1"}\n'));
       expect(existing.labels).toEqual({ 'dd.display.name': 'Custom Name', new: 'label' });
       expect(existing.displayName).toBe('Custom Name');
-      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith('c1', {
-        labels: { 'dd.display.name': 'Custom Name', new: 'label' },
-        displayName: 'Custom Name',
-        tagFamily: 'strict',
-        tagPinInfo: true,
-        updatePolicyDeclarative: { env: {}, label: {} },
-        updatePolicyOverrides: {},
-        updatePolicySources: {},
-      });
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'c1',
+        {
+          labels: { 'dd.display.name': 'Custom Name', new: 'label' },
+          displayName: 'Custom Name',
+          tagFamily: 'strict',
+          tagPinInfo: true,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('should not update when custom display name label matches existing value', async () => {
@@ -1102,13 +1122,18 @@ describe('Docker Watcher', () => {
         volumes: ['/srv/data:/data'],
         env: [{ key: 'APP_ENV', value: 'prod' }],
       });
-      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith('c1', {
-        details: {
-          ports: ['0.0.0.0:8080->80/tcp'],
-          volumes: ['/srv/data:/data'],
-          env: [{ key: 'APP_ENV', value: 'prod' }],
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'c1',
+        {
+          details: {
+            ports: ['0.0.0.0:8080->80/tcp'],
+            volumes: ['/srv/data:/data'],
+            env: [{ key: 'APP_ENV', value: 'prod' }],
+          },
         },
-      });
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
   });
 });

@@ -1210,8 +1210,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     updateContainerFromInspectState(containerFound, containerInspect, {
       getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName),
+      // The patch carries what the labels declare, so it updates the declared layer of
+      // the label-owned fields and leaves any Drydock override in force (spec 7.5).
       updateContainer: (id, patch) =>
-        storeContainer.updateContainerFields(id, patch, ...(context ? [context] : [])),
+        storeContainer.updateContainerFields(id, patch, context, { labelOwned: 'declared' }),
       logInfo: (message) => logContainer.info(message),
       applyDerivedLabelFieldsToContainer: (container, labels) =>
         applyEffectiveDockerConfigFromLabels(
