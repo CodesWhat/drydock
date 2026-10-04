@@ -324,7 +324,10 @@ describe('batch mode', () => {
 
       await action.handleContainerReports([report(blocked), report(open)]);
 
-      expect(run).toHaveBeenCalledWith([expect.objectContaining({ id: 'c2' })]);
+      expect(run).toHaveBeenCalledWith(
+        [expect.objectContaining({ id: 'c2' })],
+        [expect.objectContaining({ id: 'c1' })],
+      );
       const recorded = vi.mocked(notificationHistoryStore.recordNotification).mock.calls;
       expect(recorded.map((call) => call[1])).toEqual(['c2']);
     },
@@ -454,7 +457,10 @@ describe('digest mode', () => {
 
       await action.flushDigestBuffer();
 
-      expect(run).toHaveBeenCalledWith([expect.objectContaining({ id: 'c2' })]);
+      expect(run).toHaveBeenCalledWith(
+        [expect.objectContaining({ id: 'c2' })],
+        [expect.objectContaining({ id: 'c1' })],
+      );
       expect(action.digestBuffer.size).toBe(0);
       expect(
         vi.mocked(notificationHistoryStore.recordNotification).mock.calls.map((call) => call[1]),
@@ -503,6 +509,103 @@ describe('digest mode', () => {
 
     expect(run).not.toHaveBeenCalled();
     expect(action.digestBuffer.size).toBe(0);
+  });
+});
+
+describe('a group-held upstream defers its dependents', () => {
+  const HELD: GroupActions = { updateMode: 'manual' };
+  const db = () => createContainer('db', HELD);
+  const api = () => createContainer('api', undefined, { dependsOn: ['app-db'] });
+  const triggered = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map((call) => (call[0] as { id: string }).id);
+
+  test('a batch does not update a dependent while its upstream is held, then does once it is clear', async () => {
+    const action = createTrigger('docker', 'batch');
+    const trigger = vi.spyOn(action, 'trigger').mockResolvedValue(undefined);
+
+    await action.handleContainerReports([report(db()), report(api())]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(trigger).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+
+    // db was approved and updated, so the next scan reports only api.
+    await action.handleContainerReports([report(api())]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(triggered(trigger)).toEqual(['api']);
+  });
+
+  test('a dependent of a held container that is itself held is simply held', async () => {
+    const action = createTrigger('docker', 'batch');
+    const trigger = vi.spyOn(action, 'trigger').mockResolvedValue(undefined);
+    const cache = createContainer('cache', HELD, { dependsOn: ['app-db'] });
+
+    await action.handleContainerReports([report(db()), report(cache), report(api())]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(trigger).not.toHaveBeenCalled();
+  });
+
+  test('an independent container still updates beside a held upstream and its dependent', async () => {
+    const action = createTrigger('docker', 'batch');
+    const trigger = vi.spyOn(action, 'trigger').mockResolvedValue(undefined);
+
+    await action.handleContainerReports([
+      report(db()),
+      report(api()),
+      report(createContainer('web')),
+    ]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(triggered(trigger)).toEqual(['web']);
+    expect(
+      vi.mocked(notificationHistoryStore.recordNotification).mock.calls.map((call) => call[1]),
+    ).toEqual(['web']);
+  });
+
+  test('a command batch leaves a dependent of a held container unsent', async () => {
+    const command = createTrigger('command', 'batch', 'hook');
+    const send = vi.spyOn(command, 'triggerBatch').mockResolvedValue(undefined);
+
+    await command.handleContainerReports([report(db()), report(api())]);
+
+    expect(send).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test('a digest flush holds a dependent back while its upstream is held', async () => {
+    const action = createTrigger('docker', 'digest');
+    const trigger = vi.spyOn(action, 'trigger').mockResolvedValue(undefined);
+    action.digestBuffer.set('app-db', createContainer('db'));
+    action.digestBuffer.set('app-api', api());
+    vi.mocked(storeContainer.getContainersRaw).mockReturnValue([db(), api()]);
+
+    await action.flushDigestBuffer();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(trigger).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+    expect(action.digestBuffer.has('app-api')).toBe(true);
+    expect(action.digestBuffer.has('app-db')).toBe(false);
+  });
+
+  test('a command digest flush holds a dependent back while its upstream is held', async () => {
+    const command = createTrigger('command', 'digest', 'hook');
+    const send = vi.spyOn(command, 'triggerBatch').mockResolvedValue(undefined);
+    command.digestBuffer.set('app-db', createContainer('db'));
+    command.digestBuffer.set('app-api', api());
+    vi.mocked(storeContainer.getContainersRaw).mockReturnValue([db(), api()]);
+
+    await command.flushDigestBuffer();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(command.digestBuffer.has('app-api')).toBe(true);
   });
 });
 

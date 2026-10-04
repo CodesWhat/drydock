@@ -2727,6 +2727,9 @@ class Trigger<
       }
     }
     const containersToSend = Array.from(containersToSendByBusinessId.values());
+    const groupHeldReports = containerReports
+      .filter((report) => this.isAutomaticActionDispatchBlockedFor(report.container))
+      .map((report) => report.container);
     // Nothing to release here: every reserved container was also set into the
     // map above, so an empty send list means no reservation was taken.
     if (containersToSend.length === 0) {
@@ -2742,14 +2745,16 @@ class Trigger<
     try {
       this.log.debug('Run batch');
       if (this.isUpdateActionTrigger()) {
-        const batchResult = await this.runAcceptedUpdateBatch(containersToSend);
+        const batchResult = await this.runAcceptedUpdateBatch(containersToSend, groupHeldReports);
         if (!batchResult.dispatched) {
           return;
         }
         maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        maintenanceWindowDeferredIds =
-          this.collectBatchMaintenanceWindowDeferredIds(containersToSend);
+        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(
+          containersToSend,
+          groupHeldReports,
+        );
         const readyToSend = containersToSend.filter(
           (container) =>
             !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
@@ -2980,14 +2985,20 @@ class Trigger<
     }
     const bufferedEntries = Array.from(this.digestBuffer.entries());
     const currentContainersByBusinessId = this.getCurrentNotificationContainers();
+    // Entries evicted because their group holds them: they are not sent, but the entries that
+    // depend on them must not be sent without them.
+    const groupHeldAtFlush: Container[] = [];
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId(bufferedContainer);
       const stillHasUpdate = !currentContainer || currentContainer.updateAvailable;
 
       if (stillHasUpdate) {
-        const evaluatedContainer = withCurrentGroupPolicy(
-          currentContainer === undefined ? bufferedContainer : currentContainer,
-        );
+        const toEvaluate = currentContainer === undefined ? bufferedContainer : currentContainer;
+        const evaluatedContainer = toEvaluate ? withCurrentGroupPolicy(toEvaluate) : toEvaluate;
+
+        if (evaluatedContainer && this.isAutomaticActionDispatchBlockedFor(evaluatedContainer)) {
+          groupHeldAtFlush.push(evaluatedContainer);
+        }
 
         // Re-check the action-policy dispatch winner at flush time, not just
         // at buffer time (handleContainerReportDigest / shouldHandleDigest-
@@ -3090,13 +3101,16 @@ class Trigger<
     this.isDigestFlushInProgress = true;
     try {
       if (this.isUpdateActionTrigger()) {
-        const batchResult = await this.runAcceptedUpdateBatch(containers);
+        const batchResult = await this.runAcceptedUpdateBatch(containers, groupHeldAtFlush);
         if (!batchResult.dispatched) {
           return;
         }
         maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(containers);
+        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(
+          containers,
+          groupHeldAtFlush,
+        );
         const readyToSend = containers.filter(
           (container) =>
             !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
@@ -3900,8 +3914,17 @@ class Trigger<
    * straight to `triggerBatch`, and both must leave a window-deferred container alone.
    * Callers outside `runAcceptedUpdateBatch` check the action category first; a notification
    * trigger never defers.
+   *
+   * `groupHeld` are containers a group policy holds back that are not part of `containers`
+   * (the caller already took them out). They are never in the returned set, but they seed
+   * the same dependent walk a window-deferred upstream does: a dependent whose upstream is
+   * held would otherwise lose its `depends_on` edge, which is unresolved without the
+   * upstream in the graph, and update alone.
    */
-  private collectMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
+  private collectMaintenanceWindowDeferredIds(
+    containers: Container[],
+    groupHeld: Container[] = [],
+  ): Set<string> {
     const windowDeferred: Container[] = [];
     // Two views of one decision. The dependency walk below keys on `container.id` because
     // that is what buildDependencyGraph emits; callers get the business-id view, which stays
@@ -3926,11 +3949,14 @@ class Trigger<
     // §3): defer it too. It re-enters together with its now-eligible
     // dependency on a later scan once the window opens.
     const dependencyDeferred: Container[] = [];
-    if (windowDeferred.length > 0) {
-      const { edges } = buildDependencyGraph(containers);
+    const groupDeferred: Container[] = [];
+    const upstreamBlocked = [...windowDeferred, ...groupHeld];
+    if (upstreamBlocked.length > 0) {
+      const { edges } = buildDependencyGraph([...containers, ...groupHeld]);
       const dependentsByDependency = buildDependentsByDependency(edges);
       const containerById = new Map(containers.map((container) => [container.id, container]));
-      for (const blockedContainer of windowDeferred) {
+      for (const blockedContainer of upstreamBlocked) {
+        const blockedByWindow = windowDeferred.includes(blockedContainer);
         for (const dependentId of collectTransitiveDependents(
           blockedContainer.id,
           dependentsByDependency,
@@ -3938,14 +3964,16 @@ class Trigger<
           if (deferredContainerIds.has(dependentId)) {
             continue;
           }
+          // A dependent that is itself group-held is not part of this batch.
           const dependent = containerById.get(dependentId);
-          /* v8 ignore next 3 -- defensive only: every dependent id originates from
-             buildDependencyGraph(containers), so containerById (keyed the same way)
-             always has a match. */
           if (!dependent) {
             continue;
           }
           markDeferred(dependent);
+          if (!blockedByWindow) {
+            groupDeferred.push(dependent);
+            continue;
+          }
           dependencyDeferred.push(dependent);
           // Counted on the same metric as a directly window-deferred container, labelled by
           // the dependent's own watcher, which is not necessarily the one holding the window.
@@ -3971,6 +3999,12 @@ class Trigger<
       );
     }
 
+    for (const container of groupDeferred) {
+      this.log.debug(
+        `Deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} because an upstream dependency is held by its group policy this cycle`,
+      );
+    }
+
     return deferredKeys;
   }
 
@@ -3978,9 +4012,12 @@ class Trigger<
    * The window-deferred ids for a batch a non-update action trigger (`command`) is about to
    * send itself, or an empty set for a notification trigger, which the window never gates.
    */
-  private collectBatchMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
+  private collectBatchMaintenanceWindowDeferredIds(
+    containers: Container[],
+    groupHeld: Container[] = [],
+  ): Set<string> {
     return this.getCategory() === 'action'
-      ? this.collectMaintenanceWindowDeferredIds(containers)
+      ? this.collectMaintenanceWindowDeferredIds(containers, groupHeld)
       : new Set<string>();
   }
 
@@ -3995,6 +4032,7 @@ class Trigger<
    */
   private async runAcceptedUpdateBatch(
     containers: Container[],
+    heldBeforeBatch: Container[] = [],
   ): Promise<{ dispatched: boolean; deferredIds: Set<string> }> {
     if (getUpdateMode() !== 'auto') {
       this.log.debug('Global update mode does not allow automatic batch updates => ignore');
@@ -4007,7 +4045,10 @@ class Trigger<
       this.isAutomaticActionDispatchBlockedFor(container),
     );
     const groupAllowed = containers.filter((container) => !groupHeld.includes(container));
-    const deferredIds = this.collectMaintenanceWindowDeferredIds(groupAllowed);
+    const deferredIds = this.collectMaintenanceWindowDeferredIds(groupAllowed, [
+      ...groupHeld,
+      ...heldBeforeBatch,
+    ]);
     for (const container of groupHeld) {
       deferredIds.add(getMaintenanceWindowDeferralKey(container));
     }

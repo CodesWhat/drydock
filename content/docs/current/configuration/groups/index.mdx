@@ -52,6 +52,8 @@ The ceiling is applied everywhere the global update mode is applied to a contain
 
 A member's own `dd.action.auto` or `dd.action.include` label does not lift a group ceiling or a group exclusion. A container leaves the ceiling by changing or clearing `dd.group` (or its Compose project), not by labeling around it.
 
+When a held member is something other members depend on through `dd.depends_on`, its dependents in the same automatic batch or digest wait too, the way they do for a closed maintenance window, and update after the held member has been approved and updated.
+
 ### Excluding triggers
 
 `actions.exclude` entries use the same grammar as the `dd.action.exclude` label: a trigger id, a trigger name or `provider.name`, optionally followed by `:threshold` (for example `docker.local:major`). Matching is case-insensitive. The API rejects an entry that is empty, contains a comma or has a threshold Drydock doesn't support. An entry that matches no registered action trigger is saved with a warning, since an agent's triggers may be offline or register later.
