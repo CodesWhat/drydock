@@ -2227,6 +2227,54 @@ describe('request-update', () => {
       expect(mockInsertOperation).not.toHaveBeenCalled();
     });
 
+    test('names the Drydock override when the exclude or include that blocks it is an override', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { auto: 'oninclude', threshold: 'all' },
+        getId: () => 'docker.update',
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+      const labelOwned = (sources: Record<string, string>) => ({
+        v: 1,
+        declared: {},
+        declaredSources: {},
+        sources,
+      });
+      const provided = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.other',
+      };
+
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            actionTriggerExclude: 'docker.update',
+            labelOwned: labelOwned({ actionTriggerExclude: 'override' }),
+          }),
+          { trigger: provided },
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: "Trigger excluded by the Drydock override of dd.action.exclude='docker.update'.",
+      });
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            actionTriggerInclude: 'other-app',
+            labelOwned: labelOwned({ actionTriggerInclude: 'override' }),
+          }),
+          { trigger: provided },
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: "Trigger not matched by the Drydock override of dd.action.include='other-app'.",
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
     test('rejects manual update with 409 when trigger-not-included blocker fires (hard flip, spec-6.0.1-action-policy.md slice 6)', async () => {
       const trigger = {
         type: 'docker',

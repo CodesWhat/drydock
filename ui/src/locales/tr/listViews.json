@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Güncelleme politikası geçersiz kılma temizlendi",
       "group-policy-set": "Grup politikası ayarlandı",
       "group-policy-cleared": "Grup politikası temizlendi",
+      "label-override-set": "Etiket geçersiz kılma ayarlandı",
+      "label-override-cleared": "Etiket geçersiz kılma temizlendi",
       "auto-rollback": "Otomatik Geri Alma",
       "rollback": "Geri Al",
       "preview": "Önizleme",

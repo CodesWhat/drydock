@@ -6,6 +6,7 @@ import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
 import * as maturityScheduler from '../maturity/scheduler.js';
+import { isAgentEnforcedWatcher, setAgentEnforcementResolver } from '../model/label-owned.js';
 import * as securityScheduler from '../security/scheduler.js';
 import * as storeContainer from '../store/container.js';
 import * as store from '../store/index.js';
@@ -143,6 +144,10 @@ function rawConfigurationKey(kind: ComponentKind, id: string): string {
 export function getState(): Readonly<RegistryState> {
   return state;
 }
+
+// The label-owned layer composes agent-enforced routing overrides at write time, and only
+// the registry knows which agents execute on the controller (Portwing) and which do not.
+setAgentEnforcementResolver((container) => isAgentEnforcedWatcher(container, state.watcher));
 
 export function getRegistrationWarnings(): string[] {
   return [...registrationWarnings];

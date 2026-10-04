@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "更新ポリシーの上書きを解除",
       "group-policy-set": "グループポリシーを設定",
       "group-policy-cleared": "グループポリシーを解除",
+      "label-override-set": "ラベルの上書きを設定",
+      "label-override-cleared": "ラベルの上書きを解除",
       "auto-rollback": "自動ロールバック",
       "rollback": "ロールバック",
       "preview": "プレビュー",

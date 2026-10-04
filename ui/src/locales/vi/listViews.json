@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Đã xóa ghi đè chính sách cập nhật",
       "group-policy-set": "Đã đặt chính sách nhóm",
       "group-policy-cleared": "Đã xóa chính sách nhóm",
+      "label-override-set": "Đã đặt ghi đè nhãn",
+      "label-override-cleared": "Đã xóa ghi đè nhãn",
       "auto-rollback": "Tự động khôi phục",
       "rollback": "Khôi phục",
       "preview": "Xem trước",

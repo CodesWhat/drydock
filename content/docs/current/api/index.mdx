@@ -91,6 +91,8 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/preferences` | `GET`, `PATCH` | [Synced UI preferences](#preferences) (opt-in cross-device sync; `403` for anonymous sessions) |
 | `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
 | `/api/v1/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
+| `/api/v1/containers/:id/label-overrides` | `GET`, `PATCH`, `DELETE` | Durable overrides of display, dependency and routing labels (see [Container API](/docs/api/container#label-overrides)); writes need `admin` |
+| `/api/v1/label-overrides` | `GET`, `DELETE /:overrideId` | Every stored label override row, including ones with no matching container (see [Container API](/docs/api/container#label-overrides)) |
 | `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
 | `/api/v1/group-policies` | `GET`, `POST`, `GET`/`PUT`/`DELETE /:id` | [Group policies](/docs/configuration/groups): update-policy defaults per group (reads `read`, writes `admin`) |
 | `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
@@ -381,7 +383,7 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 
 ### Action types
 
-`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`
 
 ## Server-Sent Events (SSE)
 

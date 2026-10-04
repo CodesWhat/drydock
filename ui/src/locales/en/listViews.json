@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Update Policy Override Cleared",
       "group-policy-set": "Group Policy Set",
       "group-policy-cleared": "Group Policy Cleared",
+      "label-override-set": "Label Override Set",
+      "label-override-cleared": "Label Override Cleared",
       "auto-rollback": "Auto Rollback",
       "rollback": "Rollback",
       "preview": "Preview",

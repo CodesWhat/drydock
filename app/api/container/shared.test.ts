@@ -4,12 +4,56 @@ import * as sharedModule from './shared.js';
 import {
   getErrorStatusCode,
   isSensitiveKey,
+  projectLabelOwnedForApi,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
   resolveContainerImageFullName,
+  toApiContainer,
+  toApiContainers,
 } from './shared.js';
 
 describe('api/container/shared', () => {
+  describe('label-owned projection', () => {
+    const sources = { displayName: 'override', dependsOn: 'unset' };
+    const state = { v: 1, declared: { displayName: 'Sonarr' }, declaredSources: {}, sources };
+
+    test('serves the effective sources and never the declared layer', () => {
+      const projected = projectLabelOwnedForApi({
+        id: 'c1',
+        labelOwned: state,
+        displayName: 'TV',
+      } as never) as Record<string, unknown>;
+      expect(projected).toEqual({ id: 'c1', displayName: 'TV', labelOwnedSources: sources });
+      expect('labelOwned' in projected).toBe(false);
+    });
+
+    test('returns a container with no state, and non-objects, untouched', () => {
+      const plain = { id: 'c1' };
+      expect(projectLabelOwnedForApi(plain)).toBe(plain);
+      expect(projectLabelOwnedForApi(undefined)).toBeUndefined();
+      expect(projectLabelOwnedForApi('x')).toBe('x');
+    });
+
+    test('toApiContainer redacts env and projects, and toApiContainers maps a list', () => {
+      const container = {
+        id: 'c1',
+        labelOwned: state,
+        details: { env: [{ key: 'DB_PASSWORD', value: 'hunter2' }] },
+      };
+      const api = toApiContainer(container as never) as unknown as Record<string, unknown>;
+      expect(api.labelOwnedSources).toEqual(sources);
+      expect('labelOwned' in api).toBe(false);
+      expect(JSON.stringify(api)).not.toContain('hunter2');
+      const list = toApiContainers([container, { id: 'c2' }] as never) as unknown as Record<
+        string,
+        unknown
+      >[];
+      expect(list.map((entry) => entry.id)).toEqual(['c1', 'c2']);
+      expect(list[0].labelOwnedSources).toEqual(sources);
+      expect(toApiContainers('nope' as never)).toBe('nope');
+    });
+  });
+
   describe('module exports', () => {
     test('does not re-export getErrorMessage', () => {
       expect('getErrorMessage' in sharedModule).toBe(false);

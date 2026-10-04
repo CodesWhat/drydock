@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Anulación de política de actualización eliminada",
       "group-policy-set": "Política de grupo establecida",
       "group-policy-cleared": "Política de grupo eliminada",
+      "label-override-set": "Anulación de etiqueta establecida",
+      "label-override-cleared": "Anulación de etiqueta eliminada",
       "auto-rollback": "Rollback automático",
       "rollback": "Revertir",
       "preview": "Vista previa",

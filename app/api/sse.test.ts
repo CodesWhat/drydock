@@ -1987,6 +1987,28 @@ describe('SSE Router', () => {
       );
     });
 
+    test('serves label-owned sources on a container event and never the declared layer', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated({
+        id: 'container-1',
+        name: 'nginx',
+        labelOwned: {
+          v: 1,
+          declared: { displayName: 'Secret declared' },
+          declaredSources: {},
+          sources: { displayName: 'override' },
+        },
+      });
+
+      const frame = res.write.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(frame).toContain('"labelOwnedSources":{"displayName":"override"}');
+      expect(frame).not.toContain('Secret declared');
+      expect(frame).not.toContain('"labelOwned"');
+    });
+
     test('should broadcast dd:container-removed when container-removed event fires', () => {
       const handler = getHandler();
       const { res } = connectSseClient(handler);

@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "更新策略覆寫已清除",
       "group-policy-set": "群組策略已設定",
       "group-policy-cleared": "群組策略已清除",
+      "label-override-set": "標籤覆寫已設定",
+      "label-override-cleared": "標籤覆寫已清除",
       "auto-rollback": "自動回滾",
       "rollback": "回滾",
       "preview": "預覽",

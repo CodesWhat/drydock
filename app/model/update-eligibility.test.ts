@@ -1294,6 +1294,29 @@ describe('computeUpdateEligibility', () => {
       expect(blocker?.severity).toBe('hard');
     });
 
+    test('names the Drydock override in the message when the exclude is an override', () => {
+      const trigger = makeTrigger({
+        isTriggerExcluded: () => true,
+        isTriggerIncluded: () => true,
+      });
+      const container = makeContainerWithTagUpdate({
+        actionTriggerExclude: 'docker.update',
+        labelOwned: {
+          v: 1,
+          declared: {},
+          declaredSources: {},
+          sources: { actionTriggerExclude: 'override' },
+        },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'trigger-excluded')?.message).toBe(
+        "Trigger excluded by the Drydock override of dd.action.exclude='docker.update'.",
+      );
+    });
+
     test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
       // The deprecated triggerExclude/notificationTriggerExclude mirror carries a
       // value that WOULD exclude this trigger if it were (wrongly) consulted.
@@ -1349,6 +1372,26 @@ describe('computeUpdateEligibility', () => {
       );
       const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
       expect(blocker?.actionHint).toContain('dd.action.auto');
+    });
+
+    test('names the Drydock override in the message when the include is an override', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate({
+        actionTriggerInclude: 'other.trigger',
+        labelOwned: {
+          v: 1,
+          declared: {},
+          declaredSources: {},
+          sources: { actionTriggerInclude: 'override' },
+        },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')?.message).toBe(
+        "Trigger not matched by the Drydock override of dd.action.include='other.trigger'.",
+      );
     });
 
     test('reads the action-scoped include, never the deprecated mirror (#494)', () => {
