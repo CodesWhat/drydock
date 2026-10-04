@@ -2558,4 +2558,119 @@ describe('auth-lockout', () => {
     // Sanity: lockedUntil is still exactly now (not updated)
     expect(lockouts.get('boundary-exact')?.lockedUntil).toBe(now);
   });
+
+  describe('the lockout identity is the presented credential', () => {
+    const basic = (user: string) => `Basic ${Buffer.from(`${user}:pw`).toString('base64')}`;
+
+    function attempt(request: object) {
+      const res = createResponse();
+      const next = vi.fn();
+      authenticateLogin(request as any, res as any, next);
+      return { res, next };
+    }
+
+    test('a Basic header user is locked even when the body names a different user each time', () => {
+      makePassportInvalidCredentials();
+      let last = createResponse();
+      for (let index = 0; index < 5; index += 1) {
+        last = attempt({
+          headers: { authorization: basic('victim') },
+          body: { username: `decoy-${index}` },
+          ip: '203.0.113.90',
+        }).res;
+      }
+
+      expect(last.status).toHaveBeenCalledWith(423);
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.stringContaining('retry_after='),
+        'victim',
+      );
+    });
+
+    test('a locked account refuses a correct password sent with a decoy body username', () => {
+      makePassportInvalidCredentials();
+      for (let index = 0; index < 5; index += 1) {
+        attempt({ headers: { authorization: basic('victim') }, ip: '203.0.113.91' });
+      }
+      makePassportSuccess('victim');
+
+      const { res, next } = attempt({
+        headers: { authorization: basic('victim') },
+        body: { username: 'decoy' },
+        ip: '203.0.113.92',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('a successful login clears its own username, not the one named in the body', () => {
+      makePassportInvalidCredentials();
+      for (let index = 0; index < 4; index += 1) {
+        attempt({ headers: { authorization: basic('victim') }, ip: '203.0.113.93' });
+      }
+      makePassportSuccess('other');
+      const { next } = attempt({
+        headers: { authorization: basic('other') },
+        body: { username: 'victim' },
+        ip: '203.0.113.94',
+      });
+      expect(next).toHaveBeenCalledTimes(1);
+
+      makePassportInvalidCredentials();
+      const { res } = attempt({ headers: { authorization: basic('victim') }, ip: '203.0.113.95' });
+
+      expect(res.status).toHaveBeenCalledWith(423);
+    });
+
+    test('a body-only login (no Authorization header) still keys on the body username', () => {
+      makePassportInvalidCredentials();
+      let last = createResponse();
+      for (let index = 0; index < 5; index += 1) {
+        last = attempt({ body: { username: 'body-user' }, ip: '203.0.113.96' }).res;
+      }
+
+      expect(last.status).toHaveBeenCalledWith(423);
+    });
+
+    test.each([
+      ['a non-Basic scheme', 'Bearer abc'],
+      ['an empty Basic payload', 'Basic '],
+    ])('%s does not throw and does not fall back to the body username', (_name, authorization) => {
+      makePassportInvalidCredentials();
+
+      const { res } = attempt({
+        headers: { authorization },
+        body: { username: 'victim' },
+        ip: '203.0.113.97',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.any(String),
+        undefined,
+      );
+    });
+
+    test('a whitespace-only Authorization header counts as absent and uses the body username', () => {
+      makePassportInvalidCredentials();
+
+      attempt({
+        headers: { authorization: '   ' },
+        body: { username: 'ws-user' },
+        ip: '203.0.113.98',
+      });
+
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.any(String),
+        'ws-user',
+      );
+    });
+  });
 });

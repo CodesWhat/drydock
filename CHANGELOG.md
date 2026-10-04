@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Login lockout now keys on the credentials actually presented. A request could previously name a different username in its body to dodge an account's failed-login lock, leaving only the per-IP limit.
 - Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does.
 - **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.
 - Add `Cross-Origin-Opener-Policy: same-origin` and a static strict CSP on `/api` responses to the website, and stop sending `X-Powered-By`.
