@@ -89,6 +89,8 @@
       "auto-update-blocked": "Автообновление заблокировано",
       "update-policy-override-set": "Переопределение политики обновления задано",
       "update-policy-override-cleared": "Переопределение политики обновления очищено",
+      "group-policy-set": "Политика группы задана",
+      "group-policy-cleared": "Политика группы очищена",
       "auto-rollback": "Автооткат",
       "rollback": "Откат",
       "preview": "Предпросмотр",

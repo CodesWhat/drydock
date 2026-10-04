@@ -89,6 +89,8 @@
       "auto-update-blocked": "Otomatik Güncelleme Engellendi",
       "update-policy-override-set": "Güncelleme politikası geçersiz kılma ayarlandı",
       "update-policy-override-cleared": "Güncelleme politikası geçersiz kılma temizlendi",
+      "group-policy-set": "Grup politikası ayarlandı",
+      "group-policy-cleared": "Grup politikası temizlendi",
       "auto-rollback": "Otomatik Geri Alma",
       "rollback": "Geri Al",
       "preview": "Önizleme",

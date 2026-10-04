@@ -89,6 +89,8 @@
       "auto-update-blocked": "Automatisches Update blockiert",
       "update-policy-override-set": "Update-Policy-Override gesetzt",
       "update-policy-override-cleared": "Update-Policy-Override entfernt",
+      "group-policy-set": "Gruppen-Policy gesetzt",
+      "group-policy-cleared": "Gruppen-Policy entfernt",
       "auto-rollback": "Automatischer Rollback",
       "rollback": "Rollback",
       "preview": "Vorschau",

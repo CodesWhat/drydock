@@ -434,7 +434,7 @@ Returns 200 with `accepted` and `rejected` arrays, 400 if `expectedContainerIds`
 
 ## Update container update policy
 
-This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, and `updatePolicySources` (`env`, `label`, or `override`).
+This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → [group policy](/docs/configuration/groups) → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, `updatePolicySources` (`env`, `group`, `label`, or `override`), and `groupPolicy`, a snapshot of the group policy the container was last resolved against (`id`, `group`, `revision`, `updatePolicy`, `actions`), which is absent when no group policy applies.
 
 - `skip-current`: skip the currently detected remote tag or digest
 - `remove-skip`: remove a single previously skipped tag or digest (requires `kind` and `value`)
@@ -444,9 +444,9 @@ This operation controls the UI/API override tier of per-container update policy.
 - `clear`: remove all update policy
 - `set-maturity-policy`: require updates to be at least N days old before triggering (requires `mode` and optionally `minAgeDays`)
 - `clear-maturity-policy`: remove `maturityMode` and `maturityMinAgeDays`
-- `revert-to-declarative`: remove one override (`field`) or all declarative-field overrides when `field` is omitted
+- `revert-to-declarative`: remove one override (`field`) or all declarative-field overrides when `field` is omitted, revealing the label, group, watcher, or built-in value
 
-`clear-skips`, `clear-maturity-policy`, and `clear` express operational UI choices. They are not the same as reverting: an explicit empty skip-list override can hide a label-provided list, while `revert-to-declarative` reveals the current label, watcher, or built-in value. `snoozeUntil` is always UI/API-only.
+`clear-skips`, `clear-maturity-policy`, and `clear` express operational UI choices. They are not the same as reverting: an explicit empty skip-list override can hide a label-provided list, while `revert-to-declarative` reveals the current label, group, watcher, or built-in value. `skip-current` and `remove-skip` start from the effective skip list, so a list inherited from a group is copied into the override, and later edits to the group's list no longer reach that field on that container until it is reverted. `snoozeUntil` is always UI/API-only.
 
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \

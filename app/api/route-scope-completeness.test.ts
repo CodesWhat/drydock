@@ -29,6 +29,7 @@ import {
 const EXPECTED_ROUTE_SCOPES = [
   'DELETE /api/v1/api-keys/:keyId → api-keys:manage',
   'DELETE /api/v1/containers/:id → admin',
+  'DELETE /api/v1/group-policies/:id → admin',
   'DELETE /api/v1/icons/cache → admin',
   'DELETE /api/v1/notifications/outbox/:id → triggers:test',
   'DELETE /api/v1/portwing/keys/:keyId → session-only',
@@ -70,6 +71,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/containers/summary → read',
   'GET /api/v1/debug/dump → session-only',
   'GET /api/v1/events/ui → read',
+  'GET /api/v1/group-policies → read',
+  'GET /api/v1/group-policies/:id → read',
   'GET /api/v1/icons/:provider/:slug → read',
   'GET /api/v1/images → read',
   'GET /api/v1/images/prune-preview → admin',
@@ -129,6 +132,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/containers/watch → containers:watch',
   'POST /api/v1/dependency-groups/:rootId/update → containers:update',
   'POST /api/v1/events/ui/self-update/:operationId/ack → admin',
+  'POST /api/v1/group-policies → admin',
   'POST /api/v1/images/prune → admin',
   'POST /api/v1/internal/self-update/finalize → session-only',
   'POST /api/v1/notifications/:id/preview → triggers:test',
@@ -145,6 +149,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/webhook/watch/:containerName → session-only',
   'POST /api/v1/webhooks/registry → session-only',
   'PUT /api/v1/config/:section → admin',
+  'PUT /api/v1/group-policies/:id → admin',
   'PUT /api/v1/settings → admin',
 ];
 
