@@ -20,6 +20,7 @@ import {
   revokeSessionsIssuedBefore,
   type TotpFactorRecord,
 } from '../store/totp.js';
+import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 import {
   clearLoginLockoutsAfterSuccess,
@@ -231,9 +232,7 @@ export function createLoginChallengeCompletion(
       try {
         revokeSessionsIssuedBefore(challenge.subjectId, challenge.username, issuedAt);
       } catch (error: unknown) {
-        log.warn(
-          `Unable to record session revocation (${(error as { code?: string }).code ?? 'error'})`,
-        );
+        log.warn(`Unable to record session revocation (${getErrorMessage(error)})`);
         sendErrorResponse(res, 503, 'Second factor verification is unavailable');
         return;
       }

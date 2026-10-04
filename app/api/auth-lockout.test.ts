@@ -2927,6 +2927,19 @@ describe('auth-lockout', () => {
       });
     });
 
+    test('a failure with a subject but no known username is still counted, under an empty username', () => {
+      rejectFailedSecondFactor(
+        { ip: '203.0.113.119' } as any,
+        createResponse() as any,
+        undefined,
+        SUBJECT,
+      );
+
+      expect(mockRecordFactorFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ subjectId: SUBJECT, username: '' }),
+      );
+    });
+
     test('a failure that earns a persisted lock answers 423 with its Retry-After, whatever the in-memory budget says', () => {
       const now = Date.parse('2026-10-04T10:00:00.000Z');
       vi.useFakeTimers();
