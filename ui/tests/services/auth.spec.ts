@@ -149,6 +149,203 @@ describe('Auth Service', () => {
     });
   });
 
+  describe('loginBasic second-factor challenge', () => {
+    const challenge = {
+      id: 'c'.repeat(43),
+      expiresAt: '2026-10-04T12:05:00.000Z',
+      methods: ['totp', 'recovery'],
+    };
+
+    it('keeps returning the payload for a 200', async () => {
+      const { loginBasic } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ username: 'a' }),
+      });
+      await expect(loginBasic('a', 'b')).resolves.toEqual({ username: 'a' });
+    });
+
+    it('returns the challenge for a 202 and does not treat it as a session', async () => {
+      const { loginBasic } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({ challenge }) });
+      await expect(loginBasic('a', 'b')).resolves.toEqual({ challenge });
+    });
+
+    it('drops unknown methods and rejects a malformed 202 body', async () => {
+      const { loginBasic } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ challenge: { ...challenge, methods: ['totp', 5, 'sms'] } }),
+      });
+      await expect(loginBasic('a', 'b')).resolves.toEqual({
+        challenge: { ...challenge, methods: ['totp'] },
+      });
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ challenge: { id: challenge.id, expiresAt: challenge.expiresAt } }),
+      });
+      await expect(loginBasic('a', 'b')).rejects.toThrow('Unexpected login challenge response');
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({ nope: 1 }) });
+      await expect(loginBasic('a', 'b')).rejects.toThrow('Unexpected login challenge response');
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ challenge: { ...challenge, methods: [] } }),
+      });
+      await expect(loginBasic('a', 'b')).rejects.toThrow('Unexpected login challenge response');
+    });
+
+    it('never writes the challenge id to web storage or the URL', async () => {
+      const { loginBasic, completeLoginChallenge } = await loadAuthService();
+      const local = vi.spyOn(Storage.prototype, 'setItem');
+      const hrefBefore = globalThis.location.href;
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({ challenge }) });
+      await loginBasic('a', 'b');
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ username: 'a' }),
+      });
+      await completeLoginChallenge(challenge.id, { code: '123456' }, false);
+      expect(local).not.toHaveBeenCalled();
+      expect(globalThis.location.href).toBe(hrefBefore);
+      local.mockRestore();
+    });
+  });
+
+  describe('completeLoginChallenge', () => {
+    const id = 'd'.repeat(43);
+
+    it('PUTs a code with remember and returns the user', async () => {
+      const { completeLoginChallenge } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ username: 'a' }),
+      });
+      await expect(completeLoginChallenge(id, { code: '123456' }, true)).resolves.toEqual({
+        username: 'a',
+      });
+      expect(fetchMock).toHaveBeenCalledWith(`/auth/login-challenges/${id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: '123456', remember: true }),
+      });
+    });
+
+    it('PUTs a recovery code', async () => {
+      const { completeLoginChallenge } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ username: 'a' }),
+      });
+      await completeLoginChallenge(id, { recoveryCode: 'abcd-efgh' }, false);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        recoveryCode: 'abcd-efgh',
+        remember: false,
+      });
+    });
+
+    it('clears the cached user so the next check revalidates', async () => {
+      const { completeLoginChallenge, getUser } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ username: 'a' }),
+      });
+      await completeLoginChallenge(id, { code: '123456' }, false);
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ username: 'a' }) });
+      await getUser();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([[401], [400], [503]])('throws a typed error carrying status %i', async (status) => {
+      const { completeLoginChallenge } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status,
+        headers: new Headers(),
+        json: async () => ({ error: 'x' }),
+      });
+      await expect(completeLoginChallenge(id, { code: '123456' }, false)).rejects.toMatchObject({
+        name: 'AuthRequestError',
+        status,
+        retryAfterSeconds: undefined,
+      });
+    });
+
+    it('reads Retry-After seconds on 429 and 423', async () => {
+      const { completeLoginChallenge } = await loadAuthService();
+      for (const status of [429, 423]) {
+        fetchMock.mockResolvedValueOnce({
+          ok: false,
+          status,
+          headers: new Headers({ 'Retry-After': '90' }),
+          json: async () => ({ error: 'x' }),
+        });
+        await expect(completeLoginChallenge(id, { code: '1' }, false)).rejects.toMatchObject({
+          status,
+          retryAfterSeconds: 90,
+        });
+      }
+    });
+
+    it('ignores a Retry-After that is not whole seconds, or a missing headers object', async () => {
+      const { completeLoginChallenge } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers({ 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' }),
+      });
+      await expect(completeLoginChallenge(id, { code: '1' }, false)).rejects.toMatchObject({
+        status: 429,
+        retryAfterSeconds: undefined,
+      });
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 429 });
+      await expect(completeLoginChallenge(id, { code: '1' }, false)).rejects.toMatchObject({
+        retryAfterSeconds: undefined,
+      });
+    });
+
+    it('does not put the challenge id in an error message', async () => {
+      const { completeLoginChallenge } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 401, headers: new Headers() });
+      const failure = await completeLoginChallenge(id, { code: '1' }, false).catch((e) => e);
+      expect(String(failure.message)).not.toContain(id);
+    });
+
+    it('lets a network failure through as a status-less error', async () => {
+      const { completeLoginChallenge } = await loadAuthService();
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      await expect(completeLoginChallenge(id, { code: '1' }, false)).rejects.toThrow(
+        'Failed to fetch',
+      );
+    });
+  });
+
+  describe('cancelLoginChallenge', () => {
+    it('DELETEs the challenge', async () => {
+      const { cancelLoginChallenge } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 204 });
+      await cancelLoginChallenge('e'.repeat(43));
+      expect(fetchMock).toHaveBeenCalledWith(`/auth/login-challenges/${'e'.repeat(43)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+    });
+
+    it('is best-effort: a failed request never throws', async () => {
+      const { cancelLoginChallenge } = await loadAuthService();
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      await expect(cancelLoginChallenge('e'.repeat(43))).resolves.toBeUndefined();
+    });
+  });
+
   describe('loginBasic', () => {
     it('performs basic authentication successfully', async () => {
       const { loginBasic } = await loadAuthService();

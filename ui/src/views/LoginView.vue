@@ -1,18 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
 import whaleLogo from '../assets/whale-logo.png';
-import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
+import {
+  cancelLoginChallenge,
+  completeLoginChallenge,
+  getOidcRedirection,
+  getStrategies,
+  loginBasic,
+  setRememberMe,
+} from '../services/auth';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
 import AppIconButton from '../components/AppIconButton.vue';
+import LoginSecondFactorStep from '../components/LoginSecondFactorStep.vue';
 
 const router = useRouter();
 const route = useRoute();
 const { isDark } = useTheme();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 interface Strategy {
   type: string;
@@ -104,6 +112,29 @@ const showPassword = ref(false);
 const submitting = ref(false);
 const rememberMe = ref(false);
 
+interface ChallengeState {
+  methods: string[];
+  expiresAt: string;
+}
+
+// Notices are kept as keys so they re-render in the new language on a switch.
+interface ChallengeNotice {
+  key: string;
+  seconds?: number;
+}
+
+// Mirrors the server, which drops a challenge after five wrong proofs.
+const MAX_CHALLENGE_ATTEMPTS = 5;
+
+const challenge = ref<ChallengeState | undefined>();
+const challengeNotice = ref<ChallengeNotice | undefined>();
+// The challenge id is a credential: it stays in this closure, never in
+// reactive state, storage, the URL or a log line.
+let challengeId: string | undefined;
+let challengeAttempts = 0;
+let challengeExpiryTimer: ReturnType<typeof setTimeout> | undefined;
+const secondFactor = ref<{ focus: () => void } | null>(null);
+
 const hasBasic = ref(false);
 const oidcStrategies = ref<Strategy[]>([]);
 const connectionLost = ref(false);
@@ -149,11 +180,59 @@ function navigateAfterLogin() {
   }
 }
 
+function clearChallengeExpiryTimer() {
+  if (challengeExpiryTimer) {
+    clearTimeout(challengeExpiryTimer);
+    challengeExpiryTimer = undefined;
+  }
+}
+
+function endChallenge(notice?: ChallengeNotice) {
+  clearChallengeExpiryTimer();
+  challengeId = undefined;
+  challengeAttempts = 0;
+  challenge.value = undefined;
+  challengeNotice.value = notice;
+}
+
+function beginChallenge(payload: Record<string, unknown>): boolean {
+  const candidate = payload.challenge;
+  if (!isRecord(candidate) || typeof candidate.id !== 'string') {
+    return false;
+  }
+  const expiresAt = typeof candidate.expiresAt === 'string' ? candidate.expiresAt : '';
+  const methods = extractStringArray(candidate, 'methods');
+  challengeId = candidate.id;
+  challengeAttempts = 0;
+  challenge.value = { methods, expiresAt };
+  challengeNotice.value = undefined;
+  password.value = '';
+  showPassword.value = false;
+
+  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+  if (Number.isNaN(remainingMs) || remainingMs <= 0) {
+    endChallenge({ key: 'challengeExpired' });
+    return true;
+  }
+  challengeExpiryTimer = setTimeout(() => {
+    // The server has already dropped it by now; there is nothing to cancel.
+    endChallenge({ key: 'challengeExpired' });
+  }, remainingMs);
+  return true;
+}
+
 async function handleBasicLogin() {
+  if (submitting.value) {
+    return;
+  }
   error.value = '';
+  challengeNotice.value = undefined;
   submitting.value = true;
   try {
-    await loginBasic(username.value, password.value, rememberMe.value);
+    const result: unknown = await loginBasic(username.value, password.value, rememberMe.value);
+    if (isRecord(result) && 'challenge' in result && beginChallenge(result)) {
+      return;
+    }
     navigateAfterLogin();
   } catch (loginError: unknown) {
     const loginErrorMessage = errorMessage(loginError).trim();
@@ -170,6 +249,86 @@ async function handleBasicLogin() {
     submitting.value = false;
   }
 }
+
+function challengeFailureNotice(failure: unknown): ChallengeNotice {
+  const status = isRecord(failure) && typeof failure.status === 'number' ? failure.status : 0;
+  if (status === 401) {
+    return { key: 'challengeInvalid' };
+  }
+  if (status === 400) {
+    return { key: 'challengeMalformed' };
+  }
+  if (status === 423 || status === 429) {
+    const seconds = isRecord(failure) ? failure.retryAfterSeconds : undefined;
+    return typeof seconds === 'number'
+      ? { key: 'challengeLocked', seconds }
+      : { key: 'challengeLockedLater' };
+  }
+  return { key: 'challengeUnavailable' };
+}
+
+async function handleChallengeSubmit(proof: { code: string } | { recoveryCode: string }) {
+  const id = challengeId;
+  if (submitting.value || id === undefined) {
+    return;
+  }
+  challengeNotice.value = undefined;
+  submitting.value = true;
+  try {
+    await completeLoginChallenge(id, proof, rememberMe.value);
+    if (challengeId !== id) {
+      return;
+    }
+    endChallenge();
+    navigateAfterLogin();
+  } catch (failure: unknown) {
+    if (challengeId !== id) {
+      return;
+    }
+    const notice = challengeFailureNotice(failure);
+    if (notice.key === 'challengeInvalid') {
+      challengeAttempts += 1;
+      if (challengeAttempts >= MAX_CHALLENGE_ATTEMPTS) {
+        endChallenge({ key: 'challengeExpired' });
+        return;
+      }
+    }
+    challengeNotice.value = notice;
+    await nextTick();
+    secondFactor.value?.focus();
+  } finally {
+    submitting.value = false;
+  }
+}
+
+function handleChallengeCancel() {
+  const id = challengeId;
+  endChallenge();
+  if (id !== undefined) {
+    void cancelLoginChallenge(id);
+  }
+}
+
+function formatRetryTime(seconds: number): string {
+  const minutes = Math.ceil(seconds / 60);
+  const [unit, amount] = seconds < 60 ? ['second', Math.max(1, seconds)] : ['minute', minutes];
+  return new Intl.NumberFormat(locale.value, {
+    style: 'unit',
+    unit: unit as string,
+    unitDisplay: 'long',
+  }).format(amount as number);
+}
+
+const challengeNoticeText = computed(() => {
+  const notice = challengeNotice.value;
+  if (!notice) {
+    return '';
+  }
+  if (notice.seconds !== undefined) {
+    return t(`loginView.errors.${notice.key}`, { time: formatRetryTime(notice.seconds) });
+  }
+  return t(`loginView.errors.${notice.key}`);
+});
 
 async function handleOidc(name: string) {
   try {
@@ -276,6 +435,7 @@ function clearConnectivityRetry() {
 
 onUnmounted(() => {
   clearConnectivityRetry();
+  handleChallengeCancel();
 });
 </script>
 
@@ -307,8 +467,28 @@ onUnmounted(() => {
           {{ error }}
         </div>
 
+        <!-- Second-factor notices (wrong code, lockout, expiry, service fault) -->
+        <div
+          v-if="challengeNoticeText"
+          role="alert"
+          class="mb-4 px-3 py-2 text-xs dd-rounded dd-bg-danger-muted dd-text-danger"
+        >
+          {{ challengeNoticeText }}
+        </div>
+
+        <!-- Second-factor step -->
+        <LoginSecondFactorStep
+          v-if="challenge"
+          ref="secondFactor"
+          :methods="challenge.methods"
+          :expires-at="challenge.expiresAt"
+          :submitting="submitting"
+          @submit="handleChallengeSubmit"
+          @cancel="handleChallengeCancel"
+        />
+
         <!-- Basic auth form -->
-        <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-5">
+        <form v-if="hasBasic && !challenge" @submit.prevent="handleBasicLogin" class="space-y-5">
           <div>
             <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               {{ t('loginView.username.label') }}
@@ -369,14 +549,14 @@ onUnmounted(() => {
         </form>
 
         <!-- OIDC separator (only if both basic and OIDC exist) -->
-        <div v-if="hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
+        <div v-if="!challenge && hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
           <span class="text-2xs-plus dd-text-muted">{{ t('loginView.separator') }}</span>
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
         </div>
 
         <!-- OIDC provider buttons -->
-        <div v-if="oidcStrategies.length > 0" :class="oidcLayoutClass">
+        <div v-if="!challenge && oidcStrategies.length > 0" :class="oidcLayoutClass">
           <AppButton size="none" variant="plain" weight="none"
             v-for="strategy in oidcStrategies"
             :key="strategy.name"
@@ -391,7 +571,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Remember me (shown for all auth methods) -->
-        <label v-if="hasBasic || oidcStrategies.length > 0"
+        <label v-if="!challenge && (hasBasic || oidcStrategies.length > 0)"
                class="flex items-center gap-2 mt-4 cursor-pointer select-none">
           <input
             v-model="rememberMe"
@@ -402,7 +582,7 @@ onUnmounted(() => {
         </label>
 
         <!-- No strategies available -->
-        <div v-if="!hasBasic && oidcStrategies.length === 0" class="text-center text-sm">
+        <div v-if="!challenge && !hasBasic && oidcStrategies.length === 0" class="text-center text-sm">
           <div v-if="authErrors.length > 0" class="mt-3 text-left space-y-2">
             <div
               v-for="(authProviderError, index) in authErrors"

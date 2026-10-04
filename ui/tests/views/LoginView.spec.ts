@@ -15,6 +15,8 @@ vi.mock('vue-router', () => ({
 vi.mock('@/services/auth', () => ({
   getStrategies: vi.fn(),
   loginBasic: vi.fn(),
+  completeLoginChallenge: vi.fn(),
+  cancelLoginChallenge: vi.fn(),
   setRememberMe: vi.fn(),
   getOidcRedirection: vi.fn(),
 }));
@@ -32,10 +34,19 @@ vi.mock('@/theme/useTheme', () => ({
   })),
 }));
 
-import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '@/services/auth';
+import {
+  cancelLoginChallenge,
+  completeLoginChallenge,
+  getOidcRedirection,
+  getStrategies,
+  loginBasic,
+  setRememberMe,
+} from '@/services/auth';
 
 const mockGetStrategies = getStrategies as ReturnType<typeof vi.fn>;
 const mockLoginBasic = loginBasic as ReturnType<typeof vi.fn>;
+const mockComplete = completeLoginChallenge as ReturnType<typeof vi.fn>;
+const mockCancel = cancelLoginChallenge as ReturnType<typeof vi.fn>;
 const mockSetRememberMe = setRememberMe as ReturnType<typeof vi.fn>;
 const mockGetOidcRedirection = getOidcRedirection as ReturnType<typeof vi.fn>;
 const mountedWrappers: VueWrapper[] = [];
@@ -614,6 +625,392 @@ describe('LoginView', () => {
     it('renders generic icon for unknown provider', async () => {
       const wrapper = await mountLogin([{ type: 'oidc', name: 'CustomSSO' }]);
       expect(wrapper.find('.app-icon-stub[data-icon="sign-in"]').exists()).toBe(true);
+    });
+  });
+  describe('second-factor challenge', () => {
+    const CHALLENGE_ID = 'zZ9-challenge-id-should-never-leak-0123456789';
+    const futureIso = (ms = 300_000) => new Date(Date.now() + ms).toISOString();
+    const challengeResult = (methods = ['totp', 'recovery'], expiresAt = futureIso()) => ({
+      challenge: { id: CHALLENGE_ID, expiresAt, methods },
+    });
+
+    async function toCodeStep(methods = ['totp', 'recovery'], expiresAt = futureIso()) {
+      mockLoginBasic.mockResolvedValue(challengeResult(methods, expiresAt));
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      await wrapper.find('input#username').setValue('admin');
+      await wrapper.find('input#password').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+      return wrapper;
+    }
+
+    async function enterCode(wrapper: VueWrapper, value: string) {
+      await wrapper.get('input#totp-code').setValue(value);
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+    }
+
+    function authError(status: number, retryAfterSeconds?: number) {
+      return Object.assign(new Error(`Login challenge failed (${status})`), {
+        name: 'AuthRequestError',
+        status,
+        retryAfterSeconds,
+      });
+    }
+
+    beforeEach(() => {
+      mockCancel.mockResolvedValue(undefined);
+      sessionStorage.clear();
+      localStorage.clear();
+    });
+
+    it('shows the code step on a 202 instead of navigating', async () => {
+      const wrapper = await toCodeStep();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(wrapper.find('input#password').exists()).toBe(false);
+      const input = wrapper.get('input#totp-code');
+      expect(input.attributes('inputmode')).toBe('numeric');
+      expect(input.attributes('autocomplete')).toBe('one-time-code');
+      expect(wrapper.text()).toContain('Two-step verification');
+    });
+
+    it('labels the code input and moves focus to it', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      mockLoginBasic.mockResolvedValue(challengeResult());
+      mockGetStrategies.mockResolvedValue({
+        providers: [{ type: 'basic', name: 'basic' }],
+        errors: [],
+      });
+      const wrapper = trackWrapper(mountWithPlugins(LoginView, { attachTo: host }));
+      await flushPromises();
+      await wrapper.find('input#username').setValue('admin');
+      await wrapper.find('input#password').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+      const input = wrapper.get('input#totp-code');
+      expect(wrapper.get('label[for="totp-code"]').text()).toBe('Authentication code');
+      expect(document.activeElement).toBe(input.element);
+      wrapper.unmount();
+      mountedWrappers.pop();
+      host.remove();
+    });
+
+    it('clears the password after a 202 and keeps the username', async () => {
+      const wrapper = await toCodeStep();
+      await wrapper.get('button[data-testid="login-challenge-cancel"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.get<HTMLInputElement>('input#username').element.value).toBe('admin');
+      expect(wrapper.get<HTMLInputElement>('input#password').element.value).toBe('');
+    });
+
+    it('completes with the code, carries remember, and navigates', async () => {
+      mockComplete.mockResolvedValue({ username: 'admin' });
+      mockLoginBasic.mockResolvedValue(challengeResult());
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      await wrapper.find('input#username').setValue('admin');
+      await wrapper.find('input#password').setValue('secret');
+      await wrapper.find('input[type="checkbox"]').setValue(true);
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+      await enterCode(wrapper, '123456');
+      expect(mockLoginBasic).toHaveBeenCalledWith('admin', 'secret', true);
+      expect(mockComplete).toHaveBeenCalledWith(CHALLENGE_ID, { code: '123456' }, true);
+      expect(mockPush).toHaveBeenCalledWith('/');
+      expect(mockCancel).not.toHaveBeenCalled();
+    });
+
+    it('strips spaces from a pasted code and needs six digits to submit', async () => {
+      mockComplete.mockResolvedValue({ username: 'admin' });
+      const wrapper = await toCodeStep();
+      const input = wrapper.get<HTMLInputElement>('input#totp-code');
+      await input.setValue('12');
+      expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+      await wrapper.get('form').trigger('submit');
+      expect(mockComplete).not.toHaveBeenCalled();
+      await input.setValue('123 456');
+      expect(input.element.value).toBe('123456');
+      expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+    });
+
+    it('keeps the step and shows an alert on a wrong code', async () => {
+      mockComplete.mockRejectedValue(authError(401));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '000000');
+      expect(wrapper.find('input#totp-code').exists()).toBe(true);
+      const alert = wrapper.get('[role="alert"]');
+      expect(alert.text()).toContain('That code didn');
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('returns to the password step after five wrong codes, as the server expires it', async () => {
+      mockComplete.mockRejectedValue(authError(401));
+      const wrapper = await toCodeStep();
+      for (let i = 0; i < 5; i += 1) {
+        await enterCode(wrapper, '000000');
+      }
+      expect(wrapper.find('input#password').exists()).toBe(true);
+      expect(wrapper.get('[role="alert"]').text()).toContain('expired');
+    });
+
+    it('treats a 400 as a malformed code', async () => {
+      mockComplete.mockRejectedValue(authError(400));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '123456');
+      expect(wrapper.get('[role="alert"]').text()).toContain('valid code');
+      expect(wrapper.find('input#totp-code').exists()).toBe(true);
+    });
+
+    it('offers the recovery switch only when methods includes recovery', async () => {
+      const withoutRecovery = await toCodeStep(['totp']);
+      expect(withoutRecovery.find('button[data-testid="login-challenge-recovery"]').exists()).toBe(
+        false,
+      );
+    });
+
+    it('switches to a recovery code, submits it, and can switch back', async () => {
+      mockComplete.mockResolvedValue({ username: 'admin' });
+      const wrapper = await toCodeStep();
+      await wrapper.get('button[data-testid="login-challenge-recovery"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('input#totp-code').exists()).toBe(false);
+      const input = wrapper.get('input#recovery-code');
+      expect(input.attributes('inputmode')).toBeUndefined();
+      await input.setValue('  abcd-efgh-ijkl ');
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+      expect(mockComplete).toHaveBeenCalledWith(
+        CHALLENGE_ID,
+        { recoveryCode: 'abcd-efgh-ijkl' },
+        false,
+      );
+      expect(mockPush).toHaveBeenCalledWith('/');
+    });
+
+    it('switches back to the authenticator code', async () => {
+      const wrapper = await toCodeStep();
+      await wrapper.get('button[data-testid="login-challenge-recovery"]').trigger('click');
+      await wrapper.get('input#recovery-code').setValue('abc');
+      await wrapper.get('button[data-testid="login-challenge-recovery"]').trigger('click');
+      expect(wrapper.get<HTMLInputElement>('input#totp-code').element.value).toBe('');
+    });
+
+    it('does not submit an empty recovery code', async () => {
+      const wrapper = await toCodeStep();
+      await wrapper.get('button[data-testid="login-challenge-recovery"]').trigger('click');
+      await wrapper.get('form').trigger('submit');
+      expect(mockComplete).not.toHaveBeenCalled();
+    });
+
+    it('cancel calls DELETE and returns to the password step', async () => {
+      const wrapper = await toCodeStep();
+      await wrapper.get('button[data-testid="login-challenge-cancel"]').trigger('click');
+      await flushPromises();
+      expect(mockCancel).toHaveBeenCalledWith(CHALLENGE_ID);
+      expect(wrapper.find('input#password').exists()).toBe(true);
+      expect(wrapper.find('input#totp-code').exists()).toBe(false);
+    });
+
+    it('cancels a live challenge when the view is left', async () => {
+      const wrapper = await toCodeStep();
+      wrapper.unmount();
+      mountedWrappers.pop();
+      expect(mockCancel).toHaveBeenCalledWith(CHALLENGE_ID);
+    });
+
+    it('does not cancel on unmount when there is no challenge', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      wrapper.unmount();
+      mountedWrappers.pop();
+      expect(mockCancel).not.toHaveBeenCalled();
+    });
+
+    it('does not cancel a challenge it has already completed', async () => {
+      mockComplete.mockResolvedValue({ username: 'admin' });
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '123456');
+      wrapper.unmount();
+      mountedWrappers.pop();
+      expect(mockCancel).not.toHaveBeenCalled();
+    });
+
+    it('ignores a late result for a challenge that was cancelled meanwhile', async () => {
+      let resolveComplete: (v: unknown) => void = () => {};
+      mockComplete.mockReturnValue(new Promise((r) => (resolveComplete = r)));
+      const wrapper = await toCodeStep();
+      await wrapper.get('input#totp-code').setValue('123456');
+      await wrapper.get('form').trigger('submit');
+      await wrapper.get('button[data-testid="login-challenge-cancel"]').trigger('click');
+      resolveComplete({ username: 'admin' });
+      await flushPromises();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(wrapper.find('input#password').exists()).toBe(true);
+    });
+
+    describe('expiry', () => {
+      afterEach(() => vi.useRealTimers());
+
+      it('expires on its own deadline', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        mockGetStrategies.mockResolvedValue({
+          providers: [{ type: 'basic', name: 'basic' }],
+          errors: [],
+        });
+        mockLoginBasic.mockResolvedValue(challengeResult(['totp'], futureIso(60_000)));
+        const wrapper = trackWrapper(mountWithPlugins(LoginView));
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.find('input#username').setValue('admin');
+        await wrapper.find('input#password').setValue('secret');
+        await wrapper.find('form').trigger('submit');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(wrapper.find('input#totp-code').exists()).toBe(true);
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(wrapper.find('input#totp-code').exists()).toBe(true);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(wrapper.find('input#password').exists()).toBe(true);
+        expect(wrapper.get('[role="alert"]').text()).toContain('expired');
+        expect(mockCancel).not.toHaveBeenCalled();
+      });
+
+      it('treats an already-past or unparseable expiry as expired right away', async () => {
+        const past = await toCodeStep(['totp'], new Date(Date.now() - 1000).toISOString());
+        await flushPromises();
+        expect(past.find('input#password').exists()).toBe(true);
+        expect(past.get('[role="alert"]').text()).toContain('expired');
+        const bad = await toCodeStep(['totp'], 'not-a-date');
+        await flushPromises();
+        expect(bad.find('input#password').exists()).toBe(true);
+      });
+    });
+
+    it('shows the lockout with the retry time on 429 and 423', async () => {
+      for (const [status, seconds, expected] of [
+        [429, 90, '2 minutes'],
+        [423, 45, '45 seconds'],
+      ] as const) {
+        mockComplete.mockRejectedValueOnce(authError(status, seconds));
+        const wrapper = await toCodeStep();
+        await enterCode(wrapper, '123456');
+        expect(wrapper.get('[role="alert"]').text()).toContain('Too many attempts');
+        expect(wrapper.get('[role="alert"]').text()).toContain(expected);
+        expect(wrapper.find('input#totp-code').exists()).toBe(true);
+      }
+    });
+
+    it('shows a lockout without a time when Retry-After is absent', async () => {
+      mockComplete.mockRejectedValue(authError(429));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '123456');
+      expect(wrapper.get('[role="alert"]').text()).toBe('Too many attempts. Try again later.');
+    });
+
+    it('shows a service fault on 503 and keeps the step', async () => {
+      mockComplete.mockRejectedValue(authError(503));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '123456');
+      expect(wrapper.get('[role="alert"]').text()).toContain('unavailable');
+      expect(wrapper.find('input#totp-code').exists()).toBe(true);
+    });
+
+    it('shows a service fault for a network failure', async () => {
+      mockComplete.mockRejectedValue(new TypeError('Failed to fetch'));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '123456');
+      expect(wrapper.get('[role="alert"]').text()).toContain('unavailable');
+    });
+
+    it('never submits twice while a request is in flight', async () => {
+      let resolveComplete: (v: unknown) => void = () => {};
+      mockComplete.mockReturnValue(new Promise((r) => (resolveComplete = r)));
+      const wrapper = await toCodeStep();
+      await wrapper.get('input#totp-code').setValue('123456');
+      await wrapper.get('form').trigger('submit');
+      await wrapper.get('form').trigger('submit');
+      expect(mockComplete).toHaveBeenCalledTimes(1);
+      expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+      resolveComplete({ username: 'admin' });
+      await flushPromises();
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it('never submits the password twice while the first is in flight', async () => {
+      let resolveLogin: (v: unknown) => void = () => {};
+      mockLoginBasic.mockReturnValue(new Promise((r) => (resolveLogin = r)));
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      await wrapper.find('input#username').setValue('admin');
+      await wrapper.find('input#password').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await wrapper.find('form').trigger('submit');
+      expect(mockLoginBasic).toHaveBeenCalledTimes(1);
+      resolveLogin({ username: 'admin' });
+      await flushPromises();
+    });
+
+    it('lets the user retry after a failure', async () => {
+      mockComplete
+        .mockRejectedValueOnce(authError(401))
+        .mockResolvedValueOnce({ username: 'admin' });
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '000000');
+      await enterCode(wrapper, '123456');
+      expect(mockComplete).toHaveBeenCalledTimes(2);
+      expect(mockPush).toHaveBeenCalledWith('/');
+    });
+
+    it('never writes the challenge id to storage, the URL or the console', async () => {
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      const logs = [
+        vi.spyOn(console, 'log'),
+        vi.spyOn(console, 'debug'),
+        vi.spyOn(console, 'warn'),
+        vi.spyOn(console, 'error'),
+      ];
+      mockComplete.mockRejectedValue(authError(401));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '000000');
+      await wrapper.get('button[data-testid="login-challenge-cancel"]').trigger('click');
+      await flushPromises();
+      expect(setItem).not.toHaveBeenCalled();
+      expect(JSON.stringify({ ...sessionStorage })).not.toContain(CHALLENGE_ID);
+      expect(JSON.stringify({ ...localStorage })).not.toContain(CHALLENGE_ID);
+      expect(globalThis.location.href).not.toContain(CHALLENGE_ID);
+      expect(wrapper.html()).not.toContain(CHALLENGE_ID);
+      for (const spy of logs) {
+        expect(JSON.stringify(spy.mock.calls)).not.toContain(CHALLENGE_ID);
+      }
+    });
+
+    it('preserves the entered code and the error across a language switch', async () => {
+      mockComplete.mockRejectedValue(authError(401));
+      const wrapper = await toCodeStep();
+      await enterCode(wrapper, '000000');
+      const input = wrapper.get<HTMLInputElement>('input#totp-code');
+      await input.setValue('123 4');
+      expect(wrapper.get('label[for="totp-code"]').text()).toBe('Authentication code');
+      setI18nLocale('de');
+      await flushPromises();
+      expect(wrapper.get('input#totp-code').element).toBe(input.element);
+      expect(input.element.value).toBe('1234');
+      expect(wrapper.get('label[for="totp-code"]').text()).not.toBe('Authentication code');
+      expect(wrapper.get('[role="alert"]').text()).not.toContain('That code didn');
+      setI18nLocale('en');
+      await flushPromises();
+      expect(input.element.value).toBe('1234');
+      expect(wrapper.get('[role="alert"]').text()).toContain('That code didn');
+      expect(mockComplete).toHaveBeenCalledTimes(1);
+      expect(mockLoginBasic).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a 200 login exactly as it was', async () => {
+      mockLoginBasic.mockResolvedValue({ username: 'admin' });
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      await wrapper.find('input#username').setValue('admin');
+      await wrapper.find('input#password').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+      expect(mockPush).toHaveBeenCalledWith('/');
+      expect(wrapper.find('input#totp-code').exists()).toBe(false);
+      expect(mockComplete).not.toHaveBeenCalled();
     });
   });
 });
