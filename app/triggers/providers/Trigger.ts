@@ -19,6 +19,7 @@ import {
   isRollbackContainer as isRollbackContainerHelper,
 } from '../../model/container.js';
 import { getContainerGroup } from '../../model/container-group.js';
+import { getGroupExcludeEntries, resolveUpdateModeCeiling } from '../../model/group-policy.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
@@ -933,6 +934,21 @@ class Trigger<
 
   private isAutomaticActionDispatchBlocked() {
     return this.getCategory() === 'action' && getUpdateMode() !== 'auto';
+  }
+
+  /**
+   * The per-container half of the mode gate (spec 7.3): a group policy's `updateMode` is a
+   * ceiling below `auto`, so any container whose group sets one is never dispatched
+   * automatically, whatever the global mode is. Always checked after the trigger-level
+   * global gate above, and it reads only the container's own group snapshot, so it never
+   * grants anything the global mode refused. Notification triggers are not action-category
+   * and are never held back by it.
+   */
+  private isAutomaticActionDispatchBlockedFor(container: Container) {
+    return (
+      this.getCategory() === 'action' &&
+      resolveUpdateModeCeiling(container, 'auto').value !== 'auto'
+    );
   }
 
   private getAutoMode() {
@@ -2297,6 +2313,21 @@ class Trigger<
       };
     }
 
+    // A group's exclusion list reaches exactly what dd.action.exclude reaches: this plain
+    // path serves the command triggers, and notification triggers never read it.
+    const groupExcludes =
+      category === 'action'
+        ? getGroupExcludeEntries(containerResult).filter((entry) =>
+            this.isTriggerExcluded(containerResult, entry),
+          )
+        : [];
+    if (groupExcludes.length > 0) {
+      return {
+        allowed: false,
+        reason: `group policy '${(containerResult.groupPolicy as NonNullable<Container['groupPolicy']>).group}' excludes this trigger (${groupExcludes.join(',')}), triggerInclude=${containerResult.actionTriggerInclude ?? '<none>'}`,
+      };
+    }
+
     const { include: triggerInclude, exclude: triggerExclude } =
       getContainerTriggerFiltersForCategory(containerResult, category);
     const included = this.isTriggerIncluded(containerResult, triggerInclude);
@@ -2475,6 +2506,10 @@ class Trigger<
       logContainer.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
+    if (this.isAutomaticActionDispatchBlockedFor(container)) {
+      logContainer.debug('Group policy update mode does not allow automatic actions => ignore');
+      return;
+    }
     // Every action-category trigger is held back by the window, not only the ones that run
     // the Docker update lifecycle. A `command` action runs an arbitrary shell command the
     // operator attached to an update, which is exactly the kind of unattended work a window
@@ -2559,6 +2594,12 @@ class Trigger<
       this.log.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
+    if (this.isAutomaticActionDispatchBlockedFor(containerReport.container)) {
+      this.log.debug(
+        `Group policy update mode does not allow automatic actions for ${fullName(containerReport.container)} => ignore`,
+      );
+      return;
+    }
 
     const dispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
     if (!dispatchDecision.enabled) {
@@ -2629,6 +2670,11 @@ class Trigger<
       this.log.debug('Global update mode does not allow automatic batch actions => ignore');
       return;
     }
+    // Per report, after the global gate: a member whose group caps the mode never enters the
+    // batch, so it is never reserved, sent or recorded as notified.
+    const dispatchableReports = containerReports.filter(
+      (report) => !this.isAutomaticActionDispatchBlockedFor(report.container),
+    );
 
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
@@ -2640,6 +2686,11 @@ class Trigger<
     // frees only the reservation it actually holds (DR-62).
     const reservedContainers: Array<{ container: Container; token: OnceReservationToken }> = [];
     for (const container of this.getBatchRetryContainers(containerReports)) {
+      // A retry is judged on the current container, so a group that has since capped the mode
+      // holds it back without a reservation. It stays buffered, as it does under a global gate.
+      if (this.isAutomaticActionDispatchBlockedFor(container)) {
+        continue;
+      }
       const businessId = getContainerNotificationKey(container) || fullName(container);
       // Retry entries skip the eligibility check - they already passed it when
       // they were first batched - but they take the same reservation, or two
@@ -2660,7 +2711,7 @@ class Trigger<
       reservedContainers.push({ container, token });
       containersToSendByBusinessId.set(businessId, container);
     }
-    for (const containerReport of containerReports) {
+    for (const containerReport of dispatchableReports) {
       const token = this.shouldHandleBatchContainerReport(containerReport);
       if (token) {
         reservedContainers.push({ container: containerReport.container, token });
@@ -2789,6 +2840,12 @@ class Trigger<
     }
     if (this.isAutomaticActionDispatchBlocked()) {
       this.log.debug('Global update mode does not allow automatic digest actions => ignore');
+      return;
+    }
+    if (this.isAutomaticActionDispatchBlockedFor(container)) {
+      this.log.debug(
+        `Group policy update mode does not allow automatic digest actions for ${containerName} => ignore`,
+      );
       return;
     }
     // One binding for the kind this method reserves, logs and releases on, so
@@ -2939,6 +2996,7 @@ class Trigger<
         // `isActionPolicyDispatchWinner`.
         if (
           evaluatedContainer &&
+          !this.isAutomaticActionDispatchBlockedFor(evaluatedContainer) &&
           this.isActionPolicyDispatchWinner(evaluatedContainer) &&
           this.isGroupRoutedNotificationEligible(evaluatedContainer, 'update-available')
         ) {
@@ -2952,7 +3010,7 @@ class Trigger<
         }
 
         this.log.debug(
-          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner or eligible for the notification group)`,
+          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner, capped by its group policy, or eligible for the notification group)`,
         );
       }
 
@@ -3920,8 +3978,17 @@ class Trigger<
       return { dispatched: false, deferredIds: new Set<string>() };
     }
 
-    const deferredIds = this.collectMaintenanceWindowDeferredIds(containers);
-    const ready = containers.filter(
+    // A member whose group caps the mode is held back like a window-deferred one: not
+    // enqueued, and not recorded as notified, so lifting the cap lets the same result through.
+    const groupHeld = containers.filter((container) =>
+      this.isAutomaticActionDispatchBlockedFor(container),
+    );
+    const groupAllowed = containers.filter((container) => !groupHeld.includes(container));
+    const deferredIds = this.collectMaintenanceWindowDeferredIds(groupAllowed);
+    for (const container of groupHeld) {
+      deferredIds.add(getMaintenanceWindowDeferralKey(container));
+    }
+    const ready = groupAllowed.filter(
       (container) => !deferredIds.has(getMaintenanceWindowDeferralKey(container)),
     );
 
