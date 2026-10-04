@@ -169,3 +169,38 @@ describe('group policy OpenAPI schemas', () => {
     ]);
   });
 });
+
+describe('group policy action rule OpenAPI schemas (spec 7.3 slice 2a)', () => {
+  test('GroupPolicyActions accepts only restricting rules', () => {
+    expect(openApiSchemas.GroupPolicyActions).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        updateMode: { type: 'string', enum: ['manual', 'notify'] },
+        exclude: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+      },
+    });
+    expect(openApiSchemas.GroupPolicyActions.properties.updateMode.enum).not.toContain('auto');
+  });
+
+  test('names the group-notify-only blocker', () => {
+    expect(openApiSchemas.UpdateBlocker.properties.reason.enum).toContain('group-notify-only');
+  });
+
+  test('UpdateEligibility reflects the binding update mode and who set it', () => {
+    expect(openApiSchemas.UpdateEligibility.properties.updateMode).toStrictEqual({
+      $ref: '#/components/schemas/UpdateEligibilityUpdateMode',
+    });
+    expect(openApiSchemas.UpdateEligibility.required).not.toContain('updateMode');
+    expect(openApiSchemas.UpdateEligibilityUpdateMode).toMatchObject({
+      type: 'object',
+      required: ['value', 'source'],
+      additionalProperties: false,
+      properties: {
+        value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+        source: { type: 'string', enum: ['global', 'group'] },
+        group: { type: 'string' },
+      },
+    });
+  });
+});

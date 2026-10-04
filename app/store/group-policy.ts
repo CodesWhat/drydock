@@ -12,11 +12,14 @@
  * `reResolveGroupPolicyMembers` in `app/store/container.ts`.
  */
 import { randomUUID } from 'node:crypto';
+import type { Container } from '../model/container.js';
+import { getContainerGroup } from '../model/container-group.js';
 import {
   type GroupPolicy,
   GroupPolicyValidationError,
   isValidGroupPolicyName,
   normalizeGroupPolicyBody,
+  toContainerGroupPolicySnapshot,
 } from '../model/group-policy.js';
 import type { Database, Row } from './db/driver.js';
 
@@ -91,6 +94,39 @@ export function getGroupPolicyById(id: string): GroupPolicy | undefined {
 export function getGroupPolicyForGroup(group: string): GroupPolicy | undefined {
   const policy = policiesByGroup.get(group);
   return policy === undefined ? undefined : structuredClone(policy);
+}
+
+/**
+ * The container as the group's policy stands now. A container's `groupPolicy` is the
+ * snapshot its last store write recorded, and a report holds that write until the batch
+ * emit, so a policy saved in between would otherwise reach every gate that reads the
+ * snapshot only on the next scan. The global update mode is read live at each gate and the
+ * group rule has to be too. Returns `container` itself when its snapshot is current, and
+ * otherwise a shallow copy carrying the current snapshot (or none), never the shared object
+ * mutated.
+ * @param container
+ */
+export function withCurrentGroupPolicy<T extends Pick<Container, 'labels' | 'groupPolicy'>>(
+  container: T,
+): T {
+  // Without a labels map there is no group to derive, so the snapshot is left as recorded.
+  if (container.labels === undefined) {
+    return container;
+  }
+  const group = getContainerGroup(container);
+  const policy = group === null ? undefined : policiesByGroup.get(group);
+  const snapshot = container.groupPolicy;
+  const current =
+    policy === undefined
+      ? snapshot === undefined
+      : snapshot?.id === policy.id && snapshot.revision === policy.revision;
+  if (current) {
+    return container;
+  }
+  const { groupPolicy: _stale, ...rest } = container;
+  return (
+    policy === undefined ? rest : { ...rest, groupPolicy: toContainerGroupPolicySnapshot(policy) }
+  ) as T;
 }
 
 /**

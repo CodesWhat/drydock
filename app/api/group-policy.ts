@@ -22,11 +22,15 @@ import {
   normalizeGroupPolicyBody,
 } from '../model/group-policy.js';
 import { DECLARATIVE_UPDATE_POLICY_FIELDS } from '../model/update-policy.js';
+import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as groupPolicyStore from '../store/group-policy.js';
+import { doesReferenceMatchId } from '../triggers/providers/trigger-reference-matching.js';
+import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
+import { toTriggerInfos } from './label-override/references.js';
 import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'api.group-policy' });
@@ -42,13 +46,14 @@ const RE_RESOLVE_FAILED_WARNING =
   'The policy was saved, but updating current members failed. They pick it up on their next write or at restart.';
 
 /**
- * `actions` is not a known field until restrict-only action rules ship, so a body that
- * carries it fails validation like any other unknown field.
+ * `updatePolicy` and `actions` are validated by the model, which owns their rules. The
+ * request schema only fixes the envelope, so an unknown top-level field fails like any other.
  */
 const createSchema = joi
   .object({
     group: joi.string().required(),
     updatePolicy: joi.any(),
+    actions: joi.any(),
   })
   .required();
 
@@ -57,6 +62,7 @@ const replaceSchema = joi
     group: joi.string(),
     revision: joi.number().integer().min(1).required(),
     updatePolicy: joi.any(),
+    actions: joi.any(),
   })
   .required();
 
@@ -111,24 +117,49 @@ function withMembers(policy: GroupPolicy, collected: MembersByGroup) {
   return { ...policy, members: membersOf(collected, policy.group) };
 }
 
-/** The update-policy fields whose value differs between two policies, as before and after. */
-function diffFields(before: GroupPolicy['updatePolicy'], after: GroupPolicy['updatePolicy']) {
+const ACTION_FIELDS = ['updateMode', 'exclude'] as const;
+
+/**
+ * The fields whose value differs between two policy bodies, as before and after. Action
+ * rules are keyed `actions.<field>` so they never collide with an update-policy field.
+ */
+function diffFields(before: GroupPolicyBody, after: GroupPolicyBody) {
   const fields: Record<string, { before: unknown; after: unknown }> = {};
-  for (const field of DECLARATIVE_UPDATE_POLICY_FIELDS) {
-    const beforeValue = before[field] ?? null;
-    const afterValue = after[field] ?? null;
+  const compare = (name: string, beforeValue: unknown = null, afterValue: unknown = null) => {
     if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
-      fields[field] = { before: beforeValue, after: afterValue };
+      fields[name] = { before: beforeValue, after: afterValue };
     }
+  };
+  for (const field of DECLARATIVE_UPDATE_POLICY_FIELDS) {
+    compare(field, before.updatePolicy[field], after.updatePolicy[field]);
+  }
+  for (const field of ACTION_FIELDS) {
+    compare(`actions.${field}`, before.actions[field], after.actions[field]);
   }
   return fields;
 }
 
 function isSameBody(policy: GroupPolicy, body: GroupPolicyBody): boolean {
-  return (
-    JSON.stringify(diffFields(policy.updatePolicy, body.updatePolicy)) === '{}' &&
-    JSON.stringify(policy.actions) === JSON.stringify(body.actions)
+  return JSON.stringify(diffFields(policy, body)) === '{}';
+}
+
+/**
+ * Exclusion entries that match no registered action trigger. They are accepted, because an
+ * agent's triggers may be offline or register later, but the operator is told.
+ */
+function unmatchedExcludeWarnings(actions: GroupPolicyBody['actions']): string[] {
+  const actionTriggers = toTriggerInfos(registry.getState().trigger).filter(
+    (candidate) => getTriggerCategoryForType(candidate.type) === 'action',
   );
+  return (actions.exclude ?? [])
+    .filter((entry) => {
+      const reference = entry.split(':')[0].trim();
+      return !actionTriggers.some((candidate) => doesReferenceMatchId(reference, candidate.id));
+    })
+    .map(
+      (entry) =>
+        `No registered action trigger matches '${entry}'. The rule is kept for triggers that register later or run on an agent.`,
+    );
 }
 
 /** Write the audit row for a policy change. Runs inside the policy transaction. */
@@ -142,8 +173,8 @@ function auditPolicyChange({
 }: {
   operation: AuditOperation;
   policy: GroupPolicy;
-  before: GroupPolicy['updatePolicy'];
-  after: GroupPolicy['updatePolicy'];
+  before: GroupPolicyBody;
+  after: GroupPolicyBody;
   principal: string;
   members: number;
 }) {
@@ -163,6 +194,10 @@ function auditPolicyChange({
   });
 }
 
+function partialReResolveWarning(failedCount: number): string {
+  return `The policy was saved, but updating ${failedCount} current ${failedCount === 1 ? 'member' : 'members'} failed. ${failedCount === 1 ? 'It picks' : 'They pick'} it up on ${failedCount === 1 ? 'its' : 'their'} next write or at restart.`;
+}
+
 /**
  * Re-resolve the group's members after the policy change committed. A failure here does not
  * undo the saved policy: startup reconciliation and the members' next write heal it, so it
@@ -170,9 +205,18 @@ function auditPolicyChange({
  */
 function applyToMembers(group: string): { applied: { members: number }; warnings: string[] } {
   try {
+    const { reResolved, failed } = storeContainer.reResolveGroupPolicyMembers(group);
+    if (failed.length === 0) {
+      return { applied: { members: reResolved }, warnings: [] };
+    }
+    for (const failure of failed) {
+      log.error(
+        `Re-resolving member ${sanitizeLogParam(failure.id)} of group ${sanitizeLogParam(group)} failed (${sanitizeLogParam(failure.error, 500)})`,
+      );
+    }
     return {
-      applied: { members: storeContainer.reResolveGroupPolicyMembers(group) },
-      warnings: [],
+      applied: { members: reResolved },
+      warnings: [partialReResolveWarning(failed.length)],
     };
   } catch (error: unknown) {
     log.error(
@@ -221,12 +265,16 @@ function createGroupPolicy(req: Request, res: Response) {
     sendValidationError(res, request.error);
     return;
   }
-  const { group, updatePolicy } = request.value as { group: string; updatePolicy?: unknown };
+  const { group, updatePolicy, actions } = request.value as {
+    group: string;
+    updatePolicy?: unknown;
+    actions?: unknown;
+  };
   try {
     if (!isValidGroupPolicyName(group)) {
       throw new GroupPolicyValidationError('A group name must be a non-empty string');
     }
-    const body = normalizeGroupPolicyBody({ updatePolicy });
+    const body = normalizeGroupPolicyBody({ updatePolicy, actions });
     if (groupPolicyStore.getGroupPolicyForGroup(group)) {
       sendErrorResponse(res, 409, `A policy for group '${group}' already exists`);
       return;
@@ -238,14 +286,15 @@ function createGroupPolicy(req: Request, res: Response) {
       auditPolicyChange({
         operation: 'created',
         policy: created,
-        before: {},
-        after: created.updatePolicy,
+        before: { updatePolicy: {}, actions: {} },
+        after: created,
         principal,
         members: memberCount,
       });
       return created;
     });
     const { applied, warnings } = applyToMembers(group);
+    warnings.push(...unmatchedExcludeWarnings(body.actions));
     if (memberCount === 0) {
       warnings.push(NO_MEMBERS_WARNING);
     }
@@ -269,7 +318,13 @@ function replaceGroupPolicy(req: Request, res: Response) {
     group,
     revision,
     updatePolicy: requestedUpdatePolicy,
-  } = request.value as { group?: string; revision: number; updatePolicy?: unknown };
+    actions: requestedActions,
+  } = request.value as {
+    group?: string;
+    revision: number;
+    updatePolicy?: unknown;
+    actions?: unknown;
+  };
   try {
     const existing = groupPolicyStore.getGroupPolicyById(String(req.params.id));
     if (!existing) {
@@ -280,7 +335,10 @@ function replaceGroupPolicy(req: Request, res: Response) {
       sendErrorResponse(res, 400, GROUP_IMMUTABLE_MESSAGE);
       return;
     }
-    const body = normalizeGroupPolicyBody({ updatePolicy: requestedUpdatePolicy });
+    const body = normalizeGroupPolicyBody({
+      updatePolicy: requestedUpdatePolicy,
+      actions: requestedActions,
+    });
     if (existing.revision === revision && isSameBody(existing, body)) {
       res.status(200).json({
         changed: false,
@@ -301,8 +359,8 @@ function replaceGroupPolicy(req: Request, res: Response) {
         auditPolicyChange({
           operation: 'replaced',
           policy: replaced,
-          before: existing.updatePolicy,
-          after: replaced.updatePolicy,
+          before: existing,
+          after: replaced,
           principal,
           members: memberCount,
         });
@@ -314,6 +372,7 @@ function replaceGroupPolicy(req: Request, res: Response) {
       return;
     }
     const { applied, warnings } = applyToMembers(policy.group);
+    warnings.push(...unmatchedExcludeWarnings(body.actions));
     if (memberCount === 0) {
       warnings.push(NO_MEMBERS_WARNING);
     }
@@ -351,8 +410,8 @@ function deleteGroupPolicy(req: Request, res: Response) {
         auditPolicyChange({
           operation: 'deleted',
           policy: removed,
-          before: removed.updatePolicy,
-          after: {},
+          before: removed,
+          after: { updatePolicy: {}, actions: {} },
           principal,
           members: memberCount,
         });

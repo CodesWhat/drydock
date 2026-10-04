@@ -8548,14 +8548,20 @@ describe('digest mode', () => {
     });
     await actionTrigger.flushDigestBuffer();
 
-    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'c1' })],
+      [],
+    );
     expect(actionTrigger.digestBuffer.size).toBe(1);
     expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
 
     runAcceptedUpdateBatchSpy.mockClear();
     await actionTrigger.flushDigestBuffer();
 
-    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'c1' })],
+      [],
+    );
     expect(actionTrigger.digestBuffer.size).toBe(0);
     expect(notificationHistoryStore.recordNotification).toHaveBeenCalled();
   });
@@ -8674,7 +8680,10 @@ describe('digest mode', () => {
       } as any,
     ]);
 
-    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'c1' })],
+      [],
+    );
   });
 
   test.each(['manual', 'notify'] as const)(

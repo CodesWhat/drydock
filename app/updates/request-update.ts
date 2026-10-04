@@ -17,10 +17,16 @@ import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   type ActionPolicyTrigger,
+  findMatchingGroupExcludeEntries,
   resolveForTrigger,
   selectActionTrigger,
 } from '../model/action-policy.js';
 import { type Container, hasRawUpdate } from '../model/container.js';
+import {
+  groupTriggerExcludedMessage,
+  groupUpdateModeRejectionMessage,
+  resolveUpdateModeCeiling,
+} from '../model/group-policy.js';
 import { describeRoutingOrigin } from '../model/label-owned.js';
 import {
   computeUpdateEligibility,
@@ -29,6 +35,7 @@ import {
   type UpdateBlockerReason,
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
+import { withCurrentGroupPolicy } from '../store/group-policy.js';
 import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
@@ -112,6 +119,8 @@ const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercomp
 const log = logger.child({ component: 'updates.request-update' });
 const NOTIFY_MODE_REJECTION_MESSAGE = 'Update mode is notify; Drydock will not apply updates';
 const MANUAL_MODE_REJECTION_MESSAGE = 'Update mode is manual; automatic updates are disabled';
+const GROUP_MODE_REJECTION_PATTERN =
+  /^Group policy '.*' allows (?:manual updates|notifications) only$/s;
 const ACTION_POLICY_NOT_AUTO_REJECTION_MESSAGE =
   'Action policy for this trigger does not permit automatic updates for this container';
 
@@ -131,7 +140,8 @@ export function isUpdateModeAdmissionRejection(
   return (
     rejection.statusCode === 409 &&
     (rejection.message === NOTIFY_MODE_REJECTION_MESSAGE ||
-      rejection.message === MANUAL_MODE_REJECTION_MESSAGE)
+      rejection.message === MANUAL_MODE_REJECTION_MESSAGE ||
+      GROUP_MODE_REJECTION_PATTERN.test(rejection.message))
   );
 }
 
@@ -176,6 +186,15 @@ function resolveUpdateTrigger(
       container,
     );
     if (resolvedPolicy.state === 'blocked') {
+      if (resolvedPolicy.reason === 'excluded' && resolvedPolicy.excludedBy === 'group') {
+        throw new UpdateRequestError(
+          409,
+          groupTriggerExcludedMessage(
+            (container.groupPolicy as NonNullable<Container['groupPolicy']>).group,
+            findMatchingGroupExcludeEntries(providedTrigger.getId(), container),
+          ),
+        );
+      }
       if (resolvedPolicy.reason === 'excluded') {
         throw new UpdateRequestError(
           409,
@@ -245,6 +264,7 @@ const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'threshold-not-reached': 409,
   'trigger-excluded': 409,
   'trigger-not-included': 409,
+  'group-notify-only': 409,
   // soft — manual callers do not reach this code path but the map must be exhaustive
   'maintenance-window-closed': 409,
 };
@@ -304,9 +324,19 @@ function formatAcceptedDispatchContext(accepted: AcceptedContainerUpdateRequest[
 }
 
 function prepareContainerUpdateRequest(
-  container: Container,
+  requested: Container,
   options: EnqueueContainerUpdateOptions = {},
 ): PreparedContainerUpdateRequest {
+  // The lower-level enqueue path is used by watcher-driven action triggers.
+  // Manual/API callers go through requestContainerUpdate(s), which explicitly
+  // override this to manual. Defaulting to automatic keeps future internal
+  // callers fail-closed when the global mode is manual.
+  const source = options.source ?? 'automatic';
+  // An automatic request carries the container a scan built, whose group snapshot can
+  // predate a policy saved since. The group rule is read live here, as the global mode is,
+  // so a stale snapshot never admits what the current policy holds. A manual request is the
+  // operator's own call and reads the container as it was handed in.
+  const container = source === 'automatic' ? withCurrentGroupPolicy(requested) : requested;
   // Active-operation gate first — preserves the original error wording for callers that
   // distinguish "queued" vs "in progress" by message text.
   const activeOperation = getActiveUpdateOperationForContainer(container);
@@ -317,17 +347,26 @@ function prepareContainerUpdateRequest(
     );
   }
 
-  const updateMode = getUpdateMode();
-  // The lower-level enqueue path is used by watcher-driven action triggers.
-  // Manual/API callers go through requestContainerUpdate(s), which explicitly
-  // override this to manual. Defaulting to automatic keeps future internal
-  // callers fail-closed when the global mode is manual.
-  const source = options.source ?? 'automatic';
+  // The global mode, lowered to the group's when its policy is stricter. A group can only
+  // restrict, so this is never more permissive than the global mode alone.
+  const ceiling = resolveUpdateModeCeiling(container, getUpdateMode());
+  const updateMode = ceiling.value;
+  const groupCeiling = ceiling.source === 'group' ? ceiling.group : undefined;
   if (updateMode === 'notify') {
-    throw new UpdateRequestError(409, NOTIFY_MODE_REJECTION_MESSAGE);
+    throw new UpdateRequestError(
+      409,
+      groupCeiling === undefined
+        ? NOTIFY_MODE_REJECTION_MESSAGE
+        : groupUpdateModeRejectionMessage(groupCeiling, 'notify'),
+    );
   }
   if (updateMode === 'manual' && source === 'automatic') {
-    throw new UpdateRequestError(409, MANUAL_MODE_REJECTION_MESSAGE);
+    throw new UpdateRequestError(
+      409,
+      groupCeiling === undefined
+        ? MANUAL_MODE_REJECTION_MESSAGE
+        : groupUpdateModeRejectionMessage(groupCeiling, 'manual'),
+    );
   }
 
   // A user-initiated request may intentionally override a soft policy gate. Those

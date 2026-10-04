@@ -231,12 +231,14 @@ describe('case 4: exclude beats include+auto -> blocked, trigger-excluded', () =
     expect(resolveForTrigger(trigger, container)).toStrictEqual({
       state: 'blocked',
       reason: 'excluded',
+      excludedBy: 'label',
     });
     expect(
       selectActionTrigger({ 'docker.update': trigger }, container, { requireAuto: true }),
     ).toStrictEqual({
       state: 'blocked',
       reason: 'excluded',
+      excludedBy: 'label',
       trigger,
       triggerId: 'docker.update',
     });

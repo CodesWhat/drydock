@@ -2433,6 +2433,12 @@ function readGroupPolicyStateRows(): GroupPolicyStateRow[] {
   }));
 }
 
+export interface GroupPolicyReResolveResult {
+  reResolved: number;
+  /** Members whose write threw. They keep the old rule until their next write or restart. */
+  failed: Array<{ id: string; error: string }>;
+}
+
 /**
  * Spec 7.3: re-resolve every stored member of `group` after its policy was created,
  * replaced or deleted, through the same `updateContainer` path an override edit takes, so
@@ -2443,18 +2449,25 @@ function readGroupPolicyStateRows(): GroupPolicyStateRow[] {
  * One synchronous loop with no await: nothing else runs until every member is written, so
  * no request or dispatch can observe a half-applied group. Only a crash interrupts it, and
  * `reconcileGroupPolicySnapshots` heals that at the next start. Call it after the policy
- * write has committed. Returns how many records it rewrote.
+ * write has committed. A member whose write throws is skipped and reported in `failed`, so
+ * the rest of the group is still re-resolved.
  */
-export function reResolveGroupPolicyMembers(group: string): number {
+export function reResolveGroupPolicyMembers(group: string): GroupPolicyReResolveResult {
   let reResolved = 0;
+  const failed: GroupPolicyReResolveResult['failed'] = [];
   for (const row of readGroupPolicyStateRows()) {
     if (row.group !== group && row.layer.groupPolicy?.group !== group) {
       continue;
     }
-    updateContainer(getContainerRaw(row.id));
-    reResolved += 1;
+    // One failing member never leaves the rest of the group on the old rule.
+    try {
+      updateContainer(getContainerRaw(row.id));
+      reResolved += 1;
+    } catch (error: unknown) {
+      failed.push({ id: row.id, error: error instanceof Error ? error.message : String(error) });
+    }
   }
-  return reResolved;
+  return { reResolved, failed };
 }
 
 /**

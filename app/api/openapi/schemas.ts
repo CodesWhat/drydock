@@ -628,7 +628,15 @@ export const openApiSchemas = {
   GroupPolicyActions: {
     type: 'object',
     description:
-      'Reserved for restrict-only action rules. Always empty today: no field is accepted or stored.',
+      'Restrict-only action rules. They lower what a member may do and never grant: `updateMode` can only be `manual` or `notify` and is composed with the global mode as the more restrictive of the two, and `exclude` is a hard stop that a member include or auto label cannot lift. Each `exclude` entry uses the `dd.action.exclude` grammar: a trigger id or name with an optional `:threshold`.',
+    properties: {
+      updateMode: { type: 'string', enum: ['manual', 'notify'] },
+      exclude: {
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
+        uniqueItems: true,
+      },
+    },
     additionalProperties: false,
   },
   ContainerGroupPolicySnapshot: {
@@ -718,6 +726,7 @@ export const openApiSchemas = {
           'threshold-not-reached',
           'trigger-excluded',
           'trigger-not-included',
+          'group-notify-only',
           'agent-mismatch',
           'no-update-trigger-configured',
           'self-update-unavailable',
@@ -762,6 +771,18 @@ export const openApiSchemas = {
     required: ['state'],
     additionalProperties: false,
   },
+  UpdateEligibilityUpdateMode: {
+    type: 'object',
+    description:
+      "The update mode that binds this container: the global mode, or its group policy's when that is strictly more restrictive. `source` is `group` only in that case, and `group` then names it.",
+    properties: {
+      value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      source: { type: 'string', enum: ['global', 'group'] },
+      group: { type: 'string' },
+    },
+    required: ['value', 'source'],
+    additionalProperties: false,
+  },
   UpdateEligibility: {
     type: 'object',
     properties: {
@@ -772,6 +793,7 @@ export const openApiSchemas = {
       },
       evaluatedAt: { type: 'string', format: 'date-time' },
       actionPolicy: { $ref: '#/components/schemas/ActionPolicy' },
+      updateMode: { $ref: '#/components/schemas/UpdateEligibilityUpdateMode' },
     },
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,

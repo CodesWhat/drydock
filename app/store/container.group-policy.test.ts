@@ -250,7 +250,7 @@ describe('group update-policy layer at the store', () => {
     );
     const policy = setPolicy('payments', { maturityMode: 'mature', skipTags: ['group'] });
 
-    expect(container.reResolveGroupPolicyMembers('payments')).toBe(1);
+    expect(container.reResolveGroupPolicyMembers('payments').reResolved).toBe(1);
     expect(container.getContainerRaw('legacy')).toMatchObject({
       updatePolicy: { maturityMode: 'mature', skipTags: ['legacy'], maturityMinAgeDays: 3 },
       updatePolicyDeclarative: { env: {}, label: {} },
@@ -379,6 +379,40 @@ describe('membership changes, recreation and the stash', () => {
 });
 
 describe('reResolveGroupPolicyMembers', () => {
+  test('reports a member that throws something other than an Error', () => {
+    container.insertContainer(watched('member'));
+    setPolicy('payments', { maturityMode: 'mature' });
+    vi.mocked(event.emitContainerUpdated).mockImplementationOnce(() => {
+      throw 'plain string failure';
+    });
+
+    expect(container.reResolveGroupPolicyMembers('payments')).toEqual({
+      reResolved: 0,
+      failed: [{ id: 'member', error: 'plain string failure' }],
+    });
+  });
+
+  test('continues past a member that fails and reports it', () => {
+    container.insertContainer(watched('first'));
+    container.insertContainer(watched('second'));
+    container.insertContainer(watched('third'));
+    setPolicy('payments', { maturityMode: 'mature' });
+    vi.mocked(event.emitContainerUpdated).mockClear();
+    vi.mocked(event.emitContainerUpdated).mockImplementationOnce(() => {
+      throw new Error('listener exploded');
+    });
+
+    const result = container.reResolveGroupPolicyMembers('payments');
+
+    expect(result.reResolved + result.failed.length).toBe(3);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].id).toMatch(/^(first|second|third)$/);
+    expect(result.failed[0].error).toBe('listener exploded');
+    for (const id of ['first', 'second', 'third']) {
+      expect(container.getContainerRaw(id)?.updatePolicySources).toEqual({ maturityMode: 'group' });
+    }
+  });
+
   test('re-resolves every member on the controller and on each agent before it returns', () => {
     container.insertContainer(watched('controller-member'));
     container.insertContainer(watched('edge1-member', { agent: 'edge1' }));
@@ -388,7 +422,7 @@ describe('reResolveGroupPolicyMembers', () => {
 
     const result = container.reResolveGroupPolicyMembers('payments');
 
-    expect(result).toBe(3);
+    expect(result).toEqual({ reResolved: 3, failed: [] });
     for (const id of ['controller-member', 'edge1-member', 'edge2-member']) {
       expect(container.getContainerRaw(id)?.updatePolicySources).toEqual({ maturityMode: 'group' });
     }
@@ -401,7 +435,7 @@ describe('reResolveGroupPolicyMembers', () => {
     db.prepare('UPDATE containers SET labels = ? WHERE id = ?').run('{}', 'member');
     groupPolicy.deleteGroupPolicy(policy.id, 1);
 
-    expect(container.reResolveGroupPolicyMembers('payments')).toBe(1);
+    expect(container.reResolveGroupPolicyMembers('payments').reResolved).toBe(1);
     expect(container.getContainerRaw('member')).not.toHaveProperty('groupPolicy');
   });
 });
