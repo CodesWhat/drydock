@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does.
+- Login lockout now keys on the credentials actually presented. A request could previously name a different username in its body to dodge an account's failed-login lock, leaving only the per-IP limit.
 
 ### Changed
 
