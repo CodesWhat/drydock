@@ -515,6 +515,18 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       expect(getLoginChallengeCountForTests()).toBe(0);
     });
 
+    test('keeps at most five live challenges per subject, replacing the oldest', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const challenges = [];
+      for (let index = 0; index < 6; index += 1) {
+        challenges.push(await startChallenge(h));
+      }
+
+      expect((await put(h, challenges[0].id, { code: totpNow(enrolled.seed) })).status).toBe(401);
+      expect((await put(h, challenges[5].id, { code: totpNow(enrolled.seed) })).status).toBe(200);
+    });
+
     test('is refused with 429 once 5,000 live challenges exist, and nothing is evicted', async () => {
       const h = await boot();
       const enrolled = enroll();
@@ -522,7 +534,7 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       const { createLoginChallenge } = await import('./totp-challenge.js');
       for (let index = 1; index < LOGIN_CHALLENGE_MAX_ENTRIES; index += 1) {
         createLoginChallenge({
-          subjectId: 'x',
+          subjectId: `x-${index}`,
           providerId: 'basic.default',
           username: 'x',
           factorVersion: 1,

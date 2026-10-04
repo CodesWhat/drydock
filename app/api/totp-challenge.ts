@@ -20,6 +20,7 @@ import { sendErrorResponse } from './error-response.js';
 import type { AuthenticatedPrincipal } from './principal.js';
 
 export const LOGIN_CHALLENGE_MAX_ENTRIES = 5000;
+export const LOGIN_CHALLENGE_MAX_PER_SUBJECT = 5;
 export const LOGIN_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const LOGIN_CHALLENGE_MAX_FAILED_ATTEMPTS = 5;
 const CHALLENGE_ID_BYTES = 32;
@@ -59,6 +60,24 @@ function sweepExpired(now: number): void {
 }
 
 /**
+ * Make room for one more challenge of this subject: past the per-subject cap
+ * its oldest goes. A password-verified caller can only ever displace its own
+ * subject's challenges, never another subject's, and never fills the global
+ * table by itself.
+ */
+function evictSubjectOverflow(subjectId: string): void {
+  const held: string[] = [];
+  for (const [key, challenge] of challenges) {
+    if (challenge.subjectId === subjectId) {
+      held.push(key);
+    }
+  }
+  for (const key of held.slice(0, Math.max(0, held.length - LOGIN_CHALLENGE_MAX_PER_SUBJECT + 1))) {
+    challenges.delete(key);
+  }
+}
+
+/**
  * Hold a challenge and return its id, or undefined when the table is full of
  * live entries. A full table refuses new challenges rather than evicting: an
  * evicting table would let a flood of challenges push out a real user's.
@@ -68,6 +87,7 @@ export function createLoginChallenge(
   now: number = Date.now(),
 ): { id: string; expiresAt: number } | undefined {
   sweepExpired(now);
+  evictSubjectOverflow(input.subjectId);
   if (challenges.size >= LOGIN_CHALLENGE_MAX_ENTRIES) {
     return undefined;
   }
