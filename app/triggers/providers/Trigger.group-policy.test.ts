@@ -197,6 +197,24 @@ describe('simple mode', () => {
     },
   );
 
+  test.each(CEILINGS)(
+    'handleContainerReport stops a %s group before it reserves a slot or evaluates the container',
+    async (_name, actions) => {
+      const action = createTrigger('docker', 'simple');
+      const evaluate = vi.spyOn(action, 'runUpdateAvailableSimpleTrigger');
+      const debug = vi.fn();
+      action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const container = createContainer('c1', actions);
+
+      await action.handleContainerReport(report(container));
+
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(debug).toHaveBeenCalledWith(
+        `Group policy update mode does not allow automatic actions for ${container.watcher}_${container.name} => ignore`,
+      );
+    },
+  );
+
   test('a member include or auto label cannot lift the group ceiling', async () => {
     const action = createTrigger('docker', 'simple');
     const spy = vi.spyOn(action, 'trigger').mockResolvedValue(undefined);

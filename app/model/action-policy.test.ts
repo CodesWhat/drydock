@@ -1,4 +1,5 @@
 import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
+import type { UpdateMode } from '../store/settings.js';
 import {
   type ActionPolicyTrigger,
   findInertAutoLabelContainers,
@@ -8,6 +9,7 @@ import {
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
+import { resolveUpdateModeCeiling } from './group-policy.js';
 import {
   applyLabelOwnedState,
   buildLabelOwnedState,
@@ -875,15 +877,13 @@ describe('a group exclusion never raises an outcome, composed with label overrid
     (LABEL_OWNED_FIELDS as readonly { field: string }[]).map((spec) => [spec.field, 'label']),
   ) as LabelOwnedDeclaredSources;
 
-  function resolveWith(
+  function buildContainer(
     declared: LabelOwnedDeclared,
     overrides: LabelOverrideFields,
     agent: string | undefined,
     groupExclude: string[] | undefined,
-    mode: (typeof MODES)[number],
-    triggerId: string,
     semverDiff: (typeof DIFFS)[number],
-  ): number {
+  ): Container {
     const state = buildLabelOwnedState(declared, DECLARED_SOURCES, overrides);
     const base = {
       id: 'c1',
@@ -895,8 +895,18 @@ describe('a group exclusion never raises an outcome, composed with label overrid
       updateKind: { kind: 'tag', localValue: '1', remoteValue: '2', semverDiff },
     } as unknown as Container;
     const composed = applyLabelOwnedState(base, state, overrides);
-    const container =
-      groupExclude === undefined ? composed : withGroupExclude(composed, groupExclude);
+    return groupExclude === undefined ? composed : withGroupExclude(composed, groupExclude);
+  }
+
+  function resolveWith(
+    declared: LabelOwnedDeclared,
+    overrides: LabelOverrideFields,
+    groupExclude: string[] | undefined,
+    mode: (typeof MODES)[number],
+    triggerId: string,
+    semverDiff: (typeof DIFFS)[number],
+  ): number {
+    const container = buildContainer(declared, overrides, undefined, groupExclude, semverDiff);
     const candidate = {
       type: 'docker',
       getId: () => triggerId,
@@ -905,39 +915,40 @@ describe('a group exclusion never raises an outcome, composed with label overrid
     return RANK[resolveForTrigger(candidate, container).state];
   }
 
-  test('for every label, override, agent, mode and group rule, the group rule only lowers or keeps the outcome', () => {
+  /** What the dispatch sites see: the ranked walk over every registered trigger. */
+  function selectedRank(
+    declared: LabelOwnedDeclared,
+    overrides: LabelOverrideFields,
+    agent: string | undefined,
+    groupExclude: string[] | undefined,
+    mode: (typeof MODES)[number],
+    semverDiff: (typeof DIFFS)[number],
+    requireAuto: boolean,
+  ): number {
+    const triggers = {
+      edge: makeTrigger('docker.edge', { agent: 'edge', configuration: { auto: mode } }),
+      other: makeTrigger('docker.other', { configuration: { auto: mode } }),
+    } as Record<string, ActionPolicyTrigger>;
+    const container = buildContainer(declared, overrides, agent, groupExclude, semverDiff);
+    const selected = selectActionTrigger(triggers, container, { requireAuto });
+    return selected === undefined ? RANK.blocked : RANK[selected.state];
+  }
+
+  test('for every label, override, mode and group rule, the group rule only lowers or keeps the outcome', () => {
     let compared = 0;
     for (const declared of DECLARED_ROUTING) {
       for (const overrides of OVERRIDES) {
-        for (const agent of [undefined, 'edge']) {
-          for (const rule of GROUP_RULES) {
-            for (const mode of MODES) {
-              for (const triggerId of TRIGGER_IDS) {
-                for (const diff of DIFFS) {
-                  const without = resolveWith(
-                    declared,
-                    overrides,
-                    agent,
-                    undefined,
-                    mode,
-                    triggerId,
-                    diff,
+        for (const rule of GROUP_RULES) {
+          for (const mode of MODES) {
+            for (const triggerId of TRIGGER_IDS) {
+              for (const diff of DIFFS) {
+                const without = resolveWith(declared, overrides, undefined, mode, triggerId, diff);
+                const withRule = resolveWith(declared, overrides, rule, mode, triggerId, diff);
+                compared += 1;
+                if (withRule > without) {
+                  throw new Error(
+                    `group rule raised an outcome: ${JSON.stringify({ declared, overrides, rule, mode, triggerId, diff, without, withRule })}`,
                   );
-                  const withRule = resolveWith(
-                    declared,
-                    overrides,
-                    agent,
-                    rule,
-                    mode,
-                    triggerId,
-                    diff,
-                  );
-                  compared += 1;
-                  if (withRule > without) {
-                    throw new Error(
-                      `group rule raised an outcome: ${JSON.stringify({ declared, overrides, agent, rule, mode, triggerId, diff, without, withRule })}`,
-                    );
-                  }
                 }
               }
             }
@@ -948,12 +959,78 @@ describe('a group exclusion never raises an outcome, composed with label overrid
     expect(compared).toBe(
       DECLARED_ROUTING.length *
         OVERRIDES.length *
-        2 *
         GROUP_RULES.length *
         MODES.length *
         TRIGGER_IDS.length *
         DIFFS.length,
     );
+  });
+
+  test('through selectActionTrigger, with agent affinity in play, a group rule never raises the outcome', () => {
+    let compared = 0;
+    for (const declared of DECLARED_ROUTING) {
+      for (const overrides of OVERRIDES) {
+        for (const agent of [undefined, 'edge', 'other']) {
+          for (const rule of GROUP_RULES) {
+            for (const mode of MODES) {
+              for (const requireAuto of [false, true]) {
+                const args = [declared, overrides, agent] as const;
+                const without = selectedRank(...args, undefined, mode, 'minor', requireAuto);
+                const withRule = selectedRank(...args, rule, mode, 'minor', requireAuto);
+                compared += 1;
+                if (withRule > without) {
+                  throw new Error(
+                    `group rule raised a selection: ${JSON.stringify({ declared, overrides, agent, rule, mode, requireAuto, without, withRule })}`,
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(compared).toBe(
+      DECLARED_ROUTING.length * OVERRIDES.length * 3 * GROUP_RULES.length * MODES.length * 2,
+    );
+  });
+
+  test('an agent trigger is never selected for another agent whatever the group says', () => {
+    for (const rule of GROUP_RULES) {
+      for (const agent of [undefined, 'other']) {
+        const triggers = {
+          edge: makeTrigger('docker.edge', { agent: 'edge', configuration: { auto: 'all' } }),
+        } as Record<string, ActionPolicyTrigger>;
+        const container = buildContainer({}, {}, agent, rule, 'minor');
+        expect(selectActionTrigger(triggers, container)).toBeUndefined();
+      }
+    }
+  });
+
+  test('the update mode ceiling never exceeds the global mode, for every group and global value', () => {
+    const UPDATE_MODES: UpdateMode[] = ['notify', 'manual', 'auto'];
+    const MODE_RANK = { notify: 0, manual: 1, auto: 2 } as const;
+    let compared = 0;
+    for (const globalMode of UPDATE_MODES) {
+      for (const groupMode of [undefined, 'manual', 'notify'] as const) {
+        const container = {
+          groupPolicy: {
+            id: 'policy-1',
+            group: 'payments',
+            revision: 1,
+            updatePolicy: {},
+            actions: groupMode ? { updateMode: groupMode } : {},
+          },
+        } as Pick<Container, 'groupPolicy'>;
+        const ceiling = resolveUpdateModeCeiling(container, globalMode);
+        compared += 1;
+        expect(MODE_RANK[ceiling.value]).toBeLessThanOrEqual(MODE_RANK[globalMode]);
+        expect(ceiling.value).toBe(
+          groupMode && MODE_RANK[groupMode] < MODE_RANK[globalMode] ? groupMode : globalMode,
+        );
+      }
+    }
+    expect(compared).toBe(9);
+    expect(resolveUpdateModeCeiling({}, 'auto')).toEqual({ value: 'auto', source: 'global' });
   });
 
   test('the outcome is either unchanged or blocked, never a different allowed state', () => {
@@ -962,24 +1039,8 @@ describe('a group exclusion never raises an outcome, composed with label overrid
         for (const rule of GROUP_RULES) {
           for (const mode of MODES) {
             for (const triggerId of TRIGGER_IDS) {
-              const without = resolveWith(
-                declared,
-                overrides,
-                'edge',
-                undefined,
-                mode,
-                triggerId,
-                'minor',
-              );
-              const withRule = resolveWith(
-                declared,
-                overrides,
-                'edge',
-                rule,
-                mode,
-                triggerId,
-                'minor',
-              );
+              const without = resolveWith(declared, overrides, undefined, mode, triggerId, 'minor');
+              const withRule = resolveWith(declared, overrides, rule, mode, triggerId, 'minor');
               expect(withRule === without || withRule === RANK.blocked).toBe(true);
             }
           }
