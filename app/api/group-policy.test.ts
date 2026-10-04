@@ -6,6 +6,7 @@
  */
 import http from 'node:http';
 import express, { type Application } from 'express';
+import rateLimit from 'express-rate-limit';
 import type { Container } from '../model/container.js';
 import { applyDeclarativeUpdatePolicy } from '../model/update-policy.js';
 import * as auditStore from '../store/audit.js';
@@ -17,7 +18,16 @@ import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as groupPolicyRouter from './group-policy.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
+const mockRegistryTriggers = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+
 vi.mock('../event');
+vi.mock('../registry/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../registry/index.js')>();
+  return {
+    ...actual,
+    getState: () => ({ ...actual.getState(), trigger: mockRegistryTriggers.current }),
+  };
+});
 vi.mock('../store/container.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../store/container.js')>();
   return {
@@ -45,6 +55,9 @@ function apiKey(scopes: string[]): TestPrincipal {
 
 function createTestApp(): Application {
   const app = express();
+  app.use(
+    rateLimit({ windowMs: 60_000, limit: 10_000, standardHeaders: true, legacyHeaders: false }),
+  );
   app.use(express.json());
   app.use((req, _res, next) => {
     const header = req.header('x-test-principal');
@@ -142,6 +155,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRegistryTriggers.current = {};
   storeContainer._resetContainerStoreStateForTests();
   db = createMigratedMemoryDatabase();
   auditStore.createCollections(db);
@@ -346,10 +360,30 @@ describe('POST /group-policies', () => {
     ['a non-integer min age', { group: 'g', updatePolicy: { maturityMinAgeDays: 1.5 } }],
     ['a string min age', { group: 'g', updatePolicy: { maturityMinAgeDays: '3' } }],
     ['skip tags that are not a list', { group: 'g', updatePolicy: { skipTags: 'a' } }],
-    ['actions, which no slice accepts yet', { group: 'g', actions: { updateMode: 'manual' } }],
     [
-      'actions next to a valid update policy',
+      'automatic updates, which a group can never grant',
+      { group: 'g', actions: { updateMode: 'auto' } },
+    ],
+    [
+      'automatic updates next to a valid update policy',
       { group: 'g', updatePolicy: { maturityMode: 'all' }, actions: { updateMode: 'auto' } },
+    ],
+    ['an unknown update mode', { group: 'g', actions: { updateMode: 'never' } }],
+    [
+      'an unknown action rule, such as an include list',
+      { group: 'g', actions: { include: ['docker'] } },
+    ],
+    ['an action rule that grants auto', { group: 'g', actions: { auto: ['docker'] } }],
+    ['actions that are not an object', { group: 'g', actions: 'manual' }],
+    ['null actions', { group: 'g', actions: null }],
+    ['an empty actions object and nothing else', { group: 'g', actions: {} }],
+    ['an exclude list that is not a list', { group: 'g', actions: { exclude: 'docker' } }],
+    ['an empty exclude entry', { group: 'g', actions: { exclude: [''] } }],
+    ['a whitespace exclude entry', { group: 'g', actions: { exclude: ['  '] } }],
+    ['an exclude entry holding a comma', { group: 'g', actions: { exclude: ['a,b'] } }],
+    [
+      'an exclude entry with an unsupported threshold',
+      { group: 'g', actions: { exclude: ['a:huge'] } },
     ],
   ])('rejects %s with 400 and writes nothing', async (_name, body) => {
     const result = await call('POST', '', body);
@@ -366,6 +400,179 @@ describe('POST /group-policies', () => {
 
     expect(empty.body.error).toBe('A group policy must set at least one field');
     expect(blank.body.error).toBe('A group name must be a non-empty string');
+  });
+});
+
+describe('action rules (spec 7.3 slice 2a)', () => {
+  const trigger = (id: string, type: string) => ({ type, getId: () => id });
+
+  test('creates an actions-only policy, applies it to members and audits the action fields', async () => {
+    storeContainer.insertContainer(watched('member'));
+
+    const result = await call('POST', '', {
+      group: 'payments',
+      actions: { updateMode: 'manual', exclude: [' docker.local:major ', 'docker.local:major'] },
+    });
+
+    expect(result.status).toBe(201);
+    expectContract(result, 'post', '/api/v1/group-policies');
+    expect(result.body.policy).toMatchObject({
+      updatePolicy: {},
+      actions: { updateMode: 'manual', exclude: ['docker.local:major'] },
+    });
+    expect(result.body.applied).toEqual({ members: 1 });
+    expect(storeContainer.getContainer('member')?.groupPolicy?.actions).toEqual({
+      updateMode: 'manual',
+      exclude: ['docker.local:major'],
+    });
+    expect(JSON.parse(auditRows('group-policy-set')[0].details as string).fields).toEqual({
+      'actions.updateMode': { before: null, after: 'manual' },
+      'actions.exclude': { before: null, after: ['docker.local:major'] },
+    });
+  });
+
+  test('accepts update policy and actions together, and an empty actions object next to a policy', async () => {
+    const both = await call('POST', '', {
+      group: 'a',
+      updatePolicy: { maturityMode: 'all' },
+      actions: { updateMode: 'notify' },
+    });
+    const emptyActions = await call('POST', '', {
+      group: 'b',
+      updatePolicy: { maturityMode: 'all' },
+      actions: {},
+    });
+
+    expect([both.status, emptyActions.status]).toEqual([201, 201]);
+    expect(both.body.policy).toMatchObject({
+      updatePolicy: { maturityMode: 'all' },
+      actions: { updateMode: 'notify' },
+    });
+    expect(emptyActions.body.policy.actions).toEqual({});
+  });
+
+  test('a member sees the ceiling on its snapshot and is re-resolved on every actions change', async () => {
+    storeContainer.insertContainer(watched('member'));
+    const created = await call('POST', '', {
+      group: 'payments',
+      actions: { updateMode: 'manual' },
+    });
+    const id = created.body.policy.id;
+
+    const replaced = await call('PUT', `/${id}`, {
+      revision: 1,
+      actions: { updateMode: 'notify' },
+    });
+
+    expect(replaced.status).toBe(200);
+    expectContract(replaced, 'put', '/api/v1/group-policies/{id}');
+    expect(replaced.body).toMatchObject({
+      changed: true,
+      policy: { revision: 2, actions: { updateMode: 'notify' } },
+      applied: { members: 1 },
+    });
+    expect(storeContainer.getContainer('member')?.groupPolicy).toMatchObject({
+      revision: 2,
+      actions: { updateMode: 'notify' },
+    });
+    expect(JSON.parse(auditRows('group-policy-set')[1].details as string).fields).toEqual({
+      'actions.updateMode': { before: 'manual', after: 'notify' },
+    });
+  });
+
+  test('replacing without actions clears them, and the same actions are a no-op', async () => {
+    const created = await call('POST', '', {
+      group: 'payments',
+      updatePolicy: { maturityMode: 'all' },
+      actions: { exclude: ['docker.local'] },
+    });
+    const id = created.body.policy.id;
+
+    const unchanged = await call('PUT', `/${id}`, {
+      revision: 1,
+      updatePolicy: { maturityMode: 'all' },
+      actions: { exclude: ['docker.local'] },
+    });
+    expect(unchanged.body.changed).toBe(false);
+    expect(auditRows('group-policy-set')).toHaveLength(1);
+
+    const cleared = await call('PUT', `/${id}`, {
+      revision: 1,
+      updatePolicy: { maturityMode: 'all' },
+    });
+    expect(cleared.body).toMatchObject({ changed: true, policy: { revision: 2, actions: {} } });
+    expect(JSON.parse(auditRows('group-policy-set')[1].details as string).fields).toEqual({
+      'actions.exclude': { before: ['docker.local'], after: null },
+    });
+  });
+
+  test('deleting the policy lifts the ceiling from members', async () => {
+    storeContainer.insertContainer(watched('member'));
+    const created = await call('POST', '', {
+      group: 'payments',
+      actions: { updateMode: 'notify' },
+    });
+    expect(storeContainer.getContainer('member')?.groupPolicy?.actions.updateMode).toBe('notify');
+
+    const deleted = await call('DELETE', `/${created.body.policy.id}?revision=1`);
+
+    expect(deleted.status).toBe(200);
+    expect(storeContainer.getContainer('member')?.groupPolicy).toBeUndefined();
+    expect(JSON.parse(auditRows('group-policy-cleared')[0].details as string).fields).toEqual({
+      'actions.updateMode': { before: 'notify', after: null },
+    });
+  });
+
+  test('an exclude entry that matches no registered action trigger is accepted with a warning', async () => {
+    mockRegistryTriggers.current = {
+      'docker.local': trigger('docker.local', 'docker'),
+      'dockercompose.stack': trigger('dockercompose.stack', 'dockercompose'),
+      'command.hook': trigger('command.hook', 'command'),
+      'slack.ops': trigger('slack.ops', 'slack'),
+    };
+    storeContainer.insertContainer(watched('member'));
+
+    const result = await call('POST', '', {
+      group: 'payments',
+      actions: {
+        exclude: ['local:major', 'stack', 'hook', 'ghost', 'ops:minor', 'edge.docker.remote'],
+      },
+    });
+
+    expect(result.status).toBe(201);
+    expectContract(result, 'post', '/api/v1/group-policies');
+    expect(result.body.warnings).toEqual([
+      "No registered action trigger matches 'ghost'. The rule is kept for triggers that register later or run on an agent.",
+      "No registered action trigger matches 'ops:minor'. The rule is kept for triggers that register later or run on an agent.",
+      "No registered action trigger matches 'edge.docker.remote'. The rule is kept for triggers that register later or run on an agent.",
+    ]);
+  });
+
+  test('a replace warns about unmatched references too, and a policy without exclusions warns about none', async () => {
+    const created = await call('POST', '', {
+      group: 'payments',
+      actions: { updateMode: 'manual' },
+    });
+    expect(created.body.warnings.filter((w: string) => w.startsWith('No registered'))).toEqual([]);
+
+    const replaced = await call('PUT', `/${created.body.policy.id}`, {
+      revision: 1,
+      actions: { exclude: ['ghost'] },
+    });
+
+    expect(replaced.body.warnings).toEqual([
+      "No registered action trigger matches 'ghost'. The rule is kept for triggers that register later or run on an agent.",
+      'No current containers are in this group. The policy applies to future members.',
+    ]);
+  });
+
+  test('a registry that reports no triggers at all warns for every reference', async () => {
+    mockRegistryTriggers.current = undefined as unknown as Record<string, unknown>;
+
+    const result = await call('POST', '', { group: 'payments', actions: { exclude: ['docker'] } });
+
+    expect(result.status).toBe(201);
+    expect(result.body.warnings[0]).toMatch(/^No registered action trigger matches 'docker'/);
   });
 });
 
@@ -575,7 +782,10 @@ describe('PUT /group-policies/:id', () => {
     ['a string revision', { revision: '1', updatePolicy: { maturityMode: 'all' } }],
     ['no policy fields', { revision: 1 }],
     ['an unknown field', { revision: 1, updatePolicy: { maturityMode: 'all' }, extra: true }],
-    ['actions', { revision: 1, actions: { updateMode: 'manual' } }],
+    ['automatic updates', { revision: 1, actions: { updateMode: 'auto' } }],
+    ['an unknown action rule', { revision: 1, actions: { include: ['docker'] } }],
+    ['an invalid exclude entry', { revision: 1, actions: { exclude: ['a:huge'] } }],
+    ['empty actions and nothing else', { revision: 1, actions: {} }],
     ['an invalid update policy', { revision: 1, updatePolicy: { maturityMinAgeDays: 0 } }],
   ])('rejects %s with 400', async (_name, body) => {
     const policy = await createPolicy();
