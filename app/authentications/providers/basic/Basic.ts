@@ -2,7 +2,7 @@ import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
-import { resolveLocalIdentity } from '../../../api/totp-identity.js';
+import { isSecondFactorRequired, resolveLocalIdentity } from '../../../api/totp-identity.js';
 import {
   observeAuthLoginDuration,
   recordAuthLogin,
@@ -334,6 +334,7 @@ class Basic extends Authentication<BasicConfiguration> {
       id: this.getId(),
       persistsSession: false,
       authenticate: (req: AuthRequest) => this.authenticateRequest(req),
+      authenticateForLogin: (req: AuthRequest) => this.verifyRequestCredentials(req),
       getFailureStatus: (req: AuthRequest) =>
         getBasicAuthorizationFailureStatus(req.headers?.authorization),
     };
@@ -344,8 +345,29 @@ class Basic extends Authentication<BasicConfiguration> {
    * the chain moves on. A wrong password and a missing header are the same
    * answer here; only the shared login route distinguishes them, and only to
    * count the attempt against the lockout budget.
+   *
+   * A subject with an active second factor is declined as well, however right
+   * the password: a password alone is not an authenticated principal for such a
+   * subject (spec 11.1.2 decision 2), so a header can never stand in for the
+   * login challenge on any route. The login route reads the verified password
+   * through `verifyRequestCredentials` instead.
    */
-  authenticateRequest(req: AuthRequest): Promise<AuthenticatedPrincipal | undefined> {
+  async authenticateRequest(req: AuthRequest): Promise<AuthenticatedPrincipal | undefined> {
+    const principal = await this.verifyRequestCredentials(req);
+    if (principal === undefined || isSecondFactorRequired(principal.identity.subjectId)) {
+      return undefined;
+    }
+    return principal;
+  }
+
+  /**
+   * Verify the `Authorization: Basic` header against the configured account,
+   * regardless of whether a second factor is also due. Used directly only by
+   * the login route, which turns a verified enrolled subject into a challenge.
+   */
+  verifyRequestCredentials(
+    req: AuthRequest,
+  ): Promise<(AuthenticatedPrincipal & { kind: 'basic' }) | undefined> {
     const authorization = parseBasicAuthorization(req.headers?.authorization);
     if (authorization.outcome !== 'credentials') {
       return Promise.resolve(undefined);
@@ -368,7 +390,7 @@ class Basic extends Authentication<BasicConfiguration> {
    * password: a store fault is the server's, so it must not count toward the
    * caller's lockout, and the session it would mint could not be checked later.
    */
-  private toBasicPrincipal(username: string): AuthenticatedPrincipal {
+  private toBasicPrincipal(username: string): AuthenticatedPrincipal & { kind: 'basic' } {
     return {
       kind: 'basic',
       username,

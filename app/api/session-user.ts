@@ -33,6 +33,9 @@ const v2LocalSchema = joi
     providerId: joi.string().required(),
     assurance: joi.string().valid('password', 'totp', 'recovery').required(),
     factorVersion: joi.number().integer().min(0).required(),
+    // Absent on a session minted before the revocation marker existed: it
+    // reads as issued at 0, which is older than any marker ever set.
+    issuedAt: joi.number().integer().min(0),
   })
   .required()
   .unknown(false);
@@ -82,6 +85,7 @@ function parseSessionUserValue(value: unknown): SessionUser {
       providerId: local.providerId as string,
       assurance: local.assurance as 'password' | 'totp' | 'recovery',
       factorVersion: local.factorVersion as number,
+      issuedAt: (local.issuedAt as number | undefined) ?? 0,
     },
   };
 }
@@ -121,6 +125,7 @@ export function serializeSessionUser(user: SessionUser): string {
     providerId: identity.providerId,
     assurance: identity.assurance,
     factorVersion: identity.factorVersion,
+    issuedAt: identity.issuedAt,
   });
 }
 

@@ -5,13 +5,14 @@ import session from 'express-session';
 import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import { getErrorMessage } from '../util/error.js';
+import { destroyOtherSubjectSessions } from '../util/session-limit.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
   authenticateLogin,
   initializeLoginLockoutState,
   resetLoginLockoutStateForTests,
 } from './auth-lockout.js';
-import { applyRememberMe, setRememberMe } from './auth-remember-me.js';
+import { applyRememberMe, getRememberMePreference, setRememberMe } from './auth-remember-me.js';
 import {
   configureSessionLimits,
   DEFAULT_SESSION_DAYS,
@@ -57,6 +58,7 @@ import {
   writeSessionPrincipal,
 } from './session-principal.js';
 import { SessionStore } from './session-store.js';
+import { cancelLoginChallenge, createLoginChallengeCompletion } from './totp-challenge-routes.js';
 
 const router = express.Router();
 
@@ -166,12 +168,6 @@ function getUser(req: AuthRequest, res: Response): void {
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
   res.status(200).json(user);
-}
-
-function getRememberMePreference(req: AuthRequest): boolean {
-  return req.body?.remember !== undefined
-    ? req.body.remember === true
-    : req.session?.rememberMe === true;
 }
 
 function getAuthenticatedUsername(req: AuthRequest): string {
@@ -290,25 +286,23 @@ function regenerateSessionForLogin(
 }
 
 /**
- * Login user (and return it).
- * @param req
- * @param res
+ * Mint the session for an authenticated principal: regenerate the session id,
+ * apply the remember-me choice, enforce the concurrent-session limit, persist
+ * the principal and answer with the current user. `revokeOtherSessions` also
+ * destroys every other session of the same local subject, which a recovery-code
+ * login asks for.
  */
-function login(req: AuthRequest, res: Response): Promise<void> {
-  const rememberMe = getRememberMePreference(req);
-
+function establishLoginSession(
+  req: AuthRequest,
+  res: Response,
+  principal: AuthenticatedPrincipal,
+  rememberMe: boolean,
+  options: { revokeOtherSessions: boolean } = { revokeOtherSessions: false },
+): Promise<void> {
   return new Promise((resolve) => {
     const finish = createLoginFinish(resolve);
-    const failLogin: LoginErrorHandler = (errorMessage, options) =>
-      handleLoginError(req, res, finish, errorMessage, options);
-
-    const principal = getPrincipal(req);
-    if (!isLoginSessionEligible(principal)) {
-      rejectUnauthenticated(req, res);
-      finish();
-      resolve();
-      return;
-    }
+    const failLogin: LoginErrorHandler = (errorMessage, errorOptions) =>
+      handleLoginError(req, res, finish, errorMessage, errorOptions);
 
     regenerateSessionForLogin(
       req,
@@ -321,13 +315,36 @@ function login(req: AuthRequest, res: Response): Promise<void> {
         req.session.rememberMe = rememberMe;
         applyRememberMe(req);
 
-        const proceed = (): Promise<void> =>
-          proceedWithLogin(req, principal, res, finish, failLogin);
+        const proceed = async (): Promise<void> => {
+          if (options.revokeOtherSessions && principal.kind === 'basic' && req.sessionStore) {
+            await destroyOtherSubjectSessions({
+              subjectId: principal.identity.subjectId,
+              username: principal.username,
+              sessionStore: req.sessionStore,
+              currentSessionId: req.sessionID,
+            });
+          }
+          return proceedWithLogin(req, principal, res, finish, failLogin);
+        };
         enforceLoginSessionLimit(req, res, finish, proceed, failLogin);
       },
       failLogin,
     );
   });
+}
+
+/**
+ * Login user (and return it).
+ * @param req
+ * @param res
+ */
+function login(req: AuthRequest, res: Response): Promise<void> {
+  const principal = getPrincipal(req);
+  if (!isLoginSessionEligible(principal)) {
+    rejectUnauthenticated(req, res);
+    return Promise.resolve();
+  }
+  return establishLoginSession(req, res, principal, getRememberMePreference(req));
 }
 
 /**
@@ -381,6 +398,70 @@ function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
     return normalized !== '' && normalized !== '0' && normalized !== 'false';
   }
   return false;
+}
+
+/**
+ * The pre-auth login routes, mounted ahead of the authentication guard: the
+ * password step with its own lockout-aware authentication middleware, and the
+ * second-factor challenge an enrolled subject completes (or cancels) next. The
+ * challenge id is that second step's credential. Exported so an integration
+ * test can mount the real routes on a router of its own.
+ */
+export function registerLoginRoutes(authRouter: express.Router): void {
+  authRouter.post('/login', authenticateLogin, login);
+  authRouter.put(
+    '/login-challenges/:id',
+    requireSameOriginForMutations,
+    createLoginChallengeCompletion(establishLoginSession),
+  );
+  authRouter.delete('/login-challenges/:id', requireSameOriginForMutations, cancelLoginChallenge);
+
+  // OIDC login flows set this preference before the provider redirects away.
+  // Keep same-origin protection on the unauthenticated pre-auth session.
+  authRouter.post('/remember', requireSameOriginForMutations, setRememberMe);
+}
+
+/**
+ * The /auth rate limiter. Authenticated UI navigations re-read the current
+ * user; keep that safe probe from exhausting the public discovery and login
+ * budget for clients behind the same address, while every other auth route
+ * stays capped. Authentication is checked before request-controlled route data
+ * so the request cannot decide whether the security check runs.
+ */
+export function createAuthRateLimiter(
+  keyGenerator?: ReturnType<typeof createAuthenticatedRouteRateLimitKeyGenerator>,
+) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    skip: (req: Request) =>
+      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    ...(keyGenerator ? { keyGenerator } : {}),
+  });
+}
+
+/**
+ * What every /auth request passes through before any route: the rate limiter,
+ * the JSON content-type gate and the 64kb JSON body parser for mutations.
+ * Exported so an integration test can mount the real thing.
+ */
+export function registerAuthRequestHandling(
+  authRouter: express.Router,
+  authLimiter: ReturnType<typeof createAuthRateLimiter>,
+): void {
+  authRouter.use(authLimiter);
+
+  const mutationJsonBodyParser = express.json({ limit: '64kb' });
+  authRouter.use(requireJsonContentTypeForMutations);
+  authRouter.use((req: Request, res: Response, next: NextFunction) => {
+    if (shouldParseJsonBody(req.method)) {
+      return mutationJsonBodyParser(req, res, next);
+    }
+    return next();
+  });
 }
 
 /**
@@ -441,33 +522,8 @@ export function init(app: Application): void {
   // Register all authentications
   registerAuthenticators(app);
 
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    // Authenticated UI navigations re-read the current user. Keep that safe
-    // probe from exhausting the public discovery and login budget for clients
-    // behind the same address; every other auth route remains capped. Check
-    // authentication before request-controlled route data so the request
-    // cannot decide whether the security check runs.
-    skip: (req: Request) =>
-      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
-    standardHeaders: true,
-    legacyHeaders: false,
-    validate: { xForwardedForHeader: false },
-    ...(identityAwareRateLimitKeyGenerator
-      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
-      : {}),
-  });
-  router.use(authLimiter);
-
-  const mutationJsonBodyParser = express.json({ limit: '64kb' });
-  router.use(requireJsonContentTypeForMutations);
-  router.use((req: Request, res: Response, next: NextFunction) => {
-    if (shouldParseJsonBody(req.method)) {
-      return mutationJsonBodyParser(req, res, next);
-    }
-    return next();
-  });
+  const authLimiter = createAuthRateLimiter(identityAwareRateLimitKeyGenerator);
+  registerAuthRequestHandling(router, authLimiter);
 
   // GET /auth/strategies is a 410 tombstone (see getAuthStrategiesTombstone
   // above) registered ahead of requireAuthentication below, so it answers
@@ -483,12 +539,7 @@ export function init(app: Application): void {
   app.get('/api/v1/auth/status', authLimiter, getAuthStatus);
   app.get('/api/auth/status', authLimiter, getAuthStatus);
 
-  // Login route with its own authentication middleware (before global auth guard)
-  router.post('/login', authenticateLogin, login);
-
-  // OIDC login flows set this preference before the provider redirects away.
-  // Keep same-origin protection on the unauthenticated pre-auth session.
-  router.post('/remember', requireSameOriginForMutations, setRememberMe);
+  registerLoginRoutes(router);
 
   // Routes to protect after this line
   router.use(requireAuthentication);

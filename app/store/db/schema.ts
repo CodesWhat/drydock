@@ -464,6 +464,24 @@ CREATE INDEX totp_subject_versions_username
   ON totp_subject_versions(username, factor_version);
 `;
 
+/**
+ * Migration 12: per-subject state a session or a guess has to be judged
+ * against, kept beside the subject's version so one read answers both.
+ *
+ * sessions_not_before (epoch ms): a session issued before it is refused. A
+ * recovery login sets it, so revoking the subject's other sessions is
+ * something the validator enforces and not only a delete a late write can
+ * undo. factor_failures and factor_locked_until: wrong second-factor proofs
+ * since the last successful one, and the end of the current escalating lock
+ * (epoch ms, 0 for none). Both survive a restart and are cleared only by a
+ * successful proof.
+ */
+export const TOTP_SUBJECT_STATE_SQL = `
+ALTER TABLE totp_subject_versions ADD COLUMN sessions_not_before INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE totp_subject_versions ADD COLUMN factor_failures INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE totp_subject_versions ADD COLUMN factor_locked_until INTEGER NOT NULL DEFAULT 0;
+`;
+
 /** Every table TOTP_TABLES_SQL creates. */
 export const TOTP_TABLES: readonly string[] = [
   'totp_enrollments',

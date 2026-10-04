@@ -73,6 +73,7 @@
       "container-stop": "Зупинка контейнера",
       "container-restart": "Перезапуск контейнера",
       "auth-login": "Вхід з автентифікацією",
+      "totp-recovery-used": "Використано код відновлення",
       "authenticated": "Автентифіковано",
       "authfail": "Помилка автентифікації",
       "hook-configured": "Хук налаштовано",

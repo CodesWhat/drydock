@@ -270,6 +270,26 @@ async function plant(h: Harness, user: string): Promise<string> {
   return `dd.sid.test=${encodeURIComponent(`s:${sid}.${signature}`)}`;
 }
 
+/**
+ * A password-assurance session at an already-enrolled version. A Basic login can
+ * no longer mint one (it gets a challenge instead), so one is planted the way a
+ * session from before the factor existed would be.
+ */
+function plantPasswordSession(h: Harness, factorVersion: number): Promise<string> {
+  return plant(
+    h,
+    JSON.stringify({
+      v: 2,
+      kind: 'local',
+      username: TEST_USER,
+      subjectId: SUBJECT_ID,
+      providerId: 'basic.default',
+      assurance: 'password',
+      factorVersion,
+    }),
+  );
+}
+
 async function protectedStatus(h: Harness, cookie: string): Promise<number> {
   const response = await fetch(url(h, '/protected'), {
     headers: { ...HTTPS_HEADERS, Cookie: cookie },
@@ -311,17 +331,18 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
       const h = await boot();
       const cookie = await login(h);
 
-      expect(storedUsers(h.db)).toEqual([
-        JSON.stringify({
-          v: 2,
-          kind: 'local',
-          username: TEST_USER,
-          subjectId: SUBJECT_ID,
-          providerId: 'basic.default',
-          assurance: 'password',
-          factorVersion: 0,
-        }),
-      ]);
+      const [stored] = storedUsers(h.db);
+      const { issuedAt, ...stable } = JSON.parse(stored);
+      expect(Math.abs(Date.now() - issuedAt)).toBeLessThan(60_000);
+      expect(stable).toEqual({
+        v: 2,
+        kind: 'local',
+        username: TEST_USER,
+        subjectId: SUBJECT_ID,
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+      });
       expect(await protectedStatus(h, cookie)).toBe(200);
       await expect(upgradeOutcome(h, cookie)).resolves.toBe('open');
     });
@@ -401,7 +422,7 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
     test('a password session minted while a factor is active is stale at once', async () => {
       const h = await boot();
       enrollSubject(SUBJECT_ID, 1);
-      const cookie = await login(h);
+      const cookie = await plantPasswordSession(h, 1);
 
       expect(storedUsers(h.db)[0]).toContain('"factorVersion":1');
       expect(await protectedStatus(h, cookie)).toBe(401);
@@ -412,7 +433,7 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
     test('a corrupt factor row refuses the session without destroying it', async () => {
       const h = await boot();
       enrollSubject(SUBJECT_ID, 1);
-      const cookie = await login(h);
+      const cookie = await plantPasswordSession(h, 1);
       h.db.exec('PRAGMA ignore_check_constraints = ON');
       h.db.exec('UPDATE totp_factors SET period_seconds = 31');
       h.db.exec('PRAGMA ignore_check_constraints = OFF');

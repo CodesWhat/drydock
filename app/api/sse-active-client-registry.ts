@@ -26,6 +26,12 @@ export interface ActiveSseClient {
    * from the store gets.
    */
   apiKeyExpiresAtMs?: number;
+  /**
+   * The login session this stream authenticated with, when it authenticated
+   * with one. A stream authenticates once and stays open, so this is what lets
+   * a revoked session be chased down its live connections.
+   */
+  sessionId?: string;
 }
 
 export class ActiveSseClientRegistry {

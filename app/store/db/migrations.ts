@@ -13,6 +13,7 @@ import type { Database } from './driver.js';
 import {
   INITIAL_SCHEMA_SQL,
   SCHEMA_MIGRATIONS_TABLE_SQL,
+  TOTP_SUBJECT_STATE_SQL,
   TOTP_SUBJECT_USERNAME_SQL,
   TOTP_TABLES_SQL,
 } from './schema.js';
@@ -43,6 +44,9 @@ export const TOTP_MIGRATION_VERSION = 10;
  * published in an open PR and a shipped migration is never edited.
  */
 export const TOTP_SUBJECT_USERNAME_MIGRATION_VERSION = 11;
+
+/** Per-subject session revocation marker and second-factor failure state. */
+export const TOTP_SUBJECT_STATE_MIGRATION_VERSION = 12;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -201,6 +205,13 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
     // therefore stale.
     note: 'record the username on totp_subject_versions (spec 11.1.2 slice 2)',
     sql: TOTP_SUBJECT_USERNAME_SQL,
+  },
+  {
+    version: TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+    // Spec 11.1.2 slice 3: a recovery login revokes older sessions by marker,
+    // and wrong second-factor proofs are counted per subject and persisted.
+    note: 'add session revocation marker and factor failure state to totp_subject_versions (spec 11.1.2 slice 3)',
+    sql: TOTP_SUBJECT_STATE_SQL,
   },
 ];
 

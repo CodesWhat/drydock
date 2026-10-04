@@ -26,12 +26,20 @@ const log = logger.child({ component: 'api.session-store' });
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
+// A destroyed sid only needs refusing for as long as a request that was
+// already running can still finish and try to save it.
+const DEFAULT_TOMBSTONE_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_MAX_TOMBSTONES = 10_000;
 
 export interface SessionStoreOptions {
   /** Fallback session lifetime, milliseconds, used only when a session carries no parseable cookie expiry. */
   ttlMs?: number;
   /** How often the background sweep deletes expired rows. */
   sweepIntervalMs?: number;
+  /** How long a destroyed sid is refused a write, milliseconds. */
+  tombstoneTtlMs?: number;
+  /** The most destroyed sids remembered at once; the oldest is forgotten first. */
+  maxTombstones?: number;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -61,11 +69,23 @@ function unref(timer: ReturnType<typeof setInterval>): void {
 
 export class SessionStore extends session.Store {
   private readonly ttlMs: number;
+  private readonly tombstoneTtlMs: number;
+  private readonly maxTombstones: number;
+  /**
+   * Destroyed sid to the instant it stops being refused. A request that loaded
+   * a session before it was destroyed saves it again when it finishes, and
+   * `set()` is an upsert, so without this a logout, an eviction or a recovery
+   * revocation is undone by whoever was mid-request. Every entry lives the same
+   * time, so insertion order is expiry order and the front is always oldest.
+   */
+  private readonly tombstones = new Map<string, number>();
   private sweepTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: SessionStoreOptions = {}) {
     super();
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+    this.tombstoneTtlMs = options.tombstoneTtlMs ?? DEFAULT_TOMBSTONE_TTL_MS;
+    this.maxTombstones = options.maxTombstones ?? DEFAULT_MAX_TOMBSTONES;
     this.sweepTimer = setInterval(
       () => this.sweepExpiredNow(),
       options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS,
@@ -90,6 +110,26 @@ export class SessionStore extends session.Store {
     }
   }
 
+  private isDestroyed(sid: string): boolean {
+    const now = Date.now();
+    for (const [tombstoned, until] of this.tombstones) {
+      if (until > now) {
+        break;
+      }
+      this.tombstones.delete(tombstoned);
+    }
+    return this.tombstones.has(sid);
+  }
+
+  private bury(sid: string): void {
+    this.tombstones.delete(sid);
+    this.tombstones.set(sid, Date.now() + this.tombstoneTtlMs);
+    while (this.tombstones.size > this.maxTombstones) {
+      const oldest = this.tombstones.keys().next().value as string;
+      this.tombstones.delete(oldest);
+    }
+  }
+
   get(sid: string, callback: (err: unknown, session?: session.SessionData | null) => void): void {
     try {
       const row = sessionStore.getSession(sid);
@@ -111,6 +151,10 @@ export class SessionStore extends session.Store {
 
   set(sid: string, sessionData: session.SessionData, callback?: (err?: unknown) => void): void {
     try {
+      if (this.isDestroyed(sid)) {
+        callback?.();
+        return;
+      }
       const expiresAt = resolveExpiresAt(sessionData, this.ttlMs);
       sessionStore.setSession(sid, expiresAt, JSON.stringify(sessionData));
       callback?.();
@@ -121,6 +165,7 @@ export class SessionStore extends session.Store {
 
   destroy(sid: string, callback?: (err?: unknown) => void): void {
     try {
+      this.bury(sid);
       sessionStore.destroySession(sid);
       callback?.();
     } catch (error: unknown) {
@@ -130,6 +175,10 @@ export class SessionStore extends session.Store {
 
   touch(sid: string, sessionData: session.SessionData, callback?: (err?: unknown) => void): void {
     try {
+      if (this.isDestroyed(sid)) {
+        callback?.();
+        return;
+      }
       const expiresAt = resolveExpiresAt(sessionData, this.ttlMs);
       sessionStore.touchSession(sid, expiresAt);
       callback?.();

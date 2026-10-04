@@ -1,24 +1,36 @@
 import { createHash } from 'node:crypto';
 
-const { mockGetSubjectVersion, mockGetFactorBySubject, mockHasEnrolledUsername, mockWarn } =
-  vi.hoisted(() => ({
-    mockGetSubjectVersion: vi.fn(),
-    mockHasEnrolledUsername: vi.fn(),
-    mockGetFactorBySubject: vi.fn(),
-    mockWarn: vi.fn(),
-  }));
+const {
+  mockGetSubjectVersion,
+  mockGetFactorBySubject,
+  mockHasEnrolledUsername,
+  mockGetSessionsNotBefore,
+  mockWarn,
+} = vi.hoisted(() => ({
+  mockGetSubjectVersion: vi.fn(),
+  mockHasEnrolledUsername: vi.fn(),
+  mockGetFactorBySubject: vi.fn(),
+  mockGetSessionsNotBefore: vi.fn(),
+  mockWarn: vi.fn(),
+}));
 
 vi.mock('../store/totp.js', () => ({
   getSubjectVersion: mockGetSubjectVersion,
   getFactorBySubject: mockGetFactorBySubject,
   hasEnrolledUsername: mockHasEnrolledUsername,
+  getSessionsNotBefore: mockGetSessionsNotBefore,
 }));
 
 vi.mock('../log/index.js', () => ({
   default: { warn: mockWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
 
-import { checkSessionIdentity, deriveSubjectId, resolveLocalIdentity } from './totp-identity.js';
+import {
+  checkSessionIdentity,
+  deriveSubjectId,
+  isSecondFactorRequired,
+  resolveLocalIdentity,
+} from './totp-identity.js';
 
 function digest(providerId: string, username: string): string {
   return createHash('sha256').update(`${providerId}\0${username}`, 'utf8').digest('hex');
@@ -31,6 +43,7 @@ function localIdentity(overrides: Record<string, unknown> = {}) {
     providerId: 'basic.default',
     assurance: 'password' as const,
     factorVersion: 0,
+    issuedAt: 1_000,
     ...overrides,
   };
 }
@@ -41,6 +54,7 @@ describe('totp-identity', () => {
     mockHasEnrolledUsername.mockReturnValue(false);
     mockGetSubjectVersion.mockReturnValue(0);
     mockGetFactorBySubject.mockReturnValue(undefined);
+    mockGetSessionsNotBefore.mockReturnValue(0);
   });
 
   describe('deriveSubjectId', () => {
@@ -65,13 +79,16 @@ describe('totp-identity', () => {
   describe('resolveLocalIdentity', () => {
     test('returns password assurance at the stored subject version', () => {
       mockGetSubjectVersion.mockReturnValue(3);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_234_567);
 
       expect(resolveLocalIdentity('basic.default', 'alice')).toEqual({
         subjectId: deriveSubjectId('basic.default', 'alice'),
         providerId: 'basic.default',
         assurance: 'password',
         factorVersion: 3,
+        issuedAt: 1_234_567,
       });
+      now.mockRestore();
       expect(mockGetSubjectVersion).toHaveBeenCalledWith(deriveSubjectId('basic.default', 'alice'));
     });
   });
@@ -98,6 +115,31 @@ describe('totp-identity', () => {
       expect(checkSessionIdentity({ username: 'alice', identity: localIdentity() })).toBe('valid');
       expect(mockGetSubjectVersion).toHaveBeenCalledTimes(1);
       expect(mockGetFactorBySubject).not.toHaveBeenCalled();
+    });
+
+    test('a local session issued before the subject revocation marker is stale', () => {
+      mockGetSessionsNotBefore.mockReturnValue(1_001);
+
+      expect(checkSessionIdentity({ username: 'alice', identity: localIdentity() })).toBe('stale');
+      expect(mockGetSessionsNotBefore).toHaveBeenCalledWith(
+        deriveSubjectId('basic.default', 'alice'),
+      );
+    });
+
+    test('a local session issued exactly at the marker is valid, which is how the revoking login survives', () => {
+      mockGetSessionsNotBefore.mockReturnValue(1_000);
+
+      expect(checkSessionIdentity({ username: 'alice', identity: localIdentity() })).toBe('valid');
+    });
+
+    test('a marker read that fails makes the session unavailable, not valid', () => {
+      mockGetSessionsNotBefore.mockImplementation(() => {
+        throw new Error('db down');
+      });
+
+      expect(checkSessionIdentity({ username: 'alice', identity: localIdentity() })).toBe(
+        'unavailable',
+      );
     });
 
     test('a local session whose version differs is stale', () => {
@@ -164,6 +206,24 @@ describe('totp-identity', () => {
       expect(mockWarn).toHaveBeenCalledWith(
         'Unable to check session subject version (totp collection not initialized)',
       );
+    });
+  });
+
+  describe('isSecondFactorRequired', () => {
+    test('is true only while the subject has an active factor row', () => {
+      mockGetFactorBySubject.mockReturnValueOnce({ factorId: 'f' });
+      expect(isSecondFactorRequired('subject')).toBe(true);
+      expect(mockGetFactorBySubject).toHaveBeenCalledWith('subject');
+
+      mockGetFactorBySubject.mockReturnValueOnce(undefined);
+      expect(isSecondFactorRequired('subject')).toBe(false);
+    });
+
+    test('lets a store fault propagate rather than answering "no factor"', () => {
+      mockGetFactorBySubject.mockImplementationOnce(() => {
+        throw new Error('totp collection not initialized');
+      });
+      expect(() => isSecondFactorRequired('subject')).toThrow('not initialized');
     });
   });
 });

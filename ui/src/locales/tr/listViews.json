@@ -73,6 +73,7 @@
       "container-stop": "Kapsayıcı Durdurma",
       "container-restart": "Kapsayıcı Yeniden Başlatma",
       "auth-login": "Kimlik doğrulama girişi",
+      "totp-recovery-used": "Kurtarma kodu kullanıldı",
       "authenticated": "Kimliği doğrulandı",
       "authfail": "Kimlik doğrulama başarısız",
       "hook-configured": "Hook yapılandırıldı",

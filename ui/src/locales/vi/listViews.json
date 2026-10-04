@@ -73,6 +73,7 @@
       "container-stop": "Dừng Container",
       "container-restart": "Khởi động lại Container",
       "auth-login": "Đăng nhập xác thực",
+      "totp-recovery-used": "Đã dùng mã khôi phục",
       "authenticated": "Đã xác thực",
       "authfail": "Xác thực thất bại",
       "hook-configured": "Hook đã được cấu hình",

@@ -12,6 +12,7 @@ import {
 } from '../log/buffer.js';
 import { toDisplayLogEntry } from '../log/display-timestamp.js';
 import * as registry from '../registry/index.js';
+import { registerSessionStreamCloser } from './session-streams.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -36,6 +37,45 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 1000;
 const WS_BUFFER_CAP_BYTES = 2 * 1024 * 1024; // 2 MB
 const WS_BUFFER_CLOSE_THRESHOLD = 3; // close after this many consecutive drops
+
+/**
+ * Open log sockets by the session that opened them. The upgrade authenticates
+ * once, so a session revoked afterwards would keep reading logs until the
+ * client let go; the revocation path closes them through the shared hook.
+ */
+const socketsBySession = new Map<string, Set<WebSocketLike>>();
+
+function trackSessionSocket(sessionId: unknown, webSocket: WebSocketLike): () => void {
+  if (typeof sessionId !== 'string' || sessionId === '') {
+    return () => {};
+  }
+  let sockets = socketsBySession.get(sessionId);
+  if (sockets === undefined) {
+    sockets = new Set();
+    socketsBySession.set(sessionId, sockets);
+  }
+  sockets.add(webSocket);
+  return () => {
+    const held = socketsBySession.get(sessionId);
+    held?.delete(webSocket);
+    if (held?.size === 0) {
+      socketsBySession.delete(sessionId);
+    }
+  };
+}
+
+function closeLogSocketsForRevokedSessions(revokedSessionIds: ReadonlySet<string>): number {
+  let closed = 0;
+  for (const sessionId of revokedSessionIds) {
+    for (const webSocket of [...(socketsBySession.get(sessionId) ?? [])]) {
+      webSocket.close(1008, 'Session revoked');
+      closed += 1;
+    }
+  }
+  return closed;
+}
+
+registerSessionStreamCloser(closeLogSocketsForRevokedSessions);
 
 interface ParsedSystemLogStreamQuery {
   level?: string;
@@ -277,12 +317,19 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
 
       await new Promise<void>((resolve) => {
         webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+          const forgetSocket = trackSessionSocket(
+            identityAuthenticated ? upgradeRequest.sessionID : undefined,
+            webSocket,
+          );
           void streamSystemLogsToWebSocket({
             webSocket,
             query: parsedRequest.query,
             getBackfillEntries,
             subscribeToEntries,
-          }).finally(resolve);
+          }).finally(() => {
+            forgetSocket();
+            resolve();
+          });
         });
       });
     },
