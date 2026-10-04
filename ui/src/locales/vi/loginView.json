@@ -25,12 +25,33 @@
       "providerBasic": "Xác thực Basic '{name}': {error}",
       "providerOidc": "Nhà cung cấp OIDC '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Mã này không hợp lệ. Hãy kiểm tra và thử lại.",
+      "challengeMalformed": "Hãy nhập mã hợp lệ.",
+      "challengeExpired": "Phiên xác minh đã hết hạn. Hãy đăng nhập lại.",
+      "challengeLocked": "Quá nhiều lần thử. Hãy thử lại sau {time}.",
+      "challengeLockedLater": "Quá nhiều lần thử. Hãy thử lại sau.",
+      "challengeUnavailable": "Hiện không thể xác minh. Hãy thử lại sau ít phút."
     },
     "connectionLost": {
       "title": "Mất kết nối",
       "body": "Máy chủ không thể truy cập. Đang chờ máy chủ trở lại...",
       "reconnecting": "Đang kết nối lại"
+    },
+    "challenge": {
+      "heading": "Xác minh hai bước",
+      "codeHint": "Nhập mã gồm 6 chữ số từ ứng dụng xác thực của bạn.",
+      "codeLabel": "Mã xác thực",
+      "codePlaceholder": "Mã 6 chữ số",
+      "recoveryHint": "Nhập một trong các mã khôi phục bạn đã lưu. Mỗi mã chỉ dùng được một lần.",
+      "recoveryLabel": "Mã khôi phục",
+      "recoveryPlaceholder": "Nhập mã khôi phục",
+      "expiresAt": "Hãy nhập mã trước {time}.",
+      "verify": "Xác minh",
+      "verifying": "Đang xác minh...",
+      "useRecovery": "Dùng mã khôi phục",
+      "useCode": "Dùng mã xác thực",
+      "cancel": "Quay lại đăng nhập"
     }
   }
 }
