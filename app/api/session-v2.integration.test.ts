@@ -8,10 +8,11 @@
  * included. Once a subject has a version row, the sessions that predate it must
  * stop working on HTTP and on the upgrade alike, and stay stopped.
  */
-import { argon2Sync, randomBytes } from 'node:crypto';
+import { argon2Sync, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { Duplex } from 'node:stream';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
+import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import { WebSocket, WebSocketServer } from 'ws';
 import Basic from '../authentications/providers/basic/Basic.js';
@@ -45,6 +46,7 @@ const TEST_USER = 'wud-card';
 const TEST_PASSWORD = 'correct-horse-battery-staple';
 const BASIC_AUTH_HEADER = `Basic ${Buffer.from(`${TEST_USER}:${TEST_PASSWORD}`).toString('base64')}`;
 const HTTPS_HEADERS = { 'X-Forwarded-Proto': 'https' };
+const SESSION_SECRET = 'test-secret';
 const SUBJECT_ID = deriveSubjectId('basic.default', TEST_USER);
 
 type Database = ReturnType<typeof createMigratedMemoryDatabase>;
@@ -180,7 +182,7 @@ async function start(): Promise<Harness> {
 
   const sessionMiddleware = session({
     name: 'dd.sid.test',
-    secret: 'test-secret',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     store,
@@ -191,14 +193,17 @@ async function start(): Promise<Harness> {
   app.set('trust proxy', 1);
   app.use(sessionMiddleware);
   app.use(restoreSessionPrincipal);
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    }),
+  );
   app.get('/protected', requireAuthentication, (req: Request, res: ExpressResponse) => {
     res.status(200).json({ user: { username: (req as AuthRequest).principal?.username } });
-  });
-  // Plant an arbitrary stored user, the way a session from another release
-  // (legacy) or another provider (OIDC) would already be sitting in the store.
-  app.post('/plant', (req: Request, res: ExpressResponse) => {
-    (req.session as unknown as Record<string, unknown>).passport = { user: req.query.user };
-    res.status(204).end();
   });
   app.post('/login', (req: Request, res: ExpressResponse) => {
     void authenticateRequest(req as AuthRequest).then((principal) => {
@@ -244,13 +249,25 @@ async function login(h: Harness): Promise<string> {
   return cookieOf(response);
 }
 
+/**
+ * Plant an arbitrary stored user the way a session from another release (legacy)
+ * or another provider (OIDC) would already be sitting in the store: write the
+ * row through the store itself, then sign the cookie the way express-session does.
+ */
 async function plant(h: Harness, user: string): Promise<string> {
-  const response = await fetch(url(h, `/plant?user=${encodeURIComponent(user)}`), {
-    method: 'POST',
-    headers: HTTPS_HEADERS,
+  const sid = randomBytes(18).toString('base64url');
+  const data = {
+    cookie: { originalMaxAge: null, httpOnly: true, secure: true },
+    passport: { user },
+  } as unknown as session.SessionData;
+  await new Promise<void>((resolve, reject) => {
+    h.store.set(sid, data, (error) => (error ? reject(error) : resolve()));
   });
-  expect(response.status).toBe(204);
-  return cookieOf(response);
+  const signature = createHmac('sha256', SESSION_SECRET)
+    .update(sid)
+    .digest('base64')
+    .replace(/=+$/, '');
+  return `dd.sid.test=${encodeURIComponent(`s:${sid}.${signature}`)}`;
 }
 
 async function protectedStatus(h: Harness, cookie: string): Promise<number> {
