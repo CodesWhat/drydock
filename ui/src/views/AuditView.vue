@@ -48,6 +48,8 @@ const actionTypes = [
   'update-policy-override-cleared',
   'group-policy-set',
   'group-policy-cleared',
+  'label-override-set',
+  'label-override-cleared',
   'mqtt-command-update',
   'update-applied-dryrun',
   'security-scan-skipped',

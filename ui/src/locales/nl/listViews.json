@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Update-beleidsoverride gewist",
       "group-policy-set": "Groepsbeleid ingesteld",
       "group-policy-cleared": "Groepsbeleid gewist",
+      "label-override-set": "Label-override ingesteld",
+      "label-override-cleared": "Label-override gewist",
       "auto-rollback": "Automatisch terugdraaien",
       "rollback": "Terugdraaien",
       "preview": "Voorbeeld",

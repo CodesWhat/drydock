@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Substitution de la policy de mise à jour effacée",
       "group-policy-set": "Policy de groupe définie",
       "group-policy-cleared": "Policy de groupe effacée",
+      "label-override-set": "Substitution de label définie",
+      "label-override-cleared": "Substitution de label effacée",
       "auto-rollback": "Rollback automatique",
       "rollback": "Rollback",
       "preview": "Aperçu",

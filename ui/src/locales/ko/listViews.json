@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "업데이트 정책 재정의 해제됨",
       "group-policy-set": "그룹 정책 설정됨",
       "group-policy-cleared": "그룹 정책 해제됨",
+      "label-override-set": "레이블 재정의 설정됨",
+      "label-override-cleared": "레이블 재정의 해제됨",
       "auto-rollback": "자동 롤백",
       "rollback": "롤백",
       "preview": "미리 보기",

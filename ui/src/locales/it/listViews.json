@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Override della policy di aggiornamento rimosso",
       "group-policy-set": "Policy di gruppo impostata",
       "group-policy-cleared": "Policy di gruppo rimossa",
+      "label-override-set": "Override dell'etichetta impostato",
+      "label-override-cleared": "Override dell'etichetta rimosso",
       "auto-rollback": "Rollback automatico",
       "rollback": "Rollback",
       "preview": "Anteprima",

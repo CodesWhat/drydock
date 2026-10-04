@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Update-Policy-Override entfernt",
       "group-policy-set": "Gruppen-Policy gesetzt",
       "group-policy-cleared": "Gruppen-Policy entfernt",
+      "label-override-set": "Label-Override gesetzt",
+      "label-override-cleared": "Label-Override entfernt",
       "auto-rollback": "Automatischer Rollback",
       "rollback": "Rollback",
       "preview": "Vorschau",

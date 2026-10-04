@@ -46,6 +46,8 @@ const backendAuditActions = {
   'update-policy-override-cleared': true,
   'group-policy-set': true,
   'group-policy-cleared': true,
+  'label-override-set': true,
+  'label-override-cleared': true,
   'update-approved': true,
   'update-rejected': true,
   'update-deferred': true,
