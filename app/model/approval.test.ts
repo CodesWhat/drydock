@@ -347,6 +347,63 @@ describe('classifyApprovalCandidate', () => {
   });
 });
 
+// Spec 7.3 slice 2a: a group's updateMode is a ceiling composed into the same predicate.
+describe('group policy ceiling', () => {
+  const group = (actions: NonNullable<Container['groupPolicy']>['actions']) => ({
+    groupPolicy: { id: 'policy-1', group: 'payments', revision: 1, updatePolicy: {}, actions },
+  });
+  const triggers = createTrigger({ auto: 'all' });
+
+  test('a manual group is not auto-dispatchable under global auto, so its candidate queues', () => {
+    const container = createContainer(group({ updateMode: 'manual' }));
+
+    expect(isAutoDispatchable(container, triggers, 'auto')).toBe(false);
+    expect(classifyApprovalCandidate(container, triggers, 'auto')).toBe('queue');
+    expect(shouldQueueForApproval(container, triggers, 'auto')).toBe(true);
+  });
+
+  test('a member include or auto label does not lift the group ceiling', () => {
+    const container = createContainer({
+      ...group({ updateMode: 'manual' }),
+      actionTriggerInclude: 'docker.local',
+      actionTriggerAuto: 'docker.local',
+    });
+
+    expect(isAutoDispatchable(container, triggers, 'auto')).toBe(false);
+    expect(classifyApprovalCandidate(container, triggers, 'auto')).toBe('queue');
+  });
+
+  test('a notify group reads blocked, so no row queues that nobody may approve', () => {
+    const container = createContainer(group({ updateMode: 'notify' }));
+
+    expect(isAutoDispatchable(container, triggers, 'auto')).toBe(false);
+    for (const updateMode of ['auto', 'manual'] as const) {
+      expect(classifyApprovalCandidate(container, triggers, updateMode)).toBe('blocked');
+    }
+    expect(shouldQueueForApproval(container, triggers, 'auto')).toBe(false);
+  });
+
+  test('a group exclusion is a hard stop and reads blocked', () => {
+    const container = createContainer(group({ exclude: ['docker.local'] }));
+
+    expect(isAutoDispatchable(container, triggers, 'auto')).toBe(false);
+    expect(classifyApprovalCandidate(container, triggers, 'auto')).toBe('blocked');
+  });
+
+  test('a group with no update mode and no match leaves auto dispatch alone', () => {
+    const container = createContainer(group({ exclude: ['other.trigger'] }));
+
+    expect(isAutoDispatchable(container, triggers, 'auto')).toBe(true);
+    expect(classifyApprovalCandidate(container, triggers, 'auto')).toBe('auto-dispatch');
+  });
+
+  test('a group never raises the result: global manual stays queue under a manual group', () => {
+    const container = createContainer(group({ updateMode: 'manual' }));
+
+    expect(classifyApprovalCandidate(container, triggers, 'manual')).toBe('queue');
+  });
+});
+
 describe('getApprovalCandidateRef', () => {
   test('prefers the candidate digest over the candidate tag', () => {
     const container = createContainer({ result: { tag: '1.2.4', digest: 'sha256:beef' } });

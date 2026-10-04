@@ -308,3 +308,95 @@ describe('transaction', () => {
     );
   });
 });
+
+describe('withCurrentGroupPolicy', () => {
+  const labels = { 'dd.group': 'payments' };
+  const snapshotOf = (policy: { id: string; revision: number }) =>
+    ({
+      id: policy.id,
+      group: 'payments',
+      revision: policy.revision,
+      updatePolicy: {},
+      actions: {},
+    }) as never;
+
+  test('returns the container itself when its snapshot is current', () => {
+    const policy = groupPolicy.insertGroupPolicy(
+      'payments',
+      { actions: { updateMode: 'manual' } },
+      'u',
+    );
+    const container = { labels, groupPolicy: snapshotOf(policy) };
+
+    expect(groupPolicy.withCurrentGroupPolicy(container)).toBe(container);
+  });
+
+  test('returns the container itself when neither it nor its group has a policy', () => {
+    const container = { labels };
+
+    expect(groupPolicy.withCurrentGroupPolicy(container)).toBe(container);
+  });
+
+  test('returns a container without a labels map as recorded', () => {
+    groupPolicy.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+    const container = {};
+
+    expect(groupPolicy.withCurrentGroupPolicy(container)).toBe(container);
+  });
+
+  test('adds a policy saved after the snapshot without touching the original', () => {
+    const container = { labels };
+    const policy = groupPolicy.insertGroupPolicy(
+      'payments',
+      { actions: { updateMode: 'manual' } },
+      'u',
+    );
+
+    const current = groupPolicy.withCurrentGroupPolicy(container);
+
+    expect(current).not.toBe(container);
+    expect(current.groupPolicy).toMatchObject({ id: policy.id, actions: { updateMode: 'manual' } });
+    expect(container).not.toHaveProperty('groupPolicy');
+  });
+
+  test('replaces a snapshot whose revision has moved on', () => {
+    const policy = groupPolicy.insertGroupPolicy(
+      'payments',
+      { actions: { updateMode: 'manual' } },
+      'u',
+    );
+    const container = { labels, groupPolicy: snapshotOf(policy) };
+    groupPolicy.replaceGroupPolicy(policy.id, 1, { actions: { updateMode: 'notify' } }, 'u');
+
+    const current = groupPolicy.withCurrentGroupPolicy(container);
+
+    expect(current.groupPolicy).toMatchObject({ revision: 2, actions: { updateMode: 'notify' } });
+    expect(container.groupPolicy).toMatchObject({ revision: 1 });
+  });
+
+  test('drops a snapshot whose policy was deleted', () => {
+    const policy = groupPolicy.insertGroupPolicy(
+      'payments',
+      { actions: { updateMode: 'manual' } },
+      'u',
+    );
+    const container = { labels, groupPolicy: snapshotOf(policy) };
+    groupPolicy.deleteGroupPolicy(policy.id, 1);
+
+    const current = groupPolicy.withCurrentGroupPolicy(container);
+
+    expect(current).not.toHaveProperty('groupPolicy');
+    expect(current.labels).toBe(labels);
+  });
+
+  test('drops a snapshot once the container has left every group', () => {
+    const policy = groupPolicy.insertGroupPolicy(
+      'payments',
+      { actions: { updateMode: 'manual' } },
+      'u',
+    );
+    const container = { labels: {}, groupPolicy: snapshotOf(policy) };
+
+    expect(groupPolicy.withCurrentGroupPolicy(container)).not.toHaveProperty('groupPolicy');
+  });
+});

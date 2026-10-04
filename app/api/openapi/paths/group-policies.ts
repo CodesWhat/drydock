@@ -20,11 +20,15 @@ const updatePolicyRequestSchema = {
   $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy',
 } as const;
 
+const actionsRequestSchema = {
+  $ref: '#/components/schemas/GroupPolicyActions',
+} as const;
+
 const writeNote =
   'Writes are admin scoped because one write changes every current and future member of the group. A containers:update key keeps its per-container override power, which outranks group values, and cannot write group policies. The policy row and its audit entry commit in one transaction.';
 
 const bodyNote =
-  'Only `updatePolicy` is accepted: `maturityMode`, `maturityMinAgeDays`, `skipTags` and `skipDigests`, validated like the container label layer. An empty skip list is dropped. A policy that sets no field is rejected, so use DELETE instead. Unknown fields, including `actions`, are rejected with 400.';
+  '`updatePolicy` takes `maturityMode`, `maturityMinAgeDays`, `skipTags` and `skipDigests`, validated like the container label layer. An empty skip list is dropped. `actions` takes restrict-only rules: `updateMode` (`manual` or `notify`, never `auto`) and `exclude` (trigger references in the `dd.action.exclude` grammar). A group rule can only lower what a member may do: a member `dd.action.auto` or `dd.action.include` label cannot lift it, and a container leaves it by changing or clearing `dd.group`. An exclude entry that matches no registered action trigger is accepted with a warning. A policy that sets no field is rejected, so use DELETE instead. Unknown fields are rejected with 400.';
 
 export const groupPolicyPaths = {
   '/api/v1/group-policies': {
@@ -68,8 +72,9 @@ export const groupPolicyPaths = {
                     'The exact group name, matched without trimming or case folding. Must not be only whitespace.',
                 },
                 updatePolicy: updatePolicyRequestSchema,
+                actions: actionsRequestSchema,
               },
-              required: ['group', 'updatePolicy'],
+              required: ['group'],
               additionalProperties: false,
             },
           },
@@ -123,8 +128,9 @@ export const groupPolicyPaths = {
                 },
                 revision: { type: 'integer', minimum: 1 },
                 updatePolicy: updatePolicyRequestSchema,
+                actions: actionsRequestSchema,
               },
-              required: ['revision', 'updatePolicy'],
+              required: ['revision'],
               additionalProperties: false,
             },
           },
