@@ -563,6 +563,20 @@ export function getEnrollment(enrollmentId: string, now: Date = new Date()) {
   return readLiveEnrollment(requireDb(), 'enrollment_id', enrollmentId, now);
 }
 
+/**
+ * The enrollment whether or not it has expired, and without deleting it. The
+ * confirm route needs the difference between an unknown id (404) and one that
+ * ran out (410), which {@link getEnrollment} erases by deleting on read.
+ */
+export function getEnrollmentIncludingExpired(
+  enrollmentId: string,
+): TotpEnrollmentRecord | undefined {
+  const row = requireDb()
+    .prepare('SELECT * FROM totp_enrollments WHERE enrollment_id = ?')
+    .get(enrollmentId);
+  return row ? toEnrollment(row) : undefined;
+}
+
 export function getEnrollmentBySubject(subjectId: string, now: Date = new Date()) {
   return readLiveEnrollment(requireDb(), 'subject_id', subjectId, now);
 }
@@ -747,6 +761,25 @@ export function markRecoveryCodeUsed(codeId: string, now: Date = new Date()): bo
                            WHERE factor_id = totp_recovery_codes.factor_id)`,
     )
     .run(now.toISOString(), codeId);
+  return result.changes === 1;
+}
+
+/**
+ * Undo {@link markRecoveryCodeUsed} for a code the caller itself just spent,
+ * when the login it was spent for then failed before a session existed. Only a
+ * used row of the factor's current generation matches, and nothing but the
+ * caller that won the spend knows the code is spent and unredeemed, so this
+ * cannot revive a code someone else used.
+ */
+export function releaseRecoveryCodeUse(codeId: string): boolean {
+  const result = requireDb()
+    .prepare(
+      `UPDATE totp_recovery_codes SET used_at = NULL
+       WHERE code_id = ? AND used_at IS NOT NULL
+         AND generation = (SELECT recovery_generation FROM totp_factors
+                           WHERE factor_id = totp_recovery_codes.factor_id)`,
+    )
+    .run(codeId);
   return result.changes === 1;
 }
 

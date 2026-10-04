@@ -910,6 +910,39 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       expect(refused.headers.get('set-cookie')).toBeNull();
       expect(storedUsers(h.db)).toHaveLength(1);
       expect(await protectedStatus(h, earlier)).toBe(200);
+      expect(
+        auditEvents.filter((e) => (e as { action: string }).action === 'totp-recovery-used'),
+      ).toEqual([]);
+
+      // The refused login did not burn the code: it works once the store is back.
+      h.db.exec('DROP TRIGGER refuse_marker');
+      const retry = await startChallenge(h);
+      const recovered = await put(h, retry.id, { recoveryCode: enrolled.recoveryCodes[0] });
+      expect(recovered.status).toBe(200);
+    });
+
+    test('a recovery login whose session cannot be established does not spend the code', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const challenge = await startChallenge(h);
+      const destroy = vi.spyOn(h.store, 'destroy').mockImplementationOnce((_sid, done) => {
+        done?.(new Error('session store down'));
+      });
+
+      const failed = await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[2] });
+      expect(failed.status).toBe(500);
+      expect(storedUsers(h.db).filter(Boolean)).toHaveLength(0);
+      expect(
+        auditEvents.filter((e) => (e as { action: string }).action === 'totp-recovery-used'),
+      ).toEqual([]);
+      destroy.mockRestore();
+
+      const retry = await startChallenge(h);
+      const recovered = await put(h, retry.id, { recoveryCode: enrolled.recoveryCodes[2] });
+      expect(recovered.status).toBe(200);
+      expect(
+        auditEvents.filter((e) => (e as { action: string }).action === 'totp-recovery-used'),
+      ).toHaveLength(1);
     });
 
     test('the marker alone refuses an older session even when its row is planted back', async () => {

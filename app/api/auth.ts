@@ -67,7 +67,8 @@ const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
-type LoginFinish = () => void;
+/** Settles a login attempt: true when a session was minted, false when it was refused with an error. */
+type LoginFinish = (established: boolean) => void;
 type LoginErrorHandler = (errorMessage: string, options?: { logWarning?: boolean }) => void;
 
 export { isAuthenticationReady };
@@ -174,21 +175,21 @@ function getAuthenticatedUsername(req: AuthRequest): string {
   return getIdentityUsername(req)?.trim() ?? '';
 }
 
-function createLoginFinish(resolve: () => void): LoginFinish {
+function createLoginFinish(resolve: (established: boolean) => void): LoginFinish {
   let completed = false;
-  return () => {
+  return (established) => {
     if (completed) {
       return;
     }
     completed = true;
-    resolve();
+    resolve(established);
   };
 }
 
 function handleLoginSuccess(req: AuthRequest, res: Response, finish: LoginFinish): void {
   recordLoginAuditEvent(req, 'success', LOGIN_SUCCESS_AUDIT_MESSAGE);
   getUser(req, res);
-  finish();
+  finish(true);
 }
 
 function handleLoginError(
@@ -203,7 +204,7 @@ function handleLoginError(
   }
   recordLoginAuditEvent(req, 'error', errorMessage);
   sendErrorResponse(res, 500, LOGIN_SESSION_ERROR_RESPONSE);
-  finish();
+  finish(false);
 }
 
 function proceedWithLogin(
@@ -298,7 +299,7 @@ function establishLoginSession(
   principal: AuthenticatedPrincipal,
   rememberMe: boolean,
   options: { revokeOtherSessions: boolean } = { revokeOtherSessions: false },
-): Promise<void> {
+): Promise<boolean> {
   return new Promise((resolve) => {
     const finish = createLoginFinish(resolve);
     const failLogin: LoginErrorHandler = (errorMessage, errorOptions) =>
@@ -338,13 +339,13 @@ function establishLoginSession(
  * @param req
  * @param res
  */
-function login(req: AuthRequest, res: Response): Promise<void> {
+async function login(req: AuthRequest, res: Response): Promise<void> {
   const principal = getPrincipal(req);
   if (!isLoginSessionEligible(principal)) {
     rejectUnauthenticated(req, res);
-    return Promise.resolve();
+    return;
   }
-  return establishLoginSession(req, res, principal, getRememberMePreference(req));
+  await establishLoginSession(req, res, principal, getRememberMePreference(req));
 }
 
 /**

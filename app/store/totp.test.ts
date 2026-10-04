@@ -762,6 +762,52 @@ describe('accepted counter replay', () => {
   });
 });
 
+describe('enrollment lookup that keeps expired rows', () => {
+  test('returns an expired enrollment without deleting it, and undefined for an unknown id', () => {
+    const enrollment = enrollmentFor();
+    totp.createEnrollment(enrollment, NOW);
+    expect(totp.getEnrollmentIncludingExpired(enrollment.enrollmentId)?.enrollmentId).toBe(
+      enrollment.enrollmentId,
+    );
+    expect(totp.getEnrollment(enrollment.enrollmentId, LATER)).toBeUndefined();
+    totp.createEnrollment(enrollment, NOW);
+    expect(totp.getEnrollmentIncludingExpired('nope')).toBeUndefined();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 1 });
+  });
+});
+
+describe('releasing a spent recovery code', () => {
+  test('puts back a code the same caller spent, once, so a failed login does not burn it', () => {
+    const { factor, codes } = activate();
+    const row = findRecoveryCodeMatch(
+      codes[0],
+      totp.listRecoveryCodes(factor.factorId),
+    ) as totp.TotpRecoveryCodeRecord;
+    expect(totp.releaseRecoveryCodeUse(row.codeId)).toBe(false);
+    expect(totp.markRecoveryCodeUsed(row.codeId, NOW)).toBe(true);
+    expect(totp.releaseRecoveryCodeUse(row.codeId)).toBe(true);
+    expect(totp.releaseRecoveryCodeUse(row.codeId)).toBe(false);
+    expect(totp.countUnusedRecoveryCodes(factor.factorId)).toBe(10);
+    expect(totp.markRecoveryCodeUsed(row.codeId, NOW)).toBe(true);
+  });
+
+  test('does not revive a code of a replaced generation', () => {
+    const { factor, codes } = activate();
+    const row = findRecoveryCodeMatch(
+      codes[0],
+      totp.listRecoveryCodes(factor.factorId),
+    ) as totp.TotpRecoveryCodeRecord;
+    totp.markRecoveryCodeUsed(row.codeId, NOW);
+    totp.replaceRecoveryCodes({
+      factorId: factor.factorId,
+      expectedGeneration: 1,
+      recoveryCodeDigests: generateRecoveryCodes().map(digestRecoveryCode),
+      now: NOW,
+    });
+    expect(totp.releaseRecoveryCodeUse(row.codeId)).toBe(false);
+  });
+});
+
 describe('recovery codes', () => {
   test('lists the active generation with digests only', () => {
     const { factor, codes } = activate();
