@@ -892,7 +892,14 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       const challenge = await startChallenge(h);
       await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[0] });
 
-      expect(closed).toEqual([[earlierSid]]);
+      // Every id it closed streams for is a session that no longer exists.
+      const live = h.db
+        .prepare('SELECT sid FROM sessions')
+        .all()
+        .map((row) => String(row.sid));
+      expect(live).toHaveLength(1);
+      expect(closed.flat()).toContain(earlierSid);
+      expect(closed.flat().filter((sid) => live.includes(sid))).toEqual([]);
     });
 
     test('a recovery login that cannot record the revocation mints no session', async () => {

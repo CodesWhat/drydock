@@ -670,7 +670,7 @@ describe('destroyOtherSubjectSessions', () => {
       issuedAt: 1_000,
     });
 
-  test('destroys only the other local sessions of that subject', async () => {
+  test('destroys the other local sessions of that subject and the legacy sessions of its username, and nothing else', async () => {
     const sessionStore = {
       all: vi.fn((done) =>
         done(null, {
@@ -684,6 +684,7 @@ describe('destroyOtherSubjectSessions', () => {
           },
           oidc: { passport: { user: JSON.stringify({ v: 2, kind: 'oidc', username: 'john' }) } },
           legacy: { passport: { user: JSON.stringify({ username: 'john' }) } },
+          'legacy-other-user': { passport: { user: JSON.stringify({ username: 'jane' }) } },
           'object-user': { passport: { user: { username: 'john' } } },
         }),
       ),
@@ -697,10 +698,30 @@ describe('destroyOtherSubjectSessions', () => {
       currentSessionId: 'current',
     });
 
-    expect(destroyed).toBe(1);
-    expect(sessionStore.destroy).toHaveBeenCalledTimes(1);
-    expect(sessionStore.destroy).toHaveBeenCalledWith('same-subject', expect.any(Function));
-    expect(mockCloseStreams).toHaveBeenCalledWith(['same-subject']);
+    expect(destroyed).toBe(2);
+    expect(sessionStore.destroy.mock.calls.map(([sid]) => sid)).toEqual(['same-subject', 'legacy']);
+    expect(mockCloseStreams).toHaveBeenCalledWith(['same-subject', 'legacy']);
+  });
+
+  test('the current session is the one exception, whatever shape it has', async () => {
+    const sessionStore = {
+      all: vi.fn((done) =>
+        done(null, {
+          current: { passport: { user: JSON.stringify({ username: 'john' }) } },
+          legacy: { passport: { user: JSON.stringify({ username: 'john' }) } },
+        }),
+      ),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+
+    await destroyOtherSubjectSessions({
+      subjectId,
+      username: 'john',
+      sessionStore,
+      currentSessionId: 'current',
+    });
+
+    expect(sessionStore.destroy.mock.calls.map(([sid]) => sid)).toEqual(['legacy']);
   });
 
   test('closes the revoked sessions’ open streams even when a destroy fails', async () => {

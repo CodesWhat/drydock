@@ -3,6 +3,7 @@ import type { Database } from '../store/db/driver.js';
 import * as sessionModel from '../store/session.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { SessionStore } from './session-store.js';
+import { registerSessionStreamCloser } from './session-streams.js';
 
 vi.mock('../log/index.js', () => ({
   default: {
@@ -255,6 +256,41 @@ describe('SessionStore', () => {
     } finally {
       timerStore.stop();
     }
+  });
+
+  describe('destroying a session closes the streams it opened', () => {
+    const closed: string[][] = [];
+    registerSessionStreamCloser((revoked) => {
+      closed.push([...revoked]);
+      return revoked.size;
+    });
+
+    beforeEach(() => {
+      closed.length = 0;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test('destroy tells the stream closers which session ended, and no other', async () => {
+      await setAsync('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+      await setAsync('sid-2', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+
+      await destroyAsync('sid-1');
+
+      expect(closed).toEqual([['sid-1']]);
+    });
+
+    test('the streams are closed before the row goes, so a delete that fails still closes them', async () => {
+      vi.spyOn(sessionModel, 'destroySession').mockImplementationOnce(() => {
+        expect(closed).toEqual([['sid-1']]);
+        throw new Error('boom');
+      });
+
+      await expect(destroyAsync('sid-1')).rejects.toThrow('boom');
+      expect(closed).toEqual([['sid-1']]);
+    });
   });
 
   describe('destroyed sessions stay destroyed', () => {

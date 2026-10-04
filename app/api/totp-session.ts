@@ -4,8 +4,11 @@
  * move the subject's factor version, which already makes every other session
  * of the subject invalid on its next read. This mints the one session that
  * survives: the browser that proved itself, on a fresh id, at the new version.
- * It then destroys the others so their rows go and their open streams close
- * rather than waiting for a next read that a stream never makes.
+ * It then destroys the others, legacy sessions of the username included, so
+ * their rows go. Open streams close with the rows rather than waiting for a
+ * next read that a stream never makes: the session store closes the streams of
+ * every id it destroys, which covers the caller's own old id at regeneration
+ * and the sessions the concurrent-session limit drops as stale on the way.
  */
 
 import log from '../log/index.js';

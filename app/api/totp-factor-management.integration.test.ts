@@ -453,6 +453,19 @@ async function plant(h: Harness, user: string): Promise<string> {
 
 const sidOf = (cookie: string) => decodeURIComponent(cookie.split('=')[1]).slice(2).split('.')[0];
 
+/** The stored user of a v2 session of the test subject, minted a moment ago. */
+const localSessionUser = (assurance: 'password' | 'totp', factorVersion: number) =>
+  JSON.stringify({
+    v: 2,
+    kind: 'local',
+    username: TEST_USER,
+    subjectId: SUBJECT_ID,
+    providerId: PROVIDER,
+    assurance,
+    factorVersion,
+    issuedAt: Date.now() - 1_000,
+  });
+
 async function protectedStatus(h: Harness, cookie: string) {
   const response = await fetch(url(h, '/api/v1/protected'), {
     headers: { 'X-Forwarded-Proto': 'https', Cookie: cookie },
@@ -1180,21 +1193,32 @@ describe('TOTP slice 4: factor-management API', () => {
   });
 
   /** A session minted by the real login routes for an already-enrolled subject. */
-  async function loginCookieWithCode(h: Harness, enrolled: Enrolled): Promise<string> {
+  async function loginCookieWithCode(
+    h: Harness,
+    enrolled: Enrolled,
+    offsetSteps = 0,
+  ): Promise<string> {
     const response = await loginPassword(h);
     expect(response.status).toBe(202);
     const { challenge } = (await response.json()) as { challenge: { id: string } };
-    const completed = await fetch(url(h, `/auth/login-challenges/${challenge.id}`), {
+    const completed = await completeChallenge(h, challenge.id, {
+      code: code(enrolled.seed, offsetSteps),
+    });
+    expect(completed.status).toBe(200);
+    return cookieOf(completed);
+  }
+
+  function completeChallenge(h: Harness, id: string, body: unknown, cookie?: string) {
+    return fetch(url(h, `/auth/login-challenges/${id}`), {
       method: 'PUT',
       headers: {
         'X-Forwarded-Proto': 'https',
         Origin: originOf(h),
         'Content-Type': 'application/json',
+        ...(cookie ? { Cookie: cookie } : {}),
       },
-      body: JSON.stringify({ code: code(enrolled.seed) }),
+      body: JSON.stringify(body),
     });
-    expect(completed.status).toBe(200);
-    return cookieOf(completed);
   }
 
   describe('starting an enrollment', () => {
@@ -1419,11 +1443,16 @@ describe('TOTP slice 4: factor-management API', () => {
 
     test('the current browser stays signed in as factor-assured; every other session and its streams die', async () => {
       const h = await boot();
+      // In the store before the first login builds the username index.
+      const preExisting = await plant(h, localSessionUser('password', 0));
       const cookie = await sessionCookie(h);
       const other = await sessionCookie(h);
+      // Planted after the index was built: only a fresh read of the store finds it.
       const legacy = await plant(h, JSON.stringify({ username: TEST_USER }));
       const elsewhere = await sessionCookie(h, TEST_USER, OTHER_PASSWORD);
       expect(await protectedStatus(h, other)).toBe(200);
+      expect(await protectedStatus(h, preExisting)).toBe(200);
+      expect(await protectedStatus(h, legacy)).toBe(200);
 
       const reveal = await revealEnrollment(h, cookie);
       closedStreams.length = 0;
@@ -1439,13 +1468,26 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(await protectedStatus(h, cookie)).toBe(401);
       expect(await protectedStatus(h, other)).toBe(401);
       expect(await protectedStatus(h, legacy)).toBe(401);
+      expect(await protectedStatus(h, preExisting)).toBe(401);
       // The same username under another provider is another subject: untouched.
       expect(await protectedStatus(h, elsewhere)).toBe(200);
 
+      // A stream holds whichever id it connected with: another session's, a
+      // legacy one's, or the caller's own old id, which a copied cookie shares.
       const closed = closedStreams.flat();
       expect(closed).toContain(sidOf(other));
+      expect(closed).toContain(sidOf(preExisting));
+      expect(closed).toContain(sidOf(legacy));
+      expect(closed).toContain(sidOf(cookie));
       expect(closed).not.toContain(sidOf(fresh));
       expect(closed).not.toContain(sidOf(elsewhere));
+      expect(
+        h.db
+          .prepare('SELECT sid FROM sessions')
+          .all()
+          .map((row) => String(row.sid))
+          .sort(),
+      ).toEqual([sidOf(fresh), sidOf(elsewhere)].sort());
       const stored = h.db
         .prepare('SELECT data FROM sessions')
         .all()
@@ -1914,6 +1956,39 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(login.status).toBe(200);
     });
 
+    test('removal closes the streams of every session it ends, the caller’s old id and legacy ones included', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      // In the store before the first login builds the username index.
+      const preExisting = await plant(h, localSessionUser('totp', 1));
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const other = await loginCookieWithCode(h, enrolled, 1);
+      const legacy = await plant(h, JSON.stringify({ username: TEST_USER }));
+      expect(await protectedStatus(h, preExisting)).toBe(200);
+      expect(await protectedStatus(h, other)).toBe(200);
+      closedStreams.length = 0;
+
+      const response = await call(h, 'DELETE', '/totp-factor', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: enrolled.recoveryCodes[0] },
+      });
+      expect(response.status).toBe(204);
+      const fresh = cookieOf(response);
+
+      const closed = closedStreams.flat();
+      for (const ended of [preExisting, other, legacy, cookie]) {
+        expect(closed).toContain(sidOf(ended));
+        expect(await protectedStatus(h, ended)).toBe(401);
+      }
+      expect(closed).not.toContain(sidOf(fresh));
+      expect(
+        h.db
+          .prepare('SELECT sid FROM sessions')
+          .all()
+          .map((row) => String(row.sid)),
+      ).toEqual([sidOf(fresh)]);
+    });
+
     test('a recovery code is an accepted proof, with no key ring needed', async () => {
       const h = await boot();
       const enrolled = enroll();
@@ -1967,6 +2042,44 @@ describe('TOTP slice 4: factor-management API', () => {
       );
       expect(results.filter((r) => r.status === 204)).toHaveLength(1);
       expect(totpStore.getFactorBySubject(SUBJECT_ID)).toBeUndefined();
+    });
+  });
+
+  describe('a recovery login', () => {
+    test('closes the streams of every session it ends, the browser’s old id and legacy ones included', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      // In the store before the first login builds the username index.
+      const preExisting = await plant(h, localSessionUser('totp', 1));
+      const browser = await loginCookieWithCode(h, enrolled);
+      const other = await loginCookieWithCode(h, enrolled, 1);
+      const legacy = await plant(h, JSON.stringify({ username: TEST_USER }));
+      const elsewhere = await sessionCookie(h, TEST_USER, OTHER_PASSWORD);
+      expect(await protectedStatus(h, preExisting)).toBe(200);
+      closedStreams.length = 0;
+
+      const login = await loginPassword(h);
+      expect(login.status).toBe(202);
+      const { challenge } = (await login.json()) as { challenge: { id: string } };
+      // The browser still carries its old cookie, the one a thief would share.
+      const completed = await completeChallenge(
+        h,
+        challenge.id,
+        { recoveryCode: enrolled.recoveryCodes[0] },
+        browser,
+      );
+      expect(completed.status).toBe(200);
+      const fresh = cookieOf(completed);
+
+      const closed = closedStreams.flat();
+      for (const ended of [preExisting, other, legacy, browser]) {
+        expect(closed).toContain(sidOf(ended));
+        expect(await protectedStatus(h, ended)).toBe(401);
+      }
+      expect(closed).not.toContain(sidOf(fresh));
+      expect(closed).not.toContain(sidOf(elsewhere));
+      expect(await protectedStatus(h, fresh)).toBe(200);
+      expect(await protectedStatus(h, elsewhere)).toBe(200);
     });
   });
 

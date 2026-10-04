@@ -378,11 +378,16 @@ export async function enforceConcurrentSessionLimit({
 }
 
 /**
- * Destroy every other session that belongs to one local subject. A recovery
- * login uses it (spec 11.1.2 decision 8): the codes are bearer secrets, so a
- * session minted with one must not leave older ones standing beside it. It
- * reads the store afresh rather than the cached username index, because
- * sessions minted since the index was built carry no stored user there.
+ * Destroy every other session that belongs to one local subject, and every
+ * legacy session of its username. A recovery login uses it (spec 11.1.2
+ * decision 8): the codes are bearer secrets, so a session minted with one must
+ * not leave older ones standing beside it. A factor change uses it for the
+ * sessions the new version leaves behind. A legacy session names no subject,
+ * and the validator refuses it for good once any subject of its username has
+ * enrolled, which is true of every caller here, so it goes too rather than
+ * keeping a row and a stream nothing else would close. It reads the store
+ * afresh rather than the cached username index, because sessions minted since
+ * the index was built carry no stored user there.
  */
 export async function destroyOtherSubjectSessions({
   subjectId,
@@ -402,7 +407,9 @@ export async function destroyOtherSubjectSessions({
     }
     try {
       const { identity } = deserializeSessionUser(session.rawUser);
-      return identity?.type === 'local' && identity.subjectId === subjectId;
+      return (
+        identity === undefined || (identity.type === 'local' && identity.subjectId === subjectId)
+      );
     } catch {
       return false;
     }
