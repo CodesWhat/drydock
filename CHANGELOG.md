@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **ZAP alerts in code scanning are now keyed per scanned site.** `scripts/zap-json-to-sarif.mjs` stripped the origin from every location, so getdrydock.com, the demo and the app scan shared one alert per rule and path, and dismissing it for the public site hid the same finding on the app. Locations now read `getdrydock.com/robots.txt`. Expect one round of reopened and closed alerts when the next scans upload.
+- **The weekly DAST scans of getdrydock.com and the demo can now pass.** The two public-site ZAP jobs read a new `.zap/rules-public-site.tsv`, which adds IGNORE entries for the reviewed false positives (SQL, private IP, timestamp, eval, debug-error and application-error text matched in docs prose, plus proxy, user-agent and public-file CORS notices) and the accepted CORP and COEP choices. The app scan in `ci-verify.yml` keeps the stricter `.zap/rules.tsv`, and a workflow test pins both.
 - **A stable release shows its own version instead of the release candidate it was promoted from.** A stable release is the last release candidate's image, promoted unchanged, so the `1.6.1` image reported `1.6.1-rc.15` in the UI, the API and Home Assistant. Drydock now shows the base version (`1.6.1`) and keeps the full build identity as a separate build field. The build appears in the About dialog, under Config > General and in the agent detail panel when it differs from the version, and the startup banner (shown on a TTY) reads `version 1.6.1 (build 1.6.1-rc.15)`. The `drydock is starting` log line carries no version. `GET /api/v1/app` and `GET /api/v1/agents` keep `version` as the base version and add `build`, the agent `dd:ack` event carries both, the debug dump adds `drydockBuild` next to `drydockVersion`, and Home Assistant's `sw_version` and the OpenAPI document version use the base version. API clients that parsed a prerelease suffix out of `version` should read `build` instead. Values that aren't a semver with a prerelease suffix, such as `local` or `ci`, are reported unchanged. The controller applies the same split to the version an older agent or a Portwing edge agent reports, so those agents show their base version too. Reported in [#1284](https://github.com/CodesWhat/drydock/issues/1284).
 
 ### Fixed
@@ -30,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.
 - Add `Cross-Origin-Opener-Policy: same-origin` and a static strict CSP on `/api` responses to the website, and stop sending `X-Powered-By`.
 
 ## [1.7.0-rc.17] — 2026-10-02
