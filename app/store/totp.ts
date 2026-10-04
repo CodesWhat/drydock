@@ -270,6 +270,76 @@ export function revokeSessionsIssuedBefore(
     .run(subjectId, username, notBefore);
 }
 
+export interface FactorFailureState {
+  /** Wrong second-factor proofs since the last successful one. */
+  failures: number;
+  /** Epoch ms the current lock ends; 0 or in the past for none. */
+  lockedUntil: number;
+}
+
+export function getFactorFailureState(subjectId: string): FactorFailureState {
+  const row = requireDb()
+    .prepare(
+      'SELECT factor_failures, factor_locked_until FROM totp_subject_versions WHERE subject_id = ?',
+    )
+    .get(subjectId);
+  return {
+    failures: row ? Number(row.factor_failures) : 0,
+    lockedUntil: row ? Number(row.factor_locked_until) : 0,
+  };
+}
+
+/**
+ * Count one wrong second-factor proof against the subject and set the lock it
+ * earns. Nothing here expires with time: the count only returns to zero through
+ * {@link clearFactorFailures} after a successful proof, so a lapsed lock buys
+ * one more guess before the next, longer one. From the `threshold`th failure on
+ * every failure locks for `baseLockMs * 2^(failures - threshold)`, capped at
+ * `maxLockMs` (or at `baseLockMs` when that is already longer).
+ */
+export function recordFactorFailure(input: {
+  subjectId: string;
+  username: string;
+  now: number;
+  threshold: number;
+  baseLockMs: number;
+  maxLockMs: number;
+}): FactorFailureState {
+  const database = requireDb();
+  return database.transaction((): FactorFailureState => {
+    const failures = getFactorFailureState(input.subjectId).failures + 1;
+    const lockedUntil =
+      failures >= input.threshold
+        ? input.now +
+          Math.min(
+            input.baseLockMs * 2 ** Math.min(failures - input.threshold, 40),
+            Math.max(input.maxLockMs, input.baseLockMs),
+          )
+        : 0;
+    database
+      .prepare(
+        `INSERT INTO totp_subject_versions
+           (subject_id, factor_version, username, factor_failures, factor_locked_until)
+         VALUES (?, 0, ?, ?, ?)
+         ON CONFLICT(subject_id) DO UPDATE SET
+           factor_failures = excluded.factor_failures,
+           factor_locked_until = excluded.factor_locked_until`,
+      )
+      .run(input.subjectId, input.username, failures, lockedUntil);
+    return { failures, lockedUntil };
+  });
+}
+
+/** A successful proof: forgive every failure and lift any lock. */
+export function clearFactorFailures(subjectId: string): void {
+  requireDb()
+    .prepare(
+      `UPDATE totp_subject_versions SET factor_failures = 0, factor_locked_until = 0
+        WHERE subject_id = ?`,
+    )
+    .run(subjectId);
+}
+
 /**
  * Has any subject for this exact username ever enrolled a factor? A row with
  * an unknown username counts for everyone: it cannot be ruled out, and the

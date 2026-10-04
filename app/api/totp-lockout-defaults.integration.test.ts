@@ -46,6 +46,7 @@ import {
   digestRecoveryCode,
   encryptTotpSeed,
   generateRecoveryCodes,
+  generateTotp,
   generateTotpSeed,
   parseTotpKeyring,
   type TotpSeedBinding,
@@ -219,6 +220,25 @@ function prove(h: Harness, id: string, code: string) {
   });
 }
 
+function proveRecovery(h: Harness, id: string, recoveryCode: string) {
+  return fetch(url(h, `/auth/login-challenges/${id}`), {
+    method: 'PUT',
+    headers: { ...HTTPS_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recoveryCode }),
+  });
+}
+
+/** A fresh challenge, a wrong code, and the status it got. */
+async function guessWrong(h: Harness): Promise<number> {
+  return (await prove(h, await challengeFor(h), '000000')).status;
+}
+
+const MINUTE = 60_000;
+const failuresOf = (h: Harness) =>
+  h.db
+    .prepare('SELECT factor_failures AS failures FROM totp_subject_versions WHERE subject_id = ?')
+    .get(SUBJECT_ID)?.failures;
+
 async function challengeFor(h: Harness): Promise<string> {
   const response = await login(h, VICTIM);
   expect(response.status).toBe(202);
@@ -235,6 +255,7 @@ describe('lockout identity at the default thresholds', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     for (const h of harnesses.splice(0)) {
       await new Promise<void>((resolve) => h.server.close(() => resolve()));
       h.store.stop();
@@ -301,5 +322,104 @@ describe('lockout identity at the default thresholds', () => {
     }
 
     expect((await login(h, OTHER, { username: TEST_USER })).status).toBe(200);
+  });
+
+  describe('code guessing is capped, not rate-limited', () => {
+    test('after the first lock lapses each further wrong code earns a longer one, never a fresh batch of five', async () => {
+      const h = await boot();
+      enroll();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const start = Date.now();
+
+      const first = [];
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        first.push(await guessWrong(h));
+      }
+      expect(first).toEqual([401, 401, 401, 401, 423]);
+
+      for (const [elapsed, lockMinutes] of [
+        [16, 30],
+        [47, 60],
+        [108, 120],
+      ] as const) {
+        vi.setSystemTime(start + elapsed * MINUTE);
+        const response = await prove(h, await challengeFor(h), '000000');
+        expect(response.status).toBe(423);
+        expect(Number(response.headers.get('retry-after'))).toBe(lockMinutes * 60);
+        // Still inside that lock: nothing, not even a right code, gets through.
+        vi.setSystemTime(start + (elapsed + 1) * MINUTE);
+        expect((await prove(h, await challengeFor(h), '000000')).status).toBe(423);
+      }
+    });
+
+    test('a locked subject is refused even a correct code, and the lock survives a restart', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await guessWrong(h);
+      }
+
+      // A restart drops everything held in memory: budgets and challenges.
+      resetLoginLockoutStateForTests();
+      resetLoginChallengesForTests();
+
+      const challenge = await challengeFor(h);
+      const refused = await prove(h, challenge, generateTotp(enrolled.seed, Date.now()));
+      expect(refused.status).toBe(423);
+      expect(refused.headers.get('set-cookie')).toBeNull();
+      expect(failuresOf(h)).toBe(5);
+    });
+
+    test('a successful code starts the count over', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        expect(await guessWrong(h)).toBe(401);
+        resetLoginLockoutStateForTests();
+      }
+      expect(failuresOf(h)).toBe(4);
+
+      const ok = await prove(h, await challengeFor(h), generateTotp(enrolled.seed, Date.now()));
+      expect(ok.status).toBe(200);
+      expect(failuresOf(h)).toBe(0);
+
+      const again = [];
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        again.push(await guessWrong(h));
+        resetLoginLockoutStateForTests();
+      }
+      expect(again).toEqual([401, 401, 401, 401]);
+    });
+
+    test('a recovery code is a successful proof too', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await guessWrong(h);
+        resetLoginLockoutStateForTests();
+      }
+
+      const ok = await proveRecovery(h, await challengeFor(h), enrolled.recoveryCodes[0]);
+      expect(ok.status).toBe(200);
+      expect(failuresOf(h)).toBe(0);
+    });
+
+    test('wrong passwords never touch the persisted count', async () => {
+      const h = await boot();
+      enroll();
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await login(h, basicHeader(TEST_USER, 'wrong'));
+      }
+      expect(failuresOf(h)).toBe(0);
+    });
+
+    test('another subject is untouched by the lock', async () => {
+      const h = await boot();
+      enroll();
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await guessWrong(h);
+      }
+      expect((await login(h, OTHER)).status).toBe(200);
+    });
   });
 });

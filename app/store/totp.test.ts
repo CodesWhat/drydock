@@ -209,6 +209,128 @@ describe('session revocation marker', () => {
   });
 });
 
+describe('second-factor failure state', () => {
+  const MINUTE = 60_000;
+  const policy = { threshold: 5, baseLockMs: 15 * MINUTE, maxLockMs: 24 * 60 * MINUTE };
+  const fail = (subjectId = 'subject-a', now = 1_000_000) =>
+    totp.recordFactorFailure({ subjectId, username: 'scott', now, ...policy });
+
+  test('a subject with no failures is unlocked with none counted', () => {
+    expect(totp.getFactorFailureState('nobody')).toEqual({ failures: 0, lockedUntil: 0 });
+  });
+
+  test('failures below the threshold are counted and lock nothing', () => {
+    for (let count = 1; count < 5; count += 1) {
+      expect(fail()).toEqual({ failures: count, lockedUntil: 0 });
+    }
+    expect(totp.getFactorFailureState('subject-a')).toEqual({ failures: 4, lockedUntil: 0 });
+  });
+
+  test('the fifth failure locks for 15 minutes and each one after doubles it up to 24 hours', () => {
+    for (let count = 1; count < 5; count += 1) {
+      fail();
+    }
+    const lockMinutes = [];
+    for (let count = 5; count <= 14; count += 1) {
+      const { lockedUntil } = fail('subject-a', 2_000_000);
+      lockMinutes.push((lockedUntil - 2_000_000) / MINUTE);
+    }
+    expect(lockMinutes).toEqual([15, 30, 60, 120, 240, 480, 960, 1440, 1440, 1440]);
+  });
+
+  test('a very long run of failures stays at the cap rather than overflowing', () => {
+    for (let count = 1; count <= 2_000; count += 1) {
+      fail();
+    }
+    expect(fail('subject-a', 5_000_000).lockedUntil - 5_000_000).toBe(24 * 60 * MINUTE);
+  });
+
+  test('a base longer than the cap is not shortened by it', () => {
+    const state = totp.recordFactorFailure({
+      subjectId: 'subject-a',
+      username: 'scott',
+      now: 0,
+      threshold: 1,
+      baseLockMs: 48 * 60 * MINUTE,
+      maxLockMs: 24 * 60 * MINUTE,
+    });
+    expect(state.lockedUntil).toBe(48 * 60 * MINUTE);
+  });
+
+  test('the count does not reset when the lock lapses, so each later guess is locked longer', () => {
+    for (let count = 1; count <= 5; count += 1) {
+      fail('subject-a', 1_000_000);
+    }
+    const afterLapse = 1_000_000 + 16 * MINUTE;
+    expect(totp.getFactorFailureState('subject-a').failures).toBe(5);
+    const state = fail('subject-a', afterLapse);
+    expect(state.failures).toBe(6);
+    expect(state.lockedUntil - afterLapse).toBe(30 * MINUTE);
+  });
+
+  test('only a successful proof clears it, and only for that subject', () => {
+    for (let count = 1; count <= 5; count += 1) {
+      fail('subject-a');
+      fail('subject-b');
+    }
+    totp.clearFactorFailures('subject-a');
+    expect(totp.getFactorFailureState('subject-a')).toEqual({ failures: 0, lockedUntil: 0 });
+    expect(totp.getFactorFailureState('subject-b').failures).toBe(5);
+  });
+
+  test('clearing a subject that never failed is a no-op that creates nothing', () => {
+    totp.clearFactorFailures('nobody');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM totp_subject_versions').get()).toEqual({ n: 0 });
+  });
+
+  test('does not disturb the version or the revocation marker', () => {
+    activate('subject-a');
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 77);
+    fail();
+    expect(totp.getSubjectVersion('subject-a')).toBe(1);
+    expect(totp.getSessionsNotBefore('subject-a')).toBe(77);
+    totp.removeFactor({ subjectId: 'subject-a', expectedFactorVersion: 1 });
+    expect(totp.getFactorFailureState('subject-a').failures).toBe(1);
+  });
+
+  test('survives a restart: the lock is still there after the database is reopened', () => {
+    const directory = createTemporaryStoreDirectory();
+    const location = path.join(directory, 'dd.sqlite');
+    try {
+      const first = openDatabase(location);
+      migrate(first);
+      totp.createCollections(first);
+      for (let count = 1; count <= 5; count += 1) {
+        fail('subject-a', 9_000_000);
+      }
+      first.pragma('wal_checkpoint', 'TRUNCATE');
+      first.close();
+
+      const reopened = openDatabase(location);
+      migrate(reopened);
+      totp.createCollections(reopened);
+      expect(totp.getFactorFailureState('subject-a')).toEqual({
+        failures: 5,
+        lockedUntil: 9_000_000 + 15 * MINUTE,
+      });
+      reopened.close();
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('every operation fails with a clear error before the collection exists', async () => {
+    vi.resetModules();
+    const fresh = await import('./totp.js');
+    expectCode(() => fresh.getFactorFailureState('s'), 'NOT_INITIALIZED');
+    expectCode(() => fresh.clearFactorFailures('s'), 'NOT_INITIALIZED');
+    expectCode(
+      () => fresh.recordFactorFailure({ subjectId: 's', username: 'u', now: 0, ...policy }),
+      'NOT_INITIALIZED',
+    );
+  });
+});
+
 describe('enrollments', () => {
   test('stores and reads back an enrollment', () => {
     const enrollment = enrollmentFor();

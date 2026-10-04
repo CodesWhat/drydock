@@ -24,6 +24,7 @@ import { recordAuditEvent } from './audit-events.js';
 import {
   clearLoginLockoutsAfterSuccess,
   rejectFailedSecondFactor,
+  rejectIfFactorLocked,
   rejectIfLockedOut,
 } from './auth-lockout.js';
 import type { AuthRequest } from './auth-types.js';
@@ -178,6 +179,11 @@ export function createLoginChallengeCompletion(
 
     let result: ProofResult;
     try {
+      // The persisted lock comes before the proof is looked at, so a locked
+      // subject learns nothing about whether the code it sent was right.
+      if (rejectIfFactorLocked(authRequest, res, challenge.subjectId, challenge.username)) {
+        return;
+      }
       result = checkProof(challenge, proof);
     } catch (error: unknown) {
       // A store or key fault is the server's, not the caller's: it neither
@@ -193,14 +199,21 @@ export function createLoginChallengeCompletion(
       } else {
         recordLoginChallengeFailure(id, challenge);
       }
-      rejectFailedSecondFactor(authRequest, res, challenge.username);
+      // Only a wrong proof counts toward the persisted budget; a challenge
+      // outlived by its factor was never a guess.
+      rejectFailedSecondFactor(
+        authRequest,
+        res,
+        challenge.username,
+        result.outcome === 'invalid' ? challenge.subjectId : undefined,
+      );
       return;
     }
 
     // Consume before anything asynchronous: the proof is spent, and nothing
     // after this point may be reachable twice.
     deleteLoginChallenge(id);
-    clearLoginLockoutsAfterSuccess(authRequest, challenge.username);
+    clearLoginLockoutsAfterSuccess(authRequest, challenge.username, challenge.subjectId);
     const { factor } = result;
     const recovery = proof.kind === 'recovery';
     const issuedAt = Date.now();
