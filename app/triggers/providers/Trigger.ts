@@ -3003,6 +3003,10 @@ class Trigger<
         if (
           evaluatedContainer &&
           !this.isAutomaticActionDispatchBlockedFor(evaluatedContainer) &&
+          // `isActionPolicyDispatchWinner` is true for every non-update action trigger, so a
+          // command trigger is re-checked against its include and exclude lists (the group's
+          // exclusion list among them) here, as buffering checked them.
+          (this.getCategory() !== 'action' || this.mustTrigger(evaluatedContainer)) &&
           this.isActionPolicyDispatchWinner(evaluatedContainer) &&
           this.isGroupRoutedNotificationEligible(evaluatedContainer, 'update-available')
         ) {
@@ -3016,7 +3020,7 @@ class Trigger<
         }
 
         this.log.debug(
-          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner, capped by its group policy, or eligible for the notification group)`,
+          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner, capped or excluded by its group policy, or eligible for the notification group)`,
         );
       }
 

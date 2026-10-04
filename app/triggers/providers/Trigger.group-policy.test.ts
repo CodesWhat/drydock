@@ -462,6 +462,35 @@ describe('digest mode', () => {
     },
   );
 
+  test('a command digest evicts a buffered entry whose group now excludes the trigger', async () => {
+    const command = createTrigger('command', 'digest', 'hook');
+    const send = vi.spyOn(command, 'triggerBatch').mockResolvedValue(undefined);
+    await command.handleContainerReportDigest(report(createContainer('c1')));
+    expect(command.digestBuffer.size).toBe(1);
+    vi.mocked(storeContainer.getContainersRaw).mockReturnValue([
+      createContainer('c1', { exclude: ['command.hook'] }),
+    ]);
+
+    await command.flushDigestBuffer();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(command.digestBuffer.size).toBe(0);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test('a command digest still flushes an entry whose group excludes another trigger', async () => {
+    const command = createTrigger('command', 'digest', 'hook');
+    const send = vi.spyOn(command, 'triggerBatch').mockResolvedValue(undefined);
+    await command.handleContainerReportDigest(report(createContainer('c1')));
+    vi.mocked(storeContainer.getContainersRaw).mockReturnValue([
+      createContainer('c1', { exclude: ['command.other'] }),
+    ]);
+
+    await command.flushDigestBuffer();
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   test('a flush with every entry group-blocked dispatches nothing', async () => {
     const action = createTrigger('docker', 'digest');
     const run = vi.spyOn(action, 'runAcceptedUpdateBatch');
