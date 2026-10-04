@@ -80,6 +80,7 @@ import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
+import { findStub } from '../helpers/find-stub';
 
 let containerIdCounter = 0;
 function makeContainer(overrides: Record<string, any> = {}) {
@@ -603,7 +604,7 @@ describe('SecurityView', () => {
           stream.publish('resync-required', { reason: 'buffer-evicted' });
           await flushPromises();
           expect(button.attributes('disabled')).toBeDefined();
-          const emptyState = w.findComponent(stubs.SecurityEmptyState);
+          const emptyState = findStub(w, stubs.SecurityEmptyState);
           expect(emptyState.props('scannerReady')).toBe(false);
           emptyState.vm.$emit('scan-now');
           await flushPromises();
