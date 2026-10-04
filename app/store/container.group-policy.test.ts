@@ -379,6 +379,19 @@ describe('membership changes, recreation and the stash', () => {
 });
 
 describe('reResolveGroupPolicyMembers', () => {
+  test('reports a member that throws something other than an Error', () => {
+    container.insertContainer(watched('member'));
+    setPolicy('payments', { maturityMode: 'mature' });
+    vi.mocked(event.emitContainerUpdated).mockImplementationOnce(() => {
+      throw 'plain string failure';
+    });
+
+    expect(container.reResolveGroupPolicyMembers('payments')).toEqual({
+      reResolved: 0,
+      failed: [{ id: 'member', error: 'plain string failure' }],
+    });
+  });
+
   test('continues past a member that fails and reports it', () => {
     container.insertContainer(watched('first'));
     container.insertContainer(watched('second'));
