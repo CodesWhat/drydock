@@ -2,7 +2,7 @@ import { computed, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import { updateContainerPolicy } from '../../services/container';
-import type { Container } from '../../types/container';
+import type { Container, ContainerGroupPolicySnapshot } from '../../types/container';
 import { errorMessage } from '../../utils/error';
 import {
   DEFAULT_MATURITY_MIN_AGE_DAYS,
@@ -578,6 +578,22 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   const selectedPolicyDeclarative = computed<Record<string, unknown>>(
     () => asRecord(selectedPolicyMeta.value.updatePolicyDeclarative) ?? {},
   );
+  const selectedGroupPolicy = computed<ContainerGroupPolicySnapshot | undefined>(() => {
+    const snapshot = asRecord(selectedPolicyMeta.value.groupPolicy);
+    if (!snapshot || typeof snapshot.group !== 'string' || snapshot.group.length === 0) {
+      return undefined;
+    }
+    return snapshot as unknown as ContainerGroupPolicySnapshot;
+  });
+  const selectedPolicyGroupName = computed<string | undefined>(
+    () => selectedGroupPolicy.value?.group,
+  );
+  // Which fields the server says come from the group. Rendered as sent, never re-derived.
+  const selectedPolicyGroupFields = computed<Set<DeclarativePolicyField>>(() => {
+    const sources = asRecord(selectedPolicyMeta.value.updatePolicySources);
+    if (!selectedGroupPolicy.value || !sources) return new Set();
+    return new Set(DECLARATIVE_POLICY_FIELDS.filter((field) => sources[field] === 'group'));
+  });
   const selectedPolicyOverrideFields = computed<Set<DeclarativePolicyField>>(
     () =>
       new Set(
@@ -593,8 +609,13 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
       skipTags: [],
       skipDigests: [],
     };
-    for (const tierName of ['env', 'label']) {
-      const tier = asRecord(selectedPolicyDeclarative.value[tierName]);
+    // Same precedence the server resolves with: env, then group, then label.
+    const tiers = [
+      asRecord(selectedPolicyDeclarative.value.env),
+      asRecord(selectedGroupPolicy.value?.updatePolicy),
+      asRecord(selectedPolicyDeclarative.value.label),
+    ];
+    for (const tier of tiers) {
       for (const field of DECLARATIVE_POLICY_FIELDS) {
         if (tier && Object.hasOwn(tier, field)) baseline[field] = tier[field];
       }
@@ -668,6 +689,8 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
     selectedMaturityMode,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields,
     selectedSkipDigests,
@@ -760,6 +783,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
     selectedMaturityMode,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields,
     selectedSkipDigests,
@@ -819,6 +844,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
     selectedMaturityMode,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields,
     selectedSkipDigests,

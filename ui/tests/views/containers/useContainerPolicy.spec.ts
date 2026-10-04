@@ -510,4 +510,97 @@ describe('useContainerPolicy', () => {
 
     harness.wrapper.unmount();
   });
+  describe('group policy attribution', () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const groupPolicy = {
+      id: 'policy-1',
+      group: 'payments',
+      revision: 3,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['1.9.9'] },
+      actions: {},
+    };
+
+    it('exposes the group name and the fields the server attributed to the group', () => {
+      const harness = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: {
+          'container-1': {
+            groupPolicy,
+            updatePolicySources: {
+              maturityMode: 'group',
+              maturityMinAgeDays: 'group',
+              skipTags: 'label',
+              skipDigests: 'default',
+            },
+          },
+        },
+      });
+
+      expect(harness.composable.selectedPolicyGroupName.value).toBe('payments');
+      expect(harness.composable.selectedPolicyGroupFields.value).toEqual(
+        new Set(['maturityMode', 'maturityMinAgeDays']),
+      );
+      harness.wrapper.unmount();
+    });
+
+    it('shows no group attribution without a snapshot or without group sources', () => {
+      const noSnapshot = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: { 'container-1': { updatePolicySources: { skipTags: 'group' } } },
+      });
+      expect(noSnapshot.composable.selectedPolicyGroupName.value).toBeUndefined();
+      expect(noSnapshot.composable.selectedPolicyGroupFields.value).toEqual(new Set());
+      noSnapshot.wrapper.unmount();
+
+      const noSources = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: { 'container-1': { groupPolicy: { ...groupPolicy, group: '' } } },
+      });
+      expect(noSources.composable.selectedPolicyGroupName.value).toBeUndefined();
+      expect(noSources.composable.selectedPolicyGroupFields.value).toEqual(new Set());
+      noSources.wrapper.unmount();
+    });
+
+    it('uses the group value, not the global one, as the revert baseline', () => {
+      const harness = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: {
+          'container-1': {
+            groupPolicy,
+            updatePolicyDeclarative: { env: { maturityMode: 'all' }, label: {} },
+            updatePolicyOverrides: {
+              maturityMode: 'mature',
+              maturityMinAgeDays: 7,
+              skipTags: ['1.9.9'],
+            },
+          },
+        },
+      });
+
+      // mature equals the group value (not flagged); 7 differs from the group's 14;
+      // skipTags equals the group list.
+      expect(harness.composable.selectedPolicyOverriddenFields.value).toEqual(
+        new Set(['maturityMinAgeDays']),
+      );
+      harness.wrapper.unmount();
+    });
+
+    it('lets a label beat the group in the baseline', () => {
+      const harness = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: {
+          'container-1': {
+            groupPolicy,
+            updatePolicyDeclarative: { env: {}, label: { maturityMode: 'all' } },
+            updatePolicyOverrides: { maturityMode: 'mature' },
+          },
+        },
+      });
+
+      expect(harness.composable.selectedPolicyOverriddenFields.value).toEqual(
+        new Set(['maturityMode']),
+      );
+      harness.wrapper.unmount();
+    });
+  });
 });

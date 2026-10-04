@@ -158,6 +158,8 @@ const selectedPolicyOverrideFields = ref(
   new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
 );
 const selectedPolicyOverriddenFields = ref(new Set(['maturityMode', 'skipTags']));
+const selectedPolicyGroupFields = ref(new Set<string>());
+const selectedPolicyGroupName = ref<string | undefined>(undefined);
 const mockRemoveSkipTagSelected = vi.fn();
 const mockRemoveSkipDigestSelected = vi.fn();
 const mockGetTriggerKey = vi.fn((trigger: Trigger) => `${trigger.type}.${trigger.name}`);
@@ -247,6 +249,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     confirmClearPolicy: mockClearPolicySelected,
     revertPolicySelected: mockRevertPolicySelected,
     selectedPolicyOverrideFields,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     policyMessage,
     policyError,
@@ -391,6 +395,8 @@ function resetState() {
     'skipDigests',
   ]);
   selectedPolicyOverriddenFields.value = new Set(['maturityMode', 'skipTags']);
+  selectedPolicyGroupFields.value = new Set();
+  selectedPolicyGroupName.value = undefined;
   mockRemoveSkipTagSelected.mockReset();
   mockRemoveSkipDigestSelected.mockReset();
   mockGetTriggerKey.mockClear();
@@ -766,6 +772,39 @@ describe('ContainerFullPageTabContent', () => {
 
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(1, 'maturityMode');
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
+  });
+
+  it('shows a text group chip naming the group only for fields the server attributed to it', async () => {
+    selectedPolicyGroupName.value = 'payments';
+    selectedPolicyGroupFields.value = new Set(['maturityMinAgeDays', 'skipDigests']);
+    selectedSkipDigests.value = ['sha256:abc'];
+    const wrapper = mountComponent();
+
+    for (const field of ['maturityMinAgeDays', 'skipDigests']) {
+      const chip = wrapper.find(`[data-test="policy-group-${field}"]`);
+      expect(chip.exists()).toBe(true);
+      expect(chip.text()).toBe('Group: payments');
+    }
+    expect(wrapper.find('[data-test="policy-group-maturityMode"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="policy-group-skipTags"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders no group chip when no group name came from the server', () => {
+    selectedPolicyGroupFields.value = new Set(['maturityMode']);
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-group-maturityMode"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('words the revert controls as reverting to the inherited policy', () => {
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-revert-all"]').text()).toBe(
+      'Revert to inherited policy',
+    );
+    wrapper.unmount();
   });
 
   it.each([

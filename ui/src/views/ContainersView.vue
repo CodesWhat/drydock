@@ -129,6 +129,7 @@ function updatePolicyMetadataFingerprint(apiContainers: Record<string, unknown>[
       updatePolicyDeclarative: container.updatePolicyDeclarative,
       updatePolicyOverrides: container.updatePolicyOverrides,
       updatePolicySources: container.updatePolicySources,
+      groupPolicy: container.groupPolicy,
     })),
   );
 }
@@ -515,6 +516,8 @@ const {
   selectedHasMaturityPolicy,
   selectedMaturityMinAgeDays,
   selectedMaturityMode,
+  selectedPolicyGroupFields,
+  selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
   selectedSkipDigests,
@@ -1721,6 +1724,8 @@ provide(containersViewTemplateContextKey, {
   confirmClearPolicy,
   clearPolicySelected,
   revertPolicySelected,
+  selectedPolicyGroupFields,
+  selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
   policyMessage,

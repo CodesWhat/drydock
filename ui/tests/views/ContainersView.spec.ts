@@ -1232,6 +1232,35 @@ describe('ContainersView', () => {
         });
       });
 
+      it('refreshes raw policy metadata when only the group policy snapshot changes', async () => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
+        const wrapper = await mountContainersView(
+          [container],
+          [{ ...container, displayName: container.name }],
+        );
+        const vm = wrapper.vm as any;
+        const firstRef = vm.containers;
+        const groupPolicy = {
+          id: 'p1',
+          group: 'payments',
+          revision: 1,
+          updatePolicy: { maturityMode: 'mature' },
+          actions: {},
+        };
+
+        mockGetAllContainers.mockResolvedValue([
+          { ...container, displayName: container.name, groupPolicy },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([{ ...container }]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).toBe(firstRef);
+        expect(vm.containerMetaMap.c1).toMatchObject({ groupPolicy });
+      });
+
       it('reassigns containers.value when a field changes', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
         const wrapper = await mountContainersView([container]);
