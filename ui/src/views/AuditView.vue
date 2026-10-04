@@ -46,6 +46,8 @@ const actionTypes = [
   'auto-rollback',
   'update-policy-override-set',
   'update-policy-override-cleared',
+  'group-policy-set',
+  'group-policy-cleared',
   'mqtt-command-update',
   'update-applied-dryrun',
   'security-scan-skipped',

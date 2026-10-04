@@ -368,6 +368,10 @@ function createOverrideAuditDetails(
             field === 'snoozeUntil'
               ? null
               : getPolicyFieldAuditValue(container.updatePolicyDeclarative?.env, field),
+          group:
+            field === 'snoozeUntil'
+              ? null
+              : getPolicyFieldAuditValue(container.groupPolicy?.updatePolicy, field),
           label:
             field === 'snoozeUntil'
               ? null
