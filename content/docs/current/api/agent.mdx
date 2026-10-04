@@ -23,7 +23,8 @@ curl http://drydock:3000/api/v1/agents
       "host": "192.168.1.50",
       "port": 3000,
       "connected": true,
-      "version": "1.7.0-rc.17",
+      "version": "1.7.0",
+      "build": "1.7.0-rc.18",
       "os": "linux",
       "arch": "amd64",
       "cpus": 4,
@@ -48,7 +49,8 @@ curl http://drydock:3000/api/v1/agents
 | `data[].host` | string | Agent hostname or IP |
 | `data[].port` | integer | Agent port |
 | `data[].connected` | boolean | Whether the agent is currently connected |
-| `data[].version` | string | Agent drydock version |
+| `data[].version` | string | Agent drydock version, with any prerelease suffix removed |
+| `data[].build` | string | Agent's full build identity. See [version and build](/docs/api/app#version-and-build). Equals `version` when the agent reports no prerelease suffix. The controller derives both fields from the version a drydock agent or a Portwing edge agent reports, so agents that predate `build` get one too |
 | `data[].os` | string | Operating system |
 | `data[].arch` | string | CPU architecture |
 | `data[].cpus` | integer | Number of CPU cores |
@@ -153,7 +155,8 @@ Sent immediately upon connection to confirm the handshake.
 {
   "type": "dd:ack",
   "data": {
-    "version": "1.7.0-rc.17",
+    "version": "1.7.0",
+    "build": "1.7.0-rc.18",
     "os": "linux",
     "arch": "amd64",
     "cpus": 4,
@@ -168,7 +171,7 @@ Sent immediately upon connection to confirm the handshake.
 }
 ```
 
-The `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response.
+The `version`, `build`, `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response.
 
 ##### `dd:container-added`
 

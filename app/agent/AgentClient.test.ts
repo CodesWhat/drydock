@@ -2327,6 +2327,7 @@ describe('AgentClient', () => {
       expect(spy).toHaveBeenCalled();
       expect(client.info).toEqual({
         version: '1.0',
+        build: '1.0',
         os: 'linux',
         arch: 'x64',
         cpus: 8,
@@ -5944,6 +5945,58 @@ describe('AgentClient', () => {
       expect(result).toBeDefined();
     });
 
+    test('applies the build identity reported next to the base version', () => {
+      const internal = client as any;
+      client.info = { version: '1.6.0', build: '1.6.0-rc.13' };
+
+      const result = internal.buildRuntimeInfoFromAck({
+        version: '1.6.1',
+        build: '1.6.1-rc.15',
+      });
+      expect(result.version).toBe('1.6.1');
+      expect(result.build).toBe('1.6.1-rc.15');
+    });
+
+    test('normalises the version an older agent reports without a build', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.6.1-rc.15' });
+      expect(result.version).toBe('1.6.1');
+      expect(result.build).toBe('1.6.1-rc.15');
+    });
+
+    test('reports a plain version as both version and build', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.2.3' });
+      expect(result.version).toBe('1.2.3');
+      expect(result.build).toBe('1.2.3');
+    });
+
+    test('drops a stale build when the ack has no version', () => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: undefined });
+      expect(result.version).toBe('1.7.0');
+      expect(result.build).toBeUndefined();
+    });
+
+    test.each([
+      ['a number', 42],
+      ['an empty string', ''],
+      ['null', null],
+    ])('falls back to the version when the build is %s', (_label, build) => {
+      const internal = client as any;
+      client.info = { version: '1.7.0', build: '1.7.0-rc.17' };
+
+      const result = internal.buildRuntimeInfoFromAck({ version: '1.7.0', build });
+      expect(result.version).toBe('1.7.0');
+      expect(result.build).toBe('1.7.0');
+    });
+
     test('applies logLevel and pollInterval from ack payload', () => {
       const internal = client as any;
       client.info = { logLevel: 'info', pollInterval: '300' };
@@ -8179,6 +8232,31 @@ describe('AgentClient', () => {
           (m.includes('test-agent') || m.includes('connected')),
       );
       expect(hasAckLog).toBe(true);
+    });
+
+    test.each([
+      [
+        'adds the build when it differs from the version',
+        { version: '1.6.1', build: '1.6.1-rc.15' },
+        'Agent test-agent connected (version: 1.6.1, build: 1.6.1-rc.15)',
+      ],
+      [
+        'omits the build when it matches the version',
+        { version: '1.6.1', build: '1.6.1' },
+        'Agent test-agent connected (version: 1.6.1)',
+      ],
+      [
+        'omits the build when an older agent reports none',
+        { version: '1.6.1-rc.15' },
+        'Agent test-agent connected (version: 1.6.1-rc.15)',
+      ],
+    ])('%s', async (_label, ack, expectedLog) => {
+      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+
+      await client.handleEvent('dd:ack', ack);
+
+      const infoCalls = mockLogChild.info.mock.calls.map((c) => c[0]);
+      expect(infoCalls).toContain(expectedLog);
     });
   });
 

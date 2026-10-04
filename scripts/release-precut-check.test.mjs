@@ -129,7 +129,7 @@ function makeReleaseFixture(overrides = {}) {
     'apps/demo/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
     'CHANGELOG.md':
       '# Changelog\n\n## [Unreleased]\n\n## [1.7.0-rc.1] — 2026-08-13\n\n### Added\n\n- release work\n',
-    'README.md': 'v1.7.0-rc.1 highlights\n',
+    'README.md': '# drydock\n',
     'apps/web/scripts/docs-versions.mjs': '{ slug: "v1.7", source: "current", title: "v1.7" }',
     'apps/web/src/lib/site-config.ts': 'version: "1.7.0-rc.1"',
     'content/docs/current/updates/index.mdx':
@@ -157,7 +157,6 @@ test('release metadata validation accepts the GA quickstart label for a stable t
   const root = makeReleaseFixture({
     'CHANGELOG.md':
       '# Changelog\n\n## [Unreleased]\n\n## [1.7.0] — 2026-08-13\n\n### Added\n\n- release work\n',
-    'README.md': 'v1.7.0 highlights\n',
     'apps/web/src/lib/site-config.ts': 'version: "1.7.0"',
     'content/docs/current/updates/index.mdx':
       '## Unreleased\n\n## v1.7.0 Highlights — August 13, 2026\n',
@@ -199,12 +198,22 @@ test('release metadata validation rejects a stale lockfile workspace version', (
 test('release metadata validation rejects missing exact changelog and public RC identity', () => {
   const root = makeReleaseFixture({
     'CHANGELOG.md': '# Changelog\n\n## [Unreleased]\n',
-    'README.md': 'v1.6.0 highlights\n',
+    'content/docs/current/updates/index.mdx': '## v1.6.0 Highlights — August 13, 2026\n',
   });
   assert.throws(
     () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
-    /CHANGELOG\.md has no non-empty \[1\.7\.0-rc\.1\] entry[\s\S]*README\.md/u,
+    /CHANGELOG\.md has no non-empty \[1\.7\.0-rc\.1\] entry[\s\S]*updates\/index\.mdx/u,
   );
+});
+
+test('release metadata validation passes with a README that has no highlights block', () => {
+  const root = makeReleaseFixture({ 'README.md': '# drydock\n\nNo release notes here.\n' });
+  assert.doesNotThrow(() => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'));
+});
+
+test('release metadata validation ignores README content entirely', () => {
+  const root = makeReleaseFixture({ 'README.md': 'v1.6.0 highlights\n' });
+  assert.doesNotThrow(() => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'));
 });
 
 // ---------------------------------------------------------------------------
@@ -328,7 +337,7 @@ test('cli exits 1 and reports pending discussion when strict RC check has an unc
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.17'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.18'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -345,7 +354,7 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0-rc.17'],
+    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0-rc.18'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -360,7 +369,7 @@ test('cli exits 0 with warning when tracker file does not exist', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.17'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.18'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -377,7 +386,7 @@ test('cli exits 0 for prerelease tags with pending replies (informational only)'
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.17'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.18'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -393,7 +402,7 @@ test('cli exits 1 for prerelease tags with --strict and pending replies', () => 
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.17'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.18'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -409,7 +418,7 @@ test('cli exits 0 and prints success when tracker has no pending replies', () =>
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.17'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.18'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',

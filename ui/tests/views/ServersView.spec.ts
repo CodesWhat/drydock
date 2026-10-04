@@ -7,6 +7,7 @@ import { getServer } from '@/services/server';
 import { getAllWatchers } from '@/services/watcher';
 import ServersView from '@/views/ServersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
+import { findStub } from '../helpers/find-stub';
 import { mountWithPlugins } from '../helpers/mount';
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -56,7 +57,7 @@ const richDataTableStub = defineComponent({
 });
 
 function tableRows(wrapper: any) {
-  const table = wrapper.findComponent(richDataTableStub as any);
+  const table = findStub(wrapper, richDataTableStub);
   return (table.props('rows') ?? []) as Array<{
     id?: string;
     name: string;
@@ -184,7 +185,7 @@ describe('ServersView', () => {
   describe('tableColumns (card-mode annotations)', () => {
     it('flags status with cardPriority so it wins the card subtitle over the mono host address', async () => {
       const wrapper = await mountServersView();
-      const table = wrapper.findComponent(richDataTableStub as any);
+      const table = findStub(wrapper, richDataTableStub);
       const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
       const statusCol = columns.find((c) => c.key === 'status');
       expect(statusCol?.cardPriority).toBe(1);
@@ -194,14 +195,14 @@ describe('ServersView', () => {
   describe('column picker', () => {
     it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.servers (schema/view sync guard)', async () => {
       const wrapper = await mountServersView();
-      const table = wrapper.findComponent(richDataTableStub as any);
+      const table = findStub(wrapper, richDataTableStub);
       const keys = new Set((table.props('columns') as Array<{ key: string }>).map((c) => c.key));
       expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.servers));
     });
 
     it('marks the name column as required', async () => {
       const wrapper = await mountServersView();
-      const table = wrapper.findComponent(richDataTableStub as any);
+      const table = findStub(wrapper, richDataTableStub);
       const nameCol = (table.props('columns') as Array<{ key: string; required?: boolean }>).find(
         (c) => c.key === 'name',
       );

@@ -15,6 +15,7 @@ import {
   UpdateRequestError,
 } from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
+import { redactContainerRuntimeEnv } from './container/shared.js';
 import {
   AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
   findDockerTriggerForContainer,
@@ -185,7 +186,10 @@ async function executeAction(
   });
   getContainerActionsCounter()?.inc({ action });
 
-  res.status(200).json({ message: ACTION_MESSAGES[method], result: responseContainer });
+  res.status(200).json({
+    message: ACTION_MESSAGES[method],
+    result: redactContainerRuntimeEnv(responseContainer),
+  });
 }
 
 /**

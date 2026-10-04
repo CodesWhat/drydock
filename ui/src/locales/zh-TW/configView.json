@@ -76,6 +76,7 @@
       },
       "fields": {
         "version": "版本",
+        "build": "組建版本",
         "serverPort": "伺服器埠",
         "containerActions": "容器操作",
         "webhook": "Webhook",

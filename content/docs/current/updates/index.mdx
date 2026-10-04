@@ -5,6 +5,12 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.18 Highlights — October 4, 2026
+
+Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does. A stable release now reports its own base version instead of the release candidate it was promoted from, and the full build identity moves to a separate `build` field in the API, About dialog and agent panel. Bulk vulnerability scans keep accurate progress and results for large fleets, the dashboard no longer shows a Local Docker host when no local watcher is configured, and the website docs pages that returned a 500 load again.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.18/CHANGELOG.md#170-rc18--2026-10-04) for the full release notes.
+
 ## v1.7.0-rc.17 Highlights — October 2, 2026
 
 This candidate patches zlib for CVE-2026-85091 and updates libexpat to 2.8.5-r0 for CVE-2026-93990. It also updates Undici, Nodemailer, gRPC, Moment, fast-uri, and ip-address to patched versions and includes the accepted bulk vulnerability scan fix, so scans continue after a completed HTTP request. The security package update changes no Drydock application source. The owner authorized GA promotion after verification without a fresh seven-day soak.

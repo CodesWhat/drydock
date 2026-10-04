@@ -131,6 +131,23 @@ set.ignored = true
 match.rules = ["osv-scanner:CVE-2026-53550"]
 set.ignored = true
 
+# braces@3.0.3 (CVE-2026-93687, stack exhaustion on deeply nested brace patterns)
+# and http-cache-semantics@4.2.0 (CVE-2026-93748, max-stale cache disclosure).
+# Both advisories list the latest published version as last affected, so there is
+# nothing to bump to as of 2026-10-02. Both are dev-only and never ship in the image:
+# braces arrives through nodemon's chokidar in app/ and through artillery's
+# chokidar in e2e/, and only ever expands globs from in-repo config; and
+# http-cache-semantics arrives through artillery's got client in e2e/, which only
+# talks to the local QA stack during load tests. Recheck on 2026-11-02 or as soon
+# as either package publishes a fix, and drop these entries then.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-93687"]
+set.ignored = true
+
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-93748"]
+set.ignored = true
+
 # checkov CKV_GHA_7 asserts "workflow_dispatch inputs MUST be empty" and fires on
 # the mere presence of any input — confirmed against a controlled probe, where all
 # four of required/optional x with/without-default trip it identically. Its premise
@@ -148,4 +165,12 @@ set.ignored = true
 # validate it in the workflow.
 [[triage]]
 match.rules = ["checkov:CKV_GHA_7"]
+set.ignored = true
+
+# node-forge@1.4.0 (CVE-2026-33894, GHSA-86w9-cpqp-85rv) arrives through
+# @dotenvx/dotenvx in e2e/, a dev-only test helper that never ships in the image.
+# The advisory lists no patched version and 1.4.0 is the latest release as of
+# 2026-10-03. Recheck on 2026-11-02 or as soon as node-forge publishes a fix.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-33894"]
 set.ignored = true

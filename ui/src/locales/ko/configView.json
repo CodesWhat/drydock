@@ -76,6 +76,7 @@
       },
       "fields": {
         "version": "버전",
+        "build": "빌드",
         "serverPort": "서버 포트",
         "containerActions": "컨테이너 작업",
         "webhook": "Webhook",
