@@ -89,6 +89,8 @@
       "auto-update-blocked": "自動更新ブロック",
       "update-policy-override-set": "更新ポリシーの上書きを設定",
       "update-policy-override-cleared": "更新ポリシーの上書きを解除",
+      "group-policy-set": "グループポリシーを設定",
+      "group-policy-cleared": "グループポリシーを解除",
       "auto-rollback": "自動ロールバック",
       "rollback": "ロールバック",
       "preview": "プレビュー",

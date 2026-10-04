@@ -43,6 +43,11 @@ export const openApiDocument = {
     { name: 'Authentications', description: 'Authentication component discovery' },
     { name: 'Agents', description: 'Remote agent status and logs' },
     { name: 'Notifications', description: 'Notification rule management' },
+    {
+      name: 'Group policies',
+      description:
+        'Drydock-owned update policies keyed by exact group name. Reads need the read scope, writes need admin.',
+    },
     { name: 'Audit', description: 'Audit log endpoints' },
     { name: 'Logs', description: 'Application and container logs' },
     { name: 'Icons', description: 'Icon proxy/cache endpoints' },

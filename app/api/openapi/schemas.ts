@@ -1,6 +1,39 @@
 import { emptyObjectSchema, genericArraySchema, genericObjectSchema } from './common.js';
 import { labelOverrideSchemas } from './label-override-schemas.js';
 
+const groupPolicyProperties = {
+  id: { type: 'string', description: 'Random identifier used as the API path key' },
+  group: {
+    type: 'string',
+    minLength: 1,
+    description:
+      'The exact group name, matched without trimming or case folding. Immutable after creation.',
+  },
+  revision: {
+    type: 'integer',
+    minimum: 1,
+    description: 'Starts at 1 and increases by one on every change. Send it back to write.',
+  },
+  updatePolicy: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+  actions: { $ref: '#/components/schemas/GroupPolicyActions' },
+  createdAt: { type: 'string', format: 'date-time' },
+  createdBy: { type: 'string', description: '`user:<username>` or `api-key:<keyId>`' },
+  updatedAt: { type: 'string', format: 'date-time' },
+  updatedBy: { type: 'string', description: '`user:<username>` or `api-key:<keyId>`' },
+} as const;
+
+const groupPolicyRequired = [
+  'id',
+  'group',
+  'revision',
+  'updatePolicy',
+  'actions',
+  'createdAt',
+  'createdBy',
+  'updatedAt',
+  'updatedBy',
+] as const;
+
 export const openApiSchemas = {
   ...labelOverrideSchemas,
   ErrorResponse: {
@@ -585,11 +618,86 @@ export const openApiSchemas = {
   ContainerUpdatePolicySources: {
     type: 'object',
     properties: {
-      maturityMode: { type: 'string', enum: ['env', 'label', 'override'] },
-      maturityMinAgeDays: { type: 'string', enum: ['env', 'label', 'override'] },
-      skipTags: { type: 'string', enum: ['env', 'label', 'override'] },
-      skipDigests: { type: 'string', enum: ['env', 'label', 'override'] },
+      maturityMode: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      maturityMinAgeDays: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      skipTags: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      skipDigests: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
     },
+    additionalProperties: false,
+  },
+  GroupPolicyActions: {
+    type: 'object',
+    description:
+      'Reserved for restrict-only action rules. Always empty today: no field is accepted or stored.',
+    additionalProperties: false,
+  },
+  ContainerGroupPolicySnapshot: {
+    type: 'object',
+    description:
+      'The group policy a container was last resolved against, recorded with the container so its effective policy and the policy that shaped it come from one write. Absent when no group policy applies.',
+    properties: {
+      id: { type: 'string' },
+      group: { type: 'string', minLength: 1 },
+      revision: { type: 'integer', minimum: 1 },
+      updatePolicy: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+      actions: { $ref: '#/components/schemas/GroupPolicyActions' },
+    },
+    required: ['id', 'group', 'revision', 'updatePolicy', 'actions'],
+    additionalProperties: false,
+  },
+  GroupPolicy: {
+    type: 'object',
+    properties: groupPolicyProperties,
+    required: groupPolicyRequired,
+    additionalProperties: false,
+  },
+  GroupPolicyMembers: {
+    type: 'object',
+    description: 'The containers whose current labels resolve to the policy group.',
+    properties: {
+      count: { type: 'integer', minimum: 0 },
+      agents: {
+        type: 'array',
+        description: 'Distinct hosts the members run on. `null` is the controller.',
+        items: { type: ['string', 'null'] },
+      },
+    },
+    required: ['count', 'agents'],
+    additionalProperties: false,
+  },
+  GroupPolicyWithMembers: {
+    type: 'object',
+    properties: {
+      ...groupPolicyProperties,
+      members: { $ref: '#/components/schemas/GroupPolicyMembers' },
+    },
+    required: [...groupPolicyRequired, 'members'],
+    additionalProperties: false,
+  },
+  GroupPolicyWriteResult: {
+    type: 'object',
+    properties: {
+      changed: {
+        type: 'boolean',
+        description:
+          'Present on replace and delete. False when a replace changed nothing, so nothing was written, the revision did not move and no audit entry was recorded.',
+      },
+      policy: { $ref: '#/components/schemas/GroupPolicy' },
+      applied: {
+        type: 'object',
+        properties: {
+          members: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Stored container records that were re-resolved against the change',
+          },
+        },
+        required: ['members'],
+        additionalProperties: false,
+      },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['policy', 'applied', 'warnings'],
     additionalProperties: false,
   },
   UpdateBlocker: {
@@ -699,6 +807,7 @@ export const openApiSchemas = {
       },
       updatePolicyOverrides: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
       updatePolicySources: { $ref: '#/components/schemas/ContainerUpdatePolicySources' },
+      groupPolicy: { $ref: '#/components/schemas/ContainerGroupPolicySnapshot' },
       actionTriggerInclude: {
         type: 'string',
         example: 'dockercompose.local:minor',

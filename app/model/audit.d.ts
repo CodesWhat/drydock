@@ -47,6 +47,8 @@ export interface AuditEntry {
     | 'update-policy-override-cleared'
     | 'label-override-set'
     | 'label-override-cleared'
+    | 'group-policy-set'
+    | 'group-policy-cleared'
     | 'update-approved'
     | 'update-rejected'
     | 'update-deferred'

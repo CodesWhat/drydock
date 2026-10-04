@@ -89,6 +89,8 @@
       "auto-update-blocked": "التحديث التلقائي محظور",
       "update-policy-override-set": "تم تعيين تجاوز سياسة التحديث",
       "update-policy-override-cleared": "تم مسح تجاوز سياسة التحديث",
+      "group-policy-set": "تم تعيين سياسة المجموعة",
+      "group-policy-cleared": "تم مسح سياسة المجموعة",
       "auto-rollback": "تراجع تلقائي",
       "rollback": "تراجع",
       "preview": "معاينة",

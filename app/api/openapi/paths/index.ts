@@ -16,6 +16,7 @@ import { componentReadPaths } from './component-read.js';
 import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
 import { dependencyGroupPaths } from './dependency-groups.js';
+import { groupPolicyPaths } from './group-policies.js';
 import { imagePaths } from './images.js';
 import { labelOverridePaths } from './label-overrides.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
@@ -432,6 +433,7 @@ export const openApiPaths = {
   ...statsPaths,
   ...imagePaths,
   ...dependencyGroupPaths,
+  ...groupPolicyPaths,
   '/api/v1/operations/{id}/cancel': {
     post: {
       tags: ['Containers', 'Actions'],

@@ -137,3 +137,35 @@ describe('action-policy OpenAPI schemas (spec-6.0.1-action-policy.md)', () => {
     expect(openApiSchemas.LabelOverrideChangeResult.required).toContain('changed');
   });
 });
+
+describe('group policy OpenAPI schemas', () => {
+  test('names the group layer as an update-policy source on every field', () => {
+    for (const field of Object.values(openApiSchemas.ContainerUpdatePolicySources.properties)) {
+      expect(field.enum).toStrictEqual(['env', 'group', 'label', 'override']);
+    }
+  });
+
+  test('records the resolved group policy on a container', () => {
+    expect(openApiSchemas.ContainerResource.properties.groupPolicy).toStrictEqual({
+      $ref: '#/components/schemas/ContainerGroupPolicySnapshot',
+    });
+    expect(openApiSchemas.ContainerGroupPolicySnapshot.required).toStrictEqual([
+      'id',
+      'group',
+      'revision',
+      'updatePolicy',
+      'actions',
+    ]);
+  });
+
+  test('a policy with members extends the policy fields with the member roster', () => {
+    expect(Object.keys(openApiSchemas.GroupPolicyWithMembers.properties)).toStrictEqual([
+      ...Object.keys(openApiSchemas.GroupPolicy.properties),
+      'members',
+    ]);
+    expect(openApiSchemas.GroupPolicyWithMembers.required).toStrictEqual([
+      ...openApiSchemas.GroupPolicy.required,
+      'members',
+    ]);
+  });
+});

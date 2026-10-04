@@ -956,7 +956,7 @@ If you're trying to restrict which containers a trigger can touch at all, set `A
 
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
-<Callout type="info">**Declarative per-container update policy** is supported through the four `dd.updatePolicy.*` labels above. Watcher environment defaults are available for the two maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+<Callout type="info">**Declarative per-container update policy** is supported through the four `dd.updatePolicy.*` labels above. The same four fields can also be set for a whole group of containers with a [group policy](/docs/configuration/groups), which sits between the labels and the watcher environment. Watcher environment defaults are available for the two maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
 
 ### Override labels with the API
 
@@ -987,10 +987,11 @@ Each field resolves independently. A missing value falls through to the next tie
 | :---: | --- | --- |
 | 1 (highest) | UI/API override | Update policy editor or `PATCH /api/v1/containers/:id/update-policy` |
 | 2 | Container label | `dd.updatePolicy.maturityMode=mature`, `dd.updatePolicy.skipTags=latest,stable` |
-| 3 | Watcher environment | `DD_WATCHER_LOCAL_MATURITY_MODE`, `DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS` |
-| 4 | Built-in | `maturityMode=all`; minimum age `7` when mature mode is active; empty skip lists |
+| 3 | [Group policy](/docs/configuration/groups) | `PUT /api/v1/group-policies/:id`, stored in Drydock for every member of a group |
+| 4 | Watcher environment | `DD_WATCHER_LOCAL_MATURITY_MODE`, `DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS` |
+| 5 | Built-in | `maturityMode=all`; minimum age `7` when mature mode is active; empty skip lists |
 
-UI/API overrides persist across Drydock restarts, container recreation, and later label changes. Removing a label does not silently remove an override. The policy editor shows an **Overridden** badge when an override materially differs from the declarative value; **Revert** clears the selected override and immediately reveals the current label, watcher, or built-in value. Empty skip-list overrides are intentional: **Clear Skips** can suppress a declarative skip list without deleting the declaration, while **Revert** restores it.
+UI/API overrides persist across Drydock restarts, container recreation, and later label changes. Removing a label does not silently remove an override. The policy editor shows an **Overridden** badge when an override materially differs from the declarative value; **Revert** clears the selected override and immediately reveals the current label, group, watcher, or built-in value. Empty skip-list overrides are intentional: **Clear Skips** can suppress a declarative skip list without deleting the declaration, while **Revert** restores it.
 
 ## Label examples
 

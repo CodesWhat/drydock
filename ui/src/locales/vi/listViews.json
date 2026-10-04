@@ -89,6 +89,8 @@
       "auto-update-blocked": "Tự động cập nhật bị chặn",
       "update-policy-override-set": "Đã đặt ghi đè chính sách cập nhật",
       "update-policy-override-cleared": "Đã xóa ghi đè chính sách cập nhật",
+      "group-policy-set": "Đã đặt chính sách nhóm",
+      "group-policy-cleared": "Đã xóa chính sách nhóm",
       "auto-rollback": "Tự động khôi phục",
       "rollback": "Khôi phục",
       "preview": "Xem trước",

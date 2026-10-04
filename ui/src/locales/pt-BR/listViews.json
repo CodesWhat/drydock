@@ -89,6 +89,8 @@
       "auto-update-blocked": "Atualização automática bloqueada",
       "update-policy-override-set": "Substituição de policy de atualização definida",
       "update-policy-override-cleared": "Substituição de policy de atualização removida",
+      "group-policy-set": "Policy de grupo definida",
+      "group-policy-cleared": "Policy de grupo removida",
       "auto-rollback": "Rollback automático",
       "rollback": "Rollback",
       "preview": "Prévia",
