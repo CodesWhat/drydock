@@ -371,6 +371,7 @@ const routes = [
   "/docs/v1.7/configuration/config-file",
   "/docs/v1.7/configuration/dashboard",
   "/docs/v1.7/configuration/dns",
+  "/docs/v1.7/configuration/groups",
   "/docs/v1.7/configuration/hooks",
   "/docs/v1.7/configuration/logs",
   "/docs/v1.7/configuration/registries",

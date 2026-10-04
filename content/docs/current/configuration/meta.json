@@ -8,6 +8,7 @@
     "authentications",
     "config-file",
     "dns",
+    "groups",
     "hooks",
     "logs",
     "registries",

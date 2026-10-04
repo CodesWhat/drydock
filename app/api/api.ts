@@ -19,6 +19,7 @@ import * as debugRouter from './debug.js';
 import * as dependencyGroupsRouter from './dependency-groups.js';
 import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
+import * as groupPolicyRouter from './group-policy.js';
 import { isIconProxyApiPath } from './icons/route.js';
 import * as iconsRouter from './icons.js';
 import * as imagesRouter from './images.js';
@@ -223,6 +224,9 @@ export function init(): express.Router {
 
   // Mount dependency groups router (bulk dependency-chain update, sibling of /containers)
   mountRouter(router, '/dependency-groups', dependencyGroupsRouter.init());
+
+  // Mount group policies router (Drydock-owned policy per group, sibling of /dependency-groups)
+  mountRouter(router, '/group-policies', groupPolicyRouter.init());
 
   // Mount update-operations router (single-operation lookup by id)
   mountRouter(router, '/update-operations', updateOperationsRouter.init());
