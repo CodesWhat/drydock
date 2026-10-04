@@ -36,6 +36,7 @@ import { stripContainerDetailOnlySecurityFields } from './container/container-pr
 import { projectLabelOwnedForApi } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
+import { registerSessionStreamCloser } from './session-streams.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -296,6 +297,15 @@ function apiKeyClientFields(
   };
 }
 
+/** The session id a stream authenticated with, so revoking the session can close it. */
+function sessionClientFields(req: Request): Pick<ActiveSseClient, 'sessionId'> {
+  const sessionId = (req as Request & { sessionID?: unknown }).sessionID;
+  if (req.principal?.kind !== 'session' || typeof sessionId !== 'string' || sessionId === '') {
+    return {};
+  }
+  return { sessionId };
+}
+
 function isClientApiKeyExpired(response: FlushableResponse, nowMs: number): boolean {
   const expiresAtMs = sseClientRegistry.getByResponse(response)?.apiKeyExpiresAtMs;
   return expiresAtMs !== undefined && nowMs >= expiresAtMs;
@@ -404,6 +414,27 @@ export function closeSseClientsForRevokedApiKeys(revokedKeyIds: readonly string[
   }
   return closed;
 }
+
+/**
+ * Close every open stream that authenticated with one of these sessions. A
+ * session revoked after the stream connected (a recovery login, an eviction)
+ * would otherwise keep receiving events for as long as the client held the
+ * socket.
+ * @param revokedSessionIds
+ * @returns how many streams were closed
+ */
+export function closeSseClientsForRevokedSessions(revokedSessionIds: ReadonlySet<string>): number {
+  let closed = 0;
+  for (const activeClient of [...sseClientRegistry.listClients()]) {
+    if (activeClient.sessionId !== undefined && revokedSessionIds.has(activeClient.sessionId)) {
+      forceDisconnectResponse(activeClient.response);
+      closed += 1;
+    }
+  }
+  return closed;
+}
+
+registerSessionStreamCloser(closeSseClientsForRevokedSessions);
 
 /**
  * Drop any stream whose key stopped being valid since it connected.
@@ -552,6 +583,7 @@ function eventsHandler(req: Request, res: Response): void {
     response: client,
     connectedAtMs: Date.now(),
     ...apiKeyClientFields(principal),
+    ...sessionClientFields(req),
   };
   sseClientRegistry.add(activeClient);
 

@@ -1,4 +1,5 @@
 import { validateSessionUser } from '../api/session-principal.js';
+import { closeStreamsForRevokedSessions } from '../api/session-streams.js';
 import { deserializeSessionUser, readSessionUsername } from '../api/session-user.js';
 
 interface SessionStoreLike {
@@ -406,6 +407,9 @@ export async function destroyOtherSubjectSessions({
       return false;
     }
   });
+  // Before the deletes: the marker already makes these sessions invalid, so a
+  // failing delete must not leave their open streams reading.
+  closeStreamsForRevokedSessions(doomed.map((session) => session.sid));
   await Promise.all(doomed.map((session) => destroyStoredSession(sessionStore, session.sid)));
   const index = getCachedUsernameSessionIndex(sessionStore);
   if (index !== undefined) {

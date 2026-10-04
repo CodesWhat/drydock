@@ -163,6 +163,7 @@ vi.mock('../log', () => ({
   },
 }));
 
+import { closeStreamsForRevokedSessions } from './session-streams.js';
 import * as sseRouter from './sse.js';
 
 function getHandler() {
@@ -2375,6 +2376,47 @@ describe('SSE Router', () => {
 
       expect(sessionClient.res.destroy).not.toHaveBeenCalled();
       expect(sseRouter._clients.has(sessionClient.res)).toBe(true);
+    });
+
+    test('a stream a session opened is closed when that session is revoked, and no other', () => {
+      const handler = getHandler();
+      const mine = connectSseClient(handler, '10.1.0.2', { kind: 'session', username: 'scott' });
+      const theirs = connectSseClient(handler, '10.1.0.3', { kind: 'session', username: 'scott' });
+      const keyed = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+
+      expect(sseRouter._activeSseClientRegistry.getByResponse(mine.res)?.sessionId).toBe(
+        'session-10.1.0.2',
+      );
+      expect(
+        sseRouter._activeSseClientRegistry.getByResponse(keyed.res)?.sessionId,
+      ).toBeUndefined();
+
+      const closed = sseRouter.closeSseClientsForRevokedSessions(new Set(['session-10.1.0.2']));
+
+      expect(closed).toBe(1);
+      expect(mine.res.destroy).toHaveBeenCalled();
+      expect(sseRouter._clients.has(mine.res)).toBe(false);
+      expect(sseRouter._connectionsPerIp.has('10.1.0.2')).toBe(false);
+      expect(theirs.res.destroy).not.toHaveBeenCalled();
+      expect(keyed.res.destroy).not.toHaveBeenCalled();
+    });
+
+    test('a session revocation reaches the stream through the shared session-stream hook', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.2', { kind: 'session', username: 'scott' });
+
+      expect(closeStreamsForRevokedSessions(['session-10.1.0.2'])).toBe(1);
+      expect(res.destroy).toHaveBeenCalled();
+    });
+
+    test('a session stream with no session id is not tracked by session', () => {
+      const handler = getHandler();
+      const req = createSSERequest('10.1.0.4', undefined, { kind: 'session', username: 'scott' });
+      req.sessionID = undefined;
+      const res = createSSEResponse();
+      handler(req, res);
+
+      expect(sseRouter._activeSseClientRegistry.getByResponse(res)?.sessionId).toBeUndefined();
     });
 
     test('revoking an unrelated key closes nothing, and an empty cascade is a no-op', () => {

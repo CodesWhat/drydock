@@ -16,6 +16,7 @@ import {
   parseSystemLogStreamQuery,
 } from './log-stream.js';
 import * as rateLimitKey from './rate-limit-key.js';
+import { closeStreamsForRevokedSessions } from './session-streams.js';
 import { createIdentityAwareUpgradeRateLimitKeyResolver } from './ws-upgrade-utils.js';
 
 function createUpgradeSocket() {
@@ -92,6 +93,87 @@ describe('api/log-stream', () => {
 
       const query2 = parseSystemLogStreamQuery(new URLSearchParams({ tail: 'abc' }));
       expect(query2.tail).toBe(100);
+    });
+  });
+
+  describe('a log stream ends when its session is revoked', () => {
+    const opened: Array<Map<string, () => void>> = [];
+
+    afterEach(() => {
+      // Let go of every socket the way a client would, so one test's sockets
+      // are not still tracked by the next.
+      for (const listeners of opened.splice(0)) {
+        listeners.get('close')?.();
+      }
+    });
+
+    async function connect(
+      sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => void,
+    ) {
+      const listeners = new Map<string, () => void>();
+      const ws = {
+        on: vi.fn((event: string, listener: () => void) => {
+          listeners.set(event, listener);
+        }),
+        off: vi.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+      };
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: (_req, _socket, _head, callback) => callback(ws as any),
+        },
+        serverConfiguration: {},
+        getBackfillEntries: () => [],
+        subscribeToEntries: () => () => {},
+      });
+      void gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(listeners.has('close')).toBe(true));
+      opened.push(listeners);
+      return { ws, listeners };
+    }
+
+    test('closes the socket with a policy close when its session id is revoked', async () => {
+      const { ws } = await connect(authenticatingSessionMiddleware);
+
+      expect(closeStreamsForRevokedSessions(['someone-else'])).toBe(0);
+      expect(ws.close).not.toHaveBeenCalled();
+
+      expect(closeStreamsForRevokedSessions(['session-1'])).toBe(1);
+      expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
+    });
+
+    test('forgets a socket that closed on its own, so a later revocation finds nothing', async () => {
+      const { ws, listeners } = await connect(authenticatingSessionMiddleware);
+      listeners.get('close')?.();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(closeStreamsForRevokedSessions(['session-1'])).toBe(0);
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    test('a socket without a session id of its own is not tracked', async () => {
+      const { ws } = await connect((req, _res, next) => {
+        req.session = { passport: { user: '{"username":"alice"}' } };
+        next();
+      });
+
+      expect(closeStreamsForRevokedSessions(['session-1'])).toBe(0);
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    test('closing two sockets of one session closes both', async () => {
+      const first = await connect(authenticatingSessionMiddleware);
+      const second = await connect(authenticatingSessionMiddleware);
+
+      expect(closeStreamsForRevokedSessions(['session-1'])).toBe(2);
+      expect(first.ws.close).toHaveBeenCalled();
+      expect(second.ws.close).toHaveBeenCalled();
     });
   });
 

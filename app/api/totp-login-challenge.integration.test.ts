@@ -73,6 +73,7 @@ import type { AuthRequest } from './auth-types.js';
 import { clearAuthenticators, registerAuthenticator } from './authenticator-chain.js';
 import { restoreSessionPrincipal, sessionAuthenticator } from './session-principal.js';
 import { SessionStore } from './session-store.js';
+import { registerSessionStreamCloser } from './session-streams.js';
 import {
   getLoginChallengeCountForTests,
   LOGIN_CHALLENGE_MAX_ENTRIES,
@@ -875,6 +876,23 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
         storedUsers(h.db).filter((user) => user?.includes('"assurance":"recovery"')),
       ).toHaveLength(1);
       expect(storedUsers(h.db)).toHaveLength(1);
+    });
+
+    test('a recovery login closes the open streams of the sessions it revokes and no others', async () => {
+      const closed: string[][] = [];
+      registerSessionStreamCloser((revoked) => {
+        closed.push([...revoked]);
+        return 0;
+      });
+      const h = await boot();
+      const enrolled = enroll();
+      const earlier = await loginWithCode(h, enrolled);
+      const earlierSid = decodeURIComponent(earlier.split('=')[1]).slice(2).split('.')[0];
+
+      const challenge = await startChallenge(h);
+      await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[0] });
+
+      expect(closed).toEqual([[earlierSid]]);
     });
 
     test('a recovery login that cannot record the revocation mints no session', async () => {

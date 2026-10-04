@@ -7,6 +7,9 @@ vi.mock('../store/totp.js', () => ({
   hasEnrolledUsername: mockHasEnrolledUsername,
 }));
 
+const { mockCloseStreams } = vi.hoisted(() => ({ mockCloseStreams: vi.fn() }));
+vi.mock('../api/session-streams.js', () => ({ closeStreamsForRevokedSessions: mockCloseStreams }));
+
 vi.mock('../log/index.js', () => ({
   default: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
@@ -697,6 +700,41 @@ describe('destroyOtherSubjectSessions', () => {
     expect(destroyed).toBe(1);
     expect(sessionStore.destroy).toHaveBeenCalledTimes(1);
     expect(sessionStore.destroy).toHaveBeenCalledWith('same-subject', expect.any(Function));
+    expect(mockCloseStreams).toHaveBeenCalledWith(['same-subject']);
+  });
+
+  test('closes the revoked sessions’ open streams even when a destroy fails', async () => {
+    const sessionStore = {
+      all: vi.fn((done) => done(null, { stale: { passport: { user: local('john') } } })),
+      destroy: vi.fn((_sid, done) => done(new Error('disk full'))),
+    };
+
+    await expect(
+      destroyOtherSubjectSessions({
+        subjectId,
+        username: 'john',
+        sessionStore,
+        currentSessionId: 'current',
+      }),
+    ).rejects.toThrow('disk full');
+
+    expect(mockCloseStreams).toHaveBeenCalledWith(['stale']);
+  });
+
+  test('closes nothing when there is nothing to revoke', async () => {
+    const sessionStore = {
+      all: vi.fn((done) => done(null, { current: { passport: { user: local('john') } } })),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+
+    await destroyOtherSubjectSessions({
+      subjectId,
+      username: 'john',
+      sessionStore,
+      currentSessionId: 'current',
+    });
+
+    expect(mockCloseStreams).toHaveBeenCalledWith([]);
   });
 
   test('also drops them from a username index built earlier', async () => {
