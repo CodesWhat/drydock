@@ -860,6 +860,8 @@ describe('TOTP slice 4: factor-management API', () => {
       ['an unknown key', { password: TEST_PASSWORD, extra: true }],
       ['an over-long password', { password: 'x'.repeat(2000) }],
       ['a code with no factor active', { password: TEST_PASSWORD, code: '123456' }],
+      ['a numeric code', { password: TEST_PASSWORD, code: 123456 }],
+      ['an over-long recovery code', { password: TEST_PASSWORD, recoveryCode: 'f'.repeat(65) }],
     ])('rejects %s as a 400 and changes nothing', async (_name, body) => {
       const h = await boot();
       const cookie = await sessionCookie(h);
@@ -876,8 +878,14 @@ describe('TOTP slice 4: factor-management API', () => {
     ])('rejects %s as the body', async (_name, rawBody) => {
       const h = await boot();
       const cookie = await sessionCookie(h);
-      const response = await call(h, 'POST', '/totp-enrollments', { cookie, rawBody });
-      expect(response.status).toBe(400);
+      const reveal = await revealEnrollment(h, cookie);
+      for (const [method, path] of [
+        ['POST', '/totp-enrollments'],
+        ['PUT', `/totp-enrollments/${reveal.id}`],
+      ] as const) {
+        const response = await call(h, method, path, { cookie, rawBody });
+        expect(response.status, `${method} ${path}`).toBe(400);
+      }
     });
 
     test('with a factor active, the password alone is not enough: a current code or recovery code is required too', async () => {
@@ -1106,6 +1114,39 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(auditActions()).toEqual([]);
       // The password was never spent against the lockout budget either.
       expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(0);
+    });
+
+    test('the label falls back to the server name when the public URL is not usable', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      ddEnvVars.DD_PUBLIC_URL = 'not a url';
+      ddEnvVars.DD_SERVER_NAME = 'dock-one';
+      try {
+        const body = await revealEnrollment(h, cookie);
+        expect(decodeURIComponent(new URL(body.otpauthUri).pathname)).toBe(
+          `/Drydock:${TEST_USER}@dock-one`,
+        );
+      } finally {
+        delete ddEnvVars.DD_PUBLIC_URL;
+        delete ddEnvVars.DD_SERVER_NAME;
+      }
+    });
+
+    test('a factor that changes while the proof is being checked is a 409 and gives the recovery code back', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      h.db.exec(
+        `CREATE TRIGGER bump_on_spend AFTER UPDATE OF used_at ON totp_recovery_codes
+         BEGIN UPDATE totp_subject_versions SET factor_version = factor_version + 1; END;`,
+      );
+      const response = await call(h, 'POST', '/totp-enrollments', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: enrolled.recoveryCodes[0] },
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: 'Two-factor state changed. Try again.' });
+      expect(totpStore.countUnusedRecoveryCodes(enrolled.factorId)).toBe(10);
     });
 
     test('a store fault is a 503 that leaks nothing', async () => {

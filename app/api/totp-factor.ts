@@ -115,15 +115,36 @@ function keyringOrRefuse(res: Response): TotpKeyring | undefined {
   try {
     return requireTotpKeyring();
   } catch (error: unknown) {
-    log.warn(`TOTP key ring is unavailable (${(error as { code?: string }).code ?? 'error'})`);
+    log.warn(`TOTP key ring is unavailable (${String((error as { code?: unknown }).code)})`);
     sendErrorResponse(res, 503, UNAVAILABLE_MESSAGE);
     return undefined;
   }
 }
 
-function storeErrorCode(error: unknown): TotpStoreErrorCode | undefined {
-  return error instanceof TotpStoreError ? error.code : undefined;
+interface Refusal {
+  status: number;
+  message: string;
 }
+
+/**
+ * Answer a store failure the caller can act on with its mapped status, or
+ * rethrow it. Anything unmapped is a fault, which the route guard turns into a
+ * 503 with a fixed body.
+ */
+function refuseOnStoreFailure(
+  res: Response,
+  error: unknown,
+  refusals: Partial<Record<TotpStoreErrorCode, Refusal>>,
+): void {
+  const refusal = error instanceof TotpStoreError ? refusals[error.code] : undefined;
+  if (refusal === undefined) {
+    throw error;
+  }
+  sendErrorResponse(res, refusal.status, refusal.message);
+}
+
+const STATE_CHANGED = { status: 409, message: STATE_CHANGED_MESSAGE } as const;
+const NOT_ACTIVE = { status: 404, message: 'No two-factor factor is active' } as const;
 
 function labelHost(req: Request): string {
   try {
@@ -215,16 +236,11 @@ async function startEnrollment(req: Request, res: Response): Promise<void> {
     );
   } catch (error: unknown) {
     refundReauthentication(reauthenticated);
-    const code = storeErrorCode(error);
-    if (code === 'ENROLLMENT_PENDING') {
-      sendErrorResponse(res, 409, 'A two-factor enrollment is already pending');
-      return;
-    }
-    if (code === 'VERSION_CONFLICT') {
-      sendErrorResponse(res, 409, STATE_CHANGED_MESSAGE);
-      return;
-    }
-    throw error;
+    refuseOnStoreFailure(res, error, {
+      ENROLLMENT_PENDING: { status: 409, message: 'A two-factor enrollment is already pending' },
+      VERSION_CONFLICT: STATE_CHANGED,
+    });
+    return;
   }
 
   audit('totp-enrollment-started', `subject=${context.subjectId} enrollment=${enrollmentId}`);
@@ -318,20 +334,13 @@ async function confirmEnrollment(req: Request, res: Response): Promise<void> {
       now,
     }));
   } catch (error: unknown) {
-    const failure = storeErrorCode(error);
-    if (failure === 'ENROLLMENT_NOT_FOUND') {
-      sendErrorResponse(res, 404, 'Enrollment not found');
-      return;
-    }
-    if (failure === 'ENROLLMENT_EXPIRED') {
-      sendErrorResponse(res, 410, 'Enrollment expired');
-      return;
-    }
-    if (failure === 'VERSION_CONFLICT' || failure === 'BINDING_MISMATCH') {
-      sendErrorResponse(res, 409, STATE_CHANGED_MESSAGE);
-      return;
-    }
-    throw error;
+    refuseOnStoreFailure(res, error, {
+      ENROLLMENT_NOT_FOUND: { status: 404, message: 'Enrollment not found' },
+      ENROLLMENT_EXPIRED: { status: 410, message: 'Enrollment expired' },
+      VERSION_CONFLICT: STATE_CHANGED,
+      BINDING_MISMATCH: STATE_CHANGED,
+    });
+    return;
   }
 
   audit(
@@ -405,16 +414,11 @@ async function removeActiveFactor(req: Request, res: Response): Promise<void> {
     });
   } catch (error: unknown) {
     refundReauthentication(reauthenticated);
-    const failure = storeErrorCode(error);
-    if (failure === 'FACTOR_NOT_FOUND') {
-      sendErrorResponse(res, 404, 'No two-factor factor is active');
-      return;
-    }
-    if (failure === 'VERSION_CONFLICT') {
-      sendErrorResponse(res, 409, STATE_CHANGED_MESSAGE);
-      return;
-    }
-    throw error;
+    refuseOnStoreFailure(res, error, {
+      FACTOR_NOT_FOUND: NOT_ACTIVE,
+      VERSION_CONFLICT: STATE_CHANGED,
+    });
+    return;
   }
 
   audit('totp-disabled', `subject=${context.subjectId} factor=${factor.factorId}`);
@@ -440,12 +444,11 @@ async function replaceRecoveryCodeSet(req: Request, res: Response): Promise<void
     });
   } catch (error: unknown) {
     refundReauthentication(reauthenticated);
-    const failure = storeErrorCode(error);
-    if (failure === 'GENERATION_CONFLICT' || failure === 'FACTOR_NOT_FOUND') {
-      sendErrorResponse(res, 409, STATE_CHANGED_MESSAGE);
-      return;
-    }
-    throw error;
+    refuseOnStoreFailure(res, error, {
+      GENERATION_CONFLICT: STATE_CHANGED,
+      FACTOR_NOT_FOUND: STATE_CHANGED,
+    });
+    return;
   }
 
   audit('totp-recovery-codes-replaced', `subject=${context.subjectId} factor=${factor.factorId}`);

@@ -166,19 +166,14 @@ export function createLoginChallengeCompletion(
     deleteLoginChallenge(id);
     clearLoginLockoutsAfterSuccess(authRequest, challenge.username, challenge.subjectId);
     const { factor, recoveryCodeId } = result;
-    const recovery = proof.kind === 'recovery';
+    // A recovery proof is the only one that carries a spent code to hand back.
+    const recovery = recoveryCodeId !== undefined;
     const issuedAt = Date.now();
     // A recovery code is the scarce proof: when the login fails for a reason
     // that is the server's (the revocation cannot be recorded, or no session can
     // be minted) the code goes back, rather than leaving the person locked out
     // by a fault that was never theirs. A TOTP counter is not handed back; the
     // next code is one period away.
-    const refuseWithoutSpending = (): void => {
-      if (recoveryCodeId !== undefined) {
-        releaseRecoveryProof(recoveryCodeId);
-      }
-      sendErrorResponse(res, 503, 'Second factor verification is unavailable');
-    };
     if (recovery) {
       // The revocation is recorded where the session validator reads it,
       // before any session is minted, and at the new session's own issue time
@@ -188,7 +183,8 @@ export function createLoginChallengeCompletion(
         revokeSessionsIssuedBefore(challenge.subjectId, challenge.username, issuedAt);
       } catch (error: unknown) {
         log.warn(`Unable to record session revocation (${getErrorMessage(error)})`);
-        refuseWithoutSpending();
+        releaseRecoveryProof(recoveryCodeId);
+        sendErrorResponse(res, 503, 'Second factor verification is unavailable');
         return;
       }
     }

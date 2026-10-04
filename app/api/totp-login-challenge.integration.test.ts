@@ -945,6 +945,19 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       ).toHaveLength(1);
     });
 
+    test('a code login whose session cannot be established fails with 500 and mints nothing', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const challenge = await startChallenge(h);
+      const destroy = vi.spyOn(h.store, 'destroy').mockImplementationOnce((_sid, done) => {
+        done?.(new Error('session store down'));
+      });
+      const failed = await put(h, challenge.id, { code: totpNow(enrolled.seed) });
+      expect(failed.status).toBe(500);
+      expect(storedUsers(h.db).filter(Boolean)).toHaveLength(0);
+      destroy.mockRestore();
+    });
+
     test('the marker alone refuses an older session even when its row is planted back', async () => {
       const h = await boot();
       const enrolled = enroll();

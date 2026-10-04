@@ -52,20 +52,15 @@ const PROXY_HEADERS = [
 ] as const;
 
 function isLoopbackAddress(address: string | undefined): boolean {
-  if (address === undefined) {
-    return false;
-  }
-  const bare = address.startsWith('::ffff:') ? address.slice('::ffff:'.length) : address;
+  // String() turns a missing address into text no pattern below matches.
+  const text = String(address);
+  const bare = text.startsWith('::ffff:') ? text.slice('::ffff:'.length) : text;
   return bare === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare);
 }
 
 function isLoopbackHost(hostHeader: string | undefined): boolean {
-  if (hostHeader === undefined) {
-    return false;
-  }
-  const hostname = hostHeader.startsWith('[')
-    ? hostHeader.slice(1, hostHeader.indexOf(']'))
-    : hostHeader.split(':')[0];
+  const host = String(hostHeader);
+  const hostname = host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.split(':')[0];
   return hostname === 'localhost' || isLoopbackAddress(hostname);
 }
 
@@ -264,7 +259,7 @@ export function guarded(
     Promise.resolve()
       .then(() => handler(req, res))
       .catch((error: unknown) => {
-        log.warn(`Two-factor management failed (${(error as { code?: string }).code ?? 'error'})`);
+        log.warn(`Two-factor management failed (${String((error as { code?: unknown }).code)})`);
         if (!res.headersSent) {
           sendErrorResponse(res, 503, UNAVAILABLE_MESSAGE);
         }
