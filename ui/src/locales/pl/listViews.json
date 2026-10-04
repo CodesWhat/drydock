@@ -89,6 +89,8 @@
       "auto-update-blocked": "Automatyczna aktualizacja zablokowana",
       "update-policy-override-set": "Ustawiono nadpisanie polityki aktualizacji",
       "update-policy-override-cleared": "Wyczyszczono nadpisanie polityki aktualizacji",
+      "group-policy-set": "Ustawiono politykę grupy",
+      "group-policy-cleared": "Wyczyszczono politykę grupy",
       "auto-rollback": "Automatyczne cofnięcie",
       "rollback": "Cofnięcie",
       "preview": "Podgląd",

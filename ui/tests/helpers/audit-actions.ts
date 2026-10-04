@@ -44,6 +44,8 @@ const backendAuditActions = {
   'auto-update-blocked': true,
   'update-policy-override-set': true,
   'update-policy-override-cleared': true,
+  'group-policy-set': true,
+  'group-policy-cleared': true,
   'update-approved': true,
   'update-rejected': true,
   'update-deferred': true,
