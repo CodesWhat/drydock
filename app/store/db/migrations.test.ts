@@ -164,6 +164,7 @@ describe('store/db/migrations', () => {
       expect(versions.filter((version) => version > GROUP_POLICIES_MIGRATION_VERSION)).toEqual([
         LABEL_OVERRIDES_MIGRATION_VERSION,
         TOTP_MIGRATION_VERSION,
+        TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -223,6 +224,7 @@ describe('store/db/migrations', () => {
         GROUP_POLICIES_MIGRATION_VERSION,
         LABEL_OVERRIDES_MIGRATION_VERSION,
         TOTP_MIGRATION_VERSION,
+        TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -291,7 +293,11 @@ describe('store/db/migrations', () => {
          VALUES ('existing', '::local::existing', 'existing', 'existing', 'running', 'local', 'library/web', '1', '{}')`,
       ).run();
 
-      expect(migrate(db)).toEqual([LABEL_OVERRIDES_MIGRATION_VERSION, TOTP_MIGRATION_VERSION]);
+      expect(migrate(db)).toEqual([
+        LABEL_OVERRIDES_MIGRATION_VERSION,
+        TOTP_MIGRATION_VERSION,
+        TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
+      ]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,
       });
