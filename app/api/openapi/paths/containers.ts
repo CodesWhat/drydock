@@ -585,6 +585,24 @@ export const containerPaths = {
       },
     },
   },
+  '/api/v1/containers/{id}/effective-policy': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get the effective policy of a container',
+      operationId: 'getContainerEffectivePolicy',
+      description:
+        'Where each update-policy field and action restriction comes from (default, env, group, label or override), and what dispatch will do with them. It is computed with the same resolvers dispatch uses, from the container as it stands now, the live group policy and the live global update mode. It reports only policy: no runtime environment is served.',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: jsonResponse('Effective policy', {
+          $ref: '#/components/schemas/EffectiveContainerPolicy',
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        404: errorResponse('Container not found'),
+      },
+    },
+  },
   '/api/v1/containers/{id}/update-policy': {
     patch: {
       tags: ['Containers'],

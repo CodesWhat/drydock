@@ -20,12 +20,15 @@ import {
 import { createContainerStatsCollector } from '../stats/collector.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
+import * as groupPolicyStore from '../store/group-policy.js';
+import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import { mapComponentsToList } from './component.js';
 import { createBulkSecurityHandlers } from './container/bulk-security.js';
 import { createCrudHandlers } from './container/crud.js';
+import { createEffectivePolicyHandler } from './container/handlers/effective-policy.js';
 import { createLogHandlers } from './container/logs.js';
 import { createSecurityHandlers } from './container/security.js';
 import {
@@ -198,6 +201,14 @@ const triggerHandlers = createTriggerHandlers({
   log,
 });
 
+const effectivePolicyHandler = createEffectivePolicyHandler({
+  getContainer: (id) => storeContainer.getContainer(id),
+  getTriggers,
+  getUpdateMode,
+  withCurrentGroupPolicy: groupPolicyStore.withCurrentGroupPolicy,
+  toApiContainer,
+});
+
 const containerStatsCollector = createContainerStatsCollector({
   getContainerById: (id) => storeContainer.getContainer(id),
   getWatchers: () => registry.getState().watcher || {},
@@ -322,6 +333,7 @@ export function init() {
     scoped('admin', crudHandlers.deleteContainer),
   );
   router.get('/:id/triggers', scoped('read', triggerHandlers.getContainerTriggers));
+  router.get('/:id/effective-policy', scoped('read', effectivePolicyHandler));
   // The one route whose required scope depends on a path parameter: a
   // docker/dockercompose trigger needs containers:update, a notification
   // trigger needs triggers:test. Resolved in the handler, not here.
