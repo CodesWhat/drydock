@@ -7,7 +7,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 A group policy is an update policy that Drydock stores for one named group. Every container in that group inherits it, including containers that join the group later, so you set a rule once instead of labeling each container.
 
-<Callout type="info">Group policies are on the unreleased v1.8 development line. This page describes the update-policy fields and the API. A group policy does not restrict or grant any action, and it does not change notification routing.</Callout>
+<Callout type="info">Group policies are on the unreleased v1.8 development line. A group policy can set update-policy fields and can restrict what Drydock does automatically. It never grants anything, and it does not change notification routing.</Callout>
 
 ## What a group is
 
@@ -31,6 +31,37 @@ A policy carries the four declarative update-policy fields, with the same values
 
 A policy has to set at least one field. An empty `skipTags` or `skipDigests` list is dropped, because the only layer below a group is the watcher environment, which has no skip lists. `maturityMode: all` is kept, since it deliberately overrides a watcher default of `mature`. `snoozeUntil` is not a group field: a snooze stays a per-container override.
 
+## Action rules
+
+A policy can also carry two action rules. They only restrict: a group can stop Drydock from doing something to its members, and it can never allow something that was already refused.
+
+| Rule | Values | Effect |
+| --- | --- | --- |
+| `actions.updateMode` | `manual` or `notify` | A ceiling on the update mode. The mode that binds a member is the more restrictive of the global [update mode](/docs/configuration/actions/update-eligibility#global-update-mode) and the group's, ordered `notify`, `manual`, `auto`. |
+| `actions.exclude` | Trigger references | A hard stop. A matching update-action trigger is never used for a member. |
+
+`auto` is not a valid group value, and there is no group include list, auto list or un-exclude.
+
+### Update mode ceiling
+
+The ceiling is applied everywhere the global update mode is applied to a container.
+
+- **Group `manual`.** Members are never updated automatically, even when the global mode is `auto` and the container has `dd.action.auto`. Their candidates go to the [approval queue](/docs/configuration/actions/approvals), and the Update button stays enabled for a person to click.
+- **Group `notify`.** Drydock won't apply updates to members. The Update button is locked with the `group-notify-only` blocker, the API rejects an update request with `Group policy 'payments' allows notifications only`, and no approval rows queue.
+- **Global stricter than the group.** A group can't relax the global mode. A group `manual` under global `notify` stays `notify`, and the container reports the global mode as the one that applies.
+
+A member's own `dd.action.auto` or `dd.action.include` label does not lift a group ceiling or a group exclusion. A container leaves the ceiling by changing or clearing `dd.group` (or its Compose project), not by labeling around it.
+
+### Excluding triggers
+
+`actions.exclude` entries use the same grammar as the `dd.action.exclude` label: a trigger id, a trigger name or `provider.name`, optionally followed by `:threshold` (for example `docker.local:major`). Matching is case-insensitive. The API rejects an entry that is empty, contains a comma or has a threshold Drydock doesn't support. An entry that matches no registered action trigger is saved with a warning, since an agent's triggers may be offline or register later.
+
+An exclusion reaches exactly what `dd.action.exclude` reaches. Update-action triggers (`docker`, `dockercompose`, `portainer`) are blocked on the manual and automatic paths, with the `trigger-excluded` blocker naming the group. `command` triggers are blocked on automatic dispatch only, and a manual run of a command trigger is not gated, as with the label. Notification triggers ignore `actions.exclude`. The container's own `dd.action.exclude` is checked first and keeps the attribution when both match.
+
+A group rule is an operator safety net against unintended automation. It is as strong as your control over each member's labels, since whoever sets `dd.group` decides whether the group applies. Container lifecycle actions, rollback, image pruning, scans and notification delivery are not restricted by it.
+
+Agents behave the same way. A group exclusion can only narrow what a trigger already compatible with the container's agent would do, and the policy is enforced on the controller.
+
 ## Precedence
 
 Each field resolves on its own, and the last layer that sets it wins:
@@ -45,7 +76,7 @@ Each field resolves on its own, and the last layer that sets it wins:
 
 Skip lists replace the lower layer's list instead of being added to it. The container's `updatePolicySources` names the layer each field came from, and `group` is one of the values. The container response also carries `groupPolicy`, a snapshot of the policy (id, group, revision and values) it was last resolved against.
 
-A label or an override on a member still wins over the group for the same field, so a group policy is a default for the group, not a lock. Whoever controls a container's labels, including `dd.group`, controls whether the group policy reaches it. Don't treat a group policy as a security boundary.
+A label or an override on a member still wins over the group for the same update-policy field, so those fields are a default for the group, not a lock. Action rules work the other way round: they restrict whatever the lower and higher layers produce. Whoever controls a container's labels, including `dd.group`, controls whether the group policy reaches it. Don't treat a group policy as a security boundary.
 
 Existing override actions work the same against the new layer. `revert-to-declarative` removes an override and reveals the label, then the group, then the watcher value. `skip-current` copies the effective skip list, group values included, into the override, so later edits to the group's list no longer reach that field on that container until you revert it.
 
@@ -62,7 +93,13 @@ Membership is worked out from the container's current labels every time Drydock 
 Reads need the `read` scope. Writes need `admin`, because one write changes every current and future member of the group. A `containers:update` key can still set per-container overrides but can't write a group policy. Group names aren't URL-safe, so policies are addressed by `id`.
 
 ```bash
-# Create
+# Create a policy that holds the group's members to manual updates and keeps one trigger away
+curl -X POST http://drydock:3000/api/v1/group-policies \
+  -H 'Content-Type: application/json' \
+  -d '{"group":"payments","actions":{"updateMode":"manual","exclude":["docker.local:major"]}}'
+
+# Create an update-policy default
+
 curl -X POST http://drydock:3000/api/v1/group-policies \
   -H 'Content-Type: application/json' \
   -d '{"group":"payments","updatePolicy":{"maturityMode":"mature","maturityMinAgeDays":14}}'
@@ -90,8 +127,8 @@ curl -X POST http://drydock:3000/api/v1/group-policies \
 | --- | --- | --- |
 | `GET /api/v1/group-policies` | `read` | Every policy with `members: { count, agents }`. `agents` lists the hosts, with `null` for the controller |
 | `GET /api/v1/group-policies/:id` | `read` | One policy with its members, or 404 |
-| `POST /api/v1/group-policies` | `admin` | Body `{ group, updatePolicy }`. Returns 201, or 409 when the group already has a policy |
-| `PUT /api/v1/group-policies/:id` | `admin` | Full replace. Body `{ revision, updatePolicy }`, with an optional `group` that must match the stored one |
+| `POST /api/v1/group-policies` | `admin` | Body `{ group, updatePolicy?, actions? }`. Returns 201, or 409 when the group already has a policy |
+| `PUT /api/v1/group-policies/:id` | `admin` | Full replace. Body `{ revision, updatePolicy?, actions? }`, with an optional `group` that must match the stored one. Leaving `actions` out clears them |
 | `DELETE /api/v1/group-policies/:id?revision=N` | `admin` | Deletes the policy and re-resolves its members |
 
 Things worth knowing:
@@ -100,12 +137,12 @@ Things worth knowing:
 - A `PUT` that matches the stored policy returns `changed: false`, writes nothing, doesn't bump the revision and isn't audited.
 - The group is immutable. A `PUT` with a different `group` is a 400. Delete the policy and create one for the new group.
 - `applied.members` counts the stored container records that were re-resolved, on the controller and on agents, connected or not. A policy for a group with no current members still saves, with a warning that it applies to future members.
-- Unknown fields are rejected with a 400. That includes `actions`, which isn't accepted yet.
+- Unknown fields are rejected with a 400, and so is `actions.updateMode: "auto"`, because group rules only restrict.
 - If re-resolving members fails after the policy was saved, the response carries a warning instead of an error. Members pick the policy up on their next write, and Drydock reconciles them at startup.
 
 ## Audit
 
-Creating or replacing a policy records `group-policy-set`, and deleting one records `group-policy-cleared`. The entry's container name is the exact group name, and its details are JSON with the policy id, the group, the operation (`created`, `replaced` or `deleted`), the revision, who made the change (`user:<name>` or `api-key:<keyId>`), the changed fields as `before` and `after`, and the member count. The policy row and its audit row are written in one transaction, so a saved change is always audited and an audited change is always saved. Rejected requests aren't audited.
+Creating or replacing a policy records `group-policy-set`, and deleting one records `group-policy-cleared`. The entry's container name is the exact group name, and its details are JSON with the policy id, the group, the operation (`created`, `replaced` or `deleted`), the revision, who made the change (`user:<name>` or `api-key:<keyId>`), the changed fields as `before` and `after` (action rules appear as `actions.updateMode` and `actions.exclude`), and the member count. The policy row and its audit row are written in one transaction, so a saved change is always audited and an audited change is always saved. Rejected requests aren't audited.
 
 Per-container override audit entries (`update-policy-override-set` and `update-policy-override-cleared`) also carry the group layer's value for each field, next to the env and label values.
 

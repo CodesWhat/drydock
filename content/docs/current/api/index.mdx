@@ -94,7 +94,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/containers/:id/label-overrides` | `GET`, `PATCH`, `DELETE` | Durable overrides of display, dependency and routing labels (see [Container API](/docs/api/container#label-overrides)); writes need `admin` |
 | `/api/v1/label-overrides` | `GET`, `DELETE /:overrideId` | Every stored label override row, including ones with no matching container (see [Container API](/docs/api/container#label-overrides)) |
 | `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
-| `/api/v1/group-policies` | `GET`, `POST`, `GET`/`PUT`/`DELETE /:id` | [Group policies](/docs/configuration/groups): update-policy defaults per group (reads `read`, writes `admin`) |
+| `/api/v1/group-policies` | `GET`, `POST`, `GET`/`PUT`/`DELETE /:id` | [Group policies](/docs/configuration/groups): update-policy defaults and restrict-only action rules per group (reads `read`, writes `admin`) |
 | `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/stats/stream` | `GET` | SSE stream for real-time container stats (see [Container API](/docs/api/container)) |
 | `/api/v1/stats/summary` | `GET` | Fleet-aggregate CPU/memory snapshot (see [Container API](/docs/api/container#get-fleet-stats-summary)) |
@@ -595,14 +595,14 @@ curl http://drydock:3000/api/v1/containers/groups
 
 ## Group policies
 
-Drydock-owned update policies keyed by exact group name. A policy sets `maturityMode`, `maturityMinAgeDays`, `skipTags` and `skipDigests` for every current and future member of the group. Reads need the `read` scope and writes need `admin`. The behavior, precedence and field rules are on the [group policies](/docs/configuration/groups) page.
+Drydock-owned update policies keyed by exact group name. A policy sets `maturityMode`, `maturityMinAgeDays`, `skipTags` and `skipDigests` for every current and future member of the group, and can restrict what Drydock does automatically with `actions.updateMode` (`manual` or `notify`) and `actions.exclude`. Group rules only restrict, and `updateMode: auto` is rejected. Reads need the `read` scope and writes need `admin`. The behavior, precedence and field rules are on the [group policies](/docs/configuration/groups) page.
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/v1/group-policies` | `GET` | All policies, each with `members: { count, agents }` |
-| `/api/v1/group-policies` | `POST` | Create a policy with `{ group, updatePolicy }`; 409 when the group already has one |
+| `/api/v1/group-policies` | `POST` | Create a policy with `{ group, updatePolicy?, actions? }`; 409 when the group already has one |
 | `/api/v1/group-policies/:id` | `GET` | One policy, or 404 |
-| `/api/v1/group-policies/:id` | `PUT` | Replace with `{ revision, updatePolicy }`; 409 on a stale revision, `changed: false` when nothing changes |
+| `/api/v1/group-policies/:id` | `PUT` | Replace with `{ revision, updatePolicy?, actions? }`; 409 on a stale revision, `changed: false` when nothing changes |
 | `/api/v1/group-policies/:id?revision=N` | `DELETE` | Delete a policy; 409 on a stale revision |
 
 Writes return `{ policy, applied: { members }, warnings }`, plus `changed` on replace and delete. Unknown fields are a 400, and the group can't change after creation.
