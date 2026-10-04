@@ -215,3 +215,12 @@ export function groupUpdateModeRejectionMessage(group: string, mode: 'manual' | 
 export function getGroupExcludeEntries(container: Pick<Container, 'groupPolicy'>): string[] {
   return container.groupPolicy?.actions.exclude ?? [];
 }
+
+/** Why a trigger is refused for a member: the group's exclusion entries that matched it. */
+export function groupTriggerExcludedMessage(group: string, entries: readonly string[]): string {
+  return `Trigger excluded by group policy '${group}' (${entries.join(',')}).`;
+}
+
+/** What an operator can do about a group restriction on one container. */
+export const GROUP_POLICY_ACTION_HINT =
+  'Change the group policy, or move the container with dd.group.';

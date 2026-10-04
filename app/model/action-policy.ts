@@ -119,6 +119,17 @@ function normalizeAutoMode(auto: boolean | ActionPolicyAutoMode | undefined): Ac
 }
 
 /**
+ * The entries of the container's group `actions.exclude` that match `triggerId` for this
+ * container's update, in their stored order. Entries are matched one at a time so a stored
+ * entry can never be read as a list.
+ */
+export function findMatchingGroupExcludeEntries(triggerId: string, container: Container): string[] {
+  return getGroupExcludeEntries(container).filter((entry) =>
+    matchesTriggerReferenceList(triggerId, entry, container),
+  );
+}
+
+/**
  * Resolve a single trigger's per-container action policy.
  *
  * spec-6.0.1-action-policy.md resolver pseudocode:
@@ -157,11 +168,7 @@ export function resolveForTrigger(
   // A group's exclusion list is the same grammar and the same hard stop. It is only ever
   // checked here, so it can block an outcome the labels would have produced but can never
   // grant one: nothing below reads group state.
-  if (
-    getGroupExcludeEntries(container).some((entry) =>
-      matchesTriggerReferenceList(triggerId, entry, container),
-    )
-  ) {
+  if (findMatchingGroupExcludeEntries(triggerId, container).length > 0) {
     return { state: 'blocked', reason: 'excluded', excludedBy: 'group' };
   }
 

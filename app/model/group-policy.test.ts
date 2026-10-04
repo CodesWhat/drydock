@@ -1,8 +1,10 @@
 import type { Container } from './container.js';
 import {
+  GROUP_POLICY_ACTION_HINT,
   type GroupPolicy,
   GroupPolicyValidationError,
   getGroupExcludeEntries,
+  groupTriggerExcludedMessage,
   groupUpdateModeRejectionMessage,
   isValidGroupPolicyName,
   mostRestrictiveUpdateMode,
@@ -275,5 +277,19 @@ describe('getGroupExcludeEntries', () => {
     expect(
       getGroupExcludeEntries(member(snapshot({ exclude: ['docker.local:major', 'command'] }))),
     ).toEqual(['docker.local:major', 'command']);
+  });
+});
+
+describe('groupTriggerExcludedMessage', () => {
+  test('names the group and the matching entries', () => {
+    expect(groupTriggerExcludedMessage('payments', ['docker.local:major', 'local'])).toBe(
+      "Trigger excluded by group policy 'payments' (docker.local:major,local).",
+    );
+  });
+
+  test('has an action hint pointing at the policy and at dd.group', () => {
+    expect(GROUP_POLICY_ACTION_HINT).toBe(
+      'Change the group policy, or move the container with dd.group.',
+    );
   });
 });

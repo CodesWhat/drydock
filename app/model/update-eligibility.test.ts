@@ -1340,6 +1340,152 @@ describe('computeUpdateEligibility', () => {
     });
   });
 
+  describe('group policy action rules (spec 7.3)', () => {
+    function groupPolicy(
+      actions: NonNullable<Container['groupPolicy']>['actions'],
+    ): NonNullable<Container['groupPolicy']> {
+      return { id: 'policy-1', group: 'payments', revision: 2, updatePolicy: {}, actions };
+    }
+    const context = (overrides: Partial<UpdateEligibilityContext> = {}) =>
+      makeContext({
+        triggers: { 'docker.update': makeTrigger() as never },
+        now: FIXED_NOW,
+        ...overrides,
+      });
+
+    test('a notify group is a hard group-notify-only blocker with the group in the details', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({ groupPolicy: groupPolicy({ updateMode: 'notify' }) }),
+        context(),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'group-notify-only');
+      expect(blocker).toMatchObject({
+        severity: 'hard',
+        actionable: true,
+        message: "Group policy 'payments' allows notifications only.",
+        actionHint: 'Change the group policy, or move the container with dd.group.',
+        details: { group: 'payments', policyId: 'policy-1' },
+      });
+      expect(result.eligible).toBe(false);
+      expect(getPrimaryHardBlocker(result)?.reason).toBe('group-notify-only');
+    });
+
+    test('a manual group, an exclude-only group and no group add no such blocker', () => {
+      for (const groupPolicyValue of [
+        groupPolicy({ updateMode: 'manual' }),
+        groupPolicy({ exclude: ['other.trigger'] }),
+        undefined,
+      ]) {
+        const result = computeUpdateEligibility(
+          makeContainerWithTagUpdate({ groupPolicy: groupPolicyValue }),
+          context(),
+        );
+        expect(result.blockers.map((b) => b.reason)).not.toContain('group-notify-only');
+        expect(result.eligible).toBe(true);
+      }
+    });
+
+    test('a container with no raw update still reports only no-update-available', () => {
+      const result = computeUpdateEligibility(
+        makeContainer({ groupPolicy: groupPolicy({ updateMode: 'notify' }) }),
+        context(),
+      );
+      expect(result.blockers.map((b) => b.reason)).toEqual(['no-update-available']);
+    });
+
+    test('a group exclusion is trigger-excluded and names the group, not the container label', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({ groupPolicy: groupPolicy({ exclude: ['docker.update'] }) }),
+        context(),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'trigger-excluded');
+      expect(blocker).toMatchObject({
+        severity: 'hard',
+        message: "Trigger excluded by group policy 'payments' (docker.update).",
+        actionHint: 'Change the group policy, or move the container with dd.group.',
+        details: {
+          triggerExclude: 'docker.update',
+          triggerId: 'docker.update',
+          excludedBy: 'group',
+          group: 'payments',
+          policyId: 'policy-1',
+        },
+      });
+      expect(result.actionPolicy).toEqual({
+        state: 'blocked',
+        reason: 'excluded',
+        triggerId: 'docker.update',
+      });
+    });
+
+    test('the container label keeps the attribution when both exclude the trigger', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({
+          actionTriggerExclude: 'docker.update',
+          groupPolicy: groupPolicy({ exclude: ['docker.update'] }),
+        }),
+        context(),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'trigger-excluded');
+      expect(blocker?.message).toBe(
+        "Trigger excluded by container label dd.action.exclude='docker.update'.",
+      );
+      expect(blocker?.details).toEqual({
+        triggerExclude: 'docker.update',
+        triggerId: 'docker.update',
+      });
+    });
+
+    test('an include label cannot lift a group exclusion', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({
+          actionTriggerInclude: 'docker.update',
+          groupPolicy: groupPolicy({ exclude: ['update'] }),
+        }),
+        context(),
+      );
+      expect(result.blockers.map((b) => b.reason)).toContain('trigger-excluded');
+    });
+
+    describe('updateMode reflection', () => {
+      test('is omitted unless the caller supplies the global mode', () => {
+        const result = computeUpdateEligibility(
+          makeContainerWithTagUpdate({ groupPolicy: groupPolicy({ updateMode: 'manual' }) }),
+          context(),
+        );
+        expect(result.updateMode).toBeUndefined();
+      });
+
+      test('is the global mode when there is no group policy', () => {
+        const result = computeUpdateEligibility(
+          makeContainerWithTagUpdate(),
+          context({ updateMode: 'auto' }),
+        );
+        expect(result.updateMode).toEqual({ value: 'auto', source: 'global' });
+      });
+
+      test('names the group only when it is stricter than global', () => {
+        const container = makeContainerWithTagUpdate({
+          groupPolicy: groupPolicy({ updateMode: 'manual' }),
+        });
+        expect(
+          computeUpdateEligibility(container, context({ updateMode: 'auto' })).updateMode,
+        ).toEqual({ value: 'manual', source: 'group', group: 'payments' });
+        expect(
+          computeUpdateEligibility(container, context({ updateMode: 'notify' })).updateMode,
+        ).toEqual({ value: 'notify', source: 'global' });
+      });
+
+      test('is carried on a no-update-available result too', () => {
+        const result = computeUpdateEligibility(
+          makeContainer({ groupPolicy: groupPolicy({ updateMode: 'manual' }) }),
+          context({ updateMode: 'auto' }),
+        );
+        expect(result.updateMode).toEqual({ value: 'manual', source: 'group', group: 'payments' });
+      });
+    });
+  });
+
   describe('trigger-not-included', () => {
     test('emits trigger-not-included when the include label does not match and not excluded', () => {
       const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
@@ -1827,6 +1973,7 @@ describe('computeUpdateEligibility', () => {
         'threshold-not-reached',
         'trigger-excluded',
         'trigger-not-included',
+        'group-notify-only',
         'agent-mismatch',
         'no-update-trigger-configured',
         'maintenance-window-closed',
@@ -1848,6 +1995,7 @@ describe('computeUpdateEligibility', () => {
       // (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
       expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('hard');
       expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('hard');
+      expect(BLOCKER_SEVERITY['group-notify-only']).toBe('hard');
     });
 
     test('soft severities cover policy reasons that manual update bypasses', () => {

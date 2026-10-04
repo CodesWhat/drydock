@@ -3,16 +3,23 @@ import {
   findDockerTriggerForContainer,
   isTriggerExecutionCompatibleWithContainer,
 } from '../api/docker-trigger.js';
+import type { UpdateMode } from '../store/settings.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
 import {
   type ActionPolicyBlockedReason,
   type ActionPolicyState,
   type ActionPolicyTrigger,
+  findMatchingGroupExcludeEntries,
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
+import {
+  GROUP_POLICY_ACTION_HINT,
+  groupTriggerExcludedMessage,
+  resolveUpdateModeCeiling,
+} from './group-policy.js';
 import { describeRoutingOrigin } from './label-owned.js';
 import {
   maturityMinAgeDaysToMilliseconds,
@@ -33,6 +40,7 @@ export type UpdateBlockerReason =
   | 'threshold-not-reached'
   | 'trigger-excluded'
   | 'trigger-not-included'
+  | 'group-notify-only'
   | 'agent-mismatch'
   | 'no-update-trigger-configured'
   | 'self-update-unavailable'
@@ -67,6 +75,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
   'trigger-excluded': 'hard',
   'trigger-not-included': 'hard',
+  // Hard because it restricts one container: its group allows notifications only (spec 7.3).
+  'group-notify-only': 'hard',
   // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
 };
@@ -142,11 +152,23 @@ interface UpdateEligibilityActionPolicy {
   reason?: ActionPolicyBlockedReason;
 }
 
+/**
+ * The update mode that binds this container, and whose it is: the global mode, or its
+ * group's when that is strictly more restrictive (spec 7.3). Only present when the caller
+ * supplied the global mode through the context.
+ */
+export interface UpdateEligibilityUpdateMode {
+  value: UpdateMode;
+  source: 'global' | 'group';
+  group?: string;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: UpdateEligibilityActionPolicy;
+  updateMode?: UpdateEligibilityUpdateMode;
 }
 
 export interface UpdateEligibilityContext {
@@ -184,6 +206,12 @@ export interface UpdateEligibilityContext {
    * wrong-agent trigger during the registration window. See issue #605.
    */
   isAgentPendingRegistration?: (agentName: string | undefined) => boolean;
+  /**
+   * Optional. The global update mode. When supplied, the result carries `updateMode`, the
+   * mode that binds this container after any group ceiling. It never adds a blocker:
+   * global `notify` keeps its banner, and only a group `notify` blocks (`group-notify-only`).
+   */
+  updateMode?: UpdateMode;
 }
 
 /**
@@ -255,6 +283,18 @@ export function computeUpdateEligibility(
 ): UpdateEligibility {
   const now = context.now ?? Date.now();
   const evaluatedAt = new Date(now).toISOString();
+  const ceiling = context.updateMode
+    ? resolveUpdateModeCeiling(container, context.updateMode)
+    : undefined;
+  const updateMode: { updateMode?: UpdateEligibilityUpdateMode } = ceiling
+    ? {
+        updateMode: {
+          value: ceiling.value,
+          source: ceiling.source,
+          ...(ceiling.group === undefined ? {} : { group: ceiling.group }),
+        },
+      }
+    : {};
 
   // If no raw update exists at all, short-circuit with no-update-available only
   if (!hasRawTagOrDigestUpdate(container)) {
@@ -268,10 +308,28 @@ export function computeUpdateEligibility(
         }),
       ],
       evaluatedAt,
+      ...updateMode,
     };
   }
 
   const blockers: UpdateBlocker[] = [];
+
+  // group-notify-only: the container's group policy allows notifications only (spec 7.3).
+  // A per-container restriction travels the per-container channel, so the button is disabled,
+  // admission is rejected and the approval verdict is `blocked`. Global `notify` is
+  // deliberately not mirrored here: it keeps its banner, with no blocker.
+  const groupPolicy = container.groupPolicy;
+  if (groupPolicy?.actions.updateMode === 'notify') {
+    blockers.push(
+      makeBlocker({
+        reason: 'group-notify-only',
+        message: `Group policy '${groupPolicy.group}' allows notifications only.`,
+        actionable: true,
+        actionHint: GROUP_POLICY_ACTION_HINT,
+        details: { group: groupPolicy.group, policyId: groupPolicy.id },
+      }),
+    );
+  }
 
   // maintenance-window-closed: fires only when the caller explicitly passes `false`. Manual
   // API/UI callers pass `undefined` so the window never blocks manual ops. The actual auto-apply
@@ -600,7 +658,28 @@ export function computeUpdateEligibility(
       { requireAuto: false },
     );
 
-    if (selection?.reason === 'excluded') {
+    if (selection?.reason === 'excluded' && selection.excludedBy === 'group') {
+      // `excludedBy: 'group'` is only ever produced from this container's own snapshot.
+      const excludingPolicy = container.groupPolicy as NonNullable<Container['groupPolicy']>;
+      const matchedEntries = findMatchingGroupExcludeEntries(selection.triggerId, container);
+      const triggerExclude = matchedEntries.join(',');
+      blockers.push(
+        makeBlocker({
+          reason: 'trigger-excluded',
+          message: groupTriggerExcludedMessage(excludingPolicy.group, matchedEntries),
+          actionable: true,
+          actionHint: GROUP_POLICY_ACTION_HINT,
+          details: {
+            triggerExclude,
+            triggerId: selection.triggerId,
+            excludedBy: 'group',
+            group: excludingPolicy.group,
+            policyId: excludingPolicy.id,
+          },
+        }),
+      );
+      actionPolicy = { state: 'blocked', reason: 'excluded', triggerId: selection.triggerId };
+    } else if (selection?.reason === 'excluded') {
       const triggerExclude = container.actionTriggerExclude;
       blockers.push(
         makeBlocker({
@@ -672,5 +751,6 @@ export function computeUpdateEligibility(
     blockers,
     evaluatedAt,
     ...(actionPolicy ? { actionPolicy } : {}),
+    ...updateMode,
   };
 }

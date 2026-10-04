@@ -2,6 +2,7 @@ import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
 import {
   type ActionPolicyTrigger,
   findInertAutoLabelContainers,
+  findMatchingGroupExcludeEntries,
   findOnincludeAutoMigrationGaps,
   resolveForTrigger,
   selectActionTrigger,
@@ -763,6 +764,20 @@ describe('resolveForTrigger — group exclusion', () => {
     const container = withGroupExclude(makeContainer(), ['stack']);
     expect(resolveForTrigger(other, container).excludedBy).toBe('group');
     expect(resolveForTrigger(trigger, container)).toStrictEqual({ state: 'auto' });
+  });
+
+  test('findMatchingGroupExcludeEntries lists only the entries that match this trigger and update', () => {
+    const container = withGroupExclude(makeContainer(), [
+      'docker.update:major-only',
+      'update',
+      'other',
+      'docker.update:minor',
+    ]);
+    expect(findMatchingGroupExcludeEntries('docker.update', container)).toEqual([
+      'update',
+      'docker.update:minor',
+    ]);
+    expect(findMatchingGroupExcludeEntries('docker.update', makeContainer())).toEqual([]);
   });
 
   test('a policy with no exclusions, or no policy at all, changes nothing', () => {

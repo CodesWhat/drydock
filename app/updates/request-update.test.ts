@@ -82,6 +82,7 @@ import {
   dispatchAcceptedGroups,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
+  isUpdateModeAdmissionRejection,
   requestContainerUpdate,
   requestContainerUpdates,
   runAcceptedContainerUpdates,
@@ -3050,6 +3051,184 @@ describe('request-update', () => {
       );
       expect(expiredCalls).toHaveLength(1);
       expect(failedCalls).toHaveLength(1);
+    });
+  });
+  // Spec 7.3 slice 2a: a group policy's updateMode is a ceiling composed with the global mode.
+  describe('group policy ceiling', () => {
+    type Actions = { updateMode?: 'manual' | 'notify'; exclude?: string[] };
+    const policy = (actions: Actions) => ({
+      id: 'policy-1',
+      group: 'payments',
+      revision: 1,
+      updatePolicy: {},
+      actions,
+    });
+    const dockerTrigger = () => ({
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    });
+    const member = (actions: Actions, extra: Record<string, unknown> = {}) =>
+      createContainer({ groupPolicy: policy(actions), ...extra });
+
+    test('global auto with a manual group rejects automatic admission and names the group', async () => {
+      const trigger = dockerTrigger();
+      await expect(
+        enqueueContainerUpdate(member({ updateMode: 'manual' }), { trigger, source: 'automatic' }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Group policy 'payments' allows manual updates only",
+      });
+      expect(mockInsertOperation).not.toHaveBeenCalled();
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a manual group still admits a manual request, so Update stays enabled', async () => {
+      const accepted = await requestContainerUpdate(member({ updateMode: 'manual' }), {
+        trigger: dockerTrigger(),
+      });
+      expect(accepted.operationId).toEqual(expect.any(String));
+    });
+
+    test('a member include or auto label cannot lift the group ceiling', async () => {
+      const container = member(
+        { updateMode: 'manual' },
+        { actionTriggerInclude: 'docker.update', actionTriggerAuto: 'docker.update' },
+      );
+      await expect(
+        enqueueContainerUpdate(container, { trigger: dockerTrigger(), source: 'automatic' }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    });
+
+    test.each([
+      ['auto', 'automatic'],
+      ['auto', 'manual'],
+      ['manual', 'automatic'],
+      ['manual', 'manual'],
+    ] as const)(
+      'a notify group rejects every source (global %s, %s request) with the notifications message',
+      async (globalMode, source) => {
+        mockGetUpdateMode.mockReturnValue(globalMode);
+        await expect(
+          enqueueContainerUpdate(member({ updateMode: 'notify' }), {
+            trigger: dockerTrigger(),
+            source,
+          }),
+        ).rejects.toMatchObject({
+          statusCode: 409,
+          message: "Group policy 'payments' allows notifications only",
+        });
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+      },
+    );
+
+    test('a group cannot relax global: global notify stays notify and is attributed to global', async () => {
+      mockGetUpdateMode.mockReturnValue('notify');
+      await expect(
+        requestContainerUpdate(member({ updateMode: 'manual' }), { trigger: dockerTrigger() }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Update mode is notify; Drydock will not apply updates',
+      });
+    });
+
+    test('global manual with a manual group keeps the global automatic rejection message', async () => {
+      mockGetUpdateMode.mockReturnValue('manual');
+      await expect(
+        enqueueContainerUpdate(member({ updateMode: 'manual' }), {
+          trigger: dockerTrigger(),
+          source: 'automatic',
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Update mode is manual; automatic updates are disabled',
+      });
+    });
+
+    test('an exclude-only group leaves admission under the global mode', async () => {
+      const accepted = await enqueueContainerUpdate(member({ exclude: ['docker.other'] }), {
+        trigger: dockerTrigger(),
+        source: 'automatic',
+      });
+      expect(accepted.operationId).toEqual(expect.any(String));
+    });
+
+    test('a provided trigger excluded by the group is rejected and names the group', async () => {
+      const other = {
+        type: 'docker',
+        trigger: vi.fn(),
+        getId: () => 'docker.other',
+        configuration: { auto: 'all' },
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger() } });
+      await expect(
+        requestContainerUpdate(member({ exclude: ['docker.other:minor', 'other'] }), {
+          trigger: other,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Trigger excluded by group policy 'payments' (docker.other:minor,other).",
+      });
+      expect(other.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a label exclusion keeps the attribution when the group excludes the same trigger', async () => {
+      const other = {
+        type: 'docker',
+        trigger: vi.fn(),
+        getId: () => 'docker.other',
+        configuration: { auto: 'all' },
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger() } });
+      await expect(
+        requestContainerUpdate(
+          member({ exclude: ['docker.other'] }, { actionTriggerExclude: 'docker.other' }),
+          { trigger: other },
+        ),
+      ).rejects.toMatchObject({
+        message: "Trigger excluded by container label dd.action.exclude='docker.other'.",
+      });
+    });
+
+    test('a group exclusion is a hard eligibility blocker for the resolved trigger too', async () => {
+      const resolved = { ...dockerTrigger(), configuration: { auto: 'all', threshold: 'all' } };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': resolved } });
+      await expect(
+        requestContainerUpdate(
+          createContainer({
+            image: { name: 'nginx', tag: { value: '1.0.0' } },
+            result: { tag: '1.1.0' },
+            groupPolicy: policy({ exclude: ['docker.update'] }),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Trigger excluded by group policy 'payments' (docker.update).",
+      });
+    });
+
+    test('isUpdateModeAdmissionRejection recognises a group mode rejection like a global one', () => {
+      for (const message of [
+        "Group policy 'payments' allows manual updates only",
+        "Group policy 'payments' allows notifications only",
+      ]) {
+        expect(isUpdateModeAdmissionRejection({ statusCode: 409, message })).toBe(true);
+        expect(isUpdateModeAdmissionRejection({ statusCode: 500, message })).toBe(false);
+      }
+      expect(
+        isUpdateModeAdmissionRejection({
+          statusCode: 409,
+          message: "Trigger excluded by group policy 'payments' (docker.update).",
+        }),
+      ).toBe(false);
+    });
+
+    test('a container with no group policy is untouched', async () => {
+      const accepted = await enqueueContainerUpdate(createContainer(), {
+        trigger: dockerTrigger(),
+        source: 'automatic',
+      });
+      expect(accepted.operationId).toEqual(expect.any(String));
     });
   });
 });
