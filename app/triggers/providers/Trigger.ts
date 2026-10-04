@@ -4001,7 +4001,7 @@ class Trigger<
 
     for (const container of groupDeferred) {
       this.log.debug(
-        `Deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} because an upstream dependency is held by its group policy this cycle`,
+        `Deferring auto update for ${fullName(container)} because an upstream dependency is held by its group policy this cycle`,
       );
     }
 

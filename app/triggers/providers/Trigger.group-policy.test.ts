@@ -530,6 +530,14 @@ describe('digest mode', () => {
   });
 });
 
+describe('Trigger.withCurrentGroupPolicy', () => {
+  test('hands back a report that carries no container as it is', () => {
+    const empty = { changed: true } as any;
+
+    expect(Trigger.withCurrentGroupPolicy(empty)).toBe(empty);
+  });
+});
+
 describe('a group-held upstream defers its dependents', () => {
   const HELD: GroupActions = { updateMode: 'manual' };
   const db = () => createContainer('db', HELD);
