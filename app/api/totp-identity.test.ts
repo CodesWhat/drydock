@@ -18,7 +18,12 @@ vi.mock('../log/index.js', () => ({
   default: { warn: mockWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
 
-import { checkSessionIdentity, deriveSubjectId, resolveLocalIdentity } from './totp-identity.js';
+import {
+  checkSessionIdentity,
+  deriveSubjectId,
+  isSecondFactorRequired,
+  resolveLocalIdentity,
+} from './totp-identity.js';
 
 function digest(providerId: string, username: string): string {
   return createHash('sha256').update(`${providerId}\0${username}`, 'utf8').digest('hex');
@@ -164,6 +169,24 @@ describe('totp-identity', () => {
       expect(mockWarn).toHaveBeenCalledWith(
         'Unable to check session subject version (totp collection not initialized)',
       );
+    });
+  });
+
+  describe('isSecondFactorRequired', () => {
+    test('is true only while the subject has an active factor row', () => {
+      mockGetFactorBySubject.mockReturnValueOnce({ factorId: 'f' });
+      expect(isSecondFactorRequired('subject')).toBe(true);
+      expect(mockGetFactorBySubject).toHaveBeenCalledWith('subject');
+
+      mockGetFactorBySubject.mockReturnValueOnce(undefined);
+      expect(isSecondFactorRequired('subject')).toBe(false);
+    });
+
+    test('lets a store fault propagate rather than answering "no factor"', () => {
+      mockGetFactorBySubject.mockImplementationOnce(() => {
+        throw new Error('totp collection not initialized');
+      });
+      expect(() => isSecondFactorRequired('subject')).toThrow('not initialized');
     });
   });
 });

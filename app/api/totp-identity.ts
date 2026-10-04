@@ -49,6 +49,15 @@ export function resolveLocalIdentity(providerId: string, username: string): Loca
   };
 }
 
+/**
+ * Does this subject have an active second factor? Reads the store, so it
+ * throws when the store is not initialised: a caller must treat that as a
+ * server fault, never as "no factor", or a store outage would open the bypass.
+ */
+export function isSecondFactorRequired(subjectId: string): boolean {
+  return getFactorBySubject(subjectId) !== undefined;
+}
+
 function checkLocalIdentity(
   username: string,
   identity: Extract<NonNullable<SessionUser['identity']>, { type: 'local' }>,

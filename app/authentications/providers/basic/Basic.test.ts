@@ -32,12 +32,14 @@ vi.mock('node:crypto', async () => {
   };
 });
 
-var { mockResolveLocalIdentity } = vi.hoisted(() => ({
+var { mockResolveLocalIdentity, mockIsSecondFactorRequired } = vi.hoisted(() => ({
   mockResolveLocalIdentity: vi.fn(),
+  mockIsSecondFactorRequired: vi.fn(),
 }));
 
 vi.mock('../../../api/totp-identity.js', () => ({
   resolveLocalIdentity: mockResolveLocalIdentity,
+  isSecondFactorRequired: mockIsSecondFactorRequired,
 }));
 
 vi.mock('../../../prometheus/auth.js', () => ({
@@ -132,6 +134,8 @@ describe('Basic Authentication', () => {
     mockObserveAuthLoginDuration.mockClear();
     mockRecordAuthUsernameMismatch.mockClear();
     mockResolveLocalIdentity.mockReset();
+    mockIsSecondFactorRequired.mockReset();
+    mockIsSecondFactorRequired.mockReturnValue(false);
     mockResolveLocalIdentity.mockImplementation((providerId: string) => ({
       subjectId: 's'.repeat(64),
       providerId,
@@ -661,6 +665,19 @@ describe('Basic Authentication', () => {
         },
       });
       expect(mockResolveLocalIdentity).toHaveBeenCalledWith('basic.default', 'testuser');
+    });
+
+    test('declines a verified password for a subject with an active factor, but reports it to login', async () => {
+      mockIsSecondFactorRequired.mockReturnValue(true);
+      const authenticator = basic.getAuthenticator();
+      const req = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+
+      await expect(authenticator.authenticate(req)).resolves.toBeUndefined();
+      expect(mockIsSecondFactorRequired).toHaveBeenCalledWith('s'.repeat(64));
+      await expect(authenticator.authenticateForLogin?.(req)).resolves.toMatchObject({
+        kind: 'basic',
+        username: 'testuser',
+      });
     });
 
     test('lets a store failure propagate instead of answering as a wrong password', async () => {
