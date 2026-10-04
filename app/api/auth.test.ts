@@ -515,7 +515,7 @@ describe('Auth Router', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    test('should allow a session principal without an Authorization header to continue to login', async () => {
+    test('should refuse a session principal without an Authorization header: a cookie never mints a session', async () => {
       mockAuthenticate.mockResolvedValue({ kind: 'session', username: 'session-user' });
 
       const authenticateLoginFn = getLoginMiddleware();
@@ -525,8 +525,8 @@ describe('Auth Router', () => {
 
       await authenticateLoginFn(req, res, next);
 
-      expect(next).toHaveBeenCalled();
-      expect(res.status).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
     });
 
     test('should reject a malformed Basic Authorization header even when a session falls back', async () => {
@@ -1817,7 +1817,7 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });
 
-    test('login should return the user for a request already carrying a session principal', async () => {
+    test('login should refuse a request that only carries a session principal and mint nothing', async () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       const req = {
@@ -1827,14 +1827,9 @@ describe('Auth Router', () => {
 
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
-      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'auth-login',
-          status: 'success',
-        }),
-      );
+      expect(req.session.regenerate).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
     });
 
     test('login should persist the principal captured before session regeneration', async () => {

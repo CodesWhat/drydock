@@ -129,9 +129,18 @@ export function isIdentityPrincipal(
   return principal !== undefined && principal.kind !== 'anonymous';
 }
 
-/** Only principals backed by a login-capable credential may create a session. */
-export function isLoginSessionEligible(principal: AuthenticatedPrincipal | undefined): boolean {
-  return principal?.kind === 'basic' || principal?.kind === 'session';
+/**
+ * Only a verified password may mint a session. A session cookie is not a
+ * credential here: if it were, a copied cookie could be traded for a fresh
+ * session of its own at `POST /auth/login` and would outlive the owner's
+ * logout, and the factor an enrolled subject must present would be skipped.
+ * API keys and anonymous access never could, and OIDC sessions are minted by
+ * the provider's callback, never by this route.
+ */
+export function isLoginSessionEligible(
+  principal: AuthenticatedPrincipal | undefined,
+): principal is Extract<AuthenticatedPrincipal, { kind: 'basic' }> {
+  return principal?.kind === 'basic';
 }
 
 /**

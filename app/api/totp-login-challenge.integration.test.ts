@@ -1199,4 +1199,39 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       }
     });
   });
+
+  describe('a session cookie is not a credential for POST /auth/login', () => {
+    test('a valid factor-assured cookie cannot mint a second session, so a copy cannot outlive the owner', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginWithCode(h, enrolled);
+      expect(storedUsers(h.db)).toHaveLength(1);
+
+      const attempt = await fetch(url(h, '/auth/login'), {
+        method: 'POST',
+        headers: { ...HTTPS_HEADERS, 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ remember: true }),
+      });
+
+      expect(attempt.status).toBe(401);
+      expect(attempt.headers.get('set-cookie')).toBeNull();
+      expect(storedUsers(h.db)).toHaveLength(1);
+      expect(await protectedStatus(h, cookie)).toBe(200);
+    });
+
+    test('a legacy cookie on an unenrolled install is refused the same way', async () => {
+      const h = await boot();
+      const legacy = await plant(h, JSON.stringify({ username: TEST_USER }));
+      expect(await protectedStatus(h, legacy)).toBe(200);
+
+      const attempt = await fetch(url(h, '/auth/login'), {
+        method: 'POST',
+        headers: { ...HTTPS_HEADERS, 'Content-Type': 'application/json', Cookie: legacy },
+        body: '{}',
+      });
+
+      expect(attempt.status).toBe(401);
+      expect(attempt.headers.get('set-cookie')).toBeNull();
+    });
+  });
 });

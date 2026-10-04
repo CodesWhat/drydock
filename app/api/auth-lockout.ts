@@ -731,10 +731,7 @@ export async function authenticateLogin(
   }
   const principal: AuthenticatedPrincipal = outcome;
 
-  if (
-    !isLoginSessionEligible(principal) ||
-    (hasAuthorizationHeader && principal.kind !== 'basic')
-  ) {
+  if (!isLoginSessionEligible(principal)) {
     rejectFailedLogin();
     return;
   }
@@ -742,28 +739,22 @@ export async function authenticateLogin(
   // A correct password for a subject with an active factor is only half a
   // login. It starts a challenge and leaves the failure budget untouched, so
   // password-then-guess cycles cannot reset the counter that bounds the guesses.
-  if (principal.kind === 'basic') {
-    let factor: TotpFactorRecord | undefined;
-    try {
-      factor = getFactorBySubject(principal.identity.subjectId);
-    } catch (error: unknown) {
-      req.principal = undefined;
-      next(error);
-      return;
-    }
-    if (factor !== undefined) {
-      req.principal = undefined;
-      issueLoginChallenge(req, res, principal, factor);
-      return;
-    }
+  let factor: TotpFactorRecord | undefined;
+  try {
+    factor = getFactorBySubject(principal.identity.subjectId);
+  } catch (error: unknown) {
+    req.principal = undefined;
+    next(error);
+    return;
+  }
+  if (factor !== undefined) {
+    req.principal = undefined;
+    issueLoginChallenge(req, res, principal, factor);
+    return;
   }
 
-  // Forgive only what this principal proved: its own username, and only when
-  // it proved it with a password. A session principal re-logging in proved
-  // nothing about any name in the body, and must not clear anyone's budget.
-  if (principal.kind === 'basic') {
-    clearLoginLockoutsAfterSuccess(req, principal.username);
-  }
+  // Forgive only what this principal proved: its own username.
+  clearLoginLockoutsAfterSuccess(req, principal.username);
   next();
 }
 
