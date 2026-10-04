@@ -251,7 +251,20 @@ function normalizeIdentity(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+/**
+ * Who a login attempt is aimed at, for the failure budget. A Basic header is
+ * the credential being checked, so its username is the identity whenever one is
+ * present: a body field is attacker-chosen text that names no credential, and
+ * keying on it would let a caller dodge a locked account's check, spread
+ * guesses across decoy names, or forgive an enrolled user's failures by naming
+ * them. The body only speaks for a request that carries no Authorization header.
+ */
 function getLoginIdentity(req: AuthRequest): string | undefined {
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  if (authorization !== undefined && authorization.trim() !== '') {
+    return getBasicHeaderUsername(authorization);
+  }
+
   const requestBody = req.body as { username?: unknown } | undefined;
   if (typeof requestBody?.username === 'string') {
     const username = requestBody.username.trim();
@@ -259,9 +272,11 @@ function getLoginIdentity(req: AuthRequest): string | undefined {
       return username;
     }
   }
+  return undefined;
+}
 
-  const authorization = getFirstHeaderValue(req.headers?.authorization);
-  if (!authorization || !authorization.toLowerCase().startsWith('basic ')) {
+function getBasicHeaderUsername(authorization: string): string | undefined {
+  if (!authorization.toLowerCase().startsWith('basic ')) {
     return undefined;
   }
 
@@ -648,7 +663,12 @@ export async function authenticateLogin(
     }
   }
 
-  clearLoginLockoutsAfterSuccess(req, loginIdentity);
+  // Forgive only what this principal proved: its own username, and only when
+  // it proved it with a password. A session principal re-logging in proved
+  // nothing about any name in the body, and must not clear anyone's budget.
+  if (principal.kind === 'basic') {
+    clearLoginLockoutsAfterSuccess(req, principal.username);
+  }
   next();
 }
 

@@ -2792,4 +2792,111 @@ describe('auth-lockout', () => {
       expect(res.status).toHaveBeenCalledWith(401);
     });
   });
+
+  describe('the lockout identity is derived by the server', () => {
+    const header = (user: string, password = 'pw') =>
+      `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
+
+    async function fail(request: object) {
+      makeAuthenticatorInvalidCredentials();
+      const res = createResponse();
+      await authenticateLogin(request as any, res as any, vi.fn());
+      return res;
+    }
+
+    test('a Basic header user is the identity even when the body names someone else', async () => {
+      let last = createResponse();
+      for (let index = 0; index < 5; index += 1) {
+        last = await fail({
+          headers: { authorization: header('victim') },
+          body: { username: `decoy-${index}` },
+          ip: '203.0.113.90',
+        });
+      }
+
+      expect(last.status).toHaveBeenCalledWith(423);
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.stringContaining('locked'),
+        'victim',
+      );
+    });
+
+    test('a locked account stays locked when the body names a different user', async () => {
+      for (let index = 0; index < 5; index += 1) {
+        await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.91' });
+      }
+      makeAuthenticatorSuccess('victim');
+      const res = createResponse();
+      const next = vi.fn();
+
+      await authenticateLogin(
+        {
+          headers: { authorization: header('victim') },
+          body: { username: 'someone-else' },
+          ip: '203.0.113.92',
+        } as any,
+        res as any,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['a non-Basic scheme', 'Bearer abc'],
+      ['an empty Basic payload', 'Basic '],
+    ])('%s does not fall back to the body username', async (_name, authorization) => {
+      const req = { headers: { authorization }, body: { username: 'victim' }, ip: '203.0.113.93' };
+
+      await fail(req);
+
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.any(String),
+        undefined,
+      );
+    });
+
+    test('a successful login forgives its own username, not the one in the body', async () => {
+      for (let index = 0; index < 4; index += 1) {
+        await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.94' });
+      }
+      makeAuthenticatorSuccess('other');
+      await authenticateLogin(
+        {
+          headers: { authorization: header('other') },
+          body: { username: 'victim' },
+          ip: '203.0.113.95',
+        } as any,
+        createResponse() as any,
+        vi.fn(),
+      );
+
+      const res = await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.96' });
+
+      expect(res.status).toHaveBeenCalledWith(423);
+    });
+
+    test('a session principal logging in again clears nothing, whatever the body names', async () => {
+      for (let index = 0; index < 4; index += 1) {
+        await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.97' });
+      }
+      mockAuthenticateRequest.mockResolvedValue({ kind: 'session', username: 'victim' });
+      const next = vi.fn();
+      await authenticateLogin(
+        { body: { username: 'victim' }, ip: '203.0.113.97' } as any,
+        createResponse() as any,
+        next,
+      );
+      expect(next).toHaveBeenCalled();
+
+      const res = await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.98' });
+
+      expect(res.status).toHaveBeenCalledWith(423);
+    });
+  });
 });
