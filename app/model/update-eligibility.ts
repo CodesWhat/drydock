@@ -157,7 +157,7 @@ interface UpdateEligibilityActionPolicy {
  * group's when that is strictly more restrictive (spec 7.3). Only present when the caller
  * supplied the global mode through the context.
  */
-export interface UpdateEligibilityUpdateMode {
+interface UpdateEligibilityUpdateMode {
   value: UpdateMode;
   source: 'global' | 'group';
   group?: string;
