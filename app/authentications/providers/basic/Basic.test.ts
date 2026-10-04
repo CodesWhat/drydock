@@ -628,6 +628,33 @@ describe('Basic Authentication', () => {
     });
   });
 
+  describe('verifyPasswordForUser (re-authentication of a signed-in account)', () => {
+    beforeEach(() => {
+      basic.configuration = { user: 'testuser', hash: createArgon2Hash('password') };
+    });
+
+    test('accepts the configured user with the right password and records no login metric', async () => {
+      await expect(basic.verifyPasswordForUser('testuser', 'password')).resolves.toBe(true);
+      expect(mockRecordAuthLogin).not.toHaveBeenCalled();
+      expect(mockObserveAuthLoginDuration).not.toHaveBeenCalled();
+    });
+
+    test('refuses a wrong password, a different user and a non-string password', async () => {
+      await expect(basic.verifyPasswordForUser('testuser', 'wrong')).resolves.toBe(false);
+      await expect(basic.verifyPasswordForUser('someone-else', 'password')).resolves.toBe(false);
+      await expect(basic.verifyPasswordForUser('', 'password')).resolves.toBe(false);
+      await expect(basic.verifyPasswordForUser('testuser', undefined as never)).resolves.toBe(
+        false,
+      );
+    });
+
+    test('runs the password hash even when the user does not match, so timing does not tell', async () => {
+      mockArgon2.mockClear();
+      await basic.verifyPasswordForUser('someone-else', 'password');
+      expect(mockArgon2).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('getAuthenticator / authenticateRequest', () => {
     function encodeBasic(value: string): string {
       return `Basic ${Buffer.from(value).toString('base64')}`;

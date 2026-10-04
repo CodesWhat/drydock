@@ -663,6 +663,33 @@ curl -X POST http://drydock:3000/auth/remember \
   -d '{"remember": true}'
 ```
 
+### Two-factor management
+
+These routes enroll and manage a TOTP second factor for a local Basic account. They are mounted at `/api/v1/auth` and work only from a browser session of that account: API keys at any scope, `Authorization: Basic` requests, OIDC sessions and anonymous access get a `403`. Sessions that predate two-factor support also get a `403` until the person signs in again.
+
+Every call that changes something needs a same-origin request with a JSON body, and needs HTTPS (as Express sees it, so set `DD_SERVER_TRUSTPROXY` behind a TLS-terminating proxy) or a client on loopback. The caller proves themselves again in the request itself: their `password`, plus exactly one current `code` or unused `recoveryCode` while a factor is active. Nothing carries over between calls. Wrong answers count against the same lockout budgets as a login and come back as `403`, or `423` once locked.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/v1/auth/totp-factor` | Status: `unenrolled` or `active`, `activatedAt`, `recoveryCodesRemaining`, any `pendingEnrollment`. No secrets. |
+| `POST /api/v1/auth/totp-enrollments` | Start an enrollment (or a replacement). Returns the base32 `secret` and `otpauthUri` once. `409` if one is already pending. |
+| `PUT /api/v1/auth/totp-enrollments/:id` | Confirm with `{ "code": "123456" }`. Returns the ten `recoveryCodes` once. `410` expired, `422` wrong code. |
+| `DELETE /api/v1/auth/totp-enrollments/:id` | Cancel. Always `204`. |
+| `POST /api/v1/auth/totp-recovery-code-sets` | Replace the recovery codes with ten new ones, shown once. |
+| `DELETE /api/v1/auth/totp-factor` | Remove the factor and its recovery codes. `204`. |
+
+```bash
+curl -X POST https://drydock.example.com/api/v1/auth/totp-enrollments \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://drydock.example.com' \
+  -b cookies.txt \
+  -d '{"password": "..."}'
+```
+
+Enrollments expire after ten minutes. Confirming one ends every other session of the account and closes their open streams; the session that confirmed stays signed in. After that, `POST /auth/login` answers `202` with a challenge until a code completes it. Removing the factor also ends the other sessions, and password login works again.
+
+Enrollment needs an encryption key ring configured on the server. Without one these routes answer `503` and change nothing. API keys already minted from an account are independent of its sessions and are not revoked by any of this; review them after a recovery login.
+
 ## OpenAPI
 
 Machine-readable API documentation is available as an OpenAPI 3.1.0 specification.

@@ -254,6 +254,110 @@ export const openApiSchemas = {
     required: ['username'],
     additionalProperties: true,
   },
+  LoginChallengeResponse: {
+    type: 'object',
+    properties: {
+      challenge: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          expiresAt: { type: 'string', format: 'date-time' },
+          methods: { type: 'array', items: { type: 'string', enum: ['totp', 'recovery'] } },
+        },
+        required: ['id', 'expiresAt', 'methods'],
+        additionalProperties: false,
+      },
+    },
+    required: ['challenge'],
+    additionalProperties: false,
+  },
+  LoginChallengeCompletion: {
+    type: 'object',
+    description: 'Exactly one of `code` or `recoveryCode`, plus an optional `remember`.',
+    properties: {
+      code: { type: 'string', pattern: '^[0-9]{6}$' },
+      recoveryCode: { type: 'string', maxLength: 64 },
+      remember: { type: 'boolean' },
+    },
+    additionalProperties: false,
+  },
+  TotpPendingEnrollment: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      expiresAt: { type: 'string', format: 'date-time' },
+      replacesFactor: { type: 'boolean' },
+    },
+    required: ['id', 'expiresAt', 'replacesFactor'],
+    additionalProperties: false,
+  },
+  TotpFactorStatus: {
+    type: 'object',
+    properties: {
+      status: { type: 'string', enum: ['unenrolled', 'active'] },
+      activatedAt: { type: 'string', format: 'date-time' },
+      recoveryCodesRemaining: { type: 'integer', minimum: 0 },
+      pendingEnrollment: { $ref: '#/components/schemas/TotpPendingEnrollment' },
+    },
+    required: ['status', 'recoveryCodesRemaining'],
+    additionalProperties: false,
+  },
+  TotpReauthenticationRequest: {
+    type: 'object',
+    description:
+      'The caller proves themselves again in the request. `password` is always required. While a factor is active exactly one of `code` or `recoveryCode` is also required; with no factor active neither may be sent.',
+    properties: {
+      password: { type: 'string', minLength: 1, maxLength: 1024 },
+      code: { type: 'string', pattern: '^[0-9]{6}$', description: 'Current TOTP code' },
+      recoveryCode: { type: 'string', maxLength: 64, description: 'An unused recovery code' },
+    },
+    required: ['password'],
+    additionalProperties: false,
+  },
+  TotpEnrollmentReveal: {
+    type: 'object',
+    description:
+      'Shown once. `secret` is the base32 seed and `otpauthUri` carries it; neither is readable again.',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      secret: { type: 'string', pattern: '^[A-Z2-7]{32}$' },
+      otpauthUri: { type: 'string' },
+      expiresAt: { type: 'string', format: 'date-time' },
+      replacesFactor: { type: 'boolean' },
+    },
+    required: ['id', 'secret', 'otpauthUri', 'expiresAt', 'replacesFactor'],
+    additionalProperties: false,
+  },
+  TotpEnrollmentConfirmation: {
+    type: 'object',
+    properties: {
+      code: { type: 'string', pattern: '^[0-9]{6}$' },
+    },
+    required: ['code'],
+    additionalProperties: false,
+  },
+  TotpFactorActivated: {
+    type: 'object',
+    description: 'Shown once. `recoveryCodes` is not readable again.',
+    properties: {
+      status: { type: 'string', enum: ['active'] },
+      activatedAt: { type: 'string', format: 'date-time' },
+      recoveryCodesRemaining: { type: 'integer', minimum: 0 },
+      recoveryCodes: { type: 'array', items: { type: 'string' }, minItems: 10, maxItems: 10 },
+    },
+    required: ['status', 'activatedAt', 'recoveryCodesRemaining', 'recoveryCodes'],
+    additionalProperties: false,
+  },
+  TotpRecoveryCodeSet: {
+    type: 'object',
+    description: 'Shown once. `recoveryCodes` is not readable again.',
+    properties: {
+      recoveryCodes: { type: 'array', items: { type: 'string' }, minItems: 10, maxItems: 10 },
+      recoveryCodesRemaining: { type: 'integer', minimum: 0 },
+    },
+    required: ['recoveryCodes', 'recoveryCodesRemaining'],
+    additionalProperties: false,
+  },
   AuthStatusResponse: {
     type: 'object',
     properties: {

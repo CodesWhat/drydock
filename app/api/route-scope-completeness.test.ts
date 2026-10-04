@@ -28,6 +28,8 @@ import {
  */
 const EXPECTED_ROUTE_SCOPES = [
   'DELETE /api/v1/api-keys/:keyId → api-keys:manage',
+  'DELETE /api/v1/auth/totp-enrollments/:id → session-only',
+  'DELETE /api/v1/auth/totp-factor → session-only',
   'DELETE /api/v1/containers/:id → admin',
   'DELETE /api/v1/containers/:id/label-overrides → admin',
   'DELETE /api/v1/group-policies/:id → admin',
@@ -44,6 +46,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/approvals/:id → read',
   'GET /api/v1/approvals/summary → read',
   'GET /api/v1/audit → read',
+  'GET /api/v1/auth/totp-factor → session-only',
   'GET /api/v1/authentications → read',
   'GET /api/v1/authentications/:type/:name → read',
   'GET /api/v1/authentications/:type/:name/:agent → read',
@@ -118,6 +121,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/approvals/:id/approve → containers:update',
   'POST /api/v1/approvals/:id/defer → containers:update',
   'POST /api/v1/approvals/:id/reject → containers:update',
+  'POST /api/v1/auth/totp-enrollments → session-only',
+  'POST /api/v1/auth/totp-recovery-code-sets → session-only',
   'POST /api/v1/config/reload → admin',
   'POST /api/v1/config/validate → admin',
   'POST /api/v1/containers/:id/env/reveal → session-only',
@@ -153,6 +158,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/webhook/watch → session-only',
   'POST /api/v1/webhook/watch/:containerName → session-only',
   'POST /api/v1/webhooks/registry → session-only',
+  'PUT /api/v1/auth/totp-enrollments/:id → session-only',
   'PUT /api/v1/config/:section → admin',
   'PUT /api/v1/group-policies/:id → admin',
   'PUT /api/v1/settings → admin',

@@ -247,6 +247,7 @@ function mockActualApiRouterStatsLifecycle() {
     './settings.js',
     './sse.js',
     './store.js',
+    './totp-factor.js',
     './trigger.js',
     './update-operations.js',
     './watcher.js',

@@ -523,6 +523,7 @@ function rejectFailedAttempt(
   loginIdentity: string | undefined,
   auditMessage: string,
   persistedLockoutUntil = 0,
+  sendFailure: (res: Response) => void = sendUnauthorized,
 ): void {
   const failedAt = Date.now();
   const accountLockoutAfterFailure = registerFailedLoginAttempt(
@@ -548,7 +549,7 @@ function rejectFailedAttempt(
   }
 
   recordLoginAuditEvent(req, 'error', auditMessage, loginIdentity);
-  sendUnauthorized(res);
+  sendFailure(res);
 }
 
 /**
@@ -648,6 +649,33 @@ export function rejectFailedSecondFactor(
     loginIdentity,
     'Authentication failed (invalid second factor)',
     persistedLockoutUntil,
+  );
+}
+
+/**
+ * A signed-in person failed to prove themselves again for a factor-management
+ * action: a wrong password, or (with `subjectId`) a wrong second-factor proof.
+ * It draws on exactly the budgets a failed login does, so management cannot be
+ * used to guess either one past the lockout, but it answers 403 rather than
+ * 401, because a 401 tells the browser the session itself has ended.
+ */
+export function rejectFailedReauthentication(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string,
+  subjectId?: string,
+): void {
+  const persistedLockoutUntil =
+    subjectId === undefined
+      ? 0
+      : recordPersistedFactorFailure(subjectId, loginIdentity, Date.now());
+  rejectFailedAttempt(
+    req,
+    res,
+    loginIdentity,
+    'Authentication failed (invalid reauthentication)',
+    persistedLockoutUntil,
+    (response) => sendErrorResponse(response, 403, 'Reauthentication failed'),
   );
 }
 

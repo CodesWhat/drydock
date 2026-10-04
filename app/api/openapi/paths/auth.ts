@@ -62,9 +62,75 @@ export const authPaths = {
       },
       responses: {
         200: jsonResponse('Authenticated user', { $ref: '#/components/schemas/AuthUser' }),
+        202: {
+          ...jsonResponse(
+            'The password was right but the account has a second factor. No session was created; finish with PUT /auth/login-challenges/{id}.',
+            { $ref: '#/components/schemas/LoginChallengeResponse' },
+          ),
+          headers: {
+            Location: {
+              description: 'Path of the login challenge',
+              schema: { type: 'string' },
+            },
+          },
+        },
         401: errorResponse('Authentication failed'),
         423: errorResponse('Account temporarily locked after repeated failed logins'),
+        429: errorResponse('Too many concurrent logins or pending login challenges'),
         500: errorResponse('Unable to establish session'),
+      },
+    },
+  },
+  '/auth/login-challenges/{id}': {
+    put: {
+      tags: ['Authentication', 'Actions'],
+      summary: 'Complete a login with a second factor',
+      operationId: 'completeLoginChallenge',
+      security: [],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'Challenge id from the 202 login response; valid for five minutes',
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/LoginChallengeCompletion' },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Authenticated user; a session was created', {
+          $ref: '#/components/schemas/AuthUser',
+        }),
+        400: errorResponse('Body is not exactly a code or a recovery code, plus optional remember'),
+        401: errorResponse('Unknown, expired, used or stale challenge, or a wrong or reused proof'),
+        423: errorResponse('Account, address or second factor temporarily locked'),
+        500: errorResponse('Unable to establish session'),
+        503: errorResponse('Second factor verification is unavailable'),
+      },
+    },
+    delete: {
+      tags: ['Authentication', 'Actions'],
+      summary: 'Cancel a login challenge',
+      operationId: 'cancelLoginChallenge',
+      security: [],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'Challenge id',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        204: { description: 'Idempotent: the same answer for an unknown or used challenge' },
       },
     },
   },

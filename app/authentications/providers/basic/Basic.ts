@@ -398,6 +398,21 @@ class Basic extends Authentication<BasicConfiguration> {
     };
   }
 
+  /**
+   * Re-check the password of the account a session already belongs to, for
+   * actions that ask the person to prove themselves again. The hash is always
+   * run, whatever the username, and neither a login metric nor a lockout is
+   * touched here: the caller owns the failure budget.
+   */
+  async verifyPasswordForUser(username: string, password: string): Promise<boolean> {
+    const userMatches =
+      username.length > 0 &&
+      timingSafeEqual(hashValue(username), hashValue(this.configuration.user));
+    const passwordMatches =
+      typeof password === 'string' && (await verifyPassword(password, this.configuration.hash));
+    return userMatches && passwordMatches;
+  }
+
   getStrategyDescription() {
     return {
       type: 'basic',
