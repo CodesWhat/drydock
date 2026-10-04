@@ -10,10 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.18] — 2026-10-04
+
 ### Security
 
-- Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does.
 - Login lockout now keys on the credentials actually presented. A request could previously name a different username in its body to dodge an account's failed-login lock, leaving only the per-IP limit.
+- Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does.
+- **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.
+- Add `Cross-Origin-Opener-Policy: same-origin` and a static strict CSP on `/api` responses to the website, and stop sending `X-Powered-By`.
 
 ### Changed
 
@@ -30,11 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep bulk scan progress accurate for large fleets and busy event streams while HTTP acceptance is delayed. Fresh request correlation and server-owned cumulative counts replace the 500-entry early-event buffer, with bounded client state and explicit recovery for conflicting or lost progress. Duplicate/replayed events do not overcount, and failed tasks still advance progress.
 - Correlate bulk scan progress with the accepted scan cycle, retain early completion events, and ignore duplicate or unrelated scans. The Security page now shows localized request/progress errors and supports an explicit retry without automatically repeating a scan request. Lost progress requires a successful read-only results refresh before starting another scan; refreshing does not establish whether the original scan has finished.
 - Release-gated store migrations now compare against the base version, so a future migration gated on a release runs on that release's stable image rather than one release later.
-
-### Security
-
-- **The demo site now sends a full Content-Security-Policy.** `apps/demo/vercel.json` sent only `frame-ancestors`, so `script-src` and `default-src` fell open and ZAP raised rules 10055-4, 10055-5 and 10055-13 on every scan. The policy now pins scripts, the mock service worker and form targets to `'self'`, and allows only the jsDelivr and Iconify hosts the mock icon and font handlers fetch from.
-- Add `Cross-Origin-Opener-Policy: same-origin` and a static strict CSP on `/api` responses to the website, and stop sending `X-Powered-By`.
 
 ## [1.7.0-rc.17] — 2026-10-02
 
@@ -2799,7 +2798,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.17...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.18...HEAD
+[1.7.0-rc.18]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.17...v1.7.0-rc.18
 [1.7.0-rc.17]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.16...v1.7.0-rc.17
 [1.7.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.15...v1.7.0-rc.16
 [1.7.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.14...v1.7.0-rc.15
