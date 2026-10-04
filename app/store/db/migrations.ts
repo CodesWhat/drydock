@@ -10,7 +10,7 @@
 
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
-import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL } from './schema.js';
+import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL, TOTP_TABLES_SQL } from './schema.js';
 
 const log = logger.child({ component: 'store.db' });
 
@@ -26,6 +26,12 @@ export interface Migration {
  * constant: a branch that lands another migration first renumbers this line only.
  */
 export const GROUP_POLICIES_MIGRATION_VERSION = 8;
+
+/** Spec 7.5 label-owned overrides. Always one past the group policies migration. */
+export const LABEL_OVERRIDES_MIGRATION_VERSION = 9;
+
+/** Spec 11.1.2 TOTP: factor, enrollment, recovery code and subject version tables. */
+export const TOTP_MIGRATION_VERSION = 10;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -135,6 +141,44 @@ CREATE TABLE group_policies (
 ) STRICT;
 ALTER TABLE containers ADD COLUMN group_policy TEXT;
 `,
+  },
+  {
+    version: LABEL_OVERRIDES_MIGRATION_VERSION,
+    // Spec 7.5: durable Drydock overrides of the label-owned container fields, one row per
+    // container identity (deriveContainerIdentityKey over the canonical name, so every
+    // Compose replica of a service shares a row and a recreate under a new Docker id
+    // finds it again). Nothing expires: unlike the update-policy retention stash, a row
+    // lives until someone resets it. fields is JSON and never '{}', the row being deleted
+    // when its last field is removed. id is a random UUID, the API handle.
+    //
+    // containers.label_owned is the declared layer behind a container's effective
+    // label-owned fields, plus where each effective value came from. NULL until an
+    // override has ever applied to the row, and a NULL row's flat fields are pristine.
+    note: 'add container_label_overrides and containers.label_owned (spec 7.5 label overrides)',
+    sql: `
+CREATE TABLE container_label_overrides (
+  id         TEXT PRIMARY KEY,
+  scope_key  TEXT NOT NULL UNIQUE,
+  agent      TEXT NOT NULL DEFAULT '',
+  watcher    TEXT NOT NULL,
+  scope_kind TEXT NOT NULL CHECK (scope_kind IN ('container', 'compose-service')),
+  scope_name TEXT NOT NULL,
+  fields     TEXT NOT NULL,
+  revision   INTEGER NOT NULL CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+CREATE INDEX container_label_overrides_watcher_agent ON container_label_overrides(watcher, agent);
+ALTER TABLE containers ADD COLUMN label_owned TEXT;
+`,
+  },
+  {
+    version: TOTP_MIGRATION_VERSION,
+    // Spec 11.1.2 slice 1: encrypted TOTP seeds, pending enrollments, hashed
+    // recovery codes and the per-subject version counter. Inert until the
+    // login and management slices use them.
+    note: 'add TOTP factor, enrollment, recovery code and subject version tables (spec 11.1.2 slice 1)',
+    sql: TOTP_TABLES_SQL,
   },
 ];
 

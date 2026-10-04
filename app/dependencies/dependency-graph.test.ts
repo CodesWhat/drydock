@@ -50,6 +50,17 @@ describe('buildDependencyGraph', () => {
     expect(result.unresolved).toEqual([]);
   });
 
+  test('resolves an override-sourced dependency by container name, ignoring a compose project', () => {
+    const labels = { 'com.docker.compose.project': 'media' };
+    const containers = [
+      makeContainer({ name: 'web', labels, dependsOn: ['db'], dependsOnSource: 'override' }),
+      makeContainer({ name: 'db', labels: { 'com.docker.compose.project': 'other' } }),
+    ];
+    const result = buildDependencyGraph(containers);
+    expect(result.edges).toEqual([{ from: 'web', to: 'db', action: 'update', source: 'override' }]);
+    expect(result.unresolved).toEqual([]);
+  });
+
   test('defaults action to "update" and source to "label" when unset', () => {
     const containers = [
       makeContainer({ name: 'web', dependsOn: ['db'] }),

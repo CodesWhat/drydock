@@ -3,6 +3,7 @@ import {
   getCanonicalContainerName,
   normalizeContainerHealth,
 } from '../../../model/container.js';
+import { pickLabelOwnedFlat, toDeclaredProjection } from '../../../model/label-owned.js';
 import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
@@ -563,6 +564,18 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   watcher.ensureLogger();
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
+  // Spec 7.5: this pass re-derives what the watcher declares, so it starts from the
+  // declared values of the label-owned fields rather than from any Drydock override
+  // the stored record shows. Otherwise an override reads as a change on every pass, and
+  // a display-name override stops rename tracking. The effective values go back on the
+  // record once the patch below has been written.
+  const effectiveLabelOwned = containerInStore.labelOwned
+    ? pickLabelOwnedFlat(containerInStore)
+    : undefined;
+  if (containerInStore.labelOwned) {
+    Object.assign(containerInStore, pickLabelOwnedFlat(toDeclaredProjection(containerInStore)));
+  }
+
   const nameBeforeRefresh = containerInStore.name;
   const displayNameBeforeRefresh = containerInStore.displayName;
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
@@ -654,8 +667,24 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   if (dependenciesChanged) {
     Object.assign(runtimeObservationPatch, dependenciesAfterRefresh);
   }
-  if (Object.keys(runtimeObservationPatch).length > 0) {
-    storeContainer.updateContainerFields(containerInStore.id, runtimeObservationPatch);
+  // The patch carries observed label-derived values, so it updates the declared layer
+  // of the label-owned fields and leaves any override in force.
+  const persisted =
+    Object.keys(runtimeObservationPatch).length > 0
+      ? storeContainer.updateContainerFields(
+          containerInStore.id,
+          runtimeObservationPatch,
+          undefined,
+          { labelOwned: 'declared' },
+        )
+      : undefined;
+  if (effectiveLabelOwned) {
+    Object.assign(
+      containerInStore,
+      effectiveLabelOwned,
+      persisted && pickLabelOwnedFlat(persisted),
+    );
+    containerInStore.labelOwned = persisted?.labelOwned ?? containerInStore.labelOwned;
   }
 
   return containerInStore;

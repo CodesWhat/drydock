@@ -214,6 +214,7 @@ const {
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', () => createContainerMock(overrides.container));
     vi.doMock('./group-policy', createCollectionsMock);
+    vi.doMock('./label-override', createCollectionsMock);
     vi.doMock('./mqtt-hass', createCollectionsMock);
     vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createNotificationMock);
@@ -222,6 +223,7 @@ const {
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./session', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./totp', createCollectionsMock);
     vi.doMock('./ui-preferences', createCollectionsMock);
     vi.doMock('./update-lifecycle-cache', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
@@ -264,6 +266,7 @@ vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createContainerMock);
 vi.mock('./group-policy', createCollectionsMock);
+vi.mock('./label-override', createCollectionsMock);
 vi.mock('./mqtt-hass', createCollectionsMock);
 vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createNotificationMock);
@@ -274,6 +277,7 @@ vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./session', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
+vi.mock('./totp', createCollectionsMock);
 vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-lifecycle-cache', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
@@ -316,6 +320,7 @@ describe('Store Module', () => {
     const notification = await import('./notification.js');
     const sessionStore = await import('./session.js');
     const settings = await import('./settings.js');
+    const totp = await import('./totp.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateLifecycleCache = await import('./update-lifecycle-cache.js');
     const updateOperation = await import('./update-operation.js');
@@ -328,6 +333,7 @@ describe('Store Module', () => {
     expect(notification.createCollections).toHaveBeenCalled();
     expect(sessionStore.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(totp.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateLifecycleCache.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
@@ -372,6 +378,12 @@ describe('Store Module', () => {
     );
     expect(app.completeStartupInitialization.mock.invocationCallOrder[0]).toBeLessThan(
       container.reconcileGroupPolicySnapshots.mock.invocationCallOrder[0],
+    );
+
+    // Spec 7.5: label overrides are loaded before the container collection can write.
+    const labelOverride = await import('./label-override.js');
+    expect(labelOverride.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      container.createCollections.mock.invocationCallOrder[0],
     );
   });
 
@@ -474,6 +486,7 @@ describe('Store Module', () => {
     const mqttHass = await import('./mqtt-hass.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const totp = await import('./totp.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
     expect(apiKey.createCollections).toHaveBeenCalled();
@@ -482,6 +495,7 @@ describe('Store Module', () => {
     expect(mqttHass.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(totp.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();

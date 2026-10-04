@@ -3,6 +3,7 @@ import log from '../log/index.js';
 import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
 import * as store from '../store/container.js';
 import type { Database } from '../store/db/driver.js';
+import * as labelOverride from '../store/label-override.js';
 import { createContainerFixture } from '../test/helpers.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import Hass from '../triggers/providers/mqtt/Hass.js';
@@ -722,4 +723,79 @@ test('keeps simultaneous watcher operations source-scoped', async () => {
   }
   expect((await local).containers.map(({ id }) => id)).toEqual(['local']);
   expect((await other).containers.map(({ id }) => id)).toEqual(['other']);
+});
+
+describe('label-owned overrides (spec 7.5)', () => {
+  beforeEach(() => {
+    labelOverride.createCollections(db);
+  });
+  afterEach(() => {
+    labelOverride.clearCollectionForTesting();
+  });
+
+  const override = (target: unknown, fields: Record<string, unknown>) =>
+    store.mutateLabelOverrides(
+      target as never,
+      Object.entries(fields).map(([field, value]) => ({ field, op: 'set' as const, value })),
+      'user:admin',
+    );
+
+  test('an agent report that matches its declared values neither patches nor overrides the override', async () => {
+    const known = seed('known', { displayName: 'Sonarr' });
+    override(known, { displayName: 'TV' });
+    const spy = vi.spyOn(store, 'updateContainerFields');
+    const pending = inventory.refresh('docker', 'local');
+    const incoming = remote('known', { displayName: 'Sonarr', status: 'exited' });
+    frame('updated', incoming);
+    resolve(result([incoming]));
+    await pending;
+
+    expect(spy.mock.calls.flatMap(([, patch]) => Object.keys(patch))).not.toContain('displayName');
+
+    expect(store.getContainerRaw('known')).toMatchObject({ displayName: 'TV', status: 'exited' });
+    expect(store.getContainerRaw('known')?.labelOwned?.declared.displayName).toBe('Sonarr');
+  });
+
+  test('a changed declared value moves the declared layer and leaves the override effective', async () => {
+    const known = seed('known', { displayName: 'Sonarr' });
+    override(known, { displayName: 'TV' });
+    const spy = vi.spyOn(store, 'updateContainerFields');
+    const pending = inventory.refresh('docker', 'local');
+    const incoming = remote('known', { displayName: 'Sonarr v2' });
+    frame('updated', incoming);
+    // A repeat must still see the stored layer as unchanged since the baseline.
+    frame('updated', incoming);
+    resolve(result([incoming]));
+    await pending;
+
+    expect(store.getContainerRaw('known')).toMatchObject({ displayName: 'TV' });
+    expect(store.getContainerRaw('known')?.labelOwned?.declared.displayName).toBe('Sonarr v2');
+    expect(spy.mock.calls.every(([, , , options]) => options?.labelOwned === 'declared')).toBe(
+      true,
+    );
+  });
+
+  test('state an agent sends is dropped, on insert and on update', async () => {
+    const forged = {
+      v: 1,
+      declared: { displayName: 'forged' },
+      declaredSources: {},
+      sources: {},
+    };
+    const pending = inventory.refresh('docker', 'local');
+    const added = remote('new', { labelOwned: forged, dependsOnSource: 'override' });
+    frame('added', added);
+    resolve(result([added]));
+    await pending;
+    expect(store.getContainerRaw('new')).not.toHaveProperty('labelOwned');
+    expect(store.getContainerRaw('new')?.dependsOnSource).toBeUndefined();
+
+    const next = inventory.refresh('docker', 'local');
+    const updated = remote('new', { labelOwned: forged, status: 'exited' });
+    frame('updated', updated);
+    resolve(result([updated]));
+    await next;
+    expect(store.getContainerRaw('new')).toMatchObject({ status: 'exited' });
+    expect(store.getContainerRaw('new')).not.toHaveProperty('labelOwned');
+  });
 });

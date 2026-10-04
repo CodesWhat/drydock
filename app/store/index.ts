@@ -22,6 +22,7 @@ import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
 import * as groupPolicy from './group-policy.js';
+import * as labelOverride from './label-override.js';
 import * as mqttHass from './mqtt-hass.js';
 import * as nameBindings from './name-bindings.js';
 import * as notification from './notification.js';
@@ -30,6 +31,7 @@ import * as notificationOutbox from './notification-outbox.js';
 import * as secrets from './secrets.js';
 import * as sessionStore from './session.js';
 import * as settings from './settings.js';
+import * as totp from './totp.js';
 import * as uiPreferences from './ui-preferences.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updateOperation from './update-operation.js';
@@ -158,6 +160,8 @@ function createCollections(): void {
   // Spec 7.3: every container write reads the group policy cache, so it is loaded before
   // anything below (startup repairs included) can write a container.
   groupPolicy.createCollections(sqliteDb as Database);
+  // Spec 7.5: likewise, every container write looks its label override scope up.
+  labelOverride.createCollections(sqliteDb as Database);
   container.createCollections(sqliteDb as Database);
   // #556: the update-lifecycle-cache collection must exist before rehydration
   // repopulates container.ts's in-memory Map from it.
@@ -174,6 +178,7 @@ function createCollections(): void {
   notificationOutbox.createCollections(sqliteDb as Database);
   secrets.createCollections(sqliteDb as Database);
   sessionStore.createCollections(sqliteDb as Database);
+  totp.createCollections(sqliteDb as Database);
   uiPreferences.createCollections(sqliteDb as Database);
   settings.createCollections(sqliteDb as Database);
   updateOperation.createCollections(sqliteDb as Database);
