@@ -73,6 +73,7 @@
       "container-stop": "Container gestoppt",
       "container-restart": "Container neugestartet",
       "auth-login": "Auth-Anmeldung",
+      "totp-recovery-used": "Wiederherstellungscode verwendet",
       "authenticated": "Authentifiziert",
       "authfail": "Authentifizierung fehlgeschlagen",
       "hook-configured": "Hook konfiguriert",

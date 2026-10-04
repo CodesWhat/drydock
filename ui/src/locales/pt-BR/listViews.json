@@ -73,6 +73,7 @@
       "container-stop": "Parada de contêiner",
       "container-restart": "Reinicialização de contêiner",
       "auth-login": "Login de autenticação",
+      "totp-recovery-used": "Código de recuperação usado",
       "authenticated": "Autenticado",
       "authfail": "Falha na autenticação",
       "hook-configured": "Hook configurado",

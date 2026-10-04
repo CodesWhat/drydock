@@ -73,6 +73,7 @@
       "container-stop": "容器停止",
       "container-restart": "容器重启",
       "auth-login": "认证登录",
+      "totp-recovery-used": "已使用恢复码",
       "authenticated": "已认证",
       "authfail": "认证失败",
       "hook-configured": "钩子已配置",
