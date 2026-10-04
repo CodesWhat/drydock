@@ -116,10 +116,34 @@ test("custom inline scripts receive the request nonce", () => {
   assert.match(jsonLdSource, /replace\(\/<\/g/u);
 });
 
-test("Vercel does not override the per-request CSP with a static policy", () => {
-  const headerNames = vercelConfig.headers.flatMap((entry) =>
+test("Vercel does not override the per-request CSP on site pages with a static policy", () => {
+  // /api is excluded from src/proxy.ts, so it gets a static CSP; every other
+  // route must keep relying on the nonce CSP set per request.
+  const pageEntries = vercelConfig.headers.filter((entry) => entry.source !== "/api/:path*");
+  const headerNames = pageEntries.flatMap((entry) =>
     entry.headers.map((header) => header.key.toLowerCase()),
   );
 
   assert.equal(headerNames.includes("content-security-policy"), false);
+});
+
+test("/api responses get a static strict CSP because the proxy skips them", () => {
+  const entry = vercelConfig.headers.find((rule) => rule.source === "/api/:path*");
+  assert.ok(entry, "expected a /api/:path* headers rule");
+  const csp = entry.headers.find((header) => header.key === "Content-Security-Policy");
+  assert.ok(csp);
+  assert.equal(
+    csp.value,
+    "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+  );
+  assert.equal(getDirective(csp.value, "script-src"), undefined);
+});
+
+test("site-wide headers send Cross-Origin-Opener-Policy same-origin", () => {
+  const entry = vercelConfig.headers.find((rule) => rule.source === "/(.*)");
+  assert.ok(entry);
+  assert.deepEqual(
+    entry.headers.find((header) => header.key === "Cross-Origin-Opener-Policy"),
+    { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  );
 });
