@@ -14,7 +14,12 @@
 
 import { createHash } from 'node:crypto';
 import log from '../log/index.js';
-import { getFactorBySubject, getSubjectVersion, hasEnrolledUsername } from '../store/totp.js';
+import {
+  getFactorBySubject,
+  getSessionsNotBefore,
+  getSubjectVersion,
+  hasEnrolledUsername,
+} from '../store/totp.js';
 import { getErrorMessage } from '../util/error.js';
 import type { SessionUser } from './auth-types.js';
 
@@ -25,6 +30,8 @@ export interface LocalIdentityFields {
   providerId: string;
   assurance: LocalAssurance;
   factorVersion: number;
+  /** Epoch milliseconds the session was minted at; compared with the subject's revocation marker. */
+  issuedAt: number;
 }
 
 export type SessionIdentityCheck = 'valid' | 'stale' | 'unavailable';
@@ -46,6 +53,7 @@ export function resolveLocalIdentity(providerId: string, username: string): Loca
     providerId,
     assurance: 'password',
     factorVersion: getSubjectVersion(subjectId),
+    issuedAt: Date.now(),
   };
 }
 
@@ -68,6 +76,12 @@ function checkLocalIdentity(
 
   const version = getSubjectVersion(identity.subjectId);
   if (version !== identity.factorVersion) {
+    return 'stale';
+  }
+
+  // A recovery login revokes by marker, so a request that read the session
+  // before the revocation and writes it back afterwards still fails here.
+  if (identity.issuedAt < getSessionsNotBefore(identity.subjectId)) {
     return 'stale';
   }
 

@@ -257,6 +257,79 @@ describe('SessionStore', () => {
     }
   });
 
+  describe('destroyed sessions stay destroyed', () => {
+    const live = () => sessionWithExpiry(new Date(Date.now() + TTL_MS));
+
+    test('a set after destroy does not bring the session back, and reports no error', async () => {
+      await setAsync('sid-1', live());
+      await destroyAsync('sid-1');
+
+      await expect(setAsync('sid-1', live())).resolves.toBeUndefined();
+
+      await expect(getAsync('sid-1')).resolves.toBeNull();
+      expect(sessionModel.getSession('sid-1')).toBeUndefined();
+    });
+
+    test('a touch after destroy does not bring it back either', async () => {
+      await setAsync('sid-1', live());
+      await destroyAsync('sid-1');
+      await touchAsync('sid-1', live());
+      expect(sessionModel.getSession('sid-1')).toBeUndefined();
+    });
+
+    test('other sids are unaffected', async () => {
+      await destroyAsync('sid-1');
+      await setAsync('sid-2', live());
+      await expect(getAsync('sid-2')).resolves.not.toBeNull();
+    });
+
+    test('the tombstone expires, so the memory is bounded in time', async () => {
+      store?.stop();
+      store = new SessionStore({ ttlMs: TTL_MS, tombstoneTtlMs: 1_000 });
+      const now = vi.spyOn(Date, 'now');
+      now.mockReturnValue(1_000_000);
+      await destroyAsync('sid-1');
+
+      now.mockReturnValue(1_000_999);
+      await setAsync('sid-1', live());
+      expect(sessionModel.getSession('sid-1')).toBeUndefined();
+
+      now.mockReturnValue(1_001_000);
+      await setAsync('sid-1', live());
+      expect(sessionModel.getSession('sid-1')).toBeDefined();
+      now.mockRestore();
+    });
+
+    test('the table is bounded in size: the oldest tombstone is forgotten first', async () => {
+      store?.stop();
+      store = new SessionStore({ ttlMs: TTL_MS, maxTombstones: 2 });
+      await destroyAsync('sid-1');
+      await destroyAsync('sid-2');
+      await destroyAsync('sid-3');
+
+      await setAsync('sid-1', live());
+      await setAsync('sid-2', live());
+      await setAsync('sid-3', live());
+      expect(sessionModel.getSession('sid-1')).toBeDefined();
+      expect(sessionModel.getSession('sid-2')).toBeUndefined();
+      expect(sessionModel.getSession('sid-3')).toBeUndefined();
+    });
+
+    test('destroying the same sid again refreshes its tombstone rather than aging it out early', async () => {
+      store?.stop();
+      store = new SessionStore({ ttlMs: TTL_MS, maxTombstones: 2 });
+      await destroyAsync('sid-1');
+      await destroyAsync('sid-2');
+      await destroyAsync('sid-1');
+      await destroyAsync('sid-3');
+
+      await setAsync('sid-2', live());
+      await setAsync('sid-1', live());
+      expect(sessionModel.getSession('sid-2')).toBeDefined();
+      expect(sessionModel.getSession('sid-1')).toBeUndefined();
+    });
+  });
+
   describe('error propagation', () => {
     afterEach(() => {
       vi.restoreAllMocks();

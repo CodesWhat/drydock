@@ -331,17 +331,18 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
       const h = await boot();
       const cookie = await login(h);
 
-      expect(storedUsers(h.db)).toEqual([
-        JSON.stringify({
-          v: 2,
-          kind: 'local',
-          username: TEST_USER,
-          subjectId: SUBJECT_ID,
-          providerId: 'basic.default',
-          assurance: 'password',
-          factorVersion: 0,
-        }),
-      ]);
+      const [stored] = storedUsers(h.db);
+      const { issuedAt, ...stable } = JSON.parse(stored);
+      expect(Math.abs(Date.now() - issuedAt)).toBeLessThan(60_000);
+      expect(stable).toEqual({
+        v: 2,
+        kind: 'local',
+        username: TEST_USER,
+        subjectId: SUBJECT_ID,
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+      });
       expect(await protectedStatus(h, cookie)).toBe(200);
       await expect(upgradeOutcome(h, cookie)).resolves.toBe('open');
     });

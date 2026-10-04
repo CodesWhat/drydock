@@ -33,6 +33,7 @@ const V2_LOCAL = JSON.stringify({
   providerId: 'basic.default',
   assurance: 'password',
   factorVersion: 0,
+  issuedAt: 1_000,
 });
 const V2_OIDC = '{"v":2,"kind":"oidc","username":"admin"}';
 
@@ -92,6 +93,7 @@ describe('session-principal', () => {
         providerId: 'basic.default',
         assurance: 'password',
         factorVersion: 0,
+        issuedAt: 1_000,
       };
       const req = createRequest({ [SESSION_USER_KEY]: { user: V2_LOCAL } });
 
@@ -161,6 +163,7 @@ describe('session-principal', () => {
           providerId: 'basic.default',
           assurance: 'password',
           factorVersion: 0,
+          issuedAt: 1_000,
         },
       });
 
@@ -172,6 +175,7 @@ describe('session-principal', () => {
         providerId: 'basic.default',
         assurance: 'password',
         factorVersion: 0,
+        issuedAt: 1_000,
       });
     });
 
@@ -210,6 +214,7 @@ describe('session-principal', () => {
           providerId: 'basic.default',
           assurance: 'password',
           factorVersion: 0,
+          issuedAt: 1_000,
         },
       });
 

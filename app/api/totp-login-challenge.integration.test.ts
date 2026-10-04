@@ -241,6 +241,14 @@ async function start(): Promise<Harness> {
   app.get('/protected', requireAuthentication, (req: Request, res: ExpressResponse) => {
     res.status(200).json({ user: { username: (req as AuthRequest).principal?.username } });
   });
+  // Holds a request open between reading the session and finishing it, the way
+  // a slow handler does. What it writes is server-derived, never request input.
+  app.get('/slow-touch', requireAuthentication, async (req: Request, res: ExpressResponse) => {
+    inFlight.reached();
+    await inFlight.gate;
+    (req as AuthRequest).session.touchedAt = Date.now();
+    res.status(200).json({ ok: true });
+  });
   app.get('/events', requireAuthentication, (_req: Request, res: ExpressResponse) => {
     res.status(200).set('Content-Type', 'text/event-stream').end('data: ok\n\n');
   });
@@ -262,6 +270,23 @@ async function start(): Promise<Harness> {
   });
   return { db, store, server, wsServer, port };
 }
+
+const inFlight = {
+  gate: Promise.resolve(),
+  reached: () => {},
+  release: () => {},
+  arm(): Promise<void> {
+    let reached: () => void = () => {};
+    const arrived = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    this.gate = new Promise<void>((resolve) => {
+      this.release = resolve;
+    });
+    this.reached = reached;
+    return arrived;
+  },
+};
 
 const url = (h: Harness, path: string) => `http://127.0.0.1:${h.port}${path}`;
 
@@ -310,6 +335,12 @@ function storedUsers(db: Database): string[] {
     .prepare('SELECT data FROM sessions')
     .all()
     .map((row) => (JSON.parse(String(row.data)).passport ?? {}).user as string);
+}
+
+/** The stored user of a session minted a minute before the one given. */
+function oldSessionUser(user: string): string {
+  const parsed = JSON.parse(user);
+  return JSON.stringify({ ...parsed, issuedAt: parsed.issuedAt - 60_000 });
 }
 
 async function plant(h: Harness, user: string): Promise<string> {
@@ -523,17 +554,18 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
         'private, no-cache, no-store, must-revalidate',
       );
       const cookie = cookieOf(response);
-      expect(storedUsers(h.db)).toEqual([
-        JSON.stringify({
-          v: 2,
-          kind: 'local',
-          username: TEST_USER,
-          subjectId: SUBJECT_ID,
-          providerId: 'basic.default',
-          assurance: 'totp',
-          factorVersion: 1,
-        }),
-      ]);
+      const [stored] = storedUsers(h.db);
+      const { issuedAt, ...stable } = JSON.parse(stored);
+      expect(Math.abs(Date.now() - issuedAt)).toBeLessThan(60_000);
+      expect(stable).toEqual({
+        v: 2,
+        kind: 'local',
+        username: TEST_USER,
+        subjectId: SUBJECT_ID,
+        providerId: 'basic.default',
+        assurance: 'totp',
+        factorVersion: 1,
+      });
       expect(await protectedStatus(h, cookie)).toBe(200);
       expect(await status(h, '/events', { Cookie: cookie })).toBe(200);
       await expect(upgradeOutcome(h, { Cookie: cookie })).resolves.toBe('open');
@@ -802,6 +834,73 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       }
 
       expect((await put(h, challenge.id, { code })).status).toBe(200);
+    });
+  });
+
+  describe('recovery-login revocation holds against an in-flight request', () => {
+    test('a request that read the session before the revocation cannot write it back to life', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const earlier = await loginWithCode(h, enrolled);
+      expect(await protectedStatus(h, earlier)).toBe(200);
+
+      const arrived = inFlight.arm();
+      const pending = fetch(url(h, '/slow-touch'), {
+        headers: { ...HTTPS_HEADERS, Cookie: earlier },
+      });
+      await arrived;
+
+      const challenge = await startChallenge(h);
+      const recovered = await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[0] });
+      expect(recovered.status).toBe(200);
+      expect(await protectedStatus(h, earlier)).toBe(401);
+
+      inFlight.release();
+      await pending;
+
+      expect(await protectedStatus(h, earlier)).toBe(401);
+      expect(
+        storedUsers(h.db).filter((user) => user?.includes('"assurance":"recovery"')),
+      ).toHaveLength(1);
+      expect(storedUsers(h.db)).toHaveLength(1);
+    });
+
+    test('a recovery login that cannot record the revocation mints no session', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const earlier = await loginWithCode(h, enrolled);
+      h.db.exec(
+        `CREATE TRIGGER refuse_marker BEFORE UPDATE OF sessions_not_before ON totp_subject_versions
+         BEGIN SELECT RAISE(ABORT, 'store down'); END;`,
+      );
+
+      const challenge = await startChallenge(h);
+      const refused = await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[0] });
+      expect(refused.status).toBe(503);
+      expect(refused.headers.get('set-cookie')).toBeNull();
+      expect(storedUsers(h.db)).toHaveLength(1);
+      expect(await protectedStatus(h, earlier)).toBe(200);
+    });
+
+    test('the marker alone refuses an older session even when its row is planted back', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const earlier = await loginWithCode(h, enrolled);
+      const challenge = await startChallenge(h);
+      const recovered = await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[0] });
+      const fresh = cookieOf(recovered);
+
+      const row = h.db.prepare('SELECT sid, data FROM sessions').all();
+      expect(row).toHaveLength(1);
+      const sid = decodeURIComponent(earlier.split('=')[1]).slice(2).split('.')[0];
+      const data = JSON.parse(String(row[0].data));
+      const oldSession = { ...data, passport: { user: oldSessionUser(data.passport.user) } };
+      h.db
+        .prepare('INSERT INTO sessions (sid, expires_at, data) VALUES (?, ?, ?)')
+        .run(sid, Date.now() + 60_000, JSON.stringify(oldSession));
+
+      expect(await protectedStatus(h, earlier)).toBe(401);
+      expect(await protectedStatus(h, fresh)).toBe(200);
     });
   });
 

@@ -241,6 +241,35 @@ export function getSubjectVersion(subjectId: string): number {
   return readSubjectVersion(requireDb(), subjectId);
 }
 
+/** Sessions of this subject issued before this instant (epoch ms) are revoked; 0 for none. */
+export function getSessionsNotBefore(subjectId: string): number {
+  const row = requireDb()
+    .prepare('SELECT sessions_not_before FROM totp_subject_versions WHERE subject_id = ?')
+    .get(subjectId);
+  return row ? Number(row.sessions_not_before) : 0;
+}
+
+/**
+ * Revoke every session of the subject issued before `notBefore` (epoch ms).
+ * The marker only moves forward, so a repeated or late call cannot reopen an
+ * older session. A subject with no version row gets one at version 0, which
+ * reads exactly like no row at all everywhere else.
+ */
+export function revokeSessionsIssuedBefore(
+  subjectId: string,
+  username: string,
+  notBefore: number,
+): void {
+  requireDb()
+    .prepare(
+      `INSERT INTO totp_subject_versions (subject_id, factor_version, username, sessions_not_before)
+       VALUES (?, 0, ?, ?)
+       ON CONFLICT(subject_id) DO UPDATE SET
+         sessions_not_before = MAX(sessions_not_before, excluded.sessions_not_before)`,
+    )
+    .run(subjectId, username, notBefore);
+}
+
 /**
  * Has any subject for this exact username ever enrolled a factor? A row with
  * an unknown username counts for everyone: it cannot be ruled out, and the

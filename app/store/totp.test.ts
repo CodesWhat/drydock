@@ -129,6 +129,8 @@ describe('before the collection exists', () => {
     const fresh = await import('./totp.js');
     expectCode(() => fresh.getSubjectVersion('s'), 'NOT_INITIALIZED');
     expectCode(() => fresh.hasEnrolledUsername('s'), 'NOT_INITIALIZED');
+    expectCode(() => fresh.getSessionsNotBefore('s'), 'NOT_INITIALIZED');
+    expectCode(() => fresh.revokeSessionsIssuedBefore('s', 'u', 1), 'NOT_INITIALIZED');
   });
 });
 
@@ -170,6 +172,40 @@ describe('subject version', () => {
       'INSERT INTO totp_subject_versions (subject_id, factor_version, username) VALUES (?, 2, NULL)',
     ).run('unknown-row');
     expect(totp.hasEnrolledUsername('anyone')).toBe(true);
+  });
+});
+
+describe('session revocation marker', () => {
+  test('is zero for a subject nobody has revoked', () => {
+    expect(totp.getSessionsNotBefore('nobody')).toBe(0);
+  });
+
+  test('is recorded for a subject with no version row yet, without making it enrolled', () => {
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 5_000);
+    expect(totp.getSessionsNotBefore('subject-a')).toBe(5_000);
+    expect(totp.getSubjectVersion('subject-a')).toBe(0);
+    expect(totp.hasEnrolledUsername('scott')).toBe(false);
+  });
+
+  test('only ever moves forward, so a late or repeated revocation cannot reopen older sessions', () => {
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 9_000);
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 4_000);
+    expect(totp.getSessionsNotBefore('subject-a')).toBe(9_000);
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 12_000);
+    expect(totp.getSessionsNotBefore('subject-a')).toBe(12_000);
+  });
+
+  test('survives activation and removal, which rewrite the version row', () => {
+    activate('subject-a');
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 7_000);
+    totp.removeFactor({ subjectId: 'subject-a', expectedFactorVersion: 1 });
+    expect(totp.getSessionsNotBefore('subject-a')).toBe(7_000);
+    expect(totp.getSubjectVersion('subject-a')).toBe(2);
+  });
+
+  test('does not touch another subject', () => {
+    totp.revokeSessionsIssuedBefore('subject-a', 'scott', 7_000);
+    expect(totp.getSessionsNotBefore('subject-b')).toBe(0);
   });
 });
 

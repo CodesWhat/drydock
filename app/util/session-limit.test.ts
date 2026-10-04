@@ -3,6 +3,7 @@ const { mockHasEnrolledUsername } = vi.hoisted(() => ({ mockHasEnrolledUsername:
 vi.mock('../store/totp.js', () => ({
   getSubjectVersion: vi.fn(() => 0),
   getFactorBySubject: vi.fn(),
+  getSessionsNotBefore: vi.fn(() => 0),
   hasEnrolledUsername: mockHasEnrolledUsername,
 }));
 
@@ -485,6 +486,7 @@ test('enforceConcurrentSessionLimit counts v2 local and OIDC sessions against th
     providerId: 'basic.default',
     assurance: 'password',
     factorVersion: 0,
+    issuedAt: 1_000,
   });
   const v2Oidc = JSON.stringify({ v: 2, kind: 'oidc', username: 'john' });
   const sessionStore = {
@@ -534,6 +536,7 @@ describe('stale sessions', () => {
       providerId: 'basic.default',
       assurance: 'password',
       factorVersion,
+      issuedAt: 1_000,
     });
 
   function storeOf(sessions: Record<string, unknown>) {
@@ -661,6 +664,7 @@ describe('destroyOtherSubjectSessions', () => {
       providerId: 'basic.default',
       assurance: 'totp',
       factorVersion: 1,
+      issuedAt: 1_000,
     });
 
   test('destroys only the other local sessions of that subject', async () => {

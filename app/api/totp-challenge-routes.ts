@@ -17,6 +17,7 @@ import {
   getFactorBySubject,
   listRecoveryCodes,
   markRecoveryCodeUsed,
+  revokeSessionsIssuedBefore,
   type TotpFactorRecord,
 } from '../store/totp.js';
 import { recordAuditEvent } from './audit-events.js';
@@ -202,6 +203,7 @@ export function createLoginChallengeCompletion(
     clearLoginLockoutsAfterSuccess(authRequest, challenge.username);
     const { factor } = result;
     const recovery = proof.kind === 'recovery';
+    const issuedAt = Date.now();
     if (recovery) {
       recordAuditEvent({
         action: 'totp-recovery-used',
@@ -209,6 +211,19 @@ export function createLoginChallengeCompletion(
         containerName: 'authentication',
         details: `subject=${challenge.subjectId}`,
       });
+      // The revocation is recorded where the session validator reads it,
+      // before any session is minted, and at the new session's own issue time
+      // so that session is the one older than nothing. A fault here refuses the
+      // login: minting beside sessions that were meant to die would undo it.
+      try {
+        revokeSessionsIssuedBefore(challenge.subjectId, challenge.username, issuedAt);
+      } catch (error: unknown) {
+        log.warn(
+          `Unable to record session revocation (${(error as { code?: string }).code ?? 'error'})`,
+        );
+        sendErrorResponse(res, 503, 'Second factor verification is unavailable');
+        return;
+      }
     }
 
     const principal: AuthenticatedPrincipal = {
@@ -219,6 +234,7 @@ export function createLoginChallengeCompletion(
         providerId: challenge.providerId,
         assurance: recovery ? 'recovery' : 'totp',
         factorVersion: factor.factorVersion,
+        issuedAt,
       },
     };
     authRequest.principal = principal;
