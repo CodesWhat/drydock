@@ -933,6 +933,43 @@ describe('failure handling', () => {
     expect(groupPolicyStore.getGroupPolicies()).toHaveLength(1);
   });
 
+  test('a member that fails to re-resolve is counted in a warning and the rest still apply', async () => {
+    vi.mocked(storeContainer.reResolveGroupPolicyMembers).mockImplementationOnce(() => ({
+      reResolved: 2,
+      failed: [
+        { id: 'a', error: 'boom' },
+        { id: 'b', error: 'boom' },
+      ],
+    }));
+
+    const result = await call('POST', '', {
+      group: 'payments',
+      updatePolicy: { maturityMode: 'all' },
+    });
+
+    expect(result.status).toBe(201);
+    expect(result.body.applied).toEqual({ members: 2 });
+    expect(result.body.warnings).toContain(
+      'The policy was saved, but updating 2 current members failed. They pick it up on their next write or at restart.',
+    );
+  });
+
+  test('a single failed member is named in the singular', async () => {
+    vi.mocked(storeContainer.reResolveGroupPolicyMembers).mockImplementationOnce(() => ({
+      reResolved: 0,
+      failed: [{ id: 'a', error: 'boom' }],
+    }));
+
+    const result = await call('POST', '', {
+      group: 'payments',
+      updatePolicy: { maturityMode: 'all' },
+    });
+
+    expect(result.body.warnings).toContain(
+      'The policy was saved, but updating 1 current member failed. It picks it up on its next write or at restart.',
+    );
+  });
+
   test('an unexpected error while reading is a sanitized 500', async () => {
     await createPolicy();
     vi.mocked(storeContainer.getContainers).mockImplementationOnce(() => {

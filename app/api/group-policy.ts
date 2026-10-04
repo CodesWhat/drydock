@@ -194,6 +194,10 @@ function auditPolicyChange({
   });
 }
 
+function partialReResolveWarning(failedCount: number): string {
+  return `The policy was saved, but updating ${failedCount} current ${failedCount === 1 ? 'member' : 'members'} failed. ${failedCount === 1 ? 'It picks' : 'They pick'} it up on ${failedCount === 1 ? 'its' : 'their'} next write or at restart.`;
+}
+
 /**
  * Re-resolve the group's members after the policy change committed. A failure here does not
  * undo the saved policy: startup reconciliation and the members' next write heal it, so it
@@ -201,9 +205,18 @@ function auditPolicyChange({
  */
 function applyToMembers(group: string): { applied: { members: number }; warnings: string[] } {
   try {
+    const { reResolved, failed } = storeContainer.reResolveGroupPolicyMembers(group);
+    if (failed.length === 0) {
+      return { applied: { members: reResolved }, warnings: [] };
+    }
+    for (const failure of failed) {
+      log.error(
+        `Re-resolving member ${sanitizeLogParam(failure.id)} of group ${sanitizeLogParam(group)} failed (${sanitizeLogParam(failure.error, 500)})`,
+      );
+    }
     return {
-      applied: { members: storeContainer.reResolveGroupPolicyMembers(group) },
-      warnings: [],
+      applied: { members: reResolved },
+      warnings: [partialReResolveWarning(failed.length)],
     };
   } catch (error: unknown) {
     log.error(

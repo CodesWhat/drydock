@@ -1021,7 +1021,7 @@ describe('label-owned overrides at the store', () => {
         'user:admin',
       );
 
-      expect(container.reResolveGroupPolicyMembers('payments')).toBe(1);
+      expect(container.reResolveGroupPolicyMembers('payments').reResolved).toBe(1);
       expect(raw('member')).toMatchObject({
         displayName: 'Pay',
         updatePolicy: { maturityMode: 'all' },
