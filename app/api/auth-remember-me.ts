@@ -37,3 +37,13 @@ export function setRememberMe(req: AuthRequest, res: Response): void {
   applyRememberMe(req);
   res.status(200).json({ ok: true });
 }
+
+/**
+ * The remember-me choice for this login: the request body's when it carries
+ * one, otherwise whatever an earlier `/auth/remember` call left in the session.
+ */
+export function getRememberMePreference(req: AuthRequest): boolean {
+  return req.body?.remember !== undefined
+    ? req.body.remember === true
+    : req.session?.rememberMe === true;
+}

@@ -1,5 +1,5 @@
 import { validateSessionUser } from '../api/session-principal.js';
-import { readSessionUsername } from '../api/session-user.js';
+import { deserializeSessionUser, readSessionUsername } from '../api/session-user.js';
 
 interface SessionStoreLike {
   all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
@@ -374,4 +374,42 @@ export async function enforceConcurrentSessionLimit({
   removeDestroyedSessionsFromIndex(sessionIndex, normalizedUsername, sessionsToDestroy);
   recordCurrentSessionInIndex(sessionIndex, normalizedUsername, currentSessionId);
   return sessionsToDestroy.length;
+}
+
+/**
+ * Destroy every other session that belongs to one local subject. A recovery
+ * login uses it (spec 11.1.2 decision 8): the codes are bearer secrets, so a
+ * session minted with one must not leave older ones standing beside it. It
+ * reads the store afresh rather than the cached username index, because
+ * sessions minted since the index was built carry no stored user there.
+ */
+export async function destroyOtherSubjectSessions({
+  subjectId,
+  username,
+  sessionStore,
+  currentSessionId,
+}: {
+  subjectId: string;
+  username: string;
+  sessionStore: SessionStoreLike;
+  currentSessionId?: string;
+}): Promise<number> {
+  const sessions = await listStoredSessions(sessionStore);
+  const doomed = sessions.filter((session) => {
+    if (session.sid === currentSessionId || session.username !== username) {
+      return false;
+    }
+    try {
+      const { identity } = deserializeSessionUser(session.rawUser);
+      return identity?.type === 'local' && identity.subjectId === subjectId;
+    } catch {
+      return false;
+    }
+  });
+  await Promise.all(doomed.map((session) => destroyStoredSession(sessionStore, session.sid)));
+  const index = getCachedUsernameSessionIndex(sessionStore);
+  if (index !== undefined) {
+    removeDestroyedSessionsFromIndex(index, username, doomed);
+  }
+  return doomed.length;
 }

@@ -6,8 +6,12 @@ const {
   mockSetAuthIpLockedTotal,
   mockRecordLoginAuditEvent,
   mockSendErrorResponse,
+  mockGetFactorBySubject,
+  mockIssueLoginChallenge,
 } = vi.hoisted(() => {
   return {
+    mockGetFactorBySubject: vi.fn(),
+    mockIssueLoginChallenge: vi.fn(),
     mockFs: {
       existsSync: vi.fn(),
       readFileSync: vi.fn(),
@@ -64,6 +68,14 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+vi.mock('../store/totp.js', () => ({
+  getFactorBySubject: mockGetFactorBySubject,
+}));
+
+vi.mock('./totp-challenge.js', () => ({
+  issueLoginChallenge: mockIssueLoginChallenge,
+}));
+
 vi.mock('../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   setAuthAccountLockedTotal: mockSetAuthAccountLockedTotal,
@@ -75,7 +87,7 @@ vi.mock('./auth-audit.js', () => ({
 }));
 
 vi.mock('./authenticator-chain.js', () => ({
-  authenticateRequest: mockAuthenticateRequest,
+  authenticateLoginRequest: mockAuthenticateRequest,
   // The real predicate, not a stub: authenticateLogin branches on it, so a
   // mock that always answered false would hide a rejection being treated as a
   // successful login.
@@ -90,7 +102,10 @@ vi.mock('./error-response.js', () => ({
 import log from '../log/index.js';
 import {
   authenticateLogin,
+  clearLoginLockoutsAfterSuccess,
   initializeLoginLockoutState,
+  rejectFailedSecondFactor,
+  rejectIfLockedOut,
   resetLoginLockoutStateForTests,
   testable_accountLockoutPolicy,
   testable_evictOldestTrackedEntries,
@@ -113,7 +128,11 @@ function makeAuthenticatorInvalidCredentials() {
 
 function makeAuthenticatorSuccess(username = 'john') {
   mockAuthenticateRequest.mockImplementation((request: any) => {
-    const principal = { kind: 'basic', username };
+    const principal = {
+      kind: 'basic',
+      username,
+      identity: { subjectId: `subject-${username}`, providerId: 'basic.default' },
+    };
     request.principal = principal;
     return Promise.resolve(principal);
   });
@@ -554,7 +573,7 @@ describe('auth-lockout', () => {
     makeAuthenticatorSuccess('recover-user');
     await authenticateLogin(req, createResponse() as any, next);
     expect(next).toHaveBeenCalledTimes(1);
-    expect(req.principal).toEqual({ kind: 'basic', username: 'recover-user' });
+    expect(req.principal).toMatchObject({ kind: 'basic', username: 'recover-user' });
 
     makeAuthenticatorInvalidCredentials();
     for (let index = 0; index < 4; index += 1) {
@@ -2671,5 +2690,106 @@ describe('auth-lockout', () => {
     expect(result).toBeUndefined();
     // Sanity: lockedUntil is still exactly now (not updated)
     expect(lockouts.get('boundary-exact')?.lockedUntil).toBe(now);
+  });
+
+  describe('second factor (TOTP slice 3)', () => {
+    test('a correct password for an enrolled subject issues a challenge, sets no principal and leaves the failure budget alone', async () => {
+      mockGetFactorBySubject.mockReturnValue({ factorId: 'factor-1' });
+      const req = { body: { username: 'john' }, ip: '203.0.113.50' } as any;
+      const res = createResponse();
+      const next = vi.fn();
+
+      makeAuthenticatorInvalidCredentials();
+      await authenticateLogin(req, createResponse() as any, vi.fn());
+      makeAuthenticatorSuccess('john');
+      await authenticateLogin(req, res as any, next);
+
+      expect(mockGetFactorBySubject).toHaveBeenCalledWith('subject-john');
+      expect(mockIssueLoginChallenge).toHaveBeenCalledWith(
+        req,
+        res,
+        expect.objectContaining({ kind: 'basic', username: 'john' }),
+        { factorId: 'factor-1' },
+      );
+      expect(next).not.toHaveBeenCalled();
+      expect(req.principal).toBeUndefined();
+
+      // The earlier failure was not forgiven by the half-login: four more
+      // failures reach the default five-attempt account threshold.
+      makeAuthenticatorInvalidCredentials();
+      let last = createResponse();
+      for (let index = 0; index < 4; index += 1) {
+        last = createResponse();
+        await authenticateLogin({ ...req, principal: undefined } as any, last as any, vi.fn());
+      }
+      expect(last.status).toHaveBeenCalledWith(423);
+    });
+
+    test('an unenrolled subject proceeds to the login route and clears the budget', async () => {
+      mockGetFactorBySubject.mockReturnValue(undefined);
+      makeAuthenticatorSuccess('john');
+      const req = { body: { username: 'john' }, ip: '203.0.113.51' } as any;
+      const next = vi.fn();
+
+      await authenticateLogin(req, createResponse() as any, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(mockIssueLoginChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a store fault while looking for the factor is the server error path, not a login', async () => {
+      const failure = new Error('store down');
+      mockGetFactorBySubject.mockImplementation(() => {
+        throw failure;
+      });
+      makeAuthenticatorSuccess('john');
+      const req = { body: { username: 'john' }, ip: '203.0.113.52' } as any;
+      const next = vi.fn();
+
+      await authenticateLogin(req, createResponse() as any, next);
+
+      expect(next).toHaveBeenCalledWith(failure);
+      expect(req.principal).toBeUndefined();
+      expect(mockIssueLoginChallenge).not.toHaveBeenCalled();
+    });
+
+    test('rejectIfLockedOut answers 423 for a locked account and nothing otherwise', async () => {
+      const req = { body: { username: 'locky' }, ip: '203.0.113.53' } as any;
+      expect(rejectIfLockedOut(req, createResponse() as any, 'locky')).toBe(false);
+
+      for (let index = 0; index < 5; index += 1) {
+        rejectFailedSecondFactor(req, createResponse() as any, 'locky');
+      }
+      const res = createResponse();
+      expect(rejectIfLockedOut(req, res as any, 'locky')).toBe(true);
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    });
+
+    test('a failed second factor is a bare 401 with an audit entry that names no proof', async () => {
+      const req = { ip: '203.0.113.54' } as any;
+      const res = createResponse();
+
+      rejectFailedSecondFactor(req, res as any, undefined);
+
+      expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 401, 'Unauthorized');
+      expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
+        req,
+        'error',
+        'Authentication failed (invalid second factor)',
+        undefined,
+      );
+    });
+
+    test('clearLoginLockoutsAfterSuccess forgives the account and IP budget', async () => {
+      const req = { ip: '203.0.113.55' } as any;
+      for (let index = 0; index < 4; index += 1) {
+        rejectFailedSecondFactor(req, createResponse() as any, 'forgiven');
+      }
+      clearLoginLockoutsAfterSuccess(req, 'forgiven');
+      const res = createResponse();
+      rejectFailedSecondFactor(req, res as any, 'forgiven');
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
   });
 });

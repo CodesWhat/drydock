@@ -8,18 +8,20 @@ import {
   setAuthIpLockedTotal,
 } from '../prometheus/auth.js';
 import * as store from '../store/index.js';
+import { getFactorBySubject, type TotpFactorRecord } from '../store/totp.js';
 import { getErrorMessage } from '../util/error.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import type { AuthRequest } from './auth-types.js';
 import {
   type AuthenticationOutcome,
-  authenticateRequest,
+  authenticateLoginRequest,
   isAuthenticationRejection,
 } from './authenticator-chain.js';
 import { sendErrorResponse } from './error-response.js';
 import { getFirstHeaderValue } from './header-value.js';
 import { type AuthenticatedPrincipal, isLoginSessionEligible } from './principal.js';
+import { issueLoginChallenge } from './totp-challenge.js';
 
 const MS_PER_MINUTE = 60 * 1000;
 const DEFAULT_LOCKOUT_WINDOW_MINUTES = 15;
@@ -477,25 +479,96 @@ function sendLockoutResponse(
   sendErrorResponse(res, 423, LOGIN_LOCKOUT_ERROR_MESSAGE);
 }
 
+/**
+ * Count one failed attempt (password or second factor) against the account and
+ * IP budgets and answer it: 423 when that attempt locked the account or IP,
+ * otherwise the same bare 401 every wrong credential gets.
+ */
+function rejectFailedAttempt(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+  auditMessage: string,
+): void {
+  const failedAt = Date.now();
+  const accountLockoutAfterFailure = registerFailedLoginAttempt(
+    accountLoginLockouts,
+    accountLockoutPolicy,
+    normalizeIdentity(loginIdentity),
+    failedAt,
+  );
+  const ipLockoutAfterFailure = registerFailedLoginAttempt(
+    ipLoginLockouts,
+    ipLockoutPolicy,
+    normalizeIdentity(req.ip),
+    failedAt,
+  );
+  const lockoutUntil = Math.max(accountLockoutAfterFailure ?? 0, ipLockoutAfterFailure ?? 0);
+  if (lockoutUntil > failedAt) {
+    sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
+    return;
+  }
+
+  recordLoginAuditEvent(req, 'error', auditMessage, loginIdentity);
+  sendUnauthorized(res);
+}
+
+/**
+ * Answer 423 when the account (when known) or the caller's IP is locked out.
+ * Returns whether it answered. Shared with the login challenge so password and
+ * second-factor failures draw on one budget.
+ */
+export function rejectIfLockedOut(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): boolean {
+  const now = Date.now();
+  const accountLockoutUntil = getLockoutUntil(
+    accountLoginLockouts,
+    accountLockoutPolicy,
+    normalizeIdentity(loginIdentity),
+    now,
+  );
+  const ipLockoutUntil = getLockoutUntil(
+    ipLoginLockouts,
+    ipLockoutPolicy,
+    normalizeIdentity(req.ip),
+    now,
+  );
+  const activeLockoutUntil = Math.max(accountLockoutUntil ?? 0, ipLockoutUntil ?? 0);
+  if (activeLockoutUntil > now) {
+    sendLockoutResponse(req, res, activeLockoutUntil, now, loginIdentity);
+    return true;
+  }
+  return false;
+}
+
+/** A second factor failed: count it against the shared budget and answer 401 or 423. */
+export function rejectFailedSecondFactor(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): void {
+  rejectFailedAttempt(req, res, loginIdentity, 'Authentication failed (invalid second factor)');
+}
+
+/** A login fully succeeded (password, plus factor when one is due): forgive the budget. */
+export function clearLoginLockoutsAfterSuccess(
+  req: AuthRequest,
+  loginIdentity: string | undefined,
+): void {
+  clearLoginLockout(accountLoginLockouts, normalizeIdentity(loginIdentity));
+  clearLoginLockout(ipLoginLockouts, normalizeIdentity(req.ip));
+}
+
 export async function authenticateLogin(
   req: AuthRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   const loginIdentity = getLoginIdentity(req);
-  const accountLockoutKey = normalizeIdentity(loginIdentity);
-  const ipLockoutKey = normalizeIdentity(req.ip);
-  const now = Date.now();
-  const accountLockoutUntil = getLockoutUntil(
-    accountLoginLockouts,
-    accountLockoutPolicy,
-    accountLockoutKey,
-    now,
-  );
-  const ipLockoutUntil = getLockoutUntil(ipLoginLockouts, ipLockoutPolicy, ipLockoutKey, now);
-  const activeLockoutUntil = Math.max(accountLockoutUntil ?? 0, ipLockoutUntil ?? 0);
-  if (activeLockoutUntil > now) {
-    sendLockoutResponse(req, res, activeLockoutUntil, now, loginIdentity);
+  if (rejectIfLockedOut(req, res, loginIdentity)) {
     return;
   }
 
@@ -516,34 +589,8 @@ export async function authenticateLogin(
   const isBasicAuthorization =
     hasAuthorizationHeader && authorization.toLowerCase().startsWith('basic ');
 
-  const rejectFailedLogin = (): void => {
-    const failedAt = Date.now();
-    const accountLockoutAfterFailure = registerFailedLoginAttempt(
-      accountLoginLockouts,
-      accountLockoutPolicy,
-      accountLockoutKey,
-      failedAt,
-    );
-    const ipLockoutAfterFailure = registerFailedLoginAttempt(
-      ipLoginLockouts,
-      ipLockoutPolicy,
-      ipLockoutKey,
-      failedAt,
-    );
-    const lockoutUntil = Math.max(accountLockoutAfterFailure ?? 0, ipLockoutAfterFailure ?? 0);
-    if (lockoutUntil > failedAt) {
-      sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
-      return;
-    }
-
-    recordLoginAuditEvent(
-      req,
-      'error',
-      'Authentication failed (invalid credentials)',
-      loginIdentity,
-    );
-    sendUnauthorized(res);
-  };
+  const rejectFailedLogin = (): void =>
+    rejectFailedAttempt(req, res, loginIdentity, 'Authentication failed (invalid credentials)');
 
   if (hasAuthorizationHeader && !isBasicAuthorization) {
     finishAttempt();
@@ -557,7 +604,7 @@ export async function authenticateLogin(
   // session limit has been enforced.
   let outcome: AuthenticationOutcome;
   try {
-    outcome = await authenticateRequest(req);
+    outcome = await authenticateLoginRequest(req);
   } catch (error: unknown) {
     finishAttempt();
     next(error);
@@ -582,8 +629,26 @@ export async function authenticateLogin(
     return;
   }
 
-  clearLoginLockout(accountLoginLockouts, accountLockoutKey);
-  clearLoginLockout(ipLoginLockouts, ipLockoutKey);
+  // A correct password for a subject with an active factor is only half a
+  // login. It starts a challenge and leaves the failure budget untouched, so
+  // password-then-guess cycles cannot reset the counter that bounds the guesses.
+  if (principal.kind === 'basic') {
+    let factor: TotpFactorRecord | undefined;
+    try {
+      factor = getFactorBySubject(principal.identity.subjectId);
+    } catch (error: unknown) {
+      req.principal = undefined;
+      next(error);
+      return;
+    }
+    if (factor !== undefined) {
+      req.principal = undefined;
+      issueLoginChallenge(req, res, principal, factor);
+      return;
+    }
+  }
+
+  clearLoginLockoutsAfterSuccess(req, loginIdentity);
   next();
 }
 
