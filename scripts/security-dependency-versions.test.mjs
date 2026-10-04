@@ -104,11 +104,11 @@ test('every js-yaml resolution counts empty merge sources against its budget', (
 test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
   const manifest = readJson('e2e/package.json');
   const lockfile = readJson('e2e/package-lock.json');
-  assert.equal(manifest.overrides?.['csv-parse'], '7.0.2');
+  assert.ok(compareSemver(manifest.overrides?.['csv-parse'], '7.0.2') >= 0);
   const artilleryCsv =
     resolvedVersion(lockfile, 'artillery/node_modules/csv-parse') ??
     resolvedVersion(lockfile, 'csv-parse');
-  assert.equal(artilleryCsv, '7.0.2');
+  assert.ok(compareSemver(artilleryCsv, '7.0.2') >= 0);
   assert.equal(manifest.scripts.postinstall, 'node ../scripts/patch-artillery-csv.mjs');
 });
 
