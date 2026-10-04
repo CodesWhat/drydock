@@ -22,17 +22,25 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import { WebSocket, WebSocketServer } from 'ws';
 
-const { auditEvents, logLines } = vi.hoisted(() => {
+const { auditEvents, auditFault, logLines } = vi.hoisted(() => {
   // Account lockout is the budget under test in one place, so keep it out of the
   // way everywhere else: a single address makes every request one IP.
   process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = '50';
   process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS = '1000';
   process.env.DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS = '10';
-  return { auditEvents: [] as unknown[], logLines: [] as unknown[][] };
+  return {
+    auditEvents: [] as unknown[],
+    // Set by a test to make the audit insert of a matching event throw.
+    auditFault: { when: undefined as ((event: unknown) => boolean) | undefined },
+    logLines: [] as unknown[][],
+  };
 });
 
 vi.mock('./audit-events.js', () => ({
   recordAuditEvent: (event: unknown) => {
+    if (auditFault.when?.(event)) {
+      throw new Error('audit store down');
+    }
     auditEvents.push(event);
   },
 }));
@@ -389,6 +397,7 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
 
   beforeEach(() => {
     auditEvents.length = 0;
+    auditFault.when = undefined;
     logLines.length = 0;
     ddEnvVars.DD_AUTH_TOTP_KEYRING = keyringJson;
     ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID = 'k1';
@@ -984,6 +993,59 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
 
       expect(await protectedStatus(h, earlier)).toBe(401);
       expect(await protectedStatus(h, fresh)).toBe(200);
+    });
+  });
+
+  describe('a login that fails after its session was written', () => {
+    /** The audit insert of the finished login fails once, after the principal is in the session. */
+    function failTheSuccessAuditOnce(): void {
+      let failed = false;
+      auditFault.when = (event) => {
+        const { action, details } = event as { action: string; details: string };
+        if (failed || action !== 'auth-login' || !details.startsWith('Login succeeded')) {
+          return false;
+        }
+        failed = true;
+        return true;
+      };
+    }
+
+    test('a password login answers 500 with a cookie that authenticates nothing', async () => {
+      const h = await boot();
+      failTheSuccessAuditOnce();
+
+      const response = await post(h, { Authorization: BASIC_AUTH_HEADER });
+
+      expect(response.status).toBe(500);
+      expect(await protectedStatus(h, cookieOf(response))).toBe(401);
+      expect(storedUsers(h.db).filter(Boolean)).toHaveLength(0);
+    });
+
+    test('a recovery login mints no session, so the code it hands back was not also spent on one', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const challenge = await startChallenge(h);
+      failTheSuccessAuditOnce();
+
+      const response = await put(h, challenge.id, { recoveryCode: enrolled.recoveryCodes[0] });
+
+      expect(response.status).toBe(500);
+      expect(await protectedStatus(h, cookieOf(response))).toBe(401);
+      expect(storedUsers(h.db).filter(Boolean)).toHaveLength(0);
+      expect(totpStore.countUnusedRecoveryCodes(enrolled.factorId)).toBe(10);
+      expect(
+        auditEvents.filter((e) => (e as { action: string }).action === 'totp-recovery-used'),
+      ).toEqual([]);
+
+      // The code is still good, and using it for real is what gets audited.
+      const retry = await startChallenge(h);
+      const recovered = await put(h, retry.id, { recoveryCode: enrolled.recoveryCodes[0] });
+      expect(recovered.status).toBe(200);
+      expect(await protectedStatus(h, cookieOf(recovered))).toBe(200);
+      expect(totpStore.countUnusedRecoveryCodes(enrolled.factorId)).toBe(9);
+      expect(
+        auditEvents.filter((e) => (e as { action: string }).action === 'totp-recovery-used'),
+      ).toHaveLength(1);
     });
   });
 

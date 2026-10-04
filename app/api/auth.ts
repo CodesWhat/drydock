@@ -203,6 +203,13 @@ function handleLoginError(
     log.warn(errorMessage);
   }
   recordLoginAuditEvent(req, 'error', errorMessage);
+  // A fault can arrive after the principal was written into the session, and
+  // the response below still saves that session and sends its cookie. Take
+  // the principal back out first, so a login that settles false never leaves
+  // a session that authenticates.
+  if (req.session) {
+    clearSessionPrincipal(req);
+  }
   sendErrorResponse(res, 500, LOGIN_SESSION_ERROR_RESPONSE);
   finish(false);
 }
