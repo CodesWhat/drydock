@@ -14,177 +14,43 @@ const translatedReadmes = [
 const allReadmes = ['README.md', ...translatedReadmes];
 const sourceReadme = readFileSync(`${repoRoot}/README.md`, 'utf8');
 const sourceUrls = [...sourceReadme.matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url).sort();
-const localizedBehaviorFragments: Record<
-  string,
-  { homeAssistantUpdate: string; portwingEventSource: string; rawInventoryAuthority: string }
-> = {
-  'README.de.md': {
-    homeAssistantUpdate: 'Installieren-Schaltfläche ein echtes Update auslöst',
-    portwingEventSource: 'Portwing bleibt Ereignisquelle',
-    rawInventoryAuthority: 'Rohinventar kann Controller-Ergebnisse nicht löschen',
-  },
-  'README.es.md': {
-    homeAssistantUpdate: 'botón Instalar ejecuta una actualización real',
-    portwingEventSource: 'Portwing sigue siendo la fuente de eventos',
-    rawInventoryAuthority: 'inventario sin procesar no puede borrar resultados del controlador',
-  },
-  'README.fr.md': {
-    homeAssistantUpdate: 'bouton Installer déclenche une véritable mise à jour',
-    portwingEventSource: 'Portwing reste la source des événements de cycle de vie',
-    rawInventoryAuthority:
-      'inventaire brut ne peut pas effacer les résultats de mise à jour enrichis par le contrôleur',
-  },
-  'README.pl.md': {
-    homeAssistantUpdate: 'przycisk Instaluj uruchamia rzeczywistą aktualizację',
-    portwingEventSource: 'Portwing pozostaje źródłem zdarzeń cyklu życia',
-    rawInventoryAuthority:
-      'surowy spis nie może usunąć wyników aktualizacji wzbogaconych przez kontroler',
-  },
-  'README.pt-BR.md': {
-    homeAssistantUpdate: 'botão Instalar aciona uma atualização real',
-    portwingEventSource: 'Portwing continua sendo a fonte de eventos de ciclo de vida',
-    rawInventoryAuthority:
-      'inventário bruto não pode apagar resultados de atualização enriquecidos pelo controlador',
-  },
-  'README.zh-CN.md': {
-    homeAssistantUpdate: '“安装”按钮会触发实际更新',
-    portwingEventSource: 'Portwing 仍是生命周期事件源',
-    rawInventoryAuthority: '原始清单无法抹除控制器增强的更新结果',
-  },
-};
-
 const localizedSurfaceFragments: Record<
   string,
   {
     featureTableHeader: string;
     builtWithHeading: string;
     communityQaHeading: string;
-    releaseHeading: string;
   }
 > = {
   'README.de.md': {
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.10</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.10</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.10</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
-    releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.10</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.10</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.10 亮点</strong></summary>',
-  },
-};
-
-const localizedReleaseFragments: Record<
-  string,
-  {
-    onceReservation: string;
-    retryBuffer: string;
-    deadlineTimer: string;
-    hookLocation: string;
-    contributorCredit: string;
-    hookAbort: string;
-  }
-> = {
-  'README.de.md': {
-    onceReservation:
-      '**Batch- und Digest-Sends mit `once=true` nehmen jetzt dieselbe Reservierung des Benachrichtigungs-Slots vor wie der einfache Pfad, sodass ein manueller Scan, der einen Cron-Scan überlappt, dasselbe Update nicht mehr zweimal melden kann.**',
-    retryBuffer: 'der Batch-Retry-Puffer trägt keinen unreservierten Eintrag mehr an den Trigger',
-    deadlineTimer:
-      '**Das Deregistrieren eines Watchers löscht jetzt den Fristen-Timer des Cron-Scans**',
-    hookLocation:
-      '**Der Getting-Started-Leitfaden sagt jetzt, dass Hook-Skripte innerhalb des Drydock-Containers laufen**',
-    contributorCredit: 'der Agent-Registry-Lookup-Fix nennt jetzt den Beitragenden',
-    hookAbort:
-      '**Derselbe Hooks-Absatz sagt jetzt, dass ein fehlgeschlagener Pre-Hook das Update standardmäßig abbricht, und nennt `dd.hook.pre.abort=false` als Opt-out**',
-  },
-  'README.es.md': {
-    onceReservation:
-      '**Los envíos por lotes y por resumen con `once=true` ahora toman la misma reserva de la ranura de notificación que toma la ruta simple, de modo que un escaneo manual superpuesto a un escaneo de cron ya no puede anunciar la misma actualización dos veces.**',
-    retryBuffer:
-      'el búfer de reintentos por lotes ya no lleva al activador una entrada sin reservar',
-    deadlineTimer:
-      '**Dar de baja un watcher ahora borra el temporizador de plazo del escaneo de cron**',
-    hookLocation:
-      '**La guía de inicio ahora indica que los scripts de hook se ejecutan dentro del contenedor de Drydock**',
-    contributorCredit:
-      'la corrección de búsqueda de registro del agente ahora acredita a quien la escribió',
-    hookAbort:
-      '**El mismo párrafo de hooks ahora indica que un pre-hook fallido aborta la actualización de forma predeterminada y nombra `dd.hook.pre.abort=false` como la opción para desactivarlo**',
-  },
-  'README.fr.md': {
-    onceReservation:
-      "**Les envois par lot et par condensé avec `once=true` prennent désormais la même réservation de créneau de notification que le chemin simple, si bien qu'un scan manuel qui chevauche un scan cron ne peut plus annoncer deux fois la même mise à jour.**",
-    retryBuffer:
-      'le tampon de réessai par lot ne porte plus au déclencheur une entrée sans réservation',
-    deadlineTimer:
-      "**Le désenregistrement d'un watcher efface désormais le minuteur d'échéance du scan cron**",
-    hookLocation:
-      "**Le guide de démarrage précise désormais que les scripts de hook s'exécutent à l'intérieur du conteneur Drydock**",
-    contributorCredit:
-      "le correctif de recherche de registre de l'agent crédite désormais la personne qui l'a écrit",
-    hookAbort:
-      "**Le même paragraphe sur les hooks précise désormais qu'un pre-hook en échec interrompt la mise à jour par défaut et nomme `dd.hook.pre.abort=false` comme option de désactivation**",
-  },
-  'README.pl.md': {
-    onceReservation:
-      '**Wysyłki zbiorcze i skrótowe z `once=true` biorą teraz tę samą rezerwację slotu powiadomienia co ścieżka prosta, dzięki czemu ręczny skan nakładający się na skan crona nie może już zgłosić tej samej aktualizacji dwukrotnie.**',
-    retryBuffer: 'bufor ponowień wsadowych nie przekazuje już do wyzwalacza wpisu bez rezerwacji',
-    deadlineTimer: '**Wyrejestrowanie watchera czyści teraz licznik terminu skanu crona**',
-    hookLocation:
-      '**Przewodnik pierwszych kroków mówi teraz, że skrypty hooków działają wewnątrz kontenera Drydock**',
-    contributorCredit: 'poprawka wyszukiwania rejestru dla agenta wskazuje teraz jej autora',
-    hookAbort:
-      '**Ten sam akapit o hookach mówi teraz, że nieudany pre-hook domyślnie przerywa aktualizację, i wskazuje `dd.hook.pre.abort=false` jako sposób rezygnacji**',
-  },
-  'README.pt-BR.md': {
-    onceReservation:
-      '**Os envios em lote e por digest com `once=true` agora fazem a mesma reserva de vaga de notificação que o caminho simples faz, de modo que uma varredura manual sobreposta a uma varredura do cron não pode mais anunciar a mesma atualização duas vezes.**',
-    retryBuffer:
-      'o buffer de retentativas em lote não leva mais ao gatilho uma entrada sem reserva',
-    deadlineTimer:
-      '**Cancelar o registro de um watcher agora limpa o temporizador de prazo da varredura do cron**',
-    hookLocation:
-      '**O guia de primeiros passos agora diz que os scripts de hook rodam dentro do contêiner do Drydock**',
-    contributorCredit: 'a correção de busca de registro do agente agora credita quem a escreveu',
-    hookAbort:
-      '**O mesmo parágrafo sobre hooks agora diz que um pre-hook com falha aborta a atualização por padrão e nomeia `dd.hook.pre.abort=false` como a forma de desativar isso**',
-  },
-  'README.zh-CN.md': {
-    onceReservation:
-      '**批量和摘要模式下的 `once=true` 发送现在会像简单路径一样先占用通知名额，因此与定时扫描重叠的手动扫描不会再把同一次更新通报两次。**',
-    retryBuffer: '批量重试缓冲区也不会再把未占位的条目送到触发器',
-    deadlineTimer: '**注销 watcher 现在会清除定时扫描的截止计时器**',
-    hookLocation: '**入门指南现在说明 hook 脚本在 Drydock 容器内运行**',
-    contributorCredit: '代理的注册表查找修复也标注了它的贡献者',
-    hookAbort:
-      '**同一段 hooks 说明现在写明失败的 pre-hook 默认会中止更新，并指出 `dd.hook.pre.abort=false` 是退出该行为的开关**',
   },
 };
 
@@ -193,22 +59,6 @@ const balancedTagPairs = [
   { name: 'summary', opening: /<summary>/g, closing: /<\/summary>/g },
   { name: 'emphasis', opening: /<em>/g, closing: /<\/em>/g },
 ];
-
-function getReleaseBlock(content: string, heading: string): string {
-  const headingIndex = content.indexOf(heading);
-  const startIndex = content.lastIndexOf('<details', headingIndex);
-  const endIndex = content.indexOf('</details>', headingIndex);
-
-  if (headingIndex === -1 || startIndex === -1 || endIndex === -1) {
-    throw new Error(`could not find release block for ${heading}`);
-  }
-
-  return content.slice(startIndex, endIndex);
-}
-
-function getBullet(block: string, fragment: string): string | undefined {
-  return block.split('\n').find((line) => line.startsWith('- ') && line.includes(fragment));
-}
 
 const forbiddenSourceEnglishProse = [
   'Most tools force a tradeoff.',
@@ -229,20 +79,6 @@ const requiredFragments = [
   '`allowmetadata=true`',
   '`DD_NOTIFICATION_HTTP_*`',
   'DEPRECATIONS.md#enforced-security-changes-no-deprecation-window',
-  'v1.6.0-rc.13',
-  'v1.6.0-rc.12',
-  'v1.6.0-rc.11',
-  './CHANGELOG.md#160--2026-08-11',
-  './CHANGELOG.md#170-rc1--2026-08-14',
-  './CHANGELOG.md#170-rc2--2026-08-20',
-  './CHANGELOG.md#170-rc3--2026-08-23',
-  './CHANGELOG.md#170-rc4--2026-08-26',
-  './CHANGELOG.md#170-rc5--2026-08-27',
-  './CHANGELOG.md#170-rc6--2026-08-29',
-  './CHANGELOG.md#170-rc7--2026-08-29',
-  './CHANGELOG.md#170-rc8--2026-09-03',
-  './CHANGELOG.md#170-rc9--2026-09-03',
-  './CHANGELOG.md#170-rc10--2026-09-04',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -277,46 +113,16 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).not.toContain('https://star-history.com/#');
   });
 
-  test('preserves Home Assistant update and Portwing result-authority behavior', () => {
-    const behavior = localizedBehaviorFragments[readme];
-    expect(content).toContain(behavior.homeAssistantUpdate);
-    expect(content).toContain(behavior.portwingEventSource);
-    expect(content).toContain(behavior.rawInventoryAuthority);
-  });
-
   test('keeps public README labels in the target language', () => {
     const surface = localizedSurfaceFragments[readme];
     expect(content).toContain(surface.featureTableHeader);
     expect(content).toContain(surface.builtWithHeading);
     expect(content).toContain(surface.communityQaHeading);
-    expect(content).toContain(surface.releaseHeading);
   });
 
-  test('maps localized v1.7 release bullets to their source links', () => {
-    const surface = localizedSurfaceFragments[readme];
-    const release = localizedReleaseFragments[readme];
-    const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const releaseBullets = [
-      release.onceReservation,
-      release.deadlineTimer,
-      release.hookLocation,
-      release.hookAbort,
-    ].map((fragment) => getBullet(releaseBlock, fragment));
-    const getUrls = (bullet: string | undefined) =>
-      [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
-
-    expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[0]).toContain(release.retryBuffer);
-    expect(releaseBullets[2]).toContain(release.contributorCredit);
-    expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/1001',
-      'https://github.com/CodesWhat/drydock/pull/996',
-      'https://github.com/CodesWhat/drydock/pull/998',
-      'https://github.com/CodesWhat/drydock/pull/998',
-    ]);
-    expect(getUrls(releaseBullets[0]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/998',
-    ]);
+  test('carries no per-release highlights block', () => {
+    expect(content).not.toMatch(/<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/);
+    expect(content).not.toContain('id="recent-updates"');
   });
 
   test('preserves the exact source URL multiset', () => {
@@ -332,109 +138,14 @@ describe.each(translatedReadmes)('%s', (readme) => {
   });
 });
 
-test.each(allReadmes)('%s identifies the published v1.7 candidate', (readme) => {
+describe.each(allReadmes)('%s release notes', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
-  const status = content.split('id="recent-updates">')[1]?.split('<details')[0] ?? '';
 
-  expect(status).toContain(
-    '[v1.7.0-rc.16](https://github.com/CodesWhat/drydock/releases/tag/v1.7.0-rc.16)',
-  );
-  expect(status).not.toContain('v1.7.0-rc.15');
-  expect(status).toContain('v1.8');
-  expect(status).toContain('RC10');
-});
-
-const notificationRoadmapStatus: Record<
-  string,
-  { delivered: string; remaining: string; stale: string }
-> = {
-  'README.md': {
-    delivered: 'notification-only exact group routing',
-    remaining:
-      'broader live configuration and inherited group/action policies need ownership decisions',
-    stale: 'broader live configuration and group notification routing need ownership decisions',
-  },
-  'README.de.md': {
-    delivered: 'exaktes Gruppenrouting nur für Benachrichtigungen',
-    remaining:
-      'Erweiterte Live-Konfiguration und vererbte Gruppen-/Aktionsrichtlinien brauchen Entscheidungen zur Zuständigkeit',
-    stale:
-      'Erweiterte Live-Konfiguration und Gruppenrouting für Benachrichtigungen brauchen Entscheidungen zur Zuständigkeit',
-  },
-  'README.es.md': {
-    delivered: 'enrutamiento por grupo exacto solo para notificaciones',
-    remaining:
-      'La configuración en vivo ampliada y las políticas heredadas de grupos y acciones requieren decisiones sobre quién controla los ajustes',
-    stale:
-      'La configuración en vivo ampliada y el enrutamiento de notificaciones por grupo requieren decisiones sobre quién controla los ajustes',
-  },
-  'README.fr.md': {
-    delivered: 'routage par groupe exact réservé aux notifications',
-    remaining:
-      'La configuration en direct étendue et les politiques héritées des groupes et des actions exigent des décisions sur la propriété des réglages',
-    stale:
-      'La configuration en direct étendue et le routage des notifications par groupe exigent des décisions sur la propriété des réglages',
-  },
-  'README.pl.md': {
-    delivered: 'routing według dokładnej grupy tylko dla powiadomień',
-    remaining:
-      'Szersza konfiguracja na żywo i dziedziczone polityki grup oraz akcji wymagają decyzji o zarządzaniu ustawieniami',
-    stale:
-      'Szersza konfiguracja na żywo i routing powiadomień według grup wymagają decyzji o zarządzaniu ustawieniami',
-  },
-  'README.pt-BR.md': {
-    delivered: 'roteamento por grupo exato apenas para notificações',
-    remaining:
-      'A configuração ao vivo ampliada e as políticas herdadas de grupos e ações precisam de decisões sobre quem controla os ajustes',
-    stale:
-      'A configuração ao vivo ampliada e o roteamento de notificações por grupo precisam de decisões sobre quem controla os ajustes',
-  },
-  'README.zh-CN.md': {
-    delivered: '仅用于通知的精确分组路由',
-    remaining: '更广泛的实时配置以及分组和操作的继承策略仍需确定设置归属',
-    stale: '更广泛的实时配置和分组通知路由需要确定设置归属',
-  },
-};
-
-test.each(allReadmes)(
-  '%s separates implemented notification routing from remaining ownership decisions',
-  (readme) => {
-    const row =
-      readFileSync(`${repoRoot}/${readme}`, 'utf8')
-        .split('\n')
-        .find((line) => line.startsWith('| **v1.8.0**')) ?? '';
-    const status = notificationRoadmapStatus[readme];
-    expect(row).toContain(status.delivered);
-    expect(row).toContain('[#1251](https://github.com/CodesWhat/drydock/pull/1251)');
-    expect(row).toContain(status.remaining);
-    expect(row.indexOf(status.delivered)).toBeLessThan(row.indexOf(status.remaining));
-    expect(row).not.toContain(status.stale);
-    expect(row).toContain('`dev/v1.8`');
-    expect(row).toContain('TOTP');
-    expect(row).toContain('GA');
-  },
-);
-
-test('English rc.7 update highlight scopes cleanup failures to the health gate', () => {
-  const releaseBlock = getReleaseBlock(
-    sourceReadme,
-    '<summary><strong>v1.7.0-rc.7 highlights</strong></summary>',
-  );
-  const bullet = getBullet(releaseBlock, '**Update execution stays successful');
-  const urls = [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"]+/g)].map(([url]) => url);
-
-  expect(bullet).toContain('after the health gate');
-  expect(bullet).toContain('self-updates wait for active lifecycles');
-  expect(urls.sort()).toEqual([
-    'https://github.com/CodesWhat/drydock/pull/931',
-    'https://github.com/CodesWhat/drydock/pull/942',
-  ]);
-});
-
-test('German rc.7 release notes use registry terminology', () => {
-  const german = readFileSync(`${repoRoot}/README.de.md`, 'utf8');
-
-  expect(german).not.toContain('Registrierungspaginierung');
+  test('keeps release highlights in CHANGELOG.md and GitHub Releases, not the README', () => {
+    expect(content).not.toMatch(/<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/);
+    expect(content).toContain('[`CHANGELOG.md`](CHANGELOG.md)');
+    expect(content).toContain('https://github.com/CodesWhat/drydock/releases)');
+  });
 });
 
 describe.each(allReadmes)('%s star history', (readme) => {

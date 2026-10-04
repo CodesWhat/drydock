@@ -65,7 +65,7 @@ test('public release surfaces identify the v1.7 release candidate', () => {
     ),
     'README must carry the live release badge',
   );
-  assert.match(readme, new RegExp(`v${escapedRcVersion} highlights`, 'u'));
+  assert.doesNotMatch(readme, /<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/u);
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
   // The app and agent APIs report the base version as `version` and the full build
@@ -200,14 +200,12 @@ test('release candidate notes cover the post-promotion fixes', () => {
 });
 
 test('v1.6.0 is released and public release routing advances to v1.7', () => {
-  const readme = read('README.md');
   const siteContent = read('apps/web/src/lib/site-content.ts');
   const docsVersions = read('apps/web/scripts/docs-versions.mjs');
   const v16Changelog = read('content/docs/v1.6/changelog/index.mdx');
   const archivedChangelog = read('content/docs/v1.5/changelog/index.mdx');
   const docsReadme = read('content/docs/README.md');
 
-  assert.match(readme, /<summary><strong>v1\.5\.2 highlights<\/strong><\/summary>/u);
   assert.match(
     siteContent,
     /version: "v1\.6\.0",[\s\S]{0,500}?status: "released",[\s\S]{0,100}?border-emerald-500/u,

@@ -129,7 +129,7 @@ function makeReleaseFixture(overrides = {}) {
     'apps/demo/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
     'CHANGELOG.md':
       '# Changelog\n\n## [Unreleased]\n\n## [1.7.0-rc.1] — 2026-08-13\n\n### Added\n\n- release work\n',
-    'README.md': 'v1.7.0-rc.1 highlights\n',
+    'README.md': '# drydock\n',
     'apps/web/scripts/docs-versions.mjs': '{ slug: "v1.7", source: "current", title: "v1.7" }',
     'apps/web/src/lib/site-config.ts': 'version: "1.7.0-rc.1"',
     'content/docs/current/updates/index.mdx':
@@ -157,7 +157,6 @@ test('release metadata validation accepts the GA quickstart label for a stable t
   const root = makeReleaseFixture({
     'CHANGELOG.md':
       '# Changelog\n\n## [Unreleased]\n\n## [1.7.0] — 2026-08-13\n\n### Added\n\n- release work\n',
-    'README.md': 'v1.7.0 highlights\n',
     'apps/web/src/lib/site-config.ts': 'version: "1.7.0"',
     'content/docs/current/updates/index.mdx':
       '## Unreleased\n\n## v1.7.0 Highlights — August 13, 2026\n',
@@ -199,12 +198,22 @@ test('release metadata validation rejects a stale lockfile workspace version', (
 test('release metadata validation rejects missing exact changelog and public RC identity', () => {
   const root = makeReleaseFixture({
     'CHANGELOG.md': '# Changelog\n\n## [Unreleased]\n',
-    'README.md': 'v1.6.0 highlights\n',
+    'content/docs/current/updates/index.mdx': '## v1.6.0 Highlights — August 13, 2026\n',
   });
   assert.throws(
     () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
-    /CHANGELOG\.md has no non-empty \[1\.7\.0-rc\.1\] entry[\s\S]*README\.md/u,
+    /CHANGELOG\.md has no non-empty \[1\.7\.0-rc\.1\] entry[\s\S]*updates\/index\.mdx/u,
   );
+});
+
+test('release metadata validation passes with a README that has no highlights block', () => {
+  const root = makeReleaseFixture({ 'README.md': '# drydock\n\nNo release notes here.\n' });
+  assert.doesNotThrow(() => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'));
+});
+
+test('release metadata validation ignores README content entirely', () => {
+  const root = makeReleaseFixture({ 'README.md': 'v1.6.0 highlights\n' });
+  assert.doesNotThrow(() => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'));
 });
 
 // ---------------------------------------------------------------------------
