@@ -84,6 +84,15 @@ export interface Authenticator {
   authenticate(req: AuthRequest): Promise<AuthenticationOutcome>;
 
   /**
+   * Like `authenticate`, but for the login route only. An authenticator that
+   * declines a verified credential on every other route (Basic, for a subject
+   * with an active second factor) answers here with the verified identity, so
+   * login can start the factor challenge instead of treating the correct
+   * password as a wrong one. Absent means `authenticate` applies unchanged.
+   */
+  authenticateForLogin?(req: AuthRequest): Promise<AuthenticationOutcome>;
+
+  /**
    * Whether this authenticator's presence means a caller can actually get in.
    *
    * Absent means yes. It is declared false by the two authenticators that can
@@ -126,9 +135,12 @@ export function clearAuthenticators(): void {
  * accepts the request, returns a rejection when one refuses terminally, and
  * otherwise returns undefined and leaves the request unauthenticated.
  */
-export async function authenticateRequest(req: AuthRequest): Promise<AuthenticationOutcome> {
+async function runChain(req: AuthRequest, forLogin: boolean): Promise<AuthenticationOutcome> {
   for (const authenticator of chain) {
-    const outcome = await authenticator.authenticate(req);
+    const outcome =
+      forLogin && authenticator.authenticateForLogin
+        ? await authenticator.authenticateForLogin(req)
+        : await authenticator.authenticate(req);
     if (outcome === undefined) {
       continue;
     }
@@ -149,6 +161,15 @@ export async function authenticateRequest(req: AuthRequest): Promise<Authenticat
   }
 
   return undefined;
+}
+
+export async function authenticateRequest(req: AuthRequest): Promise<AuthenticationOutcome> {
+  return runChain(req, false);
+}
+
+/** Run the chain for the login route, where a verified password is reported even when a factor is due. */
+export async function authenticateLoginRequest(req: AuthRequest): Promise<AuthenticationOutcome> {
+  return runChain(req, true);
 }
 
 /**

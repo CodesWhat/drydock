@@ -73,6 +73,7 @@
       "container-stop": "إيقاف الحاوية",
       "container-restart": "إعادة تشغيل الحاوية",
       "auth-login": "تسجيل الدخول",
+      "totp-recovery-used": "استخدام رمز الاسترداد",
       "authenticated": "تمت المصادقة",
       "authfail": "فشل المصادقة",
       "hook-configured": "تم تكوين الخطاف",

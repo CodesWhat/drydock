@@ -16,7 +16,7 @@ const {
   const rateLimitMiddleware = vi.fn((_, __, next) => next());
   const sessionStoreInstance = { stop: vi.fn() };
   return {
-    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
     // A plain function, not an arrow function: this mock is invoked with
     // `new SessionStore(...)` in api/auth.ts, and arrow functions cannot be
     // used as constructors.

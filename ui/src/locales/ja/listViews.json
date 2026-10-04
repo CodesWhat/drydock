@@ -73,6 +73,7 @@
       "container-stop": "コンテナ停止",
       "container-restart": "コンテナ再起動",
       "auth-login": "認証ログイン",
+      "totp-recovery-used": "リカバリーコード使用",
       "authenticated": "認証済み",
       "authfail": "認証失敗",
       "hook-configured": "フック設定済み",

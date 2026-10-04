@@ -35,6 +35,7 @@ const backendAuditActions = {
   'hook-post-failed': true,
   'auto-rollback': true,
   'auth-login': true,
+  'totp-recovery-used': true,
   'env-reveal': true,
   'debug-dump': true,
   'config-read': true,

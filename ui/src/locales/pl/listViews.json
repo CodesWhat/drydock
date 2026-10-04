@@ -73,6 +73,7 @@
       "container-stop": "Zatrzymanie kontenera",
       "container-restart": "Restart kontenera",
       "auth-login": "Logowanie uwierzytelniające",
+      "totp-recovery-used": "Użyto kodu odzyskiwania",
       "authenticated": "Uwierzytelniony",
       "authfail": "Błąd uwierzytelniania",
       "hook-configured": "Hak skonfigurowany",

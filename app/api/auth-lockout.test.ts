@@ -6,8 +6,18 @@ const {
   mockSetAuthIpLockedTotal,
   mockRecordLoginAuditEvent,
   mockSendErrorResponse,
+  mockGetFactorBySubject,
+  mockIssueLoginChallenge,
+  mockGetFactorFailureState,
+  mockRecordFactorFailure,
+  mockClearFactorFailures,
 } = vi.hoisted(() => {
   return {
+    mockGetFactorBySubject: vi.fn(),
+    mockIssueLoginChallenge: vi.fn(),
+    mockGetFactorFailureState: vi.fn(),
+    mockRecordFactorFailure: vi.fn(),
+    mockClearFactorFailures: vi.fn(),
     mockFs: {
       existsSync: vi.fn(),
       readFileSync: vi.fn(),
@@ -64,6 +74,17 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+vi.mock('../store/totp.js', () => ({
+  getFactorBySubject: mockGetFactorBySubject,
+  getFactorFailureState: mockGetFactorFailureState,
+  recordFactorFailure: mockRecordFactorFailure,
+  clearFactorFailures: mockClearFactorFailures,
+}));
+
+vi.mock('./totp-challenge.js', () => ({
+  issueLoginChallenge: mockIssueLoginChallenge,
+}));
+
 vi.mock('../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   setAuthAccountLockedTotal: mockSetAuthAccountLockedTotal,
@@ -75,7 +96,7 @@ vi.mock('./auth-audit.js', () => ({
 }));
 
 vi.mock('./authenticator-chain.js', () => ({
-  authenticateRequest: mockAuthenticateRequest,
+  authenticateLoginRequest: mockAuthenticateRequest,
   // The real predicate, not a stub: authenticateLogin branches on it, so a
   // mock that always answered false would hide a rejection being treated as a
   // successful login.
@@ -90,7 +111,11 @@ vi.mock('./error-response.js', () => ({
 import log from '../log/index.js';
 import {
   authenticateLogin,
+  clearLoginLockoutsAfterSuccess,
   initializeLoginLockoutState,
+  rejectFailedSecondFactor,
+  rejectIfFactorLocked,
+  rejectIfLockedOut,
   resetLoginLockoutStateForTests,
   testable_accountLockoutPolicy,
   testable_evictOldestTrackedEntries,
@@ -113,7 +138,11 @@ function makeAuthenticatorInvalidCredentials() {
 
 function makeAuthenticatorSuccess(username = 'john') {
   mockAuthenticateRequest.mockImplementation((request: any) => {
-    const principal = { kind: 'basic', username };
+    const principal = {
+      kind: 'basic',
+      username,
+      identity: { subjectId: `subject-${username}`, providerId: 'basic.default' },
+    };
     request.principal = principal;
     return Promise.resolve(principal);
   });
@@ -155,6 +184,8 @@ describe('auth-lockout', () => {
       lockoutStateFiles.set(`${candidate}`, `${content}`);
     });
     mockFs.mkdirSync.mockImplementation(() => undefined);
+    mockGetFactorFailureState.mockReturnValue({ failures: 0, lockedUntil: 0 });
+    mockRecordFactorFailure.mockReturnValue({ failures: 1, lockedUntil: 0 });
     resetLoginLockoutStateForTests();
     vi.useRealTimers();
   });
@@ -434,7 +465,7 @@ describe('auth-lockout', () => {
       lockouts.set(`persisted-user-${index}`, {
         failedAttempts: 1,
         windowStartAt: now + index,
-        lockedUntil: now + testable_accountLockoutPolicy.lockoutMs,
+        lockedUntil: 0,
         lastAttemptAt: now + index,
       });
     }
@@ -554,7 +585,7 @@ describe('auth-lockout', () => {
     makeAuthenticatorSuccess('recover-user');
     await authenticateLogin(req, createResponse() as any, next);
     expect(next).toHaveBeenCalledTimes(1);
-    expect(req.principal).toEqual({ kind: 'basic', username: 'recover-user' });
+    expect(req.principal).toMatchObject({ kind: 'basic', username: 'recover-user' });
 
     makeAuthenticatorInvalidCredentials();
     for (let index = 0; index < 4; index += 1) {
@@ -1337,7 +1368,7 @@ describe('auth-lockout', () => {
       lockouts.set(`overflow-user-${i}`, {
         failedAttempts: 1,
         windowStartAt: now + i,
-        lockedUntil: now + testable_accountLockoutPolicy.lockoutMs,
+        lockedUntil: 0,
         lastAttemptAt: now + i,
       });
     }
@@ -1358,20 +1389,17 @@ describe('auth-lockout', () => {
         {
           failedAttempts: 1,
           windowStartAt: now,
-          lockedUntil: now + 60000,
+          lockedUntil: 0,
           lastAttemptAt: now + 100,
         },
       ],
-      [
-        'oldest',
-        { failedAttempts: 1, windowStartAt: now, lockedUntil: now + 60000, lastAttemptAt: now },
-      ],
+      ['oldest', { failedAttempts: 1, windowStartAt: now, lockedUntil: 0, lastAttemptAt: now }],
       [
         'middle',
         {
           failedAttempts: 1,
           windowStartAt: now,
-          lockedUntil: now + 60000,
+          lockedUntil: 0,
           lastAttemptAt: now + 50,
         },
       ],
@@ -1380,7 +1408,7 @@ describe('auth-lockout', () => {
         {
           failedAttempts: 1,
           windowStartAt: now,
-          lockedUntil: now + 60000,
+          lockedUntil: 0,
           lastAttemptAt: now + 25,
         },
       ],
@@ -1389,7 +1417,7 @@ describe('auth-lockout', () => {
         {
           failedAttempts: 1,
           windowStartAt: now,
-          lockedUntil: now + 60000,
+          lockedUntil: 0,
           lastAttemptAt: now + 75,
         },
       ],
@@ -1398,7 +1426,7 @@ describe('auth-lockout', () => {
         {
           failedAttempts: 1,
           windowStartAt: now,
-          lockedUntil: now + 60000,
+          lockedUntil: 0,
           lastAttemptAt: now + 200,
         },
       ],
@@ -1623,12 +1651,12 @@ describe('auth-lockout', () => {
     // Lines 357-359: entriesToEvict > 0 check
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map();
-    // Fill exactly to cap with locked entries (none expire)
+    // Fill exactly to cap with unlocked entries still inside the window
     for (let i = 0; i < LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; i += 1) {
       lockouts.set(`cap-user-${i}`, {
-        failedAttempts: 5,
+        failedAttempts: 2,
         windowStartAt: now - i,
-        lockedUntil: now + 60000,
+        lockedUntil: 0,
         lastAttemptAt: now - i * 1000,
       });
     }
@@ -1648,16 +1676,13 @@ describe('auth-lockout', () => {
         {
           failedAttempts: 1,
           windowStartAt: now,
-          lockedUntil: now + 60000,
+          lockedUntil: 0,
           lastAttemptAt: now + 100,
         },
       ],
-      [
-        'oldest',
-        { failedAttempts: 1, windowStartAt: now, lockedUntil: now + 60000, lastAttemptAt: now },
-      ],
+      ['oldest', { failedAttempts: 1, windowStartAt: now, lockedUntil: 0, lastAttemptAt: now }],
     ]);
-    testable_evictOldestTrackedEntries(lockouts, 1);
+    testable_evictOldestTrackedEntries(lockouts, 1, now);
     expect(lockouts.has('oldest')).toBe(false);
     expect(lockouts.has('newer')).toBe(true);
   });
@@ -2671,5 +2696,408 @@ describe('auth-lockout', () => {
     expect(result).toBeUndefined();
     // Sanity: lockedUntil is still exactly now (not updated)
     expect(lockouts.get('boundary-exact')?.lockedUntil).toBe(now);
+  });
+
+  describe('second factor (TOTP slice 3)', () => {
+    test('a correct password for an enrolled subject issues a challenge, sets no principal and leaves the failure budget alone', async () => {
+      mockGetFactorBySubject.mockReturnValue({ factorId: 'factor-1' });
+      const req = { body: { username: 'john' }, ip: '203.0.113.50' } as any;
+      const res = createResponse();
+      const next = vi.fn();
+
+      makeAuthenticatorInvalidCredentials();
+      await authenticateLogin(req, createResponse() as any, vi.fn());
+      makeAuthenticatorSuccess('john');
+      await authenticateLogin(req, res as any, next);
+
+      expect(mockGetFactorBySubject).toHaveBeenCalledWith('subject-john');
+      expect(mockIssueLoginChallenge).toHaveBeenCalledWith(
+        req,
+        res,
+        expect.objectContaining({ kind: 'basic', username: 'john' }),
+        { factorId: 'factor-1' },
+      );
+      expect(next).not.toHaveBeenCalled();
+      expect(req.principal).toBeUndefined();
+
+      // The earlier failure was not forgiven by the half-login: four more
+      // failures reach the default five-attempt account threshold.
+      makeAuthenticatorInvalidCredentials();
+      let last = createResponse();
+      for (let index = 0; index < 4; index += 1) {
+        last = createResponse();
+        await authenticateLogin({ ...req, principal: undefined } as any, last as any, vi.fn());
+      }
+      expect(last.status).toHaveBeenCalledWith(423);
+    });
+
+    test('an unenrolled subject proceeds to the login route and clears the budget', async () => {
+      mockGetFactorBySubject.mockReturnValue(undefined);
+      makeAuthenticatorSuccess('john');
+      const req = { body: { username: 'john' }, ip: '203.0.113.51' } as any;
+      const next = vi.fn();
+
+      await authenticateLogin(req, createResponse() as any, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(mockIssueLoginChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a store fault while looking for the factor is the server error path, not a login', async () => {
+      const failure = new Error('store down');
+      mockGetFactorBySubject.mockImplementation(() => {
+        throw failure;
+      });
+      makeAuthenticatorSuccess('john');
+      const req = { body: { username: 'john' }, ip: '203.0.113.52' } as any;
+      const next = vi.fn();
+
+      await authenticateLogin(req, createResponse() as any, next);
+
+      expect(next).toHaveBeenCalledWith(failure);
+      expect(req.principal).toBeUndefined();
+      expect(mockIssueLoginChallenge).not.toHaveBeenCalled();
+    });
+
+    test('rejectIfLockedOut answers 423 for a locked account and nothing otherwise', async () => {
+      const req = { body: { username: 'locky' }, ip: '203.0.113.53' } as any;
+      expect(rejectIfLockedOut(req, createResponse() as any, 'locky')).toBe(false);
+
+      for (let index = 0; index < 5; index += 1) {
+        rejectFailedSecondFactor(req, createResponse() as any, 'locky');
+      }
+      const res = createResponse();
+      expect(rejectIfLockedOut(req, res as any, 'locky')).toBe(true);
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    });
+
+    test('a failed second factor is a bare 401 with an audit entry that names no proof', async () => {
+      const req = { ip: '203.0.113.54' } as any;
+      const res = createResponse();
+
+      rejectFailedSecondFactor(req, res as any, undefined);
+
+      expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 401, 'Unauthorized');
+      expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
+        req,
+        'error',
+        'Authentication failed (invalid second factor)',
+        undefined,
+      );
+    });
+
+    test('clearLoginLockoutsAfterSuccess forgives the account and IP budget', async () => {
+      const req = { ip: '203.0.113.55' } as any;
+      for (let index = 0; index < 4; index += 1) {
+        rejectFailedSecondFactor(req, createResponse() as any, 'forgiven');
+      }
+      clearLoginLockoutsAfterSuccess(req, 'forgiven');
+      const res = createResponse();
+      rejectFailedSecondFactor(req, res as any, 'forgiven');
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+  });
+
+  describe('the lockout identity is derived by the server', () => {
+    const header = (user: string, password = 'pw') =>
+      `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
+
+    async function fail(request: object) {
+      makeAuthenticatorInvalidCredentials();
+      const res = createResponse();
+      await authenticateLogin(request as any, res as any, vi.fn());
+      return res;
+    }
+
+    test('a Basic header user is the identity even when the body names someone else', async () => {
+      let last = createResponse();
+      for (let index = 0; index < 5; index += 1) {
+        last = await fail({
+          headers: { authorization: header('victim') },
+          body: { username: `decoy-${index}` },
+          ip: '203.0.113.90',
+        });
+      }
+
+      expect(last.status).toHaveBeenCalledWith(423);
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.stringContaining('locked'),
+        'victim',
+      );
+    });
+
+    test('a locked account stays locked when the body names a different user', async () => {
+      for (let index = 0; index < 5; index += 1) {
+        await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.91' });
+      }
+      makeAuthenticatorSuccess('victim');
+      const res = createResponse();
+      const next = vi.fn();
+
+      await authenticateLogin(
+        {
+          headers: { authorization: header('victim') },
+          body: { username: 'someone-else' },
+          ip: '203.0.113.92',
+        } as any,
+        res as any,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['a non-Basic scheme', 'Bearer abc'],
+      ['an empty Basic payload', 'Basic '],
+    ])('%s does not fall back to the body username', async (_name, authorization) => {
+      const req = { headers: { authorization }, body: { username: 'victim' }, ip: '203.0.113.93' };
+
+      await fail(req);
+
+      expect(mockRecordLoginAuditEvent).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'error',
+        expect.any(String),
+        undefined,
+      );
+    });
+
+    test('a successful login forgives its own username, not the one in the body', async () => {
+      for (let index = 0; index < 4; index += 1) {
+        await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.94' });
+      }
+      makeAuthenticatorSuccess('other');
+      await authenticateLogin(
+        {
+          headers: { authorization: header('other') },
+          body: { username: 'victim' },
+          ip: '203.0.113.95',
+        } as any,
+        createResponse() as any,
+        vi.fn(),
+      );
+
+      const res = await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.96' });
+
+      expect(res.status).toHaveBeenCalledWith(423);
+    });
+
+    test('a session principal logging in again clears nothing, whatever the body names', async () => {
+      for (let index = 0; index < 4; index += 1) {
+        await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.97' });
+      }
+      mockAuthenticateRequest.mockResolvedValue({ kind: 'session', username: 'victim' });
+      const next = vi.fn();
+      await authenticateLogin(
+        { body: { username: 'victim' }, ip: '203.0.113.97' } as any,
+        createResponse() as any,
+        next,
+      );
+      expect(next).toHaveBeenCalled();
+
+      const res = await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.98' });
+
+      expect(res.status).toHaveBeenCalledWith(423);
+    });
+  });
+
+  describe('persisted second-factor failure budget', () => {
+    const SUBJECT = 'subject-a';
+
+    test('a wrong proof is counted against the subject with the account policy and a 24 hour cap', () => {
+      const now = Date.parse('2026-10-04T10:00:00.000Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const req = { ip: '203.0.113.120' } as any;
+
+      rejectFailedSecondFactor(req, createResponse() as any, 'scott', SUBJECT);
+
+      expect(mockRecordFactorFailure).toHaveBeenCalledWith({
+        subjectId: SUBJECT,
+        username: 'scott',
+        now,
+        threshold: testable_accountLockoutPolicy.maxAttempts,
+        baseLockMs: testable_accountLockoutPolicy.lockoutMs,
+        maxLockMs: 24 * 60 * 60 * 1000,
+      });
+    });
+
+    test('a failure with a subject but no known username is still counted, under an empty username', () => {
+      rejectFailedSecondFactor(
+        { ip: '203.0.113.119' } as any,
+        createResponse() as any,
+        undefined,
+        SUBJECT,
+      );
+
+      expect(mockRecordFactorFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ subjectId: SUBJECT, username: '' }),
+      );
+    });
+
+    test('a failure that earns a persisted lock answers 423 with its Retry-After, whatever the in-memory budget says', () => {
+      const now = Date.parse('2026-10-04T10:00:00.000Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      mockRecordFactorFailure.mockReturnValue({ failures: 9, lockedUntil: now + 4 * 3_600_000 });
+      const res = createResponse();
+
+      rejectFailedSecondFactor({ ip: '203.0.113.121' } as any, res as any, 'scott', SUBJECT);
+
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', `${4 * 3600}`);
+    });
+
+    test('a lapsed in-memory lock does not lapse the persisted one', () => {
+      const now = Date.parse('2026-10-04T10:00:00.000Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const req = { ip: '203.0.113.122' } as any;
+      for (let index = 0; index < testable_accountLockoutPolicy.maxAttempts; index += 1) {
+        rejectFailedSecondFactor(req, createResponse() as any, 'scott', SUBJECT);
+      }
+      vi.setSystemTime(now + testable_accountLockoutPolicy.lockoutMs * 3);
+      mockGetFactorFailureState.mockReturnValue({
+        failures: 5,
+        lockedUntil: now + 24 * 3_600_000,
+      });
+      const res = createResponse();
+
+      expect(rejectIfFactorLocked(req, res as any, SUBJECT, 'scott')).toBe(true);
+      expect(res.status).toHaveBeenCalledWith(423);
+    });
+
+    test('rejectIfFactorLocked is false for a subject whose lock has ended or never began', () => {
+      const now = Date.parse('2026-10-04T10:00:00.000Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const res = createResponse();
+      mockGetFactorFailureState.mockReturnValue({ failures: 5, lockedUntil: now });
+
+      expect(rejectIfFactorLocked({ ip: 'x' } as any, res as any, SUBJECT, 'scott')).toBe(false);
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('rejectIfFactorLocked lets a store fault reach the caller instead of reading as unlocked', () => {
+      mockGetFactorFailureState.mockImplementation(() => {
+        throw new Error('db down');
+      });
+      expect(() =>
+        rejectIfFactorLocked({ ip: 'x' } as any, createResponse() as any, SUBJECT, 'scott'),
+      ).toThrow('db down');
+    });
+
+    test('a store fault while counting falls back to the in-memory budget and says so', () => {
+      mockRecordFactorFailure.mockImplementation(() => {
+        throw new Error('db down');
+      });
+      const res = createResponse();
+
+      rejectFailedSecondFactor({ ip: '203.0.113.123' } as any, res as any, 'scott', SUBJECT);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('second-factor failure'));
+    });
+
+    test('a failure with no subject (an unknown challenge) is never persisted', () => {
+      rejectFailedSecondFactor({ ip: '203.0.113.124' } as any, createResponse() as any, undefined);
+      expect(mockRecordFactorFailure).not.toHaveBeenCalled();
+    });
+
+    test('success forgives the persisted count, and a fault doing so does not undo the login', () => {
+      const req = { ip: '203.0.113.125' } as any;
+      clearLoginLockoutsAfterSuccess(req, 'scott', SUBJECT);
+      expect(mockClearFactorFailures).toHaveBeenCalledWith(SUBJECT);
+
+      mockClearFactorFailures.mockImplementation(() => {
+        throw new Error('db down');
+      });
+      expect(() => clearLoginLockoutsAfterSuccess(req, 'scott', SUBJECT)).not.toThrow();
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('second-factor failure'));
+    });
+
+    test('a password-only success never touches the persisted count', () => {
+      clearLoginLockoutsAfterSuccess({ ip: '203.0.113.126' } as any, 'scott');
+      expect(mockClearFactorFailures).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a live lock is never evicted', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const entry = (lockedUntil: number, lastAttemptAt: number) => ({
+      failedAttempts: 5,
+      windowStartAt: lastAttemptAt,
+      lockedUntil,
+      lastAttemptAt,
+    });
+
+    test('evictOldestTrackedEntries skips locked entries however old they are', () => {
+      const lockouts = new Map([
+        ['locked-oldest', entry(now + 60_000, now - 10_000)],
+        ['unlocked', entry(0, now)],
+      ]);
+
+      testable_evictOldestTrackedEntries(lockouts, 1, now);
+
+      expect([...lockouts.keys()]).toEqual(['locked-oldest']);
+    });
+
+    test('evictOldestTrackedEntries evicts nothing when every entry is locked', () => {
+      const lockouts = new Map([
+        ['a', entry(now + 60_000, now)],
+        ['b', entry(now + 60_000, now + 1)],
+      ]);
+
+      testable_evictOldestTrackedEntries(lockouts, 2, now);
+
+      expect(lockouts.size).toBe(2);
+    });
+
+    test('an entry whose lock has just ended is evictable again', () => {
+      const lockouts = new Map([['ended', entry(now, now - 5_000)]]);
+      testable_evictOldestTrackedEntries(lockouts, 1, now);
+      expect(lockouts.size).toBe(0);
+    });
+
+    test('the overflow prune drops unlocked entries first and leaves locks standing', () => {
+      const lockouts = new Map<string, ReturnType<typeof entry>>();
+      for (let i = 0; i < LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; i += 1) {
+        lockouts.set(`locked-${i}`, entry(now + 60_000, now - 100_000 + i));
+      }
+      lockouts.set('fresh-unlocked', entry(0, now));
+
+      testable_pruneLockoutEntries(lockouts, testable_accountLockoutPolicy, now);
+
+      expect(lockouts.has('fresh-unlocked')).toBe(false);
+      expect(lockouts.size).toBe(LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS);
+    });
+
+    test('a flood of new identities cannot push out a locked account', () => {
+      const lockouts = new Map<string, ReturnType<typeof entry>>();
+      for (let i = 0; i < LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; i += 1) {
+        lockouts.set(`locked-${i}`, entry(now + 60_000, now - 100_000 + i));
+      }
+
+      for (let flood = 0; flood < 50; flood += 1) {
+        testable_registerFailedLoginAttempt(
+          lockouts,
+          testable_accountLockoutPolicy,
+          `flood-${flood}`,
+          now + flood,
+        );
+      }
+
+      for (let i = 0; i < LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; i += 1) {
+        expect(lockouts.has(`locked-${i}`)).toBe(true);
+      }
+      expect([...lockouts.keys()].filter((key) => key.startsWith('flood-')).length).toBeGreaterThan(
+        0,
+      );
+    });
   });
 });

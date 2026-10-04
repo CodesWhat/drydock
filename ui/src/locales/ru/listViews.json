@@ -73,6 +73,7 @@
       "container-stop": "Остановка контейнера",
       "container-restart": "Перезапуск контейнера",
       "auth-login": "Вход в систему",
+      "totp-recovery-used": "Использован код восстановления",
       "authenticated": "Аутентифицирован",
       "authfail": "Ошибка аутентификации",
       "hook-configured": "Хук настроен",

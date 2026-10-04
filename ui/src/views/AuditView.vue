@@ -63,6 +63,7 @@ const actionTypes = [
   'maturity-cleared',
   'hook-configured',
   'auth-login',
+  'totp-recovery-used',
   'env-reveal',
   'debug-dump',
   'config-read',

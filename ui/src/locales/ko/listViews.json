@@ -73,6 +73,7 @@
       "container-stop": "컨테이너 중지",
       "container-restart": "컨테이너 재시작",
       "auth-login": "인증 로그인",
+      "totp-recovery-used": "복구 코드 사용",
       "authenticated": "인증됨",
       "authfail": "인증 실패",
       "hook-configured": "훅 구성됨",

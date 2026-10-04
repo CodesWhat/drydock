@@ -73,6 +73,7 @@
       "container-stop": "Container gestopt",
       "container-restart": "Container herstart",
       "auth-login": "Auth-aanmelding",
+      "totp-recovery-used": "Herstelcode gebruikt",
       "authenticated": "Geverifieerd",
       "authfail": "Authenticatie mislukt",
       "hook-configured": "Hook geconfigureerd",

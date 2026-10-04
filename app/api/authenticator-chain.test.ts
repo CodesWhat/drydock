@@ -9,6 +9,7 @@ vi.mock('./session-principal.js', () => ({
 import type { AuthRequest } from './auth-types.js';
 import {
   type Authenticator,
+  authenticateLoginRequest,
   authenticateRequest,
   clearAuthenticators,
   getAuthenticationFailureStatus,
@@ -72,6 +73,30 @@ describe('authenticator-chain', () => {
       clearAuthenticators();
 
       expect(getAuthenticators()).toEqual([]);
+    });
+  });
+
+  describe('authenticateLoginRequest', () => {
+    test('uses an authenticator\u2019s login answer where it gives one, and its plain answer elsewhere', async () => {
+      const loginPrincipal: AuthenticatedPrincipal = { kind: 'basic', username: 'admin' };
+      const gated = {
+        ...createAuthenticator('gated', undefined),
+        authenticateForLogin: vi.fn().mockResolvedValue(loginPrincipal),
+      };
+      registerAuthenticator(gated);
+      const req = createRequest();
+
+      await expect(authenticateRequest(req)).resolves.toBeUndefined();
+      await expect(authenticateLoginRequest(req)).resolves.toEqual(loginPrincipal);
+      expect(req.principal).toEqual(loginPrincipal);
+      expect(gated.authenticateForLogin).toHaveBeenCalledTimes(1);
+
+      clearAuthenticators();
+      const plain = createAuthenticator('plain', { kind: 'oidc', username: 'user@example.com' });
+      registerAuthenticator(plain);
+      const other = createRequest();
+      await expect(authenticateLoginRequest(other)).resolves.toMatchObject({ kind: 'oidc' });
+      expect(plain.authenticate).toHaveBeenCalledWith(other);
     });
   });
 

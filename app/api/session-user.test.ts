@@ -15,6 +15,7 @@ function v2Local(overrides: Record<string, unknown> = {}): string {
     providerId: 'basic.default',
     assurance: 'password',
     factorVersion: 0,
+    issuedAt: 1_000,
     ...overrides,
   });
 }
@@ -66,6 +67,7 @@ describe('session user schema v2', () => {
         providerId: 'basic.default',
         assurance: 'password',
         factorVersion: 0,
+        issuedAt: 1_000,
       },
     });
   });
@@ -87,6 +89,9 @@ describe('session user schema v2', () => {
     ['a negative factor version', v2Local({ factorVersion: -1 })],
     ['a fractional factor version', v2Local({ factorVersion: 1.5 })],
     ['a string factor version', v2Local({ factorVersion: '1' })],
+    ['a negative issue time', v2Local({ issuedAt: -1 })],
+    ['a fractional issue time', v2Local({ issuedAt: 1.5 })],
+    ['a string issue time', v2Local({ issuedAt: '1000' })],
     ['an extra field', v2Local({ extra: true })],
     ['an empty username', v2Local({ username: '' })],
     [
@@ -109,6 +114,12 @@ describe('serializeSessionUser', () => {
     expect(serializeSessionUser({ username: 'alice' })).toBe('{"username":"alice"}');
   });
 
+  test('a session minted before the issue time existed reads as issued at 0', () => {
+    expect(deserializeSessionUser(v2Local({ issuedAt: undefined })).identity).toMatchObject({
+      issuedAt: 0,
+    });
+  });
+
   test('writes a deterministic v2 local payload', () => {
     const user = {
       username: 'alice',
@@ -118,6 +129,7 @@ describe('serializeSessionUser', () => {
         providerId: 'basic.default',
         assurance: 'password' as const,
         factorVersion: 0,
+        issuedAt: 1_000,
       },
     };
 
