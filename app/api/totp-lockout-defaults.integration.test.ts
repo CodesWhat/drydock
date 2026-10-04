@@ -35,7 +35,7 @@ import { ddEnvVars } from '../configuration/index.js';
 import * as sessionModel from '../store/session.js';
 import * as totpStore from '../store/totp.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
-import { registerLoginRoutes } from './auth.js';
+import { createAuthRateLimiter, registerAuthRequestHandling, registerLoginRoutes } from './auth.js';
 import { resetLoginLockoutStateForTests } from './auth-lockout.js';
 import { configureSessionLimits } from './auth-session.js';
 import { clearAuthenticators, registerAuthenticator } from './authenticator-chain.js';
@@ -190,8 +190,10 @@ async function start(): Promise<Harness> {
       validate: { xForwardedForHeader: false },
     }),
   );
+  // The real /auth stack: its own limiter, the JSON content-type gate and body
+  // parser, then the real login, challenge and remember-me routes.
   const authRouter = express.Router();
-  authRouter.use(express.json({ limit: '64kb' }));
+  registerAuthRequestHandling(authRouter, createAuthRateLimiter());
   registerLoginRoutes(authRouter);
   app.use('/auth', authRouter);
 
@@ -420,6 +422,75 @@ describe('lockout identity at the default thresholds', () => {
         await guessWrong(h);
       }
       expect((await login(h, OTHER)).status).toBe(200);
+    });
+  });
+
+  describe('through the real /auth limiter, content-type gate and remember-me route', () => {
+    const remember = (h: Harness, body: unknown, headers: Record<string, string> = {}) =>
+      fetch(url(h, '/auth/remember'), {
+        method: 'POST',
+        headers: { ...HTTPS_HEADERS, 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+      });
+
+    test('a login body that is not JSON is refused before any credential is looked at', async () => {
+      const h = await boot();
+      enroll();
+
+      const response = await fetch(url(h, '/auth/login'), {
+        method: 'POST',
+        headers: { ...HTTPS_HEADERS, 'Content-Type': 'text/plain', Authorization: VICTIM },
+        body: 'remember=true',
+      });
+
+      expect(response.status).toBe(415);
+      expect(failuresOf(h)).toBe(0);
+    });
+
+    test('the limiter caps /auth at 100 requests per window with a 429', async () => {
+      const h = await boot();
+
+      let refusedAt = 0;
+      for (let attempt = 1; attempt <= 101 && refusedAt === 0; attempt += 1) {
+        const response = await remember(h, { remember: false });
+        if (response.status === 429) {
+          refusedAt = attempt;
+        }
+      }
+
+      expect(refusedAt).toBe(101);
+    });
+
+    test('remember-me is validated, same-origin protected, and carried through the challenge', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+
+      expect((await remember(h, { remember: 'yes' })).status).toBe(400);
+      expect(
+        (await remember(h, { remember: true }, { Origin: 'https://evil.example', Cookie: 'x=y' }))
+          .status,
+      ).toBe(403);
+
+      const preference = await remember(h, { remember: true });
+      expect(preference.status).toBe(200);
+      const cookie = (preference.headers.get('set-cookie') as string).split(';')[0];
+
+      const started = await fetch(url(h, '/auth/login'), {
+        method: 'POST',
+        headers: {
+          ...HTTPS_HEADERS,
+          'Content-Type': 'application/json',
+          Authorization: VICTIM,
+          Cookie: cookie,
+        },
+        body: '{}',
+      });
+      expect(started.status).toBe(202);
+      const { challenge } = (await started.json()) as { challenge: { id: string } };
+
+      const done = await prove(h, challenge.id, generateTotp(enrolled.seed, Date.now()));
+      expect(done.status).toBe(200);
+      expect(done.headers.get('set-cookie')).toMatch(/Expires=/);
     });
   });
 });

@@ -987,6 +987,24 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
   });
 
   describe('DELETE cancels a challenge', () => {
+    test('a cross-origin cancel carrying a session cookie is refused and cancels nothing', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const challenge = await startChallenge(h);
+
+      const refused = await fetch(url(h, `/auth/login-challenges/${challenge.id}`), {
+        method: 'DELETE',
+        headers: {
+          ...HTTPS_HEADERS,
+          Cookie: 'dd.sid.test=anything',
+          Origin: 'https://evil.example',
+        },
+      });
+
+      expect(refused.status).toBe(403);
+      expect((await put(h, challenge.id, { code: totpNow(enrolled.seed) })).status).toBe(200);
+    });
+
     test('is idempotent 204, and the cancelled challenge accepts nothing', async () => {
       const h = await boot();
       const enrolled = enroll();

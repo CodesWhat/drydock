@@ -415,6 +415,53 @@ export function registerLoginRoutes(authRouter: express.Router): void {
     createLoginChallengeCompletion(establishLoginSession),
   );
   authRouter.delete('/login-challenges/:id', requireSameOriginForMutations, cancelLoginChallenge);
+
+  // OIDC login flows set this preference before the provider redirects away.
+  // Keep same-origin protection on the unauthenticated pre-auth session.
+  authRouter.post('/remember', requireSameOriginForMutations, setRememberMe);
+}
+
+/**
+ * The /auth rate limiter. Authenticated UI navigations re-read the current
+ * user; keep that safe probe from exhausting the public discovery and login
+ * budget for clients behind the same address, while every other auth route
+ * stays capped. Authentication is checked before request-controlled route data
+ * so the request cannot decide whether the security check runs.
+ */
+export function createAuthRateLimiter(
+  keyGenerator?: ReturnType<typeof createAuthenticatedRouteRateLimitKeyGenerator>,
+) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    skip: (req: Request) =>
+      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    ...(keyGenerator ? { keyGenerator } : {}),
+  });
+}
+
+/**
+ * What every /auth request passes through before any route: the rate limiter,
+ * the JSON content-type gate and the 64kb JSON body parser for mutations.
+ * Exported so an integration test can mount the real thing.
+ */
+export function registerAuthRequestHandling(
+  authRouter: express.Router,
+  authLimiter: ReturnType<typeof createAuthRateLimiter>,
+): void {
+  authRouter.use(authLimiter);
+
+  const mutationJsonBodyParser = express.json({ limit: '64kb' });
+  authRouter.use(requireJsonContentTypeForMutations);
+  authRouter.use((req: Request, res: Response, next: NextFunction) => {
+    if (shouldParseJsonBody(req.method)) {
+      return mutationJsonBodyParser(req, res, next);
+    }
+    return next();
+  });
 }
 
 /**
@@ -475,33 +522,8 @@ export function init(app: Application): void {
   // Register all authentications
   registerAuthenticators(app);
 
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    // Authenticated UI navigations re-read the current user. Keep that safe
-    // probe from exhausting the public discovery and login budget for clients
-    // behind the same address; every other auth route remains capped. Check
-    // authentication before request-controlled route data so the request
-    // cannot decide whether the security check runs.
-    skip: (req: Request) =>
-      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
-    standardHeaders: true,
-    legacyHeaders: false,
-    validate: { xForwardedForHeader: false },
-    ...(identityAwareRateLimitKeyGenerator
-      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
-      : {}),
-  });
-  router.use(authLimiter);
-
-  const mutationJsonBodyParser = express.json({ limit: '64kb' });
-  router.use(requireJsonContentTypeForMutations);
-  router.use((req: Request, res: Response, next: NextFunction) => {
-    if (shouldParseJsonBody(req.method)) {
-      return mutationJsonBodyParser(req, res, next);
-    }
-    return next();
-  });
+  const authLimiter = createAuthRateLimiter(identityAwareRateLimitKeyGenerator);
+  registerAuthRequestHandling(router, authLimiter);
 
   // GET /auth/strategies is a 410 tombstone (see getAuthStrategiesTombstone
   // above) registered ahead of requireAuthentication below, so it answers
@@ -518,10 +540,6 @@ export function init(app: Application): void {
   app.get('/api/auth/status', authLimiter, getAuthStatus);
 
   registerLoginRoutes(router);
-
-  // OIDC login flows set this preference before the provider redirects away.
-  // Keep same-origin protection on the unauthenticated pre-auth session.
-  router.post('/remember', requireSameOriginForMutations, setRememberMe);
 
   // Routes to protect after this line
   router.use(requireAuthentication);
