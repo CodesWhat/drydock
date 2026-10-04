@@ -89,6 +89,8 @@
       "auto-update-blocked": "Автооновлення заблоковано",
       "update-policy-override-set": "Перевизначення політики оновлення встановлено",
       "update-policy-override-cleared": "Перевизначення політики оновлення очищено",
+      "group-policy-set": "Політику групи встановлено",
+      "group-policy-cleared": "Політику групи очищено",
       "auto-rollback": "Автовідкат",
       "rollback": "Відкат",
       "preview": "Попередній перегляд",

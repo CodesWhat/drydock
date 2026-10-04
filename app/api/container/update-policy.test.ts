@@ -322,6 +322,7 @@ describe('api/container/update-policy', () => {
         fields: {
           maturityMode: {
             env: 'mature',
+            group: null,
             label: null,
             override: null,
             effective: 'mature',
@@ -356,6 +357,7 @@ describe('api/container/update-policy', () => {
         fields: {
           maturityMode: {
             env: 'mature',
+            group: null,
             label: null,
             override: 'all',
             effective: 'all',
@@ -363,6 +365,7 @@ describe('api/container/update-policy', () => {
           },
           maturityMinAgeDays: {
             env: 7,
+            group: null,
             label: 14,
             override: 21,
             effective: 21,
@@ -373,6 +376,39 @@ describe('api/container/update-policy', () => {
       expect(harness.storeContainer.updateContainer.mock.invocationCallOrder[0]).toBeLessThan(
         harness.deps.recordAuditEvent.mock.invocationCallOrder[0],
       );
+    });
+
+    test('audits the group layer value next to env and label for each field', () => {
+      const harness = createHarness({
+        updatePolicy: { maturityMode: 'mature', skipTags: ['1.9.9'] },
+        updatePolicyDeclarative: { env: { maturityMode: 'all' }, label: {} },
+        updatePolicyOverrides: {},
+        updatePolicySources: { maturityMode: 'group', skipTags: 'group' },
+        groupPolicy: {
+          id: 'policy-1',
+          group: 'payments',
+          revision: 2,
+          updatePolicy: { maturityMode: 'mature', skipTags: ['1.9.9'] },
+          actions: {},
+        },
+      });
+
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'all',
+        minAgeDays: 21,
+      });
+
+      const details = JSON.parse(harness.deps.recordAuditEvent.mock.calls[0][0].details);
+      expect(details.fields.maturityMode).toEqual({
+        env: 'all',
+        group: 'mature',
+        label: null,
+        override: 'all',
+        effective: 'all',
+        source: 'override',
+      });
+      expect(details.fields.maturityMinAgeDays.group).toBeNull();
     });
 
     test('audits a layered snooze override after persistence', () => {
@@ -391,6 +427,7 @@ describe('api/container/update-policy', () => {
         fields: {
           snoozeUntil: {
             env: null,
+            group: null,
             label: null,
             override: '2030-01-01T00:00:00.000Z',
             effective: '2030-01-01T00:00:00.000Z',
@@ -423,6 +460,7 @@ describe('api/container/update-policy', () => {
         fields: {
           snoozeUntil: {
             env: null,
+            group: null,
             label: null,
             override: null,
             effective: null,
@@ -763,7 +801,12 @@ describe('api/container/update-policy', () => {
       });
 
       const details = JSON.parse(harness.deps.recordAuditEvent.mock.calls[0][0].details);
-      expect(details.fields.maturityMode).toMatchObject({ env: null, label: null, source: null });
+      expect(details.fields.maturityMode).toMatchObject({
+        env: null,
+        group: null,
+        label: null,
+        source: null,
+      });
     });
   });
 

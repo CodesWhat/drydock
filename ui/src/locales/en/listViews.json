@@ -89,6 +89,8 @@
       "auto-update-blocked": "Auto-Update Blocked",
       "update-policy-override-set": "Update Policy Override Set",
       "update-policy-override-cleared": "Update Policy Override Cleared",
+      "group-policy-set": "Group Policy Set",
+      "group-policy-cleared": "Group Policy Cleared",
       "auto-rollback": "Auto Rollback",
       "rollback": "Rollback",
       "preview": "Preview",
