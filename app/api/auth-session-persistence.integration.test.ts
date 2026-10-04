@@ -19,6 +19,7 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import Basic from '../authentications/providers/basic/Basic.js';
 import * as sessionModel from '../store/session.js';
+import * as totpStore from '../store/totp.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { requireAuthentication } from './auth.js';
 import type { AuthRequest } from './auth-types.js';
@@ -61,6 +62,7 @@ function createArgon2Hash(password: string): string {
 function createStore(): SessionStore {
   const db = createMigratedMemoryDatabase();
   sessionModel.createCollections(db);
+  totpStore.createCollections(db);
   return new SessionStore({ ttlMs: 60_000 });
 }
 

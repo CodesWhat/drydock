@@ -9,18 +9,33 @@
  * so, and the two questions are asked with two different helpers.
  */
 
+import type { LocalIdentityFields } from './totp-identity.js';
+
 interface PrincipalBase {
   readonly username: string;
 }
 
+/**
+ * What a stored session says about where its identity came from. Absent on a
+ * legacy `{ username }` session, whose origin was never recorded.
+ */
+export type SessionIdentity =
+  | { readonly type: 'oidc' }
+  | ({ readonly type: 'local' } & LocalIdentityFields);
+
 /** Identity restored from an existing express-session cookie. */
 interface SessionPrincipal extends PrincipalBase {
   readonly kind: 'session';
+  readonly identity?: SessionIdentity;
 }
 
-/** Identity proven by an `Authorization: Basic` header on this request. */
+/**
+ * Identity proven by an `Authorization: Basic` header on this request.
+ * `identity` is the stable local subject the credential verified.
+ */
 interface BasicPrincipal extends PrincipalBase {
   readonly kind: 'basic';
+  readonly identity: LocalIdentityFields;
 }
 
 /** Identity proven by an `Authorization: Bearer` OIDC access token. */

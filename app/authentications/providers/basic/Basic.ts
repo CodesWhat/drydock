@@ -2,6 +2,7 @@ import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
+import { resolveLocalIdentity } from '../../../api/totp-identity.js';
 import {
   observeAuthLoginDuration,
   recordAuthLogin,
@@ -350,11 +351,29 @@ class Basic extends Authentication<BasicConfiguration> {
       return Promise.resolve(undefined);
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.authenticate(authorization.userid, authorization.password, (_error, user) => {
-        resolve(user ? { kind: 'basic', username: user.username } : undefined);
+        try {
+          resolve(user ? this.toBasicPrincipal(user.username) : undefined);
+        } catch (error: unknown) {
+          reject(error);
+        }
       });
     });
+  }
+
+  /**
+   * The verified identity as a principal carrying its stable subject. When the
+   * subject version cannot be read this throws rather than answering as a wrong
+   * password: a store fault is the server's, so it must not count toward the
+   * caller's lockout, and the session it would mint could not be checked later.
+   */
+  private toBasicPrincipal(username: string): AuthenticatedPrincipal {
+    return {
+      kind: 'basic',
+      username,
+      identity: resolveLocalIdentity(this.getId(), username),
+    };
   }
 
   getStrategyDescription() {

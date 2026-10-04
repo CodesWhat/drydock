@@ -32,6 +32,14 @@ vi.mock('node:crypto', async () => {
   };
 });
 
+var { mockResolveLocalIdentity } = vi.hoisted(() => ({
+  mockResolveLocalIdentity: vi.fn(),
+}));
+
+vi.mock('../../../api/totp-identity.js', () => ({
+  resolveLocalIdentity: mockResolveLocalIdentity,
+}));
+
 vi.mock('../../../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   observeAuthLoginDuration: mockObserveAuthLoginDuration,
@@ -123,6 +131,13 @@ describe('Basic Authentication', () => {
     mockRecordAuthLogin.mockClear();
     mockObserveAuthLoginDuration.mockClear();
     mockRecordAuthUsernameMismatch.mockClear();
+    mockResolveLocalIdentity.mockReset();
+    mockResolveLocalIdentity.mockImplementation((providerId: string) => ({
+      subjectId: 's'.repeat(64),
+      providerId,
+      assurance: 'password',
+      factorVersion: 0,
+    }));
   });
 
   test('should create instance', async () => {
@@ -635,7 +650,29 @@ describe('Basic Authentication', () => {
         authenticator.authenticate({
           headers: { authorization: encodeBasic('testuser:password') },
         } as never),
-      ).resolves.toEqual({ kind: 'basic', username: 'testuser' });
+      ).resolves.toEqual({
+        kind: 'basic',
+        username: 'testuser',
+        identity: {
+          subjectId: 's'.repeat(64),
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+        },
+      });
+      expect(mockResolveLocalIdentity).toHaveBeenCalledWith('basic.default', 'testuser');
+    });
+
+    test('lets a store failure propagate instead of answering as a wrong password', async () => {
+      mockResolveLocalIdentity.mockImplementation(() => {
+        throw new Error('totp collection not initialized');
+      });
+
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).rejects.toThrow('totp collection not initialized');
     });
 
     test('declines a wrong password', async () => {

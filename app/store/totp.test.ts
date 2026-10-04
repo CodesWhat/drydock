@@ -128,12 +128,48 @@ describe('before the collection exists', () => {
     vi.resetModules();
     const fresh = await import('./totp.js');
     expectCode(() => fresh.getSubjectVersion('s'), 'NOT_INITIALIZED');
+    expectCode(() => fresh.hasEnrolledUsername('s'), 'NOT_INITIALIZED');
   });
 });
 
 describe('subject version', () => {
   test('is zero for a subject nobody has touched', () => {
     expect(totp.getSubjectVersion('nobody')).toBe(0);
+  });
+
+  test('records the username on every write, activation and removal alike', () => {
+    activate('subject-a');
+    const row = () =>
+      db
+        .prepare('SELECT username, factor_version FROM totp_subject_versions WHERE subject_id = ?')
+        .get('subject-a');
+    expect(row()).toEqual({ username: 'scott', factor_version: 1 });
+    totp.removeFactor({ subjectId: 'subject-a', expectedFactorVersion: 1 });
+    expect(row()).toEqual({ username: 'scott', factor_version: 2 });
+  });
+
+  test('hasEnrolledUsername is false with no rows and for versions still at 0', () => {
+    expect(totp.hasEnrolledUsername('scott')).toBe(false);
+    db.prepare(
+      'INSERT INTO totp_subject_versions (subject_id, factor_version, username) VALUES (?, 0, ?)',
+    ).run('s0', 'scott');
+    expect(totp.hasEnrolledUsername('scott')).toBe(false);
+  });
+
+  test('hasEnrolledUsername is true for the exact username once a version is positive, removal included', () => {
+    activate('subject-a');
+    expect(totp.hasEnrolledUsername('scott')).toBe(true);
+    expect(totp.hasEnrolledUsername('Scott')).toBe(false);
+    expect(totp.hasEnrolledUsername('other')).toBe(false);
+    totp.removeFactor({ subjectId: 'subject-a', expectedFactorVersion: 1 });
+    expect(totp.hasEnrolledUsername('scott')).toBe(true);
+  });
+
+  test('hasEnrolledUsername treats a positive row with an unknown username as enrolled for everyone', () => {
+    db.prepare(
+      'INSERT INTO totp_subject_versions (subject_id, factor_version, username) VALUES (?, 2, NULL)',
+    ).run('unknown-row');
+    expect(totp.hasEnrolledUsername('anyone')).toBe(true);
   });
 });
 

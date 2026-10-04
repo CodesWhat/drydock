@@ -8,6 +8,8 @@ import {
   type IdentityAwareRateLimitRequestLike,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+import { validateSessionUser } from './session-principal.js';
+import { readSessionUsername } from './session-user.js';
 
 const log = logger.child({ component: 'ws-upgrade-utils' });
 
@@ -206,8 +208,13 @@ export function isAuthenticatedSession(
   options: IsAuthenticatedSessionOptions = {},
 ): boolean {
   const { anonymousAuthActive = false } = options;
-  const passportSession = request.session?.passport;
-  return passportSession?.user !== undefined || anonymousAuthActive;
+  // An upgrade never runs the authenticator chain, so it has to ask the same
+  // validator HTTP restoration asks. Presence of a stored user is not enough:
+  // a stale, legacy-after-enrollment or malformed one must read as absent.
+  const storedUser = request.session?.passport?.user;
+  const sessionValid =
+    storedUser !== undefined && validateSessionUser(storedUser).status === 'valid';
+  return sessionValid || anonymousAuthActive;
 }
 
 export function getDefaultRateLimitKey(request: UpgradeRequest): string {
@@ -331,30 +338,6 @@ export function createIdentityAwareUpgradeRateLimitKeyResolver(
   };
 }
 
-function getUsernameFromPassportSessionUser(passportUser: unknown): unknown {
-  if (!passportUser) {
-    return undefined;
-  }
-
-  if (typeof passportUser === 'object') {
-    return (passportUser as { username?: unknown }).username;
-  }
-
-  if (typeof passportUser !== 'string') {
-    return undefined;
-  }
-
-  try {
-    const parsedUser = JSON.parse(passportUser);
-    if (!parsedUser || typeof parsedUser !== 'object') {
-      return undefined;
-    }
-    return (parsedUser as { username?: unknown }).username;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * The identity to charge this upgrade to.
  *
@@ -367,8 +350,8 @@ function getUpgradeRateLimitPrincipal(request: UpgradeRequest): AuthenticatedPri
     return request.principal;
   }
 
-  const username = getUsernameFromPassportSessionUser(request.session?.passport?.user);
-  return { kind: 'session', username: typeof username === 'string' ? username : '' };
+  const username = readSessionUsername(request.session?.passport?.user);
+  return { kind: 'session', username: username ?? '' };
 }
 
 function toIdentityAwareUpgradeRateLimitRequest(

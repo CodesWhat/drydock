@@ -14,6 +14,13 @@ const { mockRecordAuthLogin, mockObserveAuthLoginDuration, mockUndiciFetch } = v
   mockUndiciFetch: vi.fn(),
 }));
 
+// The session limit validates stored legacy users against the TOTP store.
+vi.mock('../../../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
+
 vi.mock('../../../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   observeAuthLoginDuration: mockObserveAuthLoginDuration,
@@ -102,7 +109,9 @@ function failSessionPersistence(session: any, message: string) {
 
 /** Assert the callback persisted the identity under the session user key. */
 function expectPersistedUser(session: any, username: string) {
-  expect(session.passport).toEqual({ user: JSON.stringify({ username }) });
+  expect(session.passport).toEqual({
+    user: JSON.stringify({ v: 2, kind: 'oidc', username }),
+  });
 }
 
 /** Set up a successful grant + userInfo mock on the openidClientMock */

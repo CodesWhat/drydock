@@ -10,7 +10,12 @@
 
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
-import { INITIAL_SCHEMA_SQL, SCHEMA_MIGRATIONS_TABLE_SQL, TOTP_TABLES_SQL } from './schema.js';
+import {
+  INITIAL_SCHEMA_SQL,
+  SCHEMA_MIGRATIONS_TABLE_SQL,
+  TOTP_SUBJECT_USERNAME_SQL,
+  TOTP_TABLES_SQL,
+} from './schema.js';
 
 const log = logger.child({ component: 'store.db' });
 
@@ -32,6 +37,12 @@ export const LABEL_OVERRIDES_MIGRATION_VERSION = 9;
 
 /** Spec 11.1.2 TOTP: factor, enrollment, recovery code and subject version tables. */
 export const TOTP_MIGRATION_VERSION = 10;
+
+/**
+ * Follows the TOTP tables. Kept separate because migration 10 is already
+ * published in an open PR and a shipped migration is never edited.
+ */
+export const TOTP_SUBJECT_USERNAME_MIGRATION_VERSION = 11;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -179,6 +190,17 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
     // login and management slices use them.
     note: 'add TOTP factor, enrollment, recovery code and subject version tables (spec 11.1.2 slice 1)',
     sql: TOTP_TABLES_SQL,
+  },
+  {
+    version: TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
+    // Spec 11.1.2 slice 2: a legacy session names only a username, so whether
+    // it is still good has to be answerable from stored rows alone, not from
+    // which Basic providers happen to be registered right now. Rows written
+    // before this migration take the username of their factor when one still
+    // exists; a removed factor leaves NULL, which readers treat as unknown and
+    // therefore stale.
+    note: 'record the username on totp_subject_versions (spec 11.1.2 slice 2)',
+    sql: TOTP_SUBJECT_USERNAME_SQL,
   },
 ];
 

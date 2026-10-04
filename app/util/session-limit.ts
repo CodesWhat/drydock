@@ -1,3 +1,6 @@
+import { validateSessionUser } from '../api/session-principal.js';
+import { readSessionUsername } from '../api/session-user.js';
+
 interface SessionStoreLike {
   all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
   destroy?: (sid: string, callback: (error?: unknown) => void) => void;
@@ -13,10 +16,21 @@ interface EnforceConcurrentSessionLimitOptions {
 interface StoredSession {
   sid: string;
   username?: string;
+  /** The stored user, kept so validity can be re-checked against the store later. */
+  rawUser?: unknown;
   sortTimestamp: number;
 }
 
-type UsernameSessionIndex = Map<string, Map<string, number>>;
+/**
+ * `rawUser` is absent for the session a login has just recorded: it was minted
+ * a moment ago, so it is taken as valid until the index is rebuilt.
+ */
+interface IndexedSession {
+  sortTimestamp: number;
+  rawUser?: unknown;
+}
+
+type UsernameSessionIndex = Map<string, Map<string, IndexedSession>>;
 
 const sessionIndexByStore = new WeakMap<SessionStoreLike, UsernameSessionIndex>();
 const loadingSessionIndexByStore = new WeakMap<SessionStoreLike, Promise<UsernameSessionIndex>>();
@@ -59,32 +73,13 @@ function extractSessionPayload(rawSession: unknown): Record<string, unknown> | u
   return sessionRecord;
 }
 
-function extractSessionUsername(sessionPayload: Record<string, unknown>): string | undefined {
+function extractSessionUser(sessionPayload: Record<string, unknown>): unknown {
   const passport = sessionPayload.passport;
   if (!passport || typeof passport !== 'object') {
     return undefined;
   }
 
-  const user = (passport as Record<string, unknown>).user;
-  if (user && typeof user === 'object') {
-    const username = (user as Record<string, unknown>).username;
-    return typeof username === 'string' && username.length > 0 ? username : undefined;
-  }
-
-  if (typeof user !== 'string') {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(user);
-    if (!parsed || typeof parsed !== 'object') {
-      return undefined;
-    }
-    const username = (parsed as Record<string, unknown>).username;
-    return typeof username === 'string' && username.length > 0 ? username : undefined;
-  } catch {
-    return undefined;
-  }
+  return (passport as Record<string, unknown>).user;
 }
 
 function extractSortTimestamp(sessionPayload: Record<string, unknown>): number {
@@ -112,9 +107,11 @@ function toStoredSession(sid: string, rawSession: unknown): StoredSession | unde
     return undefined;
   }
 
+  const rawUser = extractSessionUser(sessionPayload);
   return {
     sid,
-    username: extractSessionUsername(sessionPayload),
+    username: readSessionUsername(rawUser),
+    rawUser,
     sortTimestamp: extractSortTimestamp(sessionPayload),
   };
 }
@@ -180,17 +177,20 @@ function destroyStoredSession(sessionStore: SessionStoreLike, sid: string): Prom
 }
 
 function buildUsernameSessionIndex(sessions: StoredSession[]): UsernameSessionIndex {
-  const sessionIndex = new Map<string, Map<string, number>>();
+  const sessionIndex: UsernameSessionIndex = new Map();
   for (const session of sessions) {
     if (!session.username || session.username.length === 0) {
       continue;
     }
     let userSessions = sessionIndex.get(session.username);
     if (!userSessions) {
-      userSessions = new Map<string, number>();
+      userSessions = new Map<string, IndexedSession>();
       sessionIndex.set(session.username, userSessions);
     }
-    userSessions.set(session.sid, session.sortTimestamp);
+    userSessions.set(session.sid, {
+      sortTimestamp: session.sortTimestamp,
+      rawUser: session.rawUser,
+    });
   }
   return sessionIndex;
 }
@@ -240,10 +240,11 @@ function listIndexedSessionsForUser(
 
   return Array.from(userSessions.entries())
     .filter(([sid]) => !currentSessionId || sid !== currentSessionId)
-    .map(([sid, sortTimestamp]) => ({
+    .map(([sid, indexed]) => ({
       sid,
       username,
-      sortTimestamp,
+      rawUser: indexed.rawUser,
+      sortTimestamp: indexed.sortTimestamp,
     }))
     .sort((s1, s2) => {
       if (s1.sortTimestamp !== s2.sortTimestamp) {
@@ -251,6 +252,21 @@ function listIndexedSessionsForUser(
       }
       return s1.sid.localeCompare(s2.sid);
     });
+}
+
+type SessionStanding = 'valid' | 'stale' | 'unavailable';
+
+function standingOf(session: StoredSession): SessionStanding {
+  if (session.rawUser === undefined) {
+    return 'valid';
+  }
+  const serialized =
+    typeof session.rawUser === 'string' ? session.rawUser : JSON.stringify(session.rawUser);
+  const validation = validateSessionUser(serialized);
+  if (validation.status === 'valid') {
+    return 'valid';
+  }
+  return validation.status === 'unavailable' ? 'unavailable' : 'stale';
 }
 
 function removeDestroyedSessionsFromIndex(
@@ -283,11 +299,11 @@ function recordCurrentSessionInIndex(
 
   let userSessions = sessionIndex.get(username);
   if (!userSessions) {
-    userSessions = new Map<string, number>();
+    userSessions = new Map<string, IndexedSession>();
     sessionIndex.set(username, userSessions);
   }
 
-  userSessions.set(currentSessionId, Date.now());
+  userSessions.set(currentSessionId, { sortTimestamp: Date.now() });
 }
 
 export async function enforceConcurrentSessionLimit({
@@ -323,13 +339,34 @@ export async function enforceConcurrentSessionLimit({
     currentSessionId,
   );
 
-  const overflowCount = existingUserSessions.length + 1 - maxConcurrentSessions;
-  if (overflowCount <= 0) {
+  // A session that is no longer valid must not hold a slot against a person
+  // who can still log in, so those are destroyed first and never counted.
+  // When the store cannot say which sessions are valid, nothing is destroyed:
+  // counting unknowns would evict valid sessions in favour of ones that may be
+  // stale, and destroying unknowns would kill sessions that may be fine.
+  const standings = existingUserSessions.map((session) => ({
+    session,
+    standing: standingOf(session),
+  }));
+  if (standings.some(({ standing }) => standing === 'unavailable')) {
     recordCurrentSessionInIndex(sessionIndex, normalizedUsername, currentSessionId);
     return 0;
   }
 
-  const sessionsToDestroy = existingUserSessions.slice(0, overflowCount);
+  const staleSessions = standings
+    .filter(({ standing }) => standing === 'stale')
+    .map(({ session }) => session);
+  const validSessions = standings
+    .filter(({ standing }) => standing === 'valid')
+    .map(({ session }) => session);
+
+  const overflowCount = Math.max(0, validSessions.length + 1 - maxConcurrentSessions);
+  const sessionsToDestroy = [...staleSessions, ...validSessions.slice(0, overflowCount)];
+  if (sessionsToDestroy.length === 0) {
+    recordCurrentSessionInIndex(sessionIndex, normalizedUsername, currentSessionId);
+    return 0;
+  }
+
   await Promise.all(
     sessionsToDestroy.map((session) => destroyStoredSession(sessionStore, session.sid)),
   );

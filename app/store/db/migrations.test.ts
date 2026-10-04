@@ -8,6 +8,7 @@ import {
   MIGRATIONS,
   migrate,
   TOTP_MIGRATION_VERSION,
+  TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
 } from './migrations.js';
 
 const { logMock } = vi.hoisted(() => ({
@@ -60,7 +61,46 @@ describe('store/db/migrations', () => {
       db,
       MIGRATIONS.filter((migration) => migration.version < TOTP_MIGRATION_VERSION),
     );
-    expect(migrate(db)).toEqual([TOTP_MIGRATION_VERSION]);
+    expect(migrate(db)).toEqual([TOTP_MIGRATION_VERSION, TOTP_SUBJECT_USERNAME_MIGRATION_VERSION]);
+  });
+
+  test('migration 11 adds the username column and backfills it from existing factors', () => {
+    expect(TOTP_SUBJECT_USERNAME_MIGRATION_VERSION).toBe(11);
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < TOTP_SUBJECT_USERNAME_MIGRATION_VERSION),
+    );
+    db.prepare(
+      `INSERT INTO totp_factors (factor_id, schema_version, subject_id, provider_id, username,
+         factor_version, encryption_key_id, secret_nonce, secret_ciphertext, secret_auth_tag,
+         algorithm, digits, period_seconds, allowed_skew_steps, created_at, activated_at,
+         updated_at, last_accepted_counter, recovery_generation)
+       VALUES ('f', 1, 'with-factor', 'basic.one', 'scott', 1, 'k1', 'n', 'c', 'a',
+         'SHA1', 6, 30, 1, 't', 't', 't', 1, 1)`,
+    ).run();
+    db.prepare('INSERT INTO totp_subject_versions (subject_id, factor_version) VALUES (?, ?)').run(
+      'with-factor',
+      1,
+    );
+    db.prepare('INSERT INTO totp_subject_versions (subject_id, factor_version) VALUES (?, ?)').run(
+      'removed',
+      2,
+    );
+
+    expect(migrate(db)).toEqual([TOTP_SUBJECT_USERNAME_MIGRATION_VERSION]);
+
+    const rows = db
+      .prepare('SELECT subject_id, username FROM totp_subject_versions ORDER BY subject_id')
+      .all();
+    expect(rows).toEqual([
+      { subject_id: 'removed', username: null },
+      { subject_id: 'with-factor', username: 'scott' },
+    ]);
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_schema WHERE name = 'totp_subject_versions_username'")
+        .all(),
+    ).toHaveLength(1);
   });
 
   test('records the version, the note and when it was applied', () => {
@@ -124,6 +164,7 @@ describe('store/db/migrations', () => {
       expect(versions.filter((version) => version > GROUP_POLICIES_MIGRATION_VERSION)).toEqual([
         LABEL_OVERRIDES_MIGRATION_VERSION,
         TOTP_MIGRATION_VERSION,
+        TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -183,6 +224,7 @@ describe('store/db/migrations', () => {
         GROUP_POLICIES_MIGRATION_VERSION,
         LABEL_OVERRIDES_MIGRATION_VERSION,
         TOTP_MIGRATION_VERSION,
+        TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -251,7 +293,11 @@ describe('store/db/migrations', () => {
          VALUES ('existing', '::local::existing', 'existing', 'existing', 'running', 'local', 'library/web', '1', '{}')`,
       ).run();
 
-      expect(migrate(db)).toEqual([LABEL_OVERRIDES_MIGRATION_VERSION, TOTP_MIGRATION_VERSION]);
+      expect(migrate(db)).toEqual([
+        LABEL_OVERRIDES_MIGRATION_VERSION,
+        TOTP_MIGRATION_VERSION,
+        TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
+      ]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,
       });
