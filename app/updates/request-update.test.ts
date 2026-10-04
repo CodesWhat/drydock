@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const {
   mockGetOperationById,
@@ -76,6 +76,8 @@ vi.mock('./dependency-restart.js', () => ({
   restartDependentContainer: mockRestartDependentContainer,
 }));
 
+import * as groupPolicyStore from '../store/group-policy.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import {
   buildAcceptedUpdateRuntimeContext,
   dispatchAccepted,
@@ -3229,6 +3231,60 @@ describe('request-update', () => {
         source: 'automatic',
       });
       expect(accepted.operationId).toEqual(expect.any(String));
+    });
+
+    // A scan builds the container, then a policy is saved, then the trigger enqueues it.
+    describe('a policy saved after the container was built', () => {
+      const labels = { 'com.docker.compose.project': 'payments' };
+      let db: ReturnType<typeof createMigratedMemoryDatabase>;
+
+      beforeEach(() => {
+        db = createMigratedMemoryDatabase();
+        groupPolicyStore.createCollections(db);
+      });
+
+      afterEach(() => {
+        groupPolicyStore.clearCollectionForTesting();
+        db.close();
+      });
+
+      test('rejects automatic admission under the current group ceiling', async () => {
+        const stale = createContainer({ labels });
+        groupPolicyStore.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+
+        await expect(
+          enqueueContainerUpdate(stale, { trigger: dockerTrigger(), source: 'automatic' }),
+        ).rejects.toMatchObject({
+          statusCode: 409,
+          message: "Group policy 'payments' allows manual updates only",
+        });
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+      });
+
+      test('rejects an automatic trigger the current group excludes', async () => {
+        const stale = createContainer({ labels });
+        groupPolicyStore.insertGroupPolicy(
+          'payments',
+          { actions: { exclude: ['docker.update'] } },
+          'u',
+        );
+
+        await expect(
+          enqueueContainerUpdate(stale, { trigger: dockerTrigger(), source: 'automatic' }),
+        ).rejects.toMatchObject({ statusCode: 409 });
+      });
+
+      test('a manual request still reads the container as handed in', async () => {
+        const stale = createContainer({ labels });
+        groupPolicyStore.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+
+        const accepted = await enqueueContainerUpdate(stale, {
+          trigger: dockerTrigger(),
+          source: 'manual',
+        });
+
+        expect(accepted.operationId).toEqual(expect.any(String));
+      });
     });
   });
 });

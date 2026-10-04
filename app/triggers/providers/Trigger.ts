@@ -20,6 +20,7 @@ import {
 } from '../../model/container.js';
 import { getContainerGroup } from '../../model/container-group.js';
 import { getGroupExcludeEntries, resolveUpdateModeCeiling } from '../../model/group-policy.js';
+import { withCurrentGroupPolicy } from '../../store/group-policy.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
@@ -2577,9 +2578,10 @@ class Trigger<
    * @param containerReport
    * @returns {Promise<void>}
    */
-  async handleContainerReport(containerReport: ContainerReport) {
+  async handleContainerReport(emittedReport: ContainerReport) {
     // Strip Docker recreate alias prefixes before any trigger processing
-    Trigger.canonicalizeReportName(containerReport);
+    Trigger.canonicalizeReportName(emittedReport);
+    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
 
     // Confirmation cleanup must run regardless of the current global mode or
     // notification-rule routing. Otherwise an auto -> manual/notify -> auto
@@ -2645,15 +2647,16 @@ class Trigger<
    * @param containerReports
    * @returns {Promise<void>}
    */
-  async handleContainerReports(containerReports: ContainerReport[]) {
+  async handleContainerReports(emittedReports: ContainerReport[]) {
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
 
     // Strip Docker recreate alias prefixes before any trigger processing
-    for (const report of containerReports) {
+    for (const report of emittedReports) {
       Trigger.canonicalizeReportName(report);
     }
+    const containerReports = emittedReports.map((report) => Trigger.withCurrentGroupPolicy(report));
 
     // Mirror the simple/digest suppression-lift (#408): a watcher report
     // confirming updateAvailable=false means the post-update state has landed,
@@ -2685,7 +2688,8 @@ class Trigger<
     // exact token its own reserve call returned, so the release loop below
     // frees only the reservation it actually holds (DR-62).
     const reservedContainers: Array<{ container: Container; token: OnceReservationToken }> = [];
-    for (const container of this.getBatchRetryContainers(containerReports)) {
+    for (const retried of this.getBatchRetryContainers(containerReports)) {
+      const container = withCurrentGroupPolicy(retried);
       // A retry is judged on the current container, so a group that has since capped the mode
       // holds it back without a reservation. It stays buffered, as it does under a global gate.
       if (this.isAutomaticActionDispatchBlockedFor(container)) {
@@ -2818,8 +2822,9 @@ class Trigger<
   /**
    * Handle container report (digest mode — single container from simple event).
    */
-  async handleContainerReportDigest(containerReport: ContainerReport) {
-    Trigger.canonicalizeReportName(containerReport);
+  async handleContainerReportDigest(emittedReport: ContainerReport) {
+    Trigger.canonicalizeReportName(emittedReport);
+    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
 
     const { container } = containerReport;
     const containerName = getContainerNotificationKey(container) || fullName(container);
@@ -2980,8 +2985,9 @@ class Trigger<
       const stillHasUpdate = !currentContainer || currentContainer.updateAvailable;
 
       if (stillHasUpdate) {
-        const evaluatedContainer =
-          currentContainer === undefined ? bufferedContainer : currentContainer;
+        const evaluatedContainer = withCurrentGroupPolicy(
+          currentContainer === undefined ? bufferedContainer : currentContainer,
+        );
 
         // Re-check the action-policy dispatch winner at flush time, not just
         // at buffer time (handleContainerReportDigest / shouldHandleDigest-
@@ -3423,6 +3429,19 @@ class Trigger<
    * Belt-and-suspenders guard — the watcher should have already canonicalized,
    * but this catches any remaining leaks regardless of environment quirks.
    */
+  /**
+   * The report with its container's group policy read live. The report's snapshot is as old
+   * as the store write that produced it, and the group rule has to apply the way the global
+   * mode does, as of this dispatch. Returns the same report when nothing changed.
+   */
+  static withCurrentGroupPolicy(report: ContainerReport): ContainerReport {
+    if (!report.container) {
+      return report;
+    }
+    const container = withCurrentGroupPolicy(report.container);
+    return container === report.container ? report : { ...report, container };
+  }
+
   static canonicalizeReportName(report: ContainerReport): void {
     const name = report.container?.name;
     if (typeof name !== 'string') return;

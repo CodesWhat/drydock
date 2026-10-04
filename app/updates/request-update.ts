@@ -35,6 +35,7 @@ import {
   type UpdateBlockerReason,
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
+import { withCurrentGroupPolicy } from '../store/group-policy.js';
 import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
@@ -323,9 +324,19 @@ function formatAcceptedDispatchContext(accepted: AcceptedContainerUpdateRequest[
 }
 
 function prepareContainerUpdateRequest(
-  container: Container,
+  requested: Container,
   options: EnqueueContainerUpdateOptions = {},
 ): PreparedContainerUpdateRequest {
+  // The lower-level enqueue path is used by watcher-driven action triggers.
+  // Manual/API callers go through requestContainerUpdate(s), which explicitly
+  // override this to manual. Defaulting to automatic keeps future internal
+  // callers fail-closed when the global mode is manual.
+  const source = options.source ?? 'automatic';
+  // An automatic request carries the container a scan built, whose group snapshot can
+  // predate a policy saved since. The group rule is read live here, as the global mode is,
+  // so a stale snapshot never admits what the current policy holds. A manual request is the
+  // operator's own call and reads the container as it was handed in.
+  const container = source === 'automatic' ? withCurrentGroupPolicy(requested) : requested;
   // Active-operation gate first — preserves the original error wording for callers that
   // distinguish "queued" vs "in progress" by message text.
   const activeOperation = getActiveUpdateOperationForContainer(container);
@@ -341,11 +352,6 @@ function prepareContainerUpdateRequest(
   const ceiling = resolveUpdateModeCeiling(container, getUpdateMode());
   const updateMode = ceiling.value;
   const groupCeiling = ceiling.source === 'group' ? ceiling.group : undefined;
-  // The lower-level enqueue path is used by watcher-driven action triggers.
-  // Manual/API callers go through requestContainerUpdate(s), which explicitly
-  // override this to manual. Defaulting to automatic keeps future internal
-  // callers fail-closed when the global mode is manual.
-  const source = options.source ?? 'automatic';
   if (updateMode === 'notify') {
     throw new UpdateRequestError(
       409,
