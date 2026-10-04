@@ -184,12 +184,68 @@ export interface Reauthenticated {
   spentRecoveryCodeId?: string;
 }
 
+const CONCURRENT_REAUTH_MESSAGE = 'Too many concurrent reauthentication attempts';
+
+/**
+ * Subjects with a re-authentication in flight. The password check is the one
+ * asynchronous step, and a failure is only counted once it returns, so calls
+ * running side by side would all pass the lock checks before any of them was
+ * counted. One at a time per subject keeps every attempt behind the count of
+ * the one before it.
+ */
+const reauthenticating = new Set<string>();
+
+/** Answer 423 while the account, the caller's address or (with a factor) the second factor is locked. */
+function rejectIfLocked(
+  req: AuthRequest,
+  res: Response,
+  context: ManagementContext,
+  factor: TotpFactorRecord | undefined,
+): boolean {
+  return (
+    rejectIfLockedOut(req, res, context.username) ||
+    (factor !== undefined && rejectIfFactorLocked(req, res, context.subjectId, context.username))
+  );
+}
+
+/**
+ * Check the second-factor proof and answer when it fails. Synchronous from the
+ * lock check that precedes it to the compare-and-set that spends the proof.
+ */
+function proveSecondFactor(
+  req: AuthRequest,
+  res: Response,
+  context: ManagementContext,
+  factor: TotpFactorRecord,
+  proof: NonNullable<ReauthBody['proof']>,
+): Reauthenticated | undefined {
+  try {
+    if (proof.kind === 'totp') {
+      if (verifyTotpProof(factor, proof.value)) {
+        return {};
+      }
+    } else {
+      const spent = verifyRecoveryProof(factor, proof.value);
+      if (spent !== undefined) {
+        return { spentRecoveryCodeId: spent };
+      }
+    }
+  } catch (error: unknown) {
+    log.warn(`Unable to verify the second factor (${getErrorMessage(error)})`);
+    sendErrorResponse(res, 503, UNAVAILABLE_MESSAGE);
+    return undefined;
+  }
+  rejectFailedReauthentication(req, res, context.username, context.subjectId);
+  return undefined;
+}
+
 /**
  * Prove the person again: their password, and, when a factor is active, a
  * current code or recovery code. Answers the request itself and resolves
  * undefined on any failure. Failures draw on the same account, IP and
- * persisted second-factor budgets login does. A code that proves the call is
- * spent like any other, so a replayed one fails.
+ * persisted second-factor budgets login does, one call at a time per subject
+ * so a burst cannot outrun them. A code that proves the call is spent like any
+ * other, so a replayed one fails.
  */
 export async function reauthenticate(
   req: Request,
@@ -203,10 +259,7 @@ export async function reauthenticate(
     sendErrorResponse(res, 400, INVALID_BODY_MESSAGE);
     return undefined;
   }
-  if (rejectIfLockedOut(authRequest, res, context.username)) {
-    return undefined;
-  }
-  if (factor && rejectIfFactorLocked(authRequest, res, context.subjectId, context.username)) {
+  if (rejectIfLocked(authRequest, res, context, factor)) {
     return undefined;
   }
 
@@ -216,32 +269,33 @@ export async function reauthenticate(
     sendErrorResponse(res, 503, UNAVAILABLE_MESSAGE);
     return undefined;
   }
-  if (!(await verifier.verifyPasswordForUser(context.username, body.password))) {
-    rejectFailedReauthentication(authRequest, res, context.username);
-    return undefined;
-  }
-  if (factor === undefined || body.proof === undefined) {
-    return {};
-  }
 
-  try {
-    if (body.proof.kind === 'totp') {
-      if (verifyTotpProof(factor, body.proof.value)) {
-        return {};
-      }
-    } else {
-      const spent = verifyRecoveryProof(factor, body.proof.value);
-      if (spent !== undefined) {
-        return { spentRecoveryCodeId: spent };
-      }
-    }
-  } catch (error: unknown) {
-    log.warn(`Unable to verify the second factor (${getErrorMessage(error)})`);
-    sendErrorResponse(res, 503, UNAVAILABLE_MESSAGE);
+  if (reauthenticating.has(context.subjectId)) {
+    res.set('Retry-After', '1');
+    sendErrorResponse(res, 429, CONCURRENT_REAUTH_MESSAGE);
     return undefined;
   }
-  rejectFailedReauthentication(authRequest, res, context.username, context.subjectId);
-  return undefined;
+  reauthenticating.add(context.subjectId);
+  try {
+    const passwordMatches = await verifier.verifyPasswordForUser(context.username, body.password);
+    // A login failing beside this call may have spent a budget while the
+    // password was being hashed, so the locks are read again here, in the same
+    // synchronous run as the verdict and the proof check. A lock that arrived
+    // meanwhile answers before either says anything about what was sent.
+    if (rejectIfLocked(authRequest, res, context, factor)) {
+      return undefined;
+    }
+    if (!passwordMatches) {
+      rejectFailedReauthentication(authRequest, res, context.username);
+      return undefined;
+    }
+    if (factor === undefined || body.proof === undefined) {
+      return {};
+    }
+    return proveSecondFactor(authRequest, res, context, factor, body.proof);
+  } finally {
+    reauthenticating.delete(context.subjectId);
+  }
 }
 
 /** Give back a recovery code that proved a call which then changed nothing. */

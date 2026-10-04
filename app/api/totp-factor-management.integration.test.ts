@@ -348,6 +348,51 @@ function call(h: Harness, method: string, path: string, options: CallOptions = {
 const code = (seed: Buffer, offsetSteps = 0) =>
   generateTotp(seed, Date.now() + offsetSteps * 30_000);
 
+/** A code no window near now accepts, so a "wrong code" is never right by accident. */
+function wrongCode(seed: Buffer): string {
+  const accepted = new Set([-2, -1, 0, 1, 2].map((offset) => code(seed, offset)));
+  return ['000000', '111111', '222222', '333333', '444444', '555555'].find(
+    (candidate) => !accepted.has(candidate),
+  ) as string;
+}
+
+interface PasswordVerifier {
+  verifyPasswordForUser(username: string, password: string): Promise<boolean>;
+}
+
+const providerOf = (providerId: string) =>
+  (registry.getState() as unknown as { authentication: Record<string, PasswordVerifier> })
+    .authentication[providerId];
+
+/** Released after every test, so a failed assertion never leaves a request hanging. */
+const heldPasswordChecks: Array<() => void> = [];
+
+/**
+ * Hold the provider's next password check open until released, the way a slow
+ * hash does, so a test can act while a re-authentication is in flight.
+ */
+function holdNextPasswordCheck(providerId = PROVIDER) {
+  const provider = providerOf(providerId);
+  const verify = provider.verifyPasswordForUser.bind(provider);
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reached: () => void = () => {};
+  const arrived = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  heldPasswordChecks.push(release);
+  const spy = vi
+    .spyOn(provider, 'verifyPasswordForUser')
+    .mockImplementationOnce(async (username, password) => {
+      reached();
+      await gate;
+      return verify(username, password);
+    });
+  return { arrived, release, spy };
+}
+
 interface EnrollmentReveal {
   id: string;
   secret: string;
@@ -474,6 +519,9 @@ describe('TOTP slice 4: factor-management API', () => {
 
   afterEach(async () => {
     vi.useRealTimers();
+    for (const release of heldPasswordChecks.splice(0)) {
+      release();
+    }
     vi.restoreAllMocks();
     for (const h of harnesses.splice(0)) {
       await new Promise<void>((resolve) => h.server.close(() => resolve()));
@@ -840,6 +888,158 @@ describe('TOTP slice 4: factor-management API', () => {
       // Still locked, even for the right password.
       const locked = await startEnrollment(h, cookie);
       expect(locked.status).toBe(423);
+    });
+
+    test('a parallel burst of wrong passwords is hashed one at a time and cannot outrun the lockout budget', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const verify = vi.spyOn(providerOf(PROVIDER), 'verifyPasswordForUser');
+      const wrong = () =>
+        call(h, 'POST', '/totp-enrollments', { cookie, body: { password: 'nope' } });
+
+      const statuses = (await Promise.all(Array.from({ length: 20 }, wrong))).map(
+        (response) => response.status,
+      );
+      expect(verify.mock.calls.length).toBeLessThanOrEqual(5);
+      for (let attempt = 0; attempt < 5 && !statuses.includes(423); attempt += 1) {
+        statuses.push((await wrong()).status);
+      }
+
+      // However the attempts were sent, exactly the budget was ever hashed.
+      expect(verify).toHaveBeenCalledTimes(5);
+      expect(statuses.filter((status) => status === 403)).toHaveLength(4);
+      expect(statuses.every((status) => [403, 423, 429].includes(status))).toBe(true);
+
+      // The right password, sent last, meets the lock rather than a hash.
+      const right = await startEnrollment(h, cookie);
+      expect(right.status).toBe(423);
+      expect(verify).toHaveBeenCalledTimes(5);
+      expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+    });
+
+    test('a parallel burst of wrong second-factor codes cannot outrun the factor budget', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const wrong = () =>
+        call(h, 'POST', '/totp-enrollments', {
+          cookie,
+          body: { password: TEST_PASSWORD, code: wrongCode(enrolled.seed) },
+        });
+
+      const statuses = (await Promise.all(Array.from({ length: 20 }, wrong))).map(
+        (response) => response.status,
+      );
+      expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBeLessThanOrEqual(5);
+      for (let attempt = 0; attempt < 5 && !statuses.includes(423); attempt += 1) {
+        statuses.push((await wrong()).status);
+      }
+
+      expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(5);
+      expect(statuses.every((status) => [403, 423, 429].includes(status))).toBe(true);
+
+      // The right code, sent last, is not looked at.
+      const right = await call(h, 'POST', '/totp-enrollments', {
+        cookie,
+        body: { password: TEST_PASSWORD, code: code(enrolled.seed, 1) },
+      });
+      expect(right.status).toBe(423);
+      expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(5);
+      expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+    });
+
+    test('a subject re-authenticates one call at a time: a second is a 429 that costs no budget, and another subject is not held up', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const second = await sessionCookie(h);
+      const elsewhere = await sessionCookie(h, TEST_USER, OTHER_PASSWORD);
+      const held = holdNextPasswordCheck();
+
+      const first = startEnrollment(h, cookie);
+      await held.arrived;
+
+      const refused = await call(h, 'POST', '/totp-enrollments', {
+        cookie: second,
+        body: { password: 'nope' },
+      });
+      expect(refused.status).toBe(429);
+      expect(refused.headers.get('retry-after')).toBe('1');
+      const body = await refused.json();
+      expect(body).toEqual({ error: 'Too many concurrent reauthentication attempts' });
+      expectContract('/api/v1/auth/totp-enrollments', 'post', '429', body);
+      expect(held.spy).toHaveBeenCalledTimes(1);
+
+      const other = await call(h, 'POST', '/totp-enrollments', {
+        cookie: elsewhere,
+        body: { password: OTHER_PASSWORD },
+      });
+      expect(other.status).toBe(201);
+
+      held.release();
+      expect((await first).status).toBe(201);
+
+      // The slot is free again: this call gets as far as the pending enrollment.
+      const after = await startEnrollment(h, second);
+      expect(after.status).toBe(409);
+    });
+
+    test('a password check that throws gives the slot back', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      vi.spyOn(providerOf(PROVIDER), 'verifyPasswordForUser').mockRejectedValueOnce(
+        new Error('hash failed'),
+      );
+
+      expect((await startEnrollment(h, cookie)).status).toBe(503);
+      expect((await startEnrollment(h, cookie)).status).toBe(201);
+    });
+
+    test('an account locked while the password was being checked is refused even when the password is right', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const held = holdNextPasswordCheck();
+
+      const pending = startEnrollment(h, cookie);
+      await held.arrived;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await loginPassword(h, TEST_USER, 'nope');
+      }
+      held.release();
+
+      const response = await pending;
+      expect(response.status).toBe(423);
+      expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0);
+      expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+    });
+
+    test('a second factor locked while the password was being checked is refused before the proof is looked at', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const proof = code(enrolled.seed, 1);
+      const prove = () =>
+        call(h, 'POST', '/totp-enrollments', {
+          cookie,
+          body: { password: TEST_PASSWORD, code: proof },
+        });
+      const held = holdNextPasswordCheck();
+
+      const pending = prove();
+      await held.arrived;
+      totpStore.recordFactorFailure({
+        subjectId: SUBJECT_ID,
+        username: TEST_USER,
+        now: Date.now(),
+        threshold: 1,
+        baseLockMs: 60_000,
+        maxLockMs: 60_000,
+      });
+      held.release();
+      expect((await pending).status).toBe(423);
+
+      // The code was never spent: with the lock lifted it still proves the call.
+      totpStore.clearFactorFailures(SUBJECT_ID);
+      expect((await prove()).status).toBe(201);
     });
 
     test('the wrong password answer says nothing about which part failed', async () => {
