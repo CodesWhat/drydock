@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does.
+
 ### Changed
 
 - **ZAP alerts in code scanning are now keyed per scanned site.** `scripts/zap-json-to-sarif.mjs` stripped the origin from every location, so getdrydock.com, the demo and the app scan shared one alert per rule and path, and dismissing it for the public site hid the same finding on the app. Locations now read `getdrydock.com/robots.txt`. Expect one round of reopened and closed alerts when the next scans upload.
