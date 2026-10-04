@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "更新策略覆盖已清除",
       "group-policy-set": "组策略已设置",
       "group-policy-cleared": "组策略已清除",
+      "label-override-set": "标签覆盖已设置",
+      "label-override-cleared": "标签覆盖已清除",
       "auto-rollback": "自动回滚",
       "rollback": "回滚",
       "preview": "预览",

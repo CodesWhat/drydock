@@ -14,6 +14,7 @@ vi.mock('../../event/index.js', () => ({
 
 import { isRollbackContainer } from '../../model/container.js';
 import { createCrudHandlers } from './crud.js';
+import { toApiContainer } from './shared.js';
 import { sortContainers } from './sorting.js';
 
 type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
@@ -2503,6 +2504,55 @@ describe('api/container/crud', () => {
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining(redacted));
+    });
+
+    test('names the Drydock override in the eligibility message of a projected container', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            result: { tag: '1.1.0' },
+            updateKind: {
+              kind: 'tag',
+              localValue: '1.0.0',
+              remoteValue: '1.1.0',
+              semverDiff: 'minor',
+            },
+            actionTriggerInclude: 'other.trigger',
+            labelOwned: {
+              v: 1,
+              declared: {},
+              declaredSources: {},
+              sources: { actionTriggerInclude: 'override' },
+            },
+          }),
+        ],
+      });
+      harness.deps.redactContainerRuntimeEnv.mockImplementation(toApiContainer);
+      const grouped = groupCrudDeps(harness.deps);
+      const handlers = createCrudHandlers({
+        ...grouped,
+        agentApi: {
+          ...grouped.agentApi,
+          getTriggers: () =>
+            ({
+              'docker.update': {
+                type: 'docker',
+                configuration: { auto: 'oninclude', threshold: 'all' },
+                getId: () => 'docker.update',
+              },
+            }) as never,
+        },
+      });
+
+      const res = callGetContainer(handlers, 'c1');
+
+      const body = res.json.mock.calls[0][0];
+      expect(body.labelOwned).toBeUndefined();
+      expect(
+        body.updateEligibility.blockers.find((b: any) => b.reason === 'trigger-not-included')
+          ?.message,
+      ).toBe("Trigger not matched by the Drydock override of dd.action.include='other.trigger'.");
     });
 
     test('returns 404 when container id does not exist', () => {

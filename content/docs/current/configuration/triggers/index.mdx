@@ -28,6 +28,19 @@ The filter covers update notifications, lifecycle/security events, batches and d
 
 Use separate notification instances for different groups or destinations. This setting is file/environment configuration, not a new live-editor field. Action providers reject `GROUP`; it grants no action permission and defines no inherited update policy. Omitting it preserves existing notification behavior.
 
+## Per-container routing overrides
+
+On the unreleased v1.8 development line, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
+
+An override changes which triggers a container reaches, nothing else. These limits still apply on top of it:
+
+- A notification trigger with a [group selector](#route-notifications-to-a-group) is checked against the container's group first. `dd.group` cannot be overridden, so a routing override can narrow or widen delivery only inside that group and can never route outside it.
+- The global update mode ceiling and each action trigger's `AUTO` setting still apply. An `AUTO=none` trigger never runs automatically, whatever `dd.action.auto` says.
+- Agent affinity still applies. On a traditional agent, action include and auto overrides can only narrow and an exclude override can only add entries, because the agent re-checks its own labels. See [Override labels with the API](/docs/configuration/watchers#override-labels-with-the-api).
+- Overrides are saved without sending a notification or running an action. Queued batches and digests recheck the current container before sending, so an override saved while one is buffered applies when it flushes.
+
+Trigger references in an override are checked when you save: each must match a registered trigger of that field's category, and a reference that matches only the other category is rejected. When an action include, exclude or auto override blocks an update, the 409 message and the eligibility blocker name the Drydock override instead of the container label.
+
 ## Edit notification delivery policy in the UI
 
 This editor and the action policy editor below are new in unreleased v1.8 builds and require a writable [configuration file](/docs/configuration/config-file).

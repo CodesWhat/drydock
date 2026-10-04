@@ -25,6 +25,7 @@ import * as iconsRouter from './icons.js';
 import * as imagesRouter from './images.js';
 import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
+import * as labelOverrideRouter from './label-override.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
@@ -204,6 +205,9 @@ export function init(): express.Router {
   // Mount backup router BEFORE container router (/:id would shadow /backups)
   mountRouter(router, '/containers', backupRouter.init());
 
+  // Mount label override routes (/:id/label-overrides) BEFORE container router
+  mountRouter(router, '/containers', labelOverrideRouter.init());
+
   // Mount container dependencies router BEFORE container router (/:id would shadow /dependencies)
   mountRouter(router, '/containers', containerDependenciesRouter.init());
 
@@ -230,6 +234,9 @@ export function init(): express.Router {
 
   // Mount update-operations router (single-operation lookup by id)
   mountRouter(router, '/update-operations', updateOperationsRouter.init());
+
+  // Mount label override list and row delete (spec 7.5), sibling of /containers
+  mountRouter(router, '/label-overrides', labelOverrideRouter.initCollection());
 
   // Mount trigger router
   mountRouter(router, '/triggers', triggerRouter.init());

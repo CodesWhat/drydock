@@ -898,6 +898,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
+`dd.display.name`, `dd.display.icon`, `dd.depends_on`, `dd.depends_on.action`, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can also be overridden by Drydock itself, per container, without touching the label. See [Override labels with the API](#override-labels-with-the-api).
+
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
 <Callout type="info" title="Dependency-ordered updates">
@@ -955,6 +957,27 @@ If you're trying to restrict which containers a trigger can touch at all, set `A
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
 <Callout type="info">**Declarative per-container update policy** is supported through the four `dd.updatePolicy.*` labels above. The same four fields can also be set for a whole group of containers with a [group policy](/docs/configuration/groups), which sits between the labels and the watcher environment. Watcher environment defaults are available for the two maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+
+### Override labels with the API
+
+On the unreleased v1.8 development line, Drydock can store its own value for nine label-owned fields: the display name and icon, `dd.depends_on` and `dd.depends_on.action`, and the notification and action include, exclude and auto routing. This is for changing a container's behavior when you can't or don't want to edit its Compose file or recreate it. Saving an override never edits a Compose file, calls Docker, recreates or restarts a container, or runs a trigger. The endpoints and request format are in the [Container API](/docs/api/container#label-overrides).
+
+Each field resolves on its own, from lowest to highest priority:
+
+| Priority | Source | Notes |
+| :---: | --- | --- |
+| 1 (lowest) | Defaults and watcher configuration | Container name, the default icon, image set routing |
+| 2 | Compose `depends_on` | Dependencies only |
+| 3 | Docker label | `dd.display.name`, `dd.depends_on` and the rest |
+| 4 (highest) | Drydock override | Set through the API |
+
+A list override replaces the label's list whole and never merges with it. An empty list is an explicit "none": for dependencies it means no dependencies even when Compose declares some, and for a routing field it removes the label's value instead of falling back to it. Removing an override reveals the current label value again.
+
+An override belongs to the container identity (watcher, agent and name, or the Compose project and service), not to a Docker id. It survives recreating the container, restarting Drydock and updating Drydock, and it has no expiry. For a Compose container the identity is the service, so every replica shares one override. Two limits follow from that. An override still applies to a different container that later takes the same name or Compose service, and the stored row stays visible in `GET /api/v1/label-overrides` when no container matches. Renaming a plain container, switching it between `docker run` and Compose, or moving it to another watcher or agent gives it a new identity, so the old override stops applying and has to be set again.
+
+On a traditional agent, the agent checks action routing against its own labels again before it acts, so an override there can only narrow access: `dd.action.include` and `dd.action.auto` overrides may only list references the label lists too (none at all when the label has no include), with no wider threshold, and a `dd.action.exclude` override must start with the label's entries in order and may add more after them. Drydock applies the same rule each time the container is written, so a later label change is never cancelled by a stored override. Portwing controller-transport containers and containers on the controller are not restricted. Notification routing, display and dependency waves always run on the controller, so overrides apply fully to agent containers.
+
+Labels stay what Docker reports. The Labels tab and label search keep showing the raw labels, and an override only changes the effective value Drydock uses. Admission messages say when the include or exclude that blocked an update is an override ("by the Drydock override of dd.action.exclude").
 
 ### Update-policy precedence
 

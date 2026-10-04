@@ -13,6 +13,7 @@ import {
   requestContainerUpdates,
 } from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
+import { toApiContainer } from './container/shared.js';
 import {
   areContainerActionsEnabled,
   CONTAINER_ACTIONS_DISABLED_MESSAGE,
@@ -191,7 +192,10 @@ async function executeAction(
   });
   getContainerActionsCounter()?.inc({ action });
 
-  res.status(200).json({ message: ACTION_MESSAGES[method], result: responseContainer });
+  res.status(200).json({
+    message: ACTION_MESSAGES[method],
+    result: toApiContainer(responseContainer),
+  });
 }
 
 /**

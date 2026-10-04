@@ -11,6 +11,8 @@ type RecordAuditEventArgs = {
   details?: AuditEntry['details'];
   fromVersion?: AuditEntry['fromVersion'];
   toVersion?: AuditEntry['toVersion'];
+  /** Overrides the key derived from `container`, for scopes that are not one container. */
+  containerIdentityKey?: AuditEntry['containerIdentityKey'];
 } & (
   | {
       container: {
@@ -41,11 +43,11 @@ export function recordAuditEvent({
   container,
   containerName = container?.name,
   containerImage = container?.image?.name,
+  containerIdentityKey = container ? getContainerIdentityKey(container) : undefined,
   details,
   fromVersion,
   toVersion,
 }: RecordAuditEventArgs) {
-  const containerIdentityKey = container ? getContainerIdentityKey(container) : undefined;
   const entry: AuditEntry = {
     id: '',
     timestamp: new Date().toISOString(),

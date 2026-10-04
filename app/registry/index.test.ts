@@ -2244,3 +2244,43 @@ describe('reconcileComponentsWithConfiguration', () => {
     expect(registry.getState().trigger['mock.mock1']).toBeUndefined();
   });
 });
+
+describe('agent enforcement for label-owned routing', () => {
+  test('tells a traditional agent watcher from a Portwing controller transport', async () => {
+    const { applyLabelOwnedState, buildLabelOwnedState, captureDeclaredFromFlat } = await import(
+      '../model/label-owned.js'
+    );
+    const resolveExclude = (agent: string | undefined, watcher: string) => {
+      const base = {
+        id: 'c1',
+        name: 'web',
+        displayName: 'web',
+        displayIcon: 'mdi:docker',
+        watcher,
+        agent,
+        actionTriggerExclude: 'a',
+      } as never;
+      const overrides = {
+        actionTriggerExclude: { value: ['b'], updatedAt: 'now', updatedBy: 'user:x' },
+      };
+      const declared = captureDeclaredFromFlat(base);
+      const state = buildLabelOwnedState(declared, {} as never, overrides);
+      return applyLabelOwnedState({ ...(base as object) } as never, state, overrides)
+        .actionTriggerExclude;
+    };
+    const watchersState = registry.getState().watcher as Record<string, unknown>;
+    watchersState['pw.docker.host'] = {
+      type: 'docker',
+      name: 'host',
+      agent: 'pw',
+      configuration: { transport: 'docker-api', execution: 'controller', events: 'portwing' },
+    };
+    try {
+      expect(resolveExclude(undefined, 'local')).toBe('b');
+      expect(resolveExclude('pw', 'host')).toBe('b');
+      expect(resolveExclude('edge', 'local')).toBe('a,b');
+    } finally {
+      delete watchersState['pw.docker.host'];
+    }
+  });
+});

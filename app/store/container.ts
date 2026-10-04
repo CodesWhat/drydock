@@ -2552,12 +2552,15 @@ export interface LabelOverrideMutationResult {
  * @param changes at most one per field
  * @param principal `user:<name>` or `api-key:<keyId>`
  * @param expectedRevision when given, the write applies only against this revision
+ * @param inTransaction runs inside the transaction once a write has applied and the scope's
+ * rows are rewritten; a throw rolls the whole mutation back (the caller's audit row goes here)
  */
 export function mutateLabelOverrides(
   target: Pick<container.Container, 'name' | 'watcher' | 'agent' | 'labels'>,
   changes: readonly labelOverrideStore.LabelOverrideChange[],
   principal: string,
   expectedRevision?: number,
+  inTransaction?: (write: labelOverrideStore.LabelOverrideWriteResult) => void,
 ): LabelOverrideMutationResult {
   const scope = labelOverrideStore.deriveLabelOverrideScope(target);
   if (scope === undefined) {
@@ -2574,10 +2577,11 @@ export function mutateLabelOverrides(
       principal,
       expectedRevision,
     );
-    return {
-      ...write,
-      refreshed: write.applied ? refreshLabelOverrideScope(scope, collected) : 0,
-    };
+    const refreshed = write.applied ? refreshLabelOverrideScope(scope, collected) : 0;
+    if (write.applied) {
+      inTransaction?.(write);
+    }
+    return { ...write, refreshed };
   });
   for (const payload of collected) {
     emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));
@@ -2598,10 +2602,13 @@ export interface LabelOverrideDeleteResult {
  * `container-updated` is emitted per rewritten row, after the commit.
  * @param id the override row id
  * @param expectedRevision the delete applies only against this revision
+ * @param inTransaction runs inside the transaction with the deleted row; a throw rolls the
+ * delete back
  */
 export function deleteLabelOverrideAndRefresh(
   id: string,
   expectedRevision: number,
+  inTransaction?: (record: labelOverrideStore.LabelOverrideRecord) => void,
 ): LabelOverrideDeleteResult {
   const collected: container.Container[] = [];
   const result = labelOverrideStore.transaction(() => {
@@ -2616,7 +2623,9 @@ export function deleteLabelOverrideAndRefresh(
       kind: record.scopeKind,
       name: record.scopeName,
     };
-    return { record, refreshed: refreshLabelOverrideScope(scope, collected) };
+    const refreshed = refreshLabelOverrideScope(scope, collected);
+    inTransaction?.(record);
+    return { record, refreshed };
   });
   for (const payload of collected) {
     emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));

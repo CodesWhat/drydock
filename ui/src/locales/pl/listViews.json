@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Wyczyszczono nadpisanie polityki aktualizacji",
       "group-policy-set": "Ustawiono politykę grupy",
       "group-policy-cleared": "Wyczyszczono politykę grupy",
+      "label-override-set": "Ustawiono nadpisanie etykiety",
+      "label-override-cleared": "Wyczyszczono nadpisanie etykiety",
       "auto-rollback": "Automatyczne cofnięcie",
       "rollback": "Cofnięcie",
       "preview": "Podgląd",

@@ -21,6 +21,7 @@ import {
   selectActionTrigger,
 } from '../model/action-policy.js';
 import { type Container, hasRawUpdate } from '../model/container.js';
+import { describeRoutingOrigin } from '../model/label-owned.js';
 import {
   computeUpdateEligibility,
   getPrimaryHardBlocker,
@@ -178,14 +179,14 @@ function resolveUpdateTrigger(
       if (resolvedPolicy.reason === 'excluded') {
         throw new UpdateRequestError(
           409,
-          `Trigger excluded by container label dd.action.exclude='${container.actionTriggerExclude}'.`,
+          `Trigger excluded ${describeRoutingOrigin(container, 'actionTriggerExclude')}='${container.actionTriggerExclude}'.`,
         );
       }
       throw new UpdateRequestError(
         409,
         container.actionTriggerInclude
-          ? `Trigger not matched by container label dd.action.include='${container.actionTriggerInclude}'.`
-          : 'Trigger not matched by container label dd.action.include.',
+          ? `Trigger not matched ${describeRoutingOrigin(container, 'actionTriggerInclude')}='${container.actionTriggerInclude}'.`
+          : `Trigger not matched ${describeRoutingOrigin(container, 'actionTriggerInclude')}.`,
       );
     }
     return providedTrigger;

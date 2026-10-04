@@ -869,6 +869,71 @@ describe('label-owned overrides at the store', () => {
     });
   });
 
+  describe('in-transaction hook', () => {
+    test('a mutation runs the hook inside the transaction and a throw rolls the whole write back', () => {
+      container.insertContainer(watched('web-1', { displayName: 'Sonarr' }));
+      emitted().mockClear();
+      const seen: unknown[] = [];
+
+      const result = container.mutateLabelOverrides(
+        watched('web-1'),
+        [{ field: 'displayName', op: 'set', value: 'TV' }],
+        'user:admin',
+        0,
+        (write) => {
+          seen.push(db.isTransaction, write.record?.revision);
+        },
+      );
+      expect(result.applied).toBe(true);
+      expect(seen).toEqual([true, 1]);
+
+      expect(() =>
+        container.mutateLabelOverrides(
+          watched('web-1'),
+          [{ field: 'displayName', op: 'set', value: 'Second' }],
+          'user:admin',
+          1,
+          () => {
+            throw new Error('audit failed');
+          },
+        ),
+      ).toThrow('audit failed');
+      expect(raw('web-1').displayName).toBe('TV');
+      expect(labelOverride.getLabelOverrideForScope('::local::web')?.revision).toBe(1);
+    });
+
+    test('a stale revision never runs the hook', () => {
+      container.insertContainer(watched('web-1', { displayName: 'Sonarr' }));
+      const hook = vi.fn();
+      container.mutateLabelOverrides(
+        watched('web-1'),
+        [{ field: 'displayName', op: 'set', value: 'TV' }],
+        'user:admin',
+        7,
+        hook,
+      );
+      expect(hook).not.toHaveBeenCalled();
+    });
+
+    test('a delete runs the hook with the deleted row and a throw keeps the row', () => {
+      container.insertContainer(watched('web-1', { displayName: 'Sonarr' }));
+      const row = setOverrides(watched('web-1'), { displayName: 'TV' })
+        .record as labelOverride.LabelOverrideRecord;
+      const hook = vi.fn(() => {
+        throw new Error('audit failed');
+      });
+
+      expect(() => container.deleteLabelOverrideAndRefresh(row.id, 99, hook)).not.toThrow();
+      expect(hook).not.toHaveBeenCalled();
+      expect(() => container.deleteLabelOverrideAndRefresh(row.id, row.revision, hook)).toThrow(
+        'audit failed',
+      );
+      expect(hook).toHaveBeenCalledWith(expect.objectContaining({ id: row.id }));
+      expect(raw('web-1').displayName).toBe('TV');
+      expect(labelOverride.getLabelOverrides()).toHaveLength(1);
+    });
+  });
+
   describe('deleting a row', () => {
     test('refreshes every affected container in the same step and announces each once', () => {
       container.insertContainer(sonarr('1', { displayName: 'Sonarr' }));

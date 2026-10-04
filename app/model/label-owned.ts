@@ -12,6 +12,11 @@
  * keeps reading the fields it reads today, and keeps the declared layer (plus where each
  * effective value came from) in `Container.labelOwned`.
  */
+import { usesControllerDockerTransport } from '../agent/controller-docker-transport.js';
+import {
+  parseIncludeOrIncludeTriggerString,
+  splitAndTrimCommaSeparatedList,
+} from '../triggers/providers/trigger-reference-matching.js';
 import {
   ddActionAuto,
   ddActionExclude,
@@ -263,13 +268,157 @@ export function inferDeclaredSources(
   ) as LabelOwnedDeclaredSources;
 }
 
+export type AgentEnforcedRoutingField =
+  | 'actionTriggerInclude'
+  | 'actionTriggerExclude'
+  | 'actionTriggerAuto';
+
+interface RoutingReference {
+  id: string;
+  threshold: string;
+  /** The comparison form, `id:threshold`. */
+  key: string;
+  text: string;
+}
+
+function toRoutingReferences(entries: readonly string[]): RoutingReference[] {
+  return entries.map((entry) => {
+    const parsed = parseIncludeOrIncludeTriggerString(entry);
+    const id = parsed.id.toLowerCase();
+    return {
+      id,
+      threshold: parsed.threshold,
+      key: `${id}:${parsed.threshold}`,
+      text: entry.trim(),
+    };
+  });
+}
+
+/** A declared routing value as comparison entries, read the way the matcher reads it. */
+export function parseDeclaredRoutingEntries(declared: string | undefined): string[] {
+  return toRoutingReferences(splitAndTrimCommaSeparatedList(declared ?? '')).map(
+    (reference) => reference.key,
+  );
+}
+
+function isIdSuffix(shorter: string, longer: string): boolean {
+  const short = shorter.split('.');
+  const long = longer.split('.');
+  return (
+    short.length <= long.length && short.every((part, i) => part === long.at(i - short.length))
+  );
+}
+
+/** Two references can match one trigger id only when one is a dotted suffix of the other. */
+function mayOverlap(first: string, second: string): boolean {
+  return isIdSuffix(first, second) || isIdSuffix(second, first);
+}
+
+/**
+ * Whether an include or auto override entry stays inside the declared list under
+ * first-match. The first declared reference that can match the same trigger decides what
+ * the label allows, so the entry has to name that reference and ask for no wider threshold.
+ * Sound for any trigger: every trigger the entry matches is matched by that same declared
+ * reference first.
+ */
+export function isEntryPermittedByDeclared(entry: string, declared: string | undefined): boolean {
+  const [candidate] = toRoutingReferences([entry]);
+  const first = toRoutingReferences(splitAndTrimCommaSeparatedList(declared ?? '')).find(
+    (reference) => mayOverlap(reference.id, candidate.id),
+  );
+  return (
+    first !== undefined &&
+    first.id === candidate.id &&
+    (first.threshold === 'all' || first.threshold === candidate.threshold)
+  );
+}
+
+/**
+ * The override entries an agent container may keep: an include or auto entry only when
+ * the declared list permits it, and for an exclude the declared entries first and then
+ * the override's extras, so first-match still reads the agent's own entries before them.
+ * Applied to the effective value at every write, so a later change to the agent's labels
+ * can never be cancelled by an override stored before it.
+ */
+export function composeAgentEnforcedRouting(
+  field: AgentEnforcedRoutingField,
+  declared: string | undefined,
+  entries: readonly string[],
+): string[] {
+  if (field !== 'actionTriggerExclude') {
+    return entries.filter((entry) => isEntryPermittedByDeclared(entry, declared));
+  }
+  const declaredEntries = splitAndTrimCommaSeparatedList(declared ?? '');
+  const declaredKeys = new Set(toRoutingReferences(declaredEntries).map((entry) => entry.key));
+  const extras = toRoutingReferences(entries)
+    .filter((entry) => !declaredKeys.has(entry.key))
+    .map((entry) => entry.text);
+  return [...declaredEntries, ...extras];
+}
+
+const AGENT_ENFORCED_ROUTING_FIELDS: ReadonlySet<string> = new Set<AgentEnforcedRoutingField>([
+  'actionTriggerInclude',
+  'actionTriggerExclude',
+  'actionTriggerAuto',
+]);
+
+export function isAgentEnforcedRoutingField(field: string): field is AgentEnforcedRoutingField {
+  return AGENT_ENFORCED_ROUTING_FIELDS.has(field);
+}
+
+type AgentEnforcementResolver = (container: Pick<Container, 'agent' | 'watcher'>) => boolean;
+
+/** Until the registry reports otherwise, any container with an agent is treated as enforced. */
+const failClosedEnforcement: AgentEnforcementResolver = (container) => Boolean(container.agent);
+let agentEnforcement: AgentEnforcementResolver = failClosedEnforcement;
+
+/**
+ * Wire in how the registry tells a traditional agent from a Portwing controller transport.
+ * The registry owns the watcher state and this module is a leaf, so it is injected.
+ */
+export function setAgentEnforcementResolver(resolver: AgentEnforcementResolver | undefined): void {
+  agentEnforcement = resolver ?? failClosedEnforcement;
+}
+
+/**
+ * Whether a container's action admission is re-run by an agent against its own labels. A
+ * controller-local container is not, and neither is a Portwing controller-transport
+ * container, which executes on the controller. An agent whose watcher is not registered
+ * right now is treated as enforcing: narrowing is always safe, widening is not.
+ */
+export function isAgentEnforcedWatcher(
+  container: { agent?: string; watcher: string },
+  watcherState: Record<string, unknown> | undefined,
+): boolean {
+  if (!container.agent) {
+    return false;
+  }
+  const watcher = Object.values(watcherState ?? {}).find((candidate) => {
+    const component = candidate as {
+      agent?: unknown;
+      name?: unknown;
+    };
+    return component.agent === container.agent && component.name === container.watcher;
+  }) as { type?: unknown; configuration?: unknown } | undefined;
+  return !(watcher && usesControllerDockerTransport(watcher.type, watcher.configuration));
+}
+
 /** The Container-field form of an override value. */
 function overrideToFlat(
   spec: LabelOwnedFieldSpec,
   value: LabelOverrideValue,
+  container: Container,
+  state: LabelOwnedState,
 ): string | string[] | undefined {
   if (spec.kind === 'trigger-list') {
-    const entries = value as string[];
+    const entries =
+      isAgentEnforcedRoutingField(spec.field) && agentEnforcement(container)
+        ? composeAgentEnforcedRouting(
+            spec.field,
+            state.declared[spec.field] as string | undefined,
+            value as string[],
+          )
+        : (value as string[]);
     return entries.length === 0 ? undefined : entries.join(',');
   }
   return Array.isArray(value) ? [...value] : value;
@@ -309,7 +458,7 @@ export function applyLabelOwnedState(
     const effective =
       override === undefined
         ? structuredClone(state.declared[spec.field])
-        : overrideToFlat(spec, override.value);
+        : overrideToFlat(spec, override.value, container, state);
     // Display name and icon are required on a Container: a state that lacks one (only a
     // hand-built round trip can) keeps the value the record already shows.
     if (effective === undefined && (spec.kind === 'text' || spec.kind === 'icon')) {
@@ -371,6 +520,25 @@ export function stripAgentLabelOwnedState(container: Container): Container {
  */
 export function toAgentPayload(container: Container): Container {
   return stripAgentLabelOwnedState(toDeclaredProjection(container));
+}
+
+/**
+ * How an admission message names where an action routing value came from: the Docker label,
+ * or the Drydock override that replaced it ("by container label dd.action.exclude", "by the
+ * Drydock override of dd.action.exclude").
+ */
+export function describeRoutingOrigin(
+  container: Pick<Container, 'labelOwned'> & {
+    /** The API projection of `labelOwned.sources`, which is all an API container carries. */
+    labelOwnedSources?: Partial<Record<string, string>>;
+  },
+  field: 'actionTriggerInclude' | 'actionTriggerExclude',
+): string {
+  const labelKey = field === 'actionTriggerInclude' ? ddActionInclude : ddActionExclude;
+  const source = container.labelOwned?.sources[field] ?? container.labelOwnedSources?.[field];
+  return source === 'override'
+    ? `by the Drydock override of ${labelKey}`
+    : `by container label ${labelKey}`;
 }
 
 /** The label-owned slice of a record, for change detection and write-backs. */

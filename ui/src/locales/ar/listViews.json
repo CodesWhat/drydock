@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "تم مسح تجاوز سياسة التحديث",
       "group-policy-set": "تم تعيين سياسة المجموعة",
       "group-policy-cleared": "تم مسح سياسة المجموعة",
+      "label-override-set": "تم تعيين تجاوز التسمية",
+      "label-override-cleared": "تم مسح تجاوز التسمية",
       "auto-rollback": "تراجع تلقائي",
       "rollback": "تراجع",
       "preview": "معاينة",

@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Переопределение политики обновления очищено",
       "group-policy-set": "Политика группы задана",
       "group-policy-cleared": "Политика группы очищена",
+      "label-override-set": "Переопределение метки задано",
+      "label-override-cleared": "Переопределение метки очищено",
       "auto-rollback": "Автооткат",
       "rollback": "Откат",
       "preview": "Предпросмотр",

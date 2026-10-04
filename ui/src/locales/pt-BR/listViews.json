@@ -91,6 +91,8 @@
       "update-policy-override-cleared": "Substituição de policy de atualização removida",
       "group-policy-set": "Policy de grupo definida",
       "group-policy-cleared": "Policy de grupo removida",
+      "label-override-set": "Substituição de label definida",
+      "label-override-cleared": "Substituição de label removida",
       "auto-rollback": "Rollback automático",
       "rollback": "Rollback",
       "preview": "Prévia",

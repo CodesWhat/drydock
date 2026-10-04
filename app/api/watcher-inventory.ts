@@ -10,7 +10,7 @@ import {
   runInventoryRefresh,
   sanitizeInventoryErrors,
 } from '../watchers/inventory-refresh.js';
-import { redactContainersRuntimeEnv } from './container/shared.js';
+import { toApiContainers } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'watcher-inventory' });
@@ -18,7 +18,7 @@ const log = logger.child({ component: 'watcher-inventory' });
 function sanitizeInventoryResult(result: InventoryRefreshResult): InventoryRefreshResult {
   return {
     ...result,
-    containers: redactContainersRuntimeEnv(result.containers),
+    containers: toApiContainers(result.containers),
     errors: sanitizeInventoryErrors(result.errors),
   };
 }
