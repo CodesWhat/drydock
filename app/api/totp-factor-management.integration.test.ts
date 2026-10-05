@@ -220,7 +220,7 @@ function enroll(
   return { seed, recoveryCodes, factorId };
 }
 
-async function start(): Promise<Harness> {
+async function start({ trustProxy = true } = {}): Promise<Harness> {
   const db = createMigratedMemoryDatabase();
   sessionModel.createCollections(db);
   totpStore.createCollections(db);
@@ -251,7 +251,7 @@ async function start(): Promise<Harness> {
   });
 
   const app: Application = express();
-  app.set('trust proxy', 1);
+  app.set('trust proxy', trustProxy ? 1 : false);
   app.use(sessionMiddleware);
   app.use(restoreSessionPrincipal);
   app.use(
@@ -517,8 +517,8 @@ const recoveryUsedAudit = () =>
 describe('TOTP slice 4: factor-management API', () => {
   const harnesses: Harness[] = [];
 
-  async function boot(): Promise<Harness> {
-    const h = await start();
+  async function boot(options: { trustProxy?: boolean } = {}): Promise<Harness> {
+    const h = await start(options);
     harnesses.push(h);
     return h;
   }
@@ -797,6 +797,32 @@ describe('TOTP slice 4: factor-management API', () => {
         expect(response.status).toBe(403);
       },
     );
+
+    test('with trust proxy off, a spoofed X-Forwarded-Proto: https does not make the request HTTPS', async () => {
+      const h = await boot({ trustProxy: false });
+      const cookie = await sessionCookie(h);
+
+      const spoofed = await call(h, 'POST', '/totp-enrollments', {
+        cookie,
+        https: false,
+        headers: { 'X-Forwarded-Proto': 'https' },
+        body: { password: TEST_PASSWORD },
+      });
+      expect(spoofed.status).toBe(403);
+      expect(await spoofed.json()).toEqual({
+        error: 'Two-factor management requires HTTPS',
+        details: { reason: 'https-required' },
+      });
+      expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+
+      // The header was the only difference: without it this is a loopback client.
+      const loopback = await call(h, 'POST', '/totp-enrollments', {
+        cookie,
+        https: false,
+        body: { password: TEST_PASSWORD },
+      });
+      expect(loopback.status).toBe(201);
+    });
 
     test('a loopback socket reached under a public Host name is not local either', async () => {
       const h = await boot();
