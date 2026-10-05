@@ -502,6 +502,44 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
   -d '{"action":"revert-to-declarative"}'
 ```
 
+## Get the effective policy of a container
+
+`GET /api/v1/containers/{id}/effective-policy` answers "where does each value come from, and what will dispatch do with it". It needs the `read` scope. The response is computed with the same resolvers dispatch uses, from the container as it stands now, the group policy as it stands now (so a policy saved a moment ago is already reflected) and the global update mode. It reports policy only. No runtime environment is served.
+
+- `group` is the group the container's labels resolve to, with `label` naming which of `dd.group`, `com.docker.compose.project` or `com.docker.stack.namespace` supplied it, plus the `policyId` and `revision` of the policy that applies. It is `null` for an ungrouped container, and `policyId` is `null` when the group has no policy (including a container whose `dd.group` is empty, which no policy matches).
+- `updatePolicy` has one entry per field. `value` is what takes effect, `source` is `default`, `env`, `group`, `label` or `override`, and `layers` holds the value each layer that sets the field contributes, so a shadowed layer is still visible. `snoozeUntil` is `override` or `default`, because snooze is per-container only.
+- `actions.updateMode` is the mode that binds the container: the more restrictive of the global mode and the group's `updateMode`. `source` is `group` only when the group is strictly more restrictive. Otherwise global is what binds, even if a group sets a looser value.
+- `actions.exclude` keeps the container's own `dd.action.exclude` (`label`, with `labelSource` saying whether a Docker label or a Drydock override supplied it) apart from the group's entries (`group`). Both are hard stops.
+- `actions.dispatch` is what dispatch decides. `automatic` is whether the automatic paths apply an update on their own. `trigger` is the action trigger the resolver selects (`state` is `auto`, `manual` or `blocked`, with `reason` and `excludedBy` when it is blocked), or `null` when none is authorized. `manualUpdate` says whether a manual update is admitted and, when it is not, `blockedBy`: `group-notify-only`, `global-notify`, `trigger-excluded` or `no-trigger`.
+
+```bash
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/effective-policy
+```
+
+```json
+{
+  "group": { "name": "payments", "label": "com.docker.compose.project", "policyId": "9f1c0c52-7b0e-4c6e-9a39-2f3b0c8a6d11", "revision": 3 },
+  "updatePolicy": {
+    "maturityMode": { "value": "mature", "source": "group", "layers": { "env": "all", "group": "mature" } },
+    "maturityMinAgeDays": { "value": 7, "source": "default", "layers": {} },
+    "skipTags": { "value": ["2.0.0"], "source": "label", "layers": { "group": ["1.9.9"], "label": ["2.0.0"] } },
+    "skipDigests": { "value": [], "source": "default", "layers": {} },
+    "snoozeUntil": { "value": null, "source": "default" }
+  },
+  "actions": {
+    "updateMode": { "value": "manual", "source": "group", "global": "auto", "group": "manual" },
+    "exclude": { "label": "command.backup", "labelSource": "label", "group": [] },
+    "dispatch": {
+      "automatic": false,
+      "trigger": { "id": "docker.local", "state": "auto" },
+      "manualUpdate": { "allowed": true }
+    }
+  }
+}
+```
+
+Returns 200, or 404 if the container is not found.
+
 ## Label overrides
 
 Drydock can store its own value for nine fields that Docker labels normally set, so you can change them without editing a Compose file or recreating the container. An override applies on top of the label, survives container recreation, restarts and Drydock updates, and never expires. Saving only updates Drydock's own records: it never calls Docker, writes a Compose file or runs a trigger.

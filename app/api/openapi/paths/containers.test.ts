@@ -31,6 +31,21 @@ describe('containerPaths', () => {
     });
   });
 
+  test('effective-policy is a read-only containers path with a documented response schema', () => {
+    const get = containerPaths['/api/v1/containers/{id}/effective-policy'].get;
+
+    expect(get.operationId).toBe('getContainerEffectivePolicy');
+    expect(get.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/EffectiveContainerPolicy',
+    });
+    expect(Object.keys(get.responses)).toEqual(['200', '401', '403', '404']);
+    expect(Object.keys(openApiSchemas.EffectiveContainerPolicy.properties)).toEqual([
+      'group',
+      'updatePolicy',
+      'actions',
+    ]);
+  });
+
   test('ContainerResource documents effective, declarative, override, and source policy layers', () => {
     const properties = openApiSchemas.ContainerResource.properties;
 
