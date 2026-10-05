@@ -694,7 +694,15 @@ Enrollment needs an encryption key ring configured on the server. Without one th
 
 #### What a recovery login can't do
 
-Signing in with a recovery code gives a normal session with one limit: it can't create an API key. `POST /api/v1/api-keys` answers `403` with `details.reason` set to `recovery-assurance`. An API key is the one credential that keeps working after the factor is reset, so a sign-in that only proved a recovery code isn't allowed to leave one behind. Everything else still works from that session, including listing and revoking keys, replacing the recovery codes, and replacing or removing the factor with a second recovery code. Sign in with a code from the authenticator app to create keys again.
+Signing in with a recovery code gives a normal session with three limits. Each of these would leave something behind that still works after the factor is reset, so a sign-in that only proved a recovery code can't do them. They answer `403` with `details.reason` set to `recovery-assurance`:
+
+| Call | What's refused |
+| --- | --- |
+| `POST /api/v1/api-keys` | Creating an API key. |
+| `PUT /api/v1/config/:section` | Writing the authentication section of the configuration file, which is where accounts and `auth.totp.allowhttp` live. That means `auth` and any section name that flattens into it, such as `auth_basic_eve`. Other sections stay writable. |
+| `POST /api/v1/portwing/keys` | Registering an agent key. |
+
+Everything else still works from that session, including listing and revoking API keys and agent keys, replacing the recovery codes, and replacing or removing the factor with a second recovery code. Sign in with a code from the authenticator app to do any of the three.
 
 ## OpenAPI
 

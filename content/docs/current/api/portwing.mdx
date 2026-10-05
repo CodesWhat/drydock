@@ -136,6 +136,7 @@ HTTP/1.1 201 Created
 | --- | --- |
 | `201` | Key registered; response body contains `keyId`, `label`, `createdAt` |
 | `400` | Missing or malformed fields (non-string, empty string, invalid base64, wrong key length) |
+| `403` | The caller is an API key, or the session signed in with a two-factor recovery code (`details.reason` is `recovery-assurance`). See [what a recovery login can't do](/docs/api#what-a-recovery-login-cant-do) |
 | `409` | A non-revoked key with this `keyId` is already registered |
 
 ### Revoke a key
