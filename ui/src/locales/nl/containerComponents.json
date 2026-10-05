@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · ontgrendelt op {date}",
       "maturityClockPublished": "Kandidaat gepubliceerd op {date} — nog {count} dag tot het minimum van {minDays} dagen | Kandidaat gepubliceerd op {date} — nog {count} dagen tot het minimum van {minDays} dagen",
       "maturityClockDetected": "Kandidaat gedetecteerd op {date} — nog {count} dag tot het minimum van {minDays} dagen | Kandidaat gedetecteerd op {date} — nog {count} dagen tot het minimum van {minDays} dagen",
+      "groupManualOnly": "Het groepsbeleid '{group}' staat alleen handmatige updates toe. Drydock past deze niet automatisch toe.",
       "updateButton": "Nu bijwerken",
       "blockedButton": "Update geblokkeerd",
       "notificationsOnlyButton": "Alleen meldingen",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Geen update-trigger geconfigureerd",
         "self-update-unavailable": "Zelfupdate niet beschikbaar",
         "maintenance-window-closed": "Onderhoudsvenster gesloten",
+        "group-notify-only": "Groep staat alleen meldingen toe",
+        "group-manual-only": "Groep vereist handmatige updates",
         "dry-run-trigger": "Triggerconfiguratie in dry-run-modus"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Updatetriggers configureren",
         "configureThreshold": "Triggerdrempel configureren",
         "configureSelfUpdate": "Zelfupdate configureren",
-        "configureMaintenance": "Onderhoudsvenster configureren"
+        "configureMaintenance": "Onderhoudsvenster configureren",
+        "editGroupPolicy": "Groepsbeleid bewerken"
       }
     },
     "maturityBadge": {

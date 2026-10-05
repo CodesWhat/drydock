@@ -25,6 +25,7 @@ import type {
   UpdateBlocker,
   UpdateBlockerReason,
   UpdateEligibility,
+  UpdateEligibilityUpdateMode,
 } from '../types/container';
 import type { TranslateFn } from '../types/i18n';
 import {
@@ -136,6 +137,7 @@ interface ApiContainerUpdateEligibility {
   eligible?: unknown;
   blockers?: unknown;
   evaluatedAt?: unknown;
+  updateMode?: unknown;
 }
 
 type SecurityScanType = 'scan' | 'updateScan';
@@ -800,6 +802,7 @@ const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
   'agent-mismatch',
   'no-update-trigger-configured',
   'maintenance-window-closed',
+  'group-notify-only',
 ]);
 
 function isUpdateBlockerReason(value: unknown): value is UpdateBlockerReason {
@@ -827,6 +830,24 @@ function deriveUpdateBlocker(blocker: unknown): UpdateBlocker | null {
   return result;
 }
 
+const UPDATE_MODE_VALUES: ReadonlySet<unknown> = new Set(['notify', 'manual', 'auto']);
+
+function deriveEligibilityUpdateMode(value: unknown): UpdateEligibilityUpdateMode | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as { value?: unknown; source?: unknown; group?: unknown };
+  if (!UPDATE_MODE_VALUES.has(raw.value)) return undefined;
+  if (raw.source !== 'global' && raw.source !== 'group') return undefined;
+  const result: UpdateEligibilityUpdateMode = {
+    value: raw.value as UpdateEligibilityUpdateMode['value'],
+    source: raw.source,
+  };
+  if (raw.group !== undefined) {
+    if (typeof raw.group !== 'string') return undefined;
+    result.group = raw.group;
+  }
+  return result;
+}
+
 function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibility | undefined {
   const eligibility = apiContainer.updateEligibility;
   if (!eligibility || typeof eligibility !== 'object') return undefined;
@@ -837,7 +858,13 @@ function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibi
   const blockers = rawBlockers
     .map(deriveUpdateBlocker)
     .filter((b): b is UpdateBlocker => b !== null);
-  return { eligible: eligibility.eligible, blockers, evaluatedAt };
+  const updateMode = deriveEligibilityUpdateMode(eligibility.updateMode);
+  return {
+    eligible: eligibility.eligible,
+    blockers,
+    evaluatedAt,
+    ...(updateMode ? { updateMode } : {}),
+  };
 }
 
 function deriveUpdateOperation(

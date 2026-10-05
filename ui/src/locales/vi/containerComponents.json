@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · mở khóa vào {date}",
       "maturityClockPublished": "Bản ứng viên được phát hành {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
       "maturityClockDetected": "Bản ứng viên được phát hiện {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
+      "groupManualOnly": "Chính sách nhóm '{group}' chỉ cho phép cập nhật thủ công. Drydock sẽ không tự động áp dụng bản cập nhật này.",
       "updateButton": "Cập nhật ngay",
       "blockedButton": "Cập nhật bị chặn",
       "notificationsOnlyButton": "Chỉ thông báo",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Chưa cấu hình trigger cập nhật",
         "self-update-unavailable": "Không thể tự cập nhật",
         "maintenance-window-closed": "Cửa sổ bảo trì đã đóng",
+        "group-notify-only": "Nhóm chỉ cho phép thông báo",
+        "group-manual-only": "Nhóm yêu cầu cập nhật thủ công",
         "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Cấu hình trigger cập nhật",
         "configureThreshold": "Cấu hình ngưỡng trigger",
         "configureSelfUpdate": "Cấu hình tự cập nhật",
-        "configureMaintenance": "Cấu hình cửa sổ bảo trì"
+        "configureMaintenance": "Cấu hình cửa sổ bảo trì",
+        "editGroupPolicy": "Chỉnh sửa chính sách nhóm"
       }
     },
     "maturityBadge": {

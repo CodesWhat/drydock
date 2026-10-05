@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} ・{date} に解除",
       "maturityClockPublished": "候補は {date} に公開されました — {minDays} 日の最低期間まであと {count} 日",
       "maturityClockDetected": "候補は {date} に検出されました — {minDays} 日の最低期間まであと {count} 日",
+      "groupManualOnly": "グループポリシー '{group}' は手動更新のみを許可しています。Drydock はこの更新を自動では適用しません。",
       "updateButton": "今すぐ更新",
       "blockedButton": "更新はブロックされています",
       "notificationsOnlyButton": "通知のみ",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "更新トリガーが構成されていません",
         "self-update-unavailable": "自己更新は利用できません",
         "maintenance-window-closed": "メンテナンスウィンドウは終了しています",
+        "group-notify-only": "グループは通知のみ許可しています",
+        "group-manual-only": "グループは手動更新を必須にしています",
         "dry-run-trigger": "トリガー構成がドライランモードです"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "更新トリガーを構成",
         "configureThreshold": "トリガーのしきい値を構成",
         "configureSelfUpdate": "自己更新を構成",
-        "configureMaintenance": "メンテナンスウィンドウを構成"
+        "configureMaintenance": "メンテナンスウィンドウを構成",
+        "editGroupPolicy": "グループポリシーを編集"
       }
     },
     "maturityBadge": {

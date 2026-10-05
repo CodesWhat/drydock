@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · 于 {date} 解锁",
       "maturityClockPublished": "候选版本于 {date} 发布 — 距达到 {minDays} 天最低要求还有 {count} 天",
       "maturityClockDetected": "候选版本于 {date} 被检测到 — 距达到 {minDays} 天最低要求还有 {count} 天",
+      "groupManualOnly": "分组策略“{group}”仅允许手动更新。Drydock 不会自动应用此更新。",
       "updateButton": "立即更新",
       "blockedButton": "更新已阻止",
       "notificationsOnlyButton": "仅通知",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "未配置更新触发器",
         "self-update-unavailable": "自我更新不可用",
         "maintenance-window-closed": "维护窗口已关闭",
+        "group-notify-only": "分组仅允许通知",
+        "group-manual-only": "分组要求手动更新",
         "dry-run-trigger": "触发器配置处于 dry-run 模式"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "配置更新触发器",
         "configureThreshold": "配置触发阈值",
         "configureSelfUpdate": "配置自我更新",
-        "configureMaintenance": "配置维护窗口"
+        "configureMaintenance": "配置维护窗口",
+        "editGroupPolicy": "编辑分组策略"
       }
     },
     "maturityBadge": {

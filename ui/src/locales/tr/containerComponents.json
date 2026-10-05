@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · {date} tarihinde açılır",
       "maturityClockPublished": "Aday {date} tarihinde yayımlandı — {minDays} günlük minimuma {count} gün kaldı",
       "maturityClockDetected": "Aday {date} tarihinde algılandı — {minDays} günlük minimuma {count} gün kaldı",
+      "groupManualOnly": "'{group}' grup ilkesi yalnızca elle güncellemeye izin veriyor. Drydock bu güncellemeyi otomatik uygulamayacak.",
       "updateButton": "Şimdi güncelle",
       "blockedButton": "Güncelleme engellendi",
       "notificationsOnlyButton": "Yalnızca bildirimler",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Yapılandırılmış güncelleme tetikleyicisi yok",
         "self-update-unavailable": "Kendi kendini güncelleme kullanılamıyor",
         "maintenance-window-closed": "Bakım penceresi kapalı",
+        "group-notify-only": "Grup yalnızca bildirimlere izin veriyor",
+        "group-manual-only": "Grup elle güncelleme gerektiriyor",
         "dry-run-trigger": "Tetikleyici yapılandırması deneme modunda (dry-run)"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Güncelleme tetikleyicilerini yapılandır",
         "configureThreshold": "Tetikleyici eşiğini yapılandır",
         "configureSelfUpdate": "Kendi kendini güncellemeyi yapılandır",
-        "configureMaintenance": "Bakım penceresini yapılandır"
+        "configureMaintenance": "Bakım penceresini yapılandır",
+        "editGroupPolicy": "Grup ilkesini düzenle"
       }
     },
     "maturityBadge": {
