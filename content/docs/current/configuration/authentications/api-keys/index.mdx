@@ -122,6 +122,10 @@ too, along with every sibling branch under it.
 
 A key that holds `api-keys:manage` can create more keys, but only within its own limits: it can't grant a scope it doesn't hold, and it can't grant `api-keys:manage` off the back of `admin`. A logged-in human isn't subject to either ceiling.
 
+## After a recovery-code sign-in
+
+If your account has two-factor authentication and you signed in with a recovery code, that session can list and revoke keys but can't create one. A key keeps working after the second factor is reset, so a sign-in that only proved a recovery code isn't allowed to leave a new one behind. Sign in with a code from your authenticator app to create keys again.
+
 ## Rate limiting
 
 Each key gets its own rate-limit bucket, keyed on the key rather than the client IP. Several integrations behind one reverse proxy therefore don't share a budget. The bucket is earned by the whole credential, not the id in it, so a request presenting an id Drydock never issued and a request presenting a real id with the wrong secret are charged the same address budget and read back identical `RateLimit` headers.

@@ -62,6 +62,7 @@ import * as sessionModel from '../store/session.js';
 import * as totpStore from '../store/totp.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { apiKeyAuthenticator } from './api-key-auth.js';
+import * as apiKeysRouter from './api-keys.js';
 import { registerLoginRoutes, requireAuthentication } from './auth.js';
 import { resetLoginLockoutStateForTests } from './auth-lockout.js';
 import { configureSessionLimits } from './auth-session.js';
@@ -278,6 +279,7 @@ async function start({ trustProxy = true } = {}): Promise<Harness> {
   api.use(requireAuthentication);
   api.use(requireSameOriginForMutations);
   api.use('/auth', totpFactorRouter.init());
+  api.use('/api-keys', apiKeysRouter.init());
   api.get('/protected', (req: Request, res: ExpressResponse) => {
     res.status(200).json({ user: { username: (req as AuthRequest).principal?.username } });
   });
@@ -2246,6 +2248,107 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(closed).not.toContain(sidOf(elsewhere));
       expect(await protectedStatus(h, fresh)).toBe(200);
       expect(await protectedStatus(h, elsewhere)).toBe(200);
+    });
+  });
+
+  describe('what a recovery login may not do', () => {
+    function mintKeyOver(h: Harness, headers: Record<string, string>) {
+      return fetch(url(h, '/api/v1/api-keys'), {
+        method: 'POST',
+        headers: {
+          'X-Forwarded-Proto': 'https',
+          Origin: originOf(h),
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify({ name: 'integration', scopes: ['read'] }),
+      });
+    }
+
+    async function recoveryLoginCookie(h: Harness, recoveryCode: string): Promise<string> {
+      const login = await loginPassword(h);
+      expect(login.status).toBe(202);
+      const { challenge } = (await login.json()) as { challenge: { id: string } };
+      const completed = await completeChallenge(h, challenge.id, { recoveryCode });
+      expect(completed.status).toBe(200);
+      return cookieOf(completed);
+    }
+
+    test('a recovery-code session cannot mint an API key, but can list and revoke them', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const existing = apiKeyStore.createApiKey({
+        name: 'existing',
+        scopes: ['read'],
+        createdBy: { kind: 'user', username: TEST_USER },
+      });
+      const cookie = await recoveryLoginCookie(h, enrolled.recoveryCodes[0]);
+
+      const refused = await mintKeyOver(h, { Cookie: cookie });
+      expect(refused.status).toBe(403);
+      const body = await refused.json();
+      expect(body).toEqual({
+        error:
+          'A session that signed in with a recovery code cannot create API keys. Sign in with a code from your authenticator app and try again.',
+        details: { reason: 'recovery-assurance' },
+      });
+      expectContract('/api/v1/api-keys', 'post', '403', body);
+      expect(apiKeyStore.listApiKeys()).toHaveLength(1);
+
+      const listed = await fetch(url(h, '/api/v1/api-keys'), {
+        headers: { 'X-Forwarded-Proto': 'https', Cookie: cookie },
+      });
+      expect(listed.status).toBe(200);
+      const revoked = await fetch(url(h, `/api/v1/api-keys/${existing.record.keyId}`), {
+        method: 'DELETE',
+        headers: {
+          'X-Forwarded-Proto': 'https',
+          Origin: originOf(h),
+          Cookie: cookie,
+          'X-DD-Confirm-Action': 'api-key-revoke',
+        },
+      });
+      expect(revoked.status).toBe(200);
+    });
+
+    test('it can still replace the recovery codes and remove the factor with a second recovery code', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await recoveryLoginCookie(h, enrolled.recoveryCodes[0]);
+
+      const replaced = await call(h, 'POST', '/totp-recovery-code-sets', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: enrolled.recoveryCodes[1] },
+      });
+      expect(replaced.status).toBe(201);
+      const { recoveryCodes } = (await replaced.json()) as { recoveryCodes: string[] };
+      const removed = await call(h, 'DELETE', '/totp-factor', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: recoveryCodes[0] },
+      });
+      expect(removed.status).toBe(204);
+    });
+
+    test('a TOTP session, a password session with no factor, an OIDC session and an API key all still mint', async () => {
+      const h = await boot();
+      const password = await sessionCookie(h, TEST_USER, OTHER_PASSWORD);
+      const oidc = await plant(
+        h,
+        JSON.stringify({ v: 2, kind: 'oidc', username: 'a@example.com' }),
+      );
+      const key = mintKey(['api-keys:manage', 'read']);
+      const enrolled = enroll();
+      const totp = await loginCookieWithCode(h, enrolled);
+
+      for (const [name, headers] of Object.entries({
+        totp: { Cookie: totp },
+        password: { Cookie: password },
+        oidc: { Cookie: oidc },
+        key: { Authorization: `Bearer ${key}` },
+      })) {
+        const response = await mintKeyOver(h, headers);
+        expect(response.status, name).toBe(201);
+      }
     });
   });
 

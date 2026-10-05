@@ -24,6 +24,12 @@
  * There is no rotate verb. Rotation is create-new-then-revoke-old, which the
  * store already supports by letting two keys be valid at once, so a third
  * verb would only be a worse spelling of two calls.
+ *
+ * One rule is about the session rather than a key: a session that signed in
+ * with a recovery code cannot mint. A key is the one credential that survives
+ * a factor reset, so a login that proved only a recovery code may list and
+ * revoke keys but not leave a new one behind. With no rotate verb, minting is
+ * the whole of what that covers.
  */
 
 import express, { type Request, type Response } from 'express';
@@ -45,7 +51,7 @@ import { getPathParamValue } from './container/request-helpers.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
 import type { PaginationLinks } from './pagination-links.js';
-import type { AuthenticatedPrincipal } from './principal.js';
+import { type AuthenticatedPrincipal, isRecoveryAssuranceSession } from './principal.js';
 import { API_KEYS_MANAGE_SCOPE, API_SCOPES, hasApiKeyScope, scoped } from './route-scopes.js';
 import { closeSseClientsForRevokedApiKeys } from './sse.js';
 
@@ -66,6 +72,8 @@ export const ANCESTOR_REVOKE_MESSAGE =
   'An API key cannot revoke the key that minted it, or any key further up that chain';
 export const SCOPE_CEILING_MESSAGE = 'An API key cannot grant scopes it does not hold itself';
 export const EXPIRY_CEILING_MESSAGE = 'An API key cannot mint a key that outlives it';
+export const RECOVERY_SESSION_MESSAGE =
+  'A session that signed in with a recovery code cannot create API keys. Sign in with a code from your authenticator app and try again.';
 export const INVALID_CURSOR_MESSAGE =
   'Invalid cursor. Use the nextCursor value from a previous response.';
 
@@ -359,6 +367,15 @@ function listKeys(req: Request, res: Response): void {
 }
 
 function createKey(req: Request, res: Response): void {
+  // Before anything in the body is read: the refusal is about who is asking.
+  if (isRecoveryAssuranceSession((req as AuthRequest).principal)) {
+    sendErrorResponse(res, 403, {
+      message: RECOVERY_SESSION_MESSAGE,
+      details: { reason: 'recovery-assurance' },
+    });
+    return;
+  }
+
   const body = getRequestBody(req);
   const callingKey = getCallingKey(req);
 

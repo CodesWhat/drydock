@@ -690,6 +690,10 @@ Enrollments expire after ten minutes. Confirming one ends every other session of
 
 Enrollment needs an encryption key ring configured on the server. Without one these routes answer `503` and change nothing. API keys already minted from an account are independent of its sessions and are not revoked by any of this; review them after a recovery login.
 
+#### What a recovery login can't do
+
+Signing in with a recovery code gives a normal session with one limit: it can't create an API key. `POST /api/v1/api-keys` answers `403` with `details.reason` set to `recovery-assurance`. An API key is the one credential that keeps working after the factor is reset, so a sign-in that only proved a recovery code isn't allowed to leave one behind. Everything else still works from that session, including listing and revoking keys, replacing the recovery codes, and replacing or removing the factor with a second recovery code. Sign in with a code from the authenticator app to create keys again.
+
 ## OpenAPI
 
 Machine-readable API documentation is available as an OpenAPI 3.1.0 specification.

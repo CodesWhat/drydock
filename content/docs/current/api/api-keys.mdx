@@ -47,9 +47,11 @@ Responses:
 | --- | --- |
 | `201` | Created — the body carries the credential |
 | `400` | Unknown scope, missing name, or an invalid expiry |
-| `403` | The calling key lacks `api-keys:manage`, or the request exceeds its scope or expiry ceiling |
+| `403` | The calling key lacks `api-keys:manage`, the request exceeds its scope or expiry ceiling, or the calling session signed in with a recovery code |
 
 When the caller is itself a key, two ceilings apply. It can't grant a scope it doesn't hold, and it can't mint a key that outlives it. A session isn't subject to either.
+
+One rule applies to sessions instead. A session that signed in with a two-factor recovery code can't create a key: the request gets a `403` whose `details.reason` is `recovery-assurance`. A key keeps working after the factor is reset, so creating one needs a sign-in with a code from the authenticator app. That session can still list and revoke keys.
 
 ## List API keys
 

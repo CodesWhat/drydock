@@ -167,7 +167,7 @@ export const apiKeyPaths = {
       tags: ['API Keys'],
       summary: 'Create an API key',
       operationId: 'createApiKey',
-      description: `Mints a key and returns the credential exactly once. ${ceilingNote}`,
+      description: `Mints a key and returns the credential exactly once. ${ceilingNote} A browser session that signed in with a two-factor recovery code is refused with 403 and \`details.reason\` of \`recovery-assurance\`: a key outlives a factor reset, so minting one needs a sign-in with a code from the authenticator app. Such a session can still list and revoke keys.`,
       security: managementSecurity,
       requestBody: {
         required: true,
@@ -202,7 +202,7 @@ export const apiKeyPaths = {
         400: errorResponse('Malformed request — unknown scope, missing name, or invalid expiry'),
         401: errorResponse('Authentication required'),
         403: errorResponse(
-          'The calling API key is missing the api-keys:manage scope, or the request exceeds its scope or expiry ceiling',
+          'The calling API key is missing the api-keys:manage scope, the request exceeds its scope or expiry ceiling, or the calling session signed in with a recovery code',
         ),
       },
     },

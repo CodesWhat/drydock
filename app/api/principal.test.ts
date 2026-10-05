@@ -5,6 +5,7 @@ import {
   getPrincipal,
   isAuthenticated,
   isIdentityPrincipal,
+  isRecoveryAssuranceSession,
 } from './principal.js';
 
 describe('principal', () => {
@@ -74,6 +75,44 @@ describe('principal', () => {
       const principal = { kind: 'basic', username: 42 } as unknown as AuthenticatedPrincipal;
 
       expect(getIdentityUsername({ principal })).toBeUndefined();
+    });
+  });
+
+  describe('isRecoveryAssuranceSession', () => {
+    const local = (assurance: 'password' | 'totp' | 'recovery') => ({
+      type: 'local' as const,
+      subjectId: 's'.repeat(64),
+      providerId: 'basic.default',
+      assurance,
+      factorVersion: 1,
+      issuedAt: 1,
+    });
+
+    test('is true only for a local session that signed in with a recovery code', () => {
+      expect(
+        isRecoveryAssuranceSession({
+          kind: 'session',
+          username: 'scott',
+          identity: local('recovery'),
+        }),
+      ).toBe(true);
+    });
+
+    test.each([
+      ['a TOTP-assured session', { kind: 'session', username: 'scott', identity: local('totp') }],
+      ['a password session', { kind: 'session', username: 'scott', identity: local('password') }],
+      ['an OIDC session', { kind: 'session', username: 'scott', identity: { type: 'oidc' } }],
+      ['a legacy session', { kind: 'session', username: 'scott' }],
+      [
+        'an API key',
+        { kind: 'api-key', username: 'ci', keyId: 'k', scopes: [], parentKeyId: null },
+      ],
+      ['anonymous access', { kind: 'anonymous', username: ANONYMOUS_USERNAME }],
+      ['no principal', undefined],
+    ])('is false for %s', (_name, principal) => {
+      expect(isRecoveryAssuranceSession(principal as AuthenticatedPrincipal | undefined)).toBe(
+        false,
+      );
     });
   });
 

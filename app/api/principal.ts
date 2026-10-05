@@ -144,6 +144,21 @@ export function isLoginSessionEligible(
 }
 
 /**
+ * Did this request's session sign in with a recovery code instead of a live
+ * code from the authenticator? A recovery code is a bearer secret that proves
+ * less than the factor it stands in for, so the few things that must outlast a
+ * factor reset ask this before they act (spec 11.1.2 decision 8). Only a local
+ * session can be one: keys, OIDC, legacy sessions and anonymous access are not.
+ */
+export function isRecoveryAssuranceSession(principal: AuthenticatedPrincipal | undefined): boolean {
+  return (
+    principal?.kind === 'session' &&
+    principal.identity?.type === 'local' &&
+    principal.identity.assurance === 'recovery'
+  );
+}
+
+/**
  * The identified username, or undefined when the request is unauthenticated or
  * anonymous. Returned verbatim — callers that need it trimmed trim it, because
  * the two existing consumers disagree about that and both are load-bearing.
