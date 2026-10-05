@@ -68,6 +68,7 @@ import { resetLoginLockoutStateForTests } from './auth-lockout.js';
 import { configureSessionLimits } from './auth-session.js';
 import type { AuthRequest } from './auth-types.js';
 import { clearAuthenticators, registerAuthenticator } from './authenticator-chain.js';
+import { createStatsHandlers, createSummaryStatsHandlers } from './container/stats.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
@@ -280,6 +281,23 @@ async function start({ trustProxy = true } = {}): Promise<Harness> {
   api.use(requireSameOriginForMutations);
   api.use('/auth', totpFactorRouter.init());
   api.use('/api-keys', apiKeysRouter.init());
+  // The two stats streams, over collectors that never emit: the tests only ask
+  // whether the response is still open.
+  const containerStats = createStatsHandlers({
+    storeContainer: { getContainer: (id) => ({ id, name: id }) as never },
+    statsCollector: {
+      watch: () => () => {},
+      touch: () => {},
+      subscribe: () => () => {},
+      getLatest: () => undefined,
+      getHistory: () => [],
+    },
+  });
+  const summaryStats = createSummaryStatsHandlers({
+    aggregator: { getCurrent: () => ({}), subscribe: () => () => {} } as never,
+  });
+  api.get('/containers/:id/stats/stream', containerStats.streamContainerStats);
+  api.get('/stats/summary/stream', summaryStats.streamStatsSummary);
   api.get('/protected', (req: Request, res: ExpressResponse) => {
     res.status(200).json({ user: { username: (req as AuthRequest).principal?.username } });
   });
@@ -2666,5 +2684,108 @@ describe('TOTP slice 4: factor-management API', () => {
         expect(seen.join('\n')).not.toContain(secret);
       }
     });
+  });
+
+  describe('a stats stream ends with the session that opened it', () => {
+    const STREAMS = [
+      ['container stats', '/api/v1/containers/c1/stats/stream'],
+      ['stats summary', '/api/v1/stats/summary/stream'],
+    ] as const;
+    const openStreams: AbortController[] = [];
+
+    afterEach(() => {
+      // An open stream would keep the server from closing.
+      for (const controller of openStreams.splice(0)) {
+        controller.abort();
+      }
+    });
+
+    /** Open a stream and report whether the server has ended it within `withinMs`. */
+    async function openStream(h: Harness, path: string, headers: Record<string, string>) {
+      const controller = new AbortController();
+      openStreams.push(controller);
+      const response = await fetch(url(h, path), { headers, signal: controller.signal });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('text/event-stream');
+      const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+      const ended = (async () => {
+        try {
+          while (!(await reader.read()).done) {
+            // Drain until the server lets go.
+          }
+        } catch {
+          // A destroyed response surfaces as a read error; either way it ended.
+        }
+        return true;
+      })();
+      return {
+        endedWithin: (withinMs: number) =>
+          Promise.race([
+            ended,
+            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), withinMs)),
+          ]),
+      };
+    }
+
+    const destroySession = (h: Harness, cookie: string) =>
+      new Promise<void>((resolve, reject) => {
+        h.store.destroy(sidOf(cookie), (error) => (error ? reject(error) : resolve()));
+      });
+
+    test.each(STREAMS)(
+      '%s: destroying the session, as a logout does, ends its stream and nobody else’s',
+      async (_name, path) => {
+        const h = await boot();
+        const desktop = await sessionCookie(h);
+        const phone = await sessionCookie(h);
+        const mine = await openStream(h, path, { Cookie: desktop });
+        const theirs = await openStream(h, path, { Cookie: phone });
+        expect(await mine.endedWithin(100)).toBe(false);
+
+        await destroySession(h, desktop);
+
+        expect(await mine.endedWithin(2_000)).toBe(true);
+        expect(await theirs.endedWithin(100)).toBe(false);
+      },
+    );
+
+    test.each(STREAMS)(
+      '%s: enrolling a factor from one session ends the stream of every other',
+      async (_name, path) => {
+        const h = await boot();
+        const desktop = await sessionCookie(h);
+        const phone = await sessionCookie(h);
+        const onDesktop = await openStream(h, path, { Cookie: desktop });
+        const onPhone = await openStream(h, path, { Cookie: phone });
+
+        await enrollThroughApi(h, phone);
+
+        // The other session is revoked, and the enrolling one is replaced by a new id.
+        expect(await onDesktop.endedWithin(2_000)).toBe(true);
+        expect(await onPhone.endedWithin(2_000)).toBe(true);
+      },
+    );
+
+    test.each(STREAMS)(
+      '%s: a stream opened with an API key outlives every session that ends',
+      async (_name, path) => {
+        const h = await boot();
+        const key = mintKey(['read']);
+        const desktop = await sessionCookie(h);
+        const phone = await sessionCookie(h);
+        const keyed = await openStream(h, path, { Authorization: `Bearer ${key}` });
+        // The key rides alongside a live session cookie, and still is not tied to it.
+        const keyedWithCookie = await openStream(h, path, {
+          Authorization: `Bearer ${key}`,
+          Cookie: desktop,
+        });
+
+        await destroySession(h, desktop);
+        await enrollThroughApi(h, phone);
+
+        expect(await keyed.endedWithin(200)).toBe(false);
+        expect(await keyedWithCookie.endedWithin(200)).toBe(false);
+      },
+    );
   });
 });

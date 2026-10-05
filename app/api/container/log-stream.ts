@@ -14,6 +14,7 @@ import type { Container } from '../../model/container.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import { getErrorMessage } from '../../util/error.js';
+import { trackSessionSocket } from '../session-streams.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -638,6 +639,17 @@ export function createContainerLogStreamGateway(
 
       await new Promise<void>((resolve) => {
         webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+          // The upgrade authenticates once, so a session revoked afterwards
+          // would keep reading logs until the viewer let go. The stream below
+          // settles as soon as it is set up, so the socket is forgotten when it
+          // closes, not when that promise does.
+          webSocket.on(
+            'close',
+            trackSessionSocket(
+              identityAuthenticated ? upgradeRequest.sessionID : undefined,
+              webSocket,
+            ),
+          );
           void streamContainerLogsToWebSocket({
             webSocket,
             containerId: parsedRequest.containerId,
