@@ -118,6 +118,8 @@ const {
   selectedHasMaturityPolicy,
   selectedMaturityMode,
   selectedMaturityMinAgeDays,
+  selectedPolicyGroupFields,
+  selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
   maturityModeInput,
@@ -820,6 +822,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       <option value="all">{{ t('containerComponents.fullPageActions.allowNewMature') }}</option>
                       <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
                     </select>
+                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('maturityMode')" data-test="policy-group-maturityMode" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMode')" data-test="policy-overridden-maturityMode" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
                     <AppButton v-if="selectedPolicyOverrideFields.has('maturityMode')" data-test="policy-revert-maturityMode" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMode')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
@@ -832,6 +835,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       class="w-[92px] px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null"
                     />
+                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('maturityMinAgeDays')" data-test="policy-group-maturityMinAgeDays" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMinAgeDays')" data-test="policy-overridden-maturityMinAgeDays" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
                     <AppButton v-if="selectedPolicyOverrideFields.has('maturityMinAgeDays')" data-test="policy-revert-maturityMinAgeDays" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMinAgeDays')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
@@ -882,6 +886,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div v-if="selectedSkipTags.length > 0 || selectedPolicyOverrideFields.has('skipTags')">
                   <div class="flex items-center gap-1">
                     {{ t('containerComponents.fullPageActions.skippedTags') }}
+                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('skipTags')" data-test="policy-group-skipTags" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipTags')" data-test="policy-overridden-skipTags" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
                     <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
@@ -905,6 +910,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div v-if="selectedSkipDigests.length > 0 || selectedPolicyOverrideFields.has('skipDigests')">
                   <div class="flex items-center gap-1">
                     {{ t('containerComponents.fullPageActions.skippedDigests') }}
+                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('skipDigests')" data-test="policy-group-skipDigests" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipDigests')" data-test="policy-overridden-skipDigests" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
                     <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>

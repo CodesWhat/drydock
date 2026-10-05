@@ -2055,6 +2055,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     selectedHasMaturityPolicy: policy.selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays: policy.selectedMaturityMinAgeDays,
     selectedMaturityMode: policy.selectedMaturityMode,
+    selectedPolicyGroupFields: policy.selectedPolicyGroupFields,
+    selectedPolicyGroupName: policy.selectedPolicyGroupName,
     selectedPolicyOverriddenFields: policy.selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields: policy.selectedPolicyOverrideFields,
     selectedSkipDigests: policy.selectedSkipDigests,
