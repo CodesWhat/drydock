@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Politiques de groupe",
+    "title": "Politiques de groupe",
+    "description": "Une politique par groupe, appliquée à chaque membre actuel et aux conteneurs qui rejoindront le groupe plus tard.",
+    "ownership": "Stockée dans Drydock, pas dans les labels Docker. Les labels et les surcharges par conteneur des membres restent prioritaires pour les champs de politique de mise à jour.",
+    "newPolicy": "Nouvelle politique",
+    "loading": "Chargement des politiques de groupe…",
+    "empty": "Aucun groupe ni politique pour le moment. Les groupes viennent de dd.group, des projets Compose et des stacks Swarm.",
+    "memberCount": "{count} conteneur | {count} conteneurs",
+    "noMembers": "Aucun membre actuel ; s’applique aux futurs membres",
+    "hosts": "Hôtes : {hosts}",
+    "controller": "Contrôleur",
+    "noPolicy": "Aucune politique",
+    "whitespaceNotice": "Le nom contient des espaces au début ou à la fin, affichés sous la forme ␣.",
+    "edit": "Modifier",
+    "create": "Créer la politique",
+    "readOnly": "Seuls les administrateurs peuvent modifier les politiques de groupe. Cette vue est en lecture seule.",
+    "summary": {
+      "maturityMode": "Maturité : {value}",
+      "minAge": "Âge min. : {days} j",
+      "skipTags": "Tags ignorés : {count}",
+      "skipDigests": "Digests ignorés : {count}",
+      "updateMode": "Mises à jour : {mode}",
+      "exclude": "Triggers exclus : {count}"
+    },
+    "editor": {
+      "titleCreate": "Nouvelle politique de groupe",
+      "titleEdit": "Politique de groupe : {group}",
+      "groupName": "Nom du groupe",
+      "groupNameHelp": "La correspondance est exacte. La casse et les espaces comptent.",
+      "groupNameInvalid": "Saisissez un nom de groupe qui n’est pas vide.",
+      "maturityMode": "Mode de maturité",
+      "maturityOptions": {
+        "inherit": "Hériter",
+        "all": "Toutes les mises à jour",
+        "mature": "Matures uniquement"
+      },
+      "minAge": "Âge minimal (jours)",
+      "minAgeHelp": "Jours entiers, de 1 à 365. Laissez vide pour hériter.",
+      "minAgeInvalid": "Saisissez un nombre entier de 1 à 365.",
+      "skipTags": "Tags ignorés",
+      "skipDigests": "Digests ignorés",
+      "listHelp": "Un par ligne ou séparés par des virgules.",
+      "updateMode": "Mises à jour automatiques",
+      "updateModeOptions": {
+        "inherit": "Hériter",
+        "manual": "Manuel uniquement",
+        "notify": "Notifier uniquement"
+      },
+      "updateModeHelp": "Les règles de groupe ne peuvent que restreindre. Mode global actuel : {mode}.",
+      "exclude": "Triggers d’action exclus",
+      "excludeHelp": "ID ou nom du trigger, éventuellement suivi de :threshold. Un par ligne ou séparés par des virgules.",
+      "noFields": "Définissez au moins un champ, ou supprimez la politique.",
+      "remove": "Supprimer la politique",
+      "conflict": "Quelqu’un d’autre a modifié cette politique. Rechargez-la, puis appliquez de nouveau votre changement. Votre brouillon est conservé jusqu’au rechargement.",
+      "reload": "Recharger",
+      "notFound": "Cette politique n’existe plus. Rechargez pour voir la liste à jour.",
+      "forbidden": "Les droits d’administrateur sont nécessaires pour modifier les politiques de groupe."
+    },
+    "remove": {
+      "header": "Supprimer la politique de groupe",
+      "message": "Supprimer la politique du groupe {group} ? Les membres reviennent à leurs valeurs de label, de watcher et globales.",
+      "accept": "Supprimer"
+    },
+    "saved": "Politique enregistrée. {members} conteneur mis à jour. | Politique enregistrée. {members} conteneurs mis à jour.",
+    "removed": "Politique supprimée. {members} conteneur mis à jour. | Politique supprimée. {members} conteneurs mis à jour.",
+    "warningsTitle": "Avertissements",
+    "errors": {
+      "load": "Échec du chargement des politiques de groupe",
+      "requestFailed": "Échec de la requête de politique de groupe (HTTP {status})",
+      "unknown": "Impossible d’enregistrer la politique de groupe"
+    }
+  }
+}

@@ -49,6 +49,14 @@ vi.mock('@/services/api-key', async (importOriginal) => {
   };
 });
 
+const mockListGroupPolicies = vi.fn();
+vi.mock('@/services/group-policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/group-policy')>();
+  return { ...actual, listGroupPolicies: (...args: any[]) => mockListGroupPolicies(...args) };
+});
+vi.mock('@/services/container', () => ({ getContainerGroups: vi.fn().mockResolvedValue([]) }));
+vi.mock('@/services/trigger', () => ({ getAllTriggers: vi.fn().mockResolvedValue([]) }));
+
 const mockDisableIconifyApi = vi.fn();
 vi.mock('@/boot/icons', () => ({
   disableIconifyApi: (...args: any[]) => mockDisableIconifyApi(...args),
@@ -1211,6 +1219,28 @@ describe('ConfigView', () => {
       await nextTick();
 
       expect(w.text()).toContain('No API keys yet');
+    });
+  });
+
+  describe('group policies tab', () => {
+    beforeEach(() => {
+      mockListGroupPolicies.mockReset().mockResolvedValue([]);
+    });
+
+    it('offers the tab alongside the others', async () => {
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.findAll('button').some((b) => b.text().includes('Group policies'))).toBe(true);
+    });
+
+    it('selects the group policies tab from the query param and loads the policies', async () => {
+      mockRouteQuery.value = { tab: 'groupPolicies' };
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockListGroupPolicies).toHaveBeenCalled());
+      await vi.waitFor(() => expect(w.text()).toContain('No groups or policies yet'));
     });
   });
 });

@@ -11,6 +11,7 @@ import AppTabBar from '../components/AppTabBar.vue';
 import ConfigApiKeysTab from '../components/config/ConfigApiKeysTab.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
+import ConfigGroupPoliciesTab from '../components/config/ConfigGroupPoliciesTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { LOCALE_OPTIONS, type SupportedLocale } from '../i18n/locales';
@@ -78,9 +79,15 @@ function setFontSize(scale: number) {
   applyFontSize(scale);
 }
 
-type SettingsTab = 'general' | 'appearance' | 'profile' | 'apiKeys';
+type SettingsTab = 'general' | 'appearance' | 'profile' | 'apiKeys' | 'groupPolicies';
 
-const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile', 'apiKeys']);
+const VALID_TABS = new Set<SettingsTab>([
+  'general',
+  'appearance',
+  'profile',
+  'apiKeys',
+  'groupPolicies',
+]);
 
 function tabFromQuery(): SettingsTab {
   const raw = route.query.tab;
@@ -104,6 +111,7 @@ const settingsTabs = computed(() => [
   { id: 'appearance' as const, label: t('configView.tabs.appearance'), icon: 'config' },
   { id: 'profile' as const, label: t('configView.tabs.profile'), icon: 'user' },
   { id: 'apiKeys' as const, label: t('configView.tabs.apiKeys'), icon: 'key' },
+  { id: 'groupPolicies' as const, label: t('groupPolicyEditor.tab'), icon: 'containers' },
 ]);
 
 const radiusPresets = computed(() =>
@@ -501,5 +509,7 @@ function handleSelectIconLibrary(library: string) {
     />
 
     <ConfigApiKeysTab v-if="activeSettingsTab === 'apiKeys'" />
+
+    <ConfigGroupPoliciesTab v-if="activeSettingsTab === 'groupPolicies'" />
   </DataViewLayout>
 </template>
