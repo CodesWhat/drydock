@@ -558,6 +558,96 @@ describe('creation', () => {
   });
 });
 
+describe('a session that signed in with a recovery code', () => {
+  const localIdentity = (assurance: 'password' | 'totp' | 'recovery') => ({
+    type: 'local',
+    subjectId: 's'.repeat(64),
+    providerId: 'basic.default',
+    assurance,
+    factorVersion: 1,
+    issuedAt: 1,
+  });
+  const recoverySession = (overrides: Record<string, unknown> = {}) =>
+    sessionRequest({
+      principal: { kind: 'session', username: 'scott', identity: localIdentity('recovery') },
+      ...overrides,
+    });
+
+  test('cannot mint a key: 403 with the reason, and nothing is stored or audited', () => {
+    const res = createMockResponse();
+
+    handlerFor('post', '/')(recoverySession({ body: { name: 'ci', scopes: ['read'] } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(bodyOf(res)).toStrictEqual({
+      error:
+        'A session that signed in with a recovery code cannot create API keys. Sign in with a code from your authenticator app and try again.',
+      details: { reason: 'recovery-assurance' },
+    });
+    expect(apiKeyStore.listApiKeys()).toStrictEqual([]);
+    expect(mockRecordCreated).not.toHaveBeenCalled();
+  });
+
+  test('is refused before the body is looked at, so a malformed one is the same 403', () => {
+    const res = createMockResponse();
+
+    handlerFor('post', '/')(recoverySession({ body: { scopes: 'not-an-array' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(bodyOf(res).details).toStrictEqual({ reason: 'recovery-assurance' });
+  });
+
+  test('can still list keys and revoke one', () => {
+    const existing = mint('leaked', ['read']);
+    const listRes = createMockResponse();
+    handlerFor('get', '/')(recoverySession(), listRes);
+    expect(listRes.status).toHaveBeenCalledWith(200);
+    expect((bodyOf(listRes).data as unknown[]).length).toBe(1);
+
+    const revokeRes = createMockResponse();
+    handlerFor('delete', '/:keyId')(
+      recoverySession({ params: { keyId: existing.record.keyId } }),
+      revokeRes,
+    );
+    expect(revokeRes.status).toHaveBeenCalledWith(200);
+    expect(apiKeyStore.findApiKeyById(existing.record.keyId)?.revokedAt).not.toBeNull();
+  });
+
+  test.each([
+    ['a code from the authenticator app', { identity: localIdentity('totp') }],
+    ['a password and no factor', { identity: localIdentity('password') }],
+    ['an OIDC provider', { identity: { type: 'oidc' } }],
+    ['a release before two-factor support', {}],
+  ])('a session that signed in with %s still mints', (_name, identity) => {
+    const res = createMockResponse();
+
+    handlerFor('post', '/')(
+      sessionRequest({
+        principal: { kind: 'session', username: 'scott', ...identity },
+        body: { name: 'ci', scopes: ['read'] },
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  test('an API key caller is not a session and still mints within its ceiling', () => {
+    const caller = mint('bootstrap', ['api-keys:manage', 'read']);
+    const res = createMockResponse();
+
+    handlerFor('post', '/')(
+      keyRequest(
+        { keyId: caller.record.keyId, scopes: ['api-keys:manage', 'read'] },
+        { body: { name: 'child', scopes: ['read'] } },
+      ),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+});
+
 describe('the minting ceiling', () => {
   test('a key cannot mint scopes it does not hold', () => {
     const caller = mint('limited', ['api-keys:manage', 'read']);

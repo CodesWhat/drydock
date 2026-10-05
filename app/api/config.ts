@@ -3,6 +3,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
+import { ddEnvKeyToSection } from '../configuration/file/diff.js';
 import {
   getActionEditSnapshot,
   getNotificationTriggerEditSnapshot,
@@ -26,6 +27,7 @@ import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+import { refuseRecoveryAssuranceSession } from './recovery-assurance.js';
 import { SESSION_ONLY, scoped } from './route-scopes.js';
 
 /**
@@ -289,11 +291,32 @@ function describeWrite(section: string, outcome: ConfigWriteOutcome): string {
   }
 }
 
+/**
+ * Would a write to this section land in the authentication configuration?
+ *
+ * The name alone does not say: a section is flattened to `DD_<SECTION>_…`, so
+ * `auth_basic_eve` writes `DD_AUTH_BASIC_EVE_*`, the same account `auth` with a
+ * nested `basic.eve` writes. So the name is normalised the way the write engine
+ * normalises it and then classified the way the engine classifies a key, by the
+ * first segment of the variable it becomes.
+ */
+function writesAuthenticationSection(section: string): boolean {
+  return ddEnvKeyToSection(`DD_${section.trim().toUpperCase()}`) === 'auth';
+}
+
 async function writeConfigurationSection(
   req: Request<{ section: string }>,
   res: Response,
 ): Promise<void> {
   const { section } = req.params;
+  // A new account, or `auth.totp.allowhttp`, would outlast a factor reset, so a
+  // session that signed in with a recovery code cannot write this one section.
+  if (
+    writesAuthenticationSection(section) &&
+    refuseRecoveryAssuranceSession(req, res, 'change the authentication configuration')
+  ) {
+    return;
+  }
   try {
     const outcome = await writeConfigurationSectionToFile(section, req.body);
     // Audited before the body is sent, matching every other route in this

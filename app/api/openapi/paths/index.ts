@@ -22,6 +22,7 @@ import { labelOverridePaths } from './label-overrides.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
+import { totpFactorPaths } from './totp-factor.js';
 import { triggerPaths } from './triggers.js';
 import { watcherInventoryPaths } from './watcher-inventory.js';
 
@@ -196,6 +197,7 @@ export const openApiPaths = {
   },
   ...apiKeyPaths,
   ...authPaths,
+  ...totpFactorPaths,
   '/api/v1/events/ui': {
     get: {
       tags: ['Realtime'],

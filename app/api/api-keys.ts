@@ -24,6 +24,12 @@
  * There is no rotate verb. Rotation is create-new-then-revoke-old, which the
  * store already supports by letting two keys be valid at once, so a third
  * verb would only be a worse spelling of two calls.
+ *
+ * One rule is about the session rather than a key: a session that signed in
+ * with a recovery code cannot mint. A key is the one credential that survives
+ * a factor reset, so a login that proved only a recovery code may list and
+ * revoke keys but not leave a new one behind. With no rotate verb, minting is
+ * the whole of what that covers.
  */
 
 import express, { type Request, type Response } from 'express';
@@ -46,6 +52,7 @@ import { requireDestructiveActionConfirmation } from './destructive-confirmation
 import { sendErrorResponse } from './error-response.js';
 import type { PaginationLinks } from './pagination-links.js';
 import type { AuthenticatedPrincipal } from './principal.js';
+import { refuseRecoveryAssuranceSession } from './recovery-assurance.js';
 import { API_KEYS_MANAGE_SCOPE, API_SCOPES, hasApiKeyScope, scoped } from './route-scopes.js';
 import { closeSseClientsForRevokedApiKeys } from './sse.js';
 
@@ -359,6 +366,11 @@ function listKeys(req: Request, res: Response): void {
 }
 
 function createKey(req: Request, res: Response): void {
+  // Before anything in the body is read: the refusal is about who is asking.
+  if (refuseRecoveryAssuranceSession(req, res, 'create API keys')) {
+    return;
+  }
+
   const body = getRequestBody(req);
   const callingKey = getCallingKey(req);
 

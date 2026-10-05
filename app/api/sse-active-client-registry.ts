@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import type { SessionUser } from './auth-types.js';
 
 export interface FlushableResponse extends Response {
   flush?: () => void;
@@ -32,6 +33,12 @@ export interface ActiveSseClient {
    * a revoked session be chased down its live connections.
    */
   sessionId?: string;
+  /**
+   * What that session restored at connect, set together with `sessionId`. The
+   * heartbeat hands it back to the session validator, which is how a session
+   * that stopped being valid without its row being destroyed is noticed.
+   */
+  sessionUser?: SessionUser;
 }
 
 export class ActiveSseClientRegistry {

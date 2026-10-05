@@ -523,6 +523,7 @@ function rejectFailedAttempt(
   loginIdentity: string | undefined,
   auditMessage: string,
   persistedLockoutUntil = 0,
+  sendFailure: (res: Response) => void = sendUnauthorized,
 ): void {
   const failedAt = Date.now();
   const accountLockoutAfterFailure = registerFailedLoginAttempt(
@@ -548,7 +549,7 @@ function rejectFailedAttempt(
   }
 
   recordLoginAuditEvent(req, 'error', auditMessage, loginIdentity);
-  sendUnauthorized(res);
+  sendFailure(res);
 }
 
 /**
@@ -652,6 +653,33 @@ export function rejectFailedSecondFactor(
 }
 
 /**
+ * A signed-in person failed to prove themselves again for a factor-management
+ * action: a wrong password, or (with `subjectId`) a wrong second-factor proof.
+ * It draws on exactly the budgets a failed login does, so management cannot be
+ * used to guess either one past the lockout, but it answers 403 rather than
+ * 401, because a 401 tells the browser the session itself has ended.
+ */
+export function rejectFailedReauthentication(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string,
+  subjectId?: string,
+): void {
+  const persistedLockoutUntil =
+    subjectId === undefined
+      ? 0
+      : recordPersistedFactorFailure(subjectId, loginIdentity, Date.now());
+  rejectFailedAttempt(
+    req,
+    res,
+    loginIdentity,
+    'Authentication failed (invalid reauthentication)',
+    persistedLockoutUntil,
+    (response) => sendErrorResponse(response, 403, 'Reauthentication failed'),
+  );
+}
+
+/**
  * A login fully succeeded (password, plus factor when one is due): forgive the
  * budget. Passing the subject also clears its persisted second-factor count,
  * which only a successful factor proof may do.
@@ -731,10 +759,7 @@ export async function authenticateLogin(
   }
   const principal: AuthenticatedPrincipal = outcome;
 
-  if (
-    !isLoginSessionEligible(principal) ||
-    (hasAuthorizationHeader && principal.kind !== 'basic')
-  ) {
+  if (!isLoginSessionEligible(principal)) {
     rejectFailedLogin();
     return;
   }
@@ -742,28 +767,22 @@ export async function authenticateLogin(
   // A correct password for a subject with an active factor is only half a
   // login. It starts a challenge and leaves the failure budget untouched, so
   // password-then-guess cycles cannot reset the counter that bounds the guesses.
-  if (principal.kind === 'basic') {
-    let factor: TotpFactorRecord | undefined;
-    try {
-      factor = getFactorBySubject(principal.identity.subjectId);
-    } catch (error: unknown) {
-      req.principal = undefined;
-      next(error);
-      return;
-    }
-    if (factor !== undefined) {
-      req.principal = undefined;
-      issueLoginChallenge(req, res, principal, factor);
-      return;
-    }
+  let factor: TotpFactorRecord | undefined;
+  try {
+    factor = getFactorBySubject(principal.identity.subjectId);
+  } catch (error: unknown) {
+    req.principal = undefined;
+    next(error);
+    return;
+  }
+  if (factor !== undefined) {
+    req.principal = undefined;
+    issueLoginChallenge(req, res, principal, factor);
+    return;
   }
 
-  // Forgive only what this principal proved: its own username, and only when
-  // it proved it with a password. A session principal re-logging in proved
-  // nothing about any name in the body, and must not clear anyone's budget.
-  if (principal.kind === 'basic') {
-    clearLoginLockoutsAfterSuccess(req, principal.username);
-  }
+  // Forgive only what this principal proved: its own username.
+  clearLoginLockoutsAfterSuccess(req, principal.username);
   next();
 }
 

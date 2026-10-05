@@ -13,10 +13,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import log from '../log/index.js';
 import {
-  advanceLastAcceptedCounter,
   getFactorBySubject,
-  listRecoveryCodes,
-  markRecoveryCodeUsed,
   revokeSessionsIssuedBefore,
   type TotpFactorRecord,
 } from '../store/totp.js';
@@ -37,12 +34,7 @@ import {
   type LoginChallenge,
   recordLoginChallengeFailure,
 } from './totp-challenge.js';
-import {
-  decryptTotpSeed,
-  findRecoveryCodeMatch,
-  loadTotpKeyringFromEnv,
-  verifyTotp,
-} from './totp-crypto.js';
+import { releaseRecoveryProof, verifyRecoveryProof, verifyTotpProof } from './totp-proof.js';
 
 const MAX_PROOF_LENGTH = 64;
 
@@ -53,16 +45,17 @@ interface ChallengeProof {
 }
 
 type ProofResult =
-  | { outcome: 'accepted'; factor: TotpFactorRecord }
+  | { outcome: 'accepted'; factor: TotpFactorRecord; recoveryCodeId?: string }
   | { outcome: 'invalid' | 'stale' };
 
+/** Resolves true when a session was minted and false when the login was refused with an error. */
 type SessionEstablisher = (
   req: AuthRequest,
   res: Response,
   principal: AuthenticatedPrincipal,
   rememberMe: boolean,
   options: { revokeOtherSessions: boolean },
-) => Promise<void>;
+) => Promise<boolean>;
 
 /** A named route segment is always a single string. */
 function challengeIdOf(req: Request): string {
@@ -95,64 +88,21 @@ function parseProof(body: unknown): ChallengeProof | undefined {
   return { kind: hasCode ? 'totp' : 'recovery', value, remember: remember as boolean | undefined };
 }
 
-function verifyTotpProof(factor: TotpFactorRecord, code: string): boolean {
-  const seed = decryptTotpSeed(
-    {
-      encryptionKeyId: factor.encryptionKeyId,
-      secretNonce: factor.secretNonce,
-      secretCiphertext: factor.secretCiphertext,
-      secretAuthTag: factor.secretAuthTag,
-    },
-    {
-      subjectId: factor.subjectId,
-      rowId: factor.factorId,
-      schemaVersion: factor.schemaVersion,
-      algorithm: factor.algorithm,
-      digits: factor.digits,
-      periodSeconds: factor.periodSeconds,
-      allowedSkewSteps: factor.allowedSkewSteps,
-    },
-    loadKeyring(),
-  );
-  const result = verifyTotp({
-    secret: seed,
-    code,
-    nowMs: Date.now(),
-    lastAcceptedCounter: factor.lastAcceptedCounter,
-    skewSteps: factor.allowedSkewSteps,
-    digits: factor.digits,
-    periodSeconds: factor.periodSeconds,
-  });
-  return (
-    result.valid &&
-    advanceLastAcceptedCounter(factor.factorId, result.counter, factor.factorVersion)
-  );
-}
-
-function loadKeyring() {
-  const keyring = loadTotpKeyringFromEnv();
-  if (keyring === undefined) {
-    throw new Error('TOTP key ring is not configured');
-  }
-  return keyring;
-}
-
-function verifyRecoveryProof(factor: TotpFactorRecord, code: string): boolean {
-  const match = findRecoveryCodeMatch(code, listRecoveryCodes(factor.factorId));
-  return match !== undefined && markRecoveryCodeUsed(match.codeId);
-}
-
 /** Check a proof against the subject's current factor. Throws only when the factor cannot be read or decrypted. */
 function checkProof(challenge: LoginChallenge, proof: ChallengeProof): ProofResult {
   const factor = getFactorBySubject(challenge.subjectId);
   if (factor === undefined || factor.factorVersion !== challenge.factorVersion) {
     return { outcome: 'stale' };
   }
-  const accepted =
-    proof.kind === 'totp'
-      ? verifyTotpProof(factor, proof.value)
-      : verifyRecoveryProof(factor, proof.value);
-  return accepted ? { outcome: 'accepted', factor } : { outcome: 'invalid' };
+  if (proof.kind === 'totp') {
+    return verifyTotpProof(factor, proof.value)
+      ? { outcome: 'accepted', factor }
+      : { outcome: 'invalid' };
+  }
+  const recoveryCodeId = verifyRecoveryProof(factor, proof.value);
+  return recoveryCodeId === undefined
+    ? { outcome: 'invalid' }
+    : { outcome: 'accepted', factor, recoveryCodeId };
 }
 
 export function createLoginChallengeCompletion(
@@ -215,16 +165,16 @@ export function createLoginChallengeCompletion(
     // after this point may be reachable twice.
     deleteLoginChallenge(id);
     clearLoginLockoutsAfterSuccess(authRequest, challenge.username, challenge.subjectId);
-    const { factor } = result;
-    const recovery = proof.kind === 'recovery';
+    const { factor, recoveryCodeId } = result;
+    // A recovery proof is the only one that carries a spent code to hand back.
+    const recovery = recoveryCodeId !== undefined;
     const issuedAt = Date.now();
+    // A recovery code is the scarce proof: when the login fails for a reason
+    // that is the server's (the revocation cannot be recorded, or no session can
+    // be minted) the code goes back, rather than leaving the person locked out
+    // by a fault that was never theirs. A TOTP counter is not handed back; the
+    // next code is one period away.
     if (recovery) {
-      recordAuditEvent({
-        action: 'totp-recovery-used',
-        status: 'success',
-        containerName: 'authentication',
-        details: `subject=${challenge.subjectId}`,
-      });
       // The revocation is recorded where the session validator reads it,
       // before any session is minted, and at the new session's own issue time
       // so that session is the one older than nothing. A fault here refuses the
@@ -233,6 +183,7 @@ export function createLoginChallengeCompletion(
         revokeSessionsIssuedBefore(challenge.subjectId, challenge.username, issuedAt);
       } catch (error: unknown) {
         log.warn(`Unable to record session revocation (${getErrorMessage(error)})`);
+        releaseRecoveryProof(recoveryCodeId);
         sendErrorResponse(res, 503, 'Second factor verification is unavailable');
         return;
       }
@@ -252,7 +203,25 @@ export function createLoginChallengeCompletion(
     authRequest.principal = principal;
     establishSession(authRequest, res, principal, proof.remember ?? challenge.remember, {
       revokeOtherSessions: recovery,
-    }).catch(next);
+    })
+      .then((established) => {
+        if (!established) {
+          authRequest.principal = undefined;
+          if (recoveryCodeId !== undefined) {
+            releaseRecoveryProof(recoveryCodeId);
+          }
+          return;
+        }
+        if (recovery) {
+          recordAuditEvent({
+            action: 'totp-recovery-used',
+            status: 'success',
+            containerName: 'authentication',
+            details: `subject=${challenge.subjectId}`,
+          });
+        }
+      })
+      .catch(next);
   };
 }
 

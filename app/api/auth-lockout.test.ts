@@ -2887,7 +2887,7 @@ describe('auth-lockout', () => {
       expect(res.status).toHaveBeenCalledWith(423);
     });
 
-    test('a session principal logging in again clears nothing, whatever the body names', async () => {
+    test('a session principal is refused at login and clears nothing, whatever the body names', async () => {
       for (let index = 0; index < 4; index += 1) {
         await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.97' });
       }
@@ -2898,7 +2898,7 @@ describe('auth-lockout', () => {
         createResponse() as any,
         next,
       );
-      expect(next).toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
 
       const res = await fail({ headers: { authorization: header('victim') }, ip: '203.0.113.98' });
 

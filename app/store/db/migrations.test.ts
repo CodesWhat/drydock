@@ -7,6 +7,7 @@ import {
   LABEL_OVERRIDES_MIGRATION_VERSION,
   MIGRATIONS,
   migrate,
+  TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
   TOTP_MIGRATION_VERSION,
   TOTP_SUBJECT_STATE_MIGRATION_VERSION,
   TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
@@ -66,6 +67,7 @@ describe('store/db/migrations', () => {
       TOTP_MIGRATION_VERSION,
       TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+      TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
     ]);
   });
 
@@ -95,6 +97,7 @@ describe('store/db/migrations', () => {
     expect(migrate(db)).toEqual([
       TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+      TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
     ]);
 
     const rows = db
@@ -121,7 +124,10 @@ describe('store/db/migrations', () => {
       'INSERT INTO totp_subject_versions (subject_id, factor_version, username) VALUES (?, ?, ?)',
     ).run('existing', 3, 'scott');
 
-    expect(migrate(db)).toEqual([TOTP_SUBJECT_STATE_MIGRATION_VERSION]);
+    expect(migrate(db)).toEqual([
+      TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+      TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+    ]);
 
     expect(
       db
@@ -139,6 +145,29 @@ describe('store/db/migrations', () => {
         factor_locked_until: 0,
       },
     ]);
+  });
+
+  test('migration 13 adds the failed-confirmation count to pending enrollments, starting existing rows at zero', () => {
+    expect(TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION).toBe(13);
+    migrate(
+      db,
+      MIGRATIONS.filter(
+        (migration) => migration.version < TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+      ),
+    );
+    db.prepare(
+      `INSERT INTO totp_enrollments (enrollment_id, schema_version, subject_id, provider_id,
+         username, expected_factor_version, replaces_factor_id, encryption_key_id, secret_nonce,
+         secret_ciphertext, secret_auth_tag, created_at, expires_at)
+       VALUES ('pending', 1, 'subject', 'basic.one', 'scott', 0, NULL, 'k1', 'n', 'c', 'a', 't', 't')`,
+    ).run();
+
+    expect(migrate(db)).toEqual([TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION]);
+
+    expect(db.prepare('SELECT enrollment_id, failed_attempts FROM totp_enrollments').all()).toEqual(
+      [{ enrollment_id: 'pending', failed_attempts: 0 }],
+    );
+    expect(MIGRATIONS.at(-1)?.version).toBe(TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION);
   });
 
   test('records the version, the note and when it was applied', () => {
@@ -204,6 +233,7 @@ describe('store/db/migrations', () => {
         TOTP_MIGRATION_VERSION,
         TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+        TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -265,6 +295,7 @@ describe('store/db/migrations', () => {
         TOTP_MIGRATION_VERSION,
         TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+        TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -338,6 +369,7 @@ describe('store/db/migrations', () => {
         TOTP_MIGRATION_VERSION,
         TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
+        TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,

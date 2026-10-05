@@ -1540,6 +1540,64 @@ describe('getVersion', () => {
   });
 });
 
+describe('getTotpConfiguration', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP;
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING;
+    delete configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID;
+  });
+
+  test('plain HTTP is not allowed unless it is asked for', () => {
+    expect(configuration.getTotpConfiguration()).toStrictEqual({ allowhttp: false });
+  });
+
+  test.each([
+    ['true', true],
+    ['TRUE', true],
+    ['false', false],
+  ])('reads DD_AUTH_TOTP_ALLOWHTTP=%s', (value, expected) => {
+    configuration.ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = value;
+    expect(configuration.getTotpConfiguration()).toStrictEqual({ allowhttp: expected });
+  });
+
+  test.each([['yes'], ['1'], ['maybe'], ['']])(
+    'rejects DD_AUTH_TOTP_ALLOWHTTP=%j rather than guessing',
+    (value) => {
+      configuration.ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = value;
+      expect(() => configuration.getTotpConfiguration()).toThrow('allowhttp');
+    },
+  );
+
+  test('passes the key ring by: it is neither returned nor validated here', () => {
+    configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING = '{"k1":"not-a-key"}';
+    configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID = 'k1';
+    configuration.ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'true';
+    expect(configuration.getTotpConfiguration()).toStrictEqual({ allowhttp: true });
+  });
+
+  test('a rejected value does not carry the key ring out in its error', async () => {
+    const { inspect } = await import('node:util');
+    const keyring = '{"k1":"c2VjcmV0LWtleS1yaW5nLW1hdGVyaWFs"}';
+    configuration.ddEnvVars.DD_AUTH_TOTP_KEYRING = keyring;
+    configuration.ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID = 'k1';
+    configuration.ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'maybe';
+
+    let thrown: unknown;
+    try {
+      configuration.getTotpConfiguration();
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    // A Joi error keeps the whole object it was handed, so the key ring must
+    // never have been part of it.
+    const everything = `${inspect(thrown, { depth: 10, showHidden: true })}\n${JSON.stringify(thrown)}`;
+    expect(everything).not.toContain('c2VjcmV0LWtleS1yaW5nLW1hdGVyaWFs');
+    expect(everything).toContain('allowhttp');
+  });
+});
+
 describe('getServerConfiguration errors', () => {
   test('should throw when server configuration is invalid', () => {
     configuration.ddEnvVars.DD_SERVER_PORT = 'not-a-number';
