@@ -42,7 +42,6 @@ import {
   ANCESTOR_REVOKE_MESSAGE,
   EXPIRY_CEILING_MESSAGE,
   INVALID_CURSOR_MESSAGE,
-  RECOVERY_SESSION_MESSAGE,
   SCOPE_CEILING_MESSAGE,
   SELF_REVOKE_MESSAGE,
   UNKNOWN_KEY_MESSAGE,
@@ -581,7 +580,8 @@ describe('a session that signed in with a recovery code', () => {
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(bodyOf(res)).toStrictEqual({
-      error: RECOVERY_SESSION_MESSAGE,
+      error:
+        'A session that signed in with a recovery code cannot create API keys. Sign in with a code from your authenticator app and try again.',
       details: { reason: 'recovery-assurance' },
     });
     expect(apiKeyStore.listApiKeys()).toStrictEqual([]);

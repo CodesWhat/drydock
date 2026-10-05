@@ -19,9 +19,19 @@ import express, { type Application, type Response as ExpressResponse, type Reque
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 
-const { auditEvents, logLines } = vi.hoisted(() => ({
+const { auditEvents, logLines, sectionWrites } = vi.hoisted(() => ({
   auditEvents: [] as Array<Record<string, unknown>>,
   logLines: [] as unknown[][],
+  sectionWrites: [] as string[],
+}));
+
+// The configuration file is not what these tests are about: a write that gets
+// as far as the engine is recorded and answered as "no file to write to".
+vi.mock('../configuration/file/write.js', () => ({
+  writeConfigurationSection: async (section: string) => {
+    sectionWrites.push(section);
+    return { kind: 'no-file' };
+  },
 }));
 
 vi.mock('./audit-events.js', () => ({
@@ -57,6 +67,7 @@ vi.mock('../log/index.js', () => {
 import Basic from '../authentications/providers/basic/Basic.js';
 import { ddEnvVars } from '../configuration/index.js';
 import * as registry from '../registry/index.js';
+import * as agentKeyStore from '../store/agent-keys.js';
 import * as apiKeyStore from '../store/api-key.js';
 import * as sessionModel from '../store/session.js';
 import * as totpStore from '../store/totp.js';
@@ -68,10 +79,12 @@ import { resetLoginLockoutStateForTests } from './auth-lockout.js';
 import { configureSessionLimits } from './auth-session.js';
 import type { AuthRequest } from './auth-types.js';
 import { clearAuthenticators, registerAuthenticator } from './authenticator-chain.js';
+import * as configRouter from './config.js';
 import { createStatsHandlers, createSummaryStatsHandlers } from './container/stats.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
+import * as portwingRouter from './portwing.js';
 import { restoreSessionPrincipal, sessionAuthenticator } from './session-principal.js';
 import { SessionStore } from './session-store.js';
 import { registerSessionStreamCloser } from './session-streams.js';
@@ -227,6 +240,7 @@ async function start({ trustProxy = true } = {}): Promise<Harness> {
   sessionModel.createCollections(db);
   totpStore.createCollections(db);
   apiKeyStore.createCollections(db);
+  agentKeyStore.createCollections(db);
   const store = new SessionStore({ ttlMs: 3_600_000 });
 
   const basic = new Basic();
@@ -281,6 +295,8 @@ async function start({ trustProxy = true } = {}): Promise<Harness> {
   api.use(requireSameOriginForMutations);
   api.use('/auth', totpFactorRouter.init());
   api.use('/api-keys', apiKeysRouter.init());
+  api.use('/config', configRouter.init());
+  api.use('/portwing', portwingRouter.init());
   // The two stats streams, over collectors that never emit: the tests only ask
   // whether the response is still open.
   const containerStats = createStatsHandlers({
@@ -547,6 +563,7 @@ describe('TOTP slice 4: factor-management API', () => {
     auditEvents.length = 0;
     logLines.length = 0;
     closedStreams.length = 0;
+    sectionWrites.length = 0;
     ddEnvVars.DD_AUTH_TOTP_KEYRING = keyringJson;
     ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID = 'k1';
     configureSessionLimits({});
@@ -2448,6 +2465,116 @@ describe('TOTP slice 4: factor-management API', () => {
         },
       });
       expect(revoked.status).toBe(200);
+    });
+
+    const RECOVERY_REFUSAL = (action: string) => ({
+      error: `A session that signed in with a recovery code cannot ${action}. Sign in with a code from your authenticator app and try again.`,
+      details: { reason: 'recovery-assurance' },
+    });
+
+    // The config router and its five-a-minute write limiter are module state
+    // shared by every harness in this file, so each test writes from an address
+    // of its own.
+    let addressSerial = 0;
+    let clientAddress = '';
+    beforeEach(() => {
+      addressSerial += 1;
+      clientAddress = `198.51.100.${addressSerial}`;
+    });
+
+    function writeSection(h: Harness, section: string, headers: Record<string, string>) {
+      return fetch(url(h, `/api/v1/config/${section}`), {
+        method: 'PUT',
+        headers: {
+          'X-Forwarded-Proto': 'https',
+          'X-Forwarded-For': clientAddress,
+          Origin: originOf(h),
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify({ basic: { eve: { user: 'eve', hash: HASH } } }),
+      });
+    }
+
+    function registerAgentKey(h: Harness, headers: Record<string, string>) {
+      return fetch(url(h, '/api/v1/portwing/keys'), {
+        method: 'POST',
+        headers: {
+          'X-Forwarded-Proto': 'https',
+          Origin: originOf(h),
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify({ pubkeyBase64: randomBytes(32).toString('base64'), label: 'edge' }),
+      });
+    }
+
+    test('a recovery-code session cannot write the authentication section, however it is spelled', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await recoveryLoginCookie(h, enrolled.recoveryCodes[0]);
+
+      for (const section of ['auth', 'AUTH', 'auth_basic_eve', 'auth_totp']) {
+        const refused = await writeSection(h, section, { Cookie: cookie });
+        expect(refused.status, section).toBe(403);
+        const body = await refused.json();
+        expect(body, section).toEqual(RECOVERY_REFUSAL('change the authentication configuration'));
+        expectContract('/api/v1/config/{section}', 'put', '403', body);
+      }
+      expect(sectionWrites).toEqual([]);
+
+      // Any other section still reaches the write engine.
+      const allowed = await writeSection(h, 'notification', { Cookie: cookie });
+      expect(allowed.status).toBe(409);
+      expect(sectionWrites).toEqual(['notification']);
+    });
+
+    test('a recovery-code session cannot register an agent key, but can list them', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await recoveryLoginCookie(h, enrolled.recoveryCodes[0]);
+
+      const refused = await registerAgentKey(h, { Cookie: cookie });
+      expect(refused.status).toBe(403);
+      const body = await refused.json();
+      expect(body).toEqual(RECOVERY_REFUSAL('register agent keys'));
+      expectContract('/api/v1/portwing/keys', 'post', '403', body);
+      expect(agentKeyStore.listKeys()).toEqual([]);
+
+      const listed = await fetch(url(h, '/api/v1/portwing/keys'), {
+        headers: { 'X-Forwarded-Proto': 'https', Cookie: cookie },
+      });
+      expect(listed.status).toBe(200);
+    });
+
+    test('totp, password-only and OIDC sessions write the authentication section and register agent keys; an admin API key writes the section', async () => {
+      const h = await boot();
+      const password = await sessionCookie(h, TEST_USER, OTHER_PASSWORD);
+      const oidc = await plant(
+        h,
+        JSON.stringify({ v: 2, kind: 'oidc', username: 'a@example.com' }),
+      );
+      const key = mintKey(['admin']);
+      const enrolled = enroll();
+      const totp = await loginCookieWithCode(h, enrolled);
+
+      for (const [name, headers] of Object.entries({
+        totp: { Cookie: totp },
+        password: { Cookie: password },
+        oidc: { Cookie: oidc },
+      })) {
+        // 409 is the engine saying there is no file: the request got that far.
+        expect((await writeSection(h, 'auth', headers)).status, name).toBe(409);
+        expect((await registerAgentKey(h, headers)).status, name).toBe(201);
+      }
+      expect((await writeSection(h, 'auth', { Authorization: `Bearer ${key}` })).status).toBe(409);
+      expect(sectionWrites).toEqual(['auth', 'auth', 'auth', 'auth']);
+      expect(agentKeyStore.listKeys()).toHaveLength(3);
+
+      // An API key never could register an agent key; that refusal is unchanged.
+      const keyed = await registerAgentKey(h, { Authorization: `Bearer ${key}` });
+      expect(keyed.status).toBe(403);
+      expect(await keyed.json()).toEqual({ error: 'This route is not reachable with an API key' });
     });
 
     test('it can still replace the recovery codes and remove the factor with a second recovery code', async () => {
