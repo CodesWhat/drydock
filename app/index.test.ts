@@ -168,4 +168,67 @@ describe('bootstrap', () => {
       process.argv = originalArgv;
     }
   });
+
+  test('a "totp" command runs after the file layer is loaded, with the arguments after it, and never imports main', async () => {
+    const calls: string[] = [];
+    const loadConfigFileIntoLayer = vi.fn(async () => {
+      calls.push('loadConfigFileIntoLayer');
+    });
+    const runTotpCommand = vi.fn(() => {
+      calls.push('totp');
+      return 3;
+    });
+    const mainFactory = vi.fn(() => ({}));
+    const originalArgv = process.argv;
+    const originalExitCode = process.exitCode;
+    process.argv = ['node', 'index.js', 'totp', 'remove', '--username', 'eve'];
+    process.exitCode = undefined;
+
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./api/totp-offline-cli.js', () => ({ runTotpCommand }));
+    vi.doMock('./main.js', mainFactory);
+
+    try {
+      await import('./index.js');
+
+      expect(runTotpCommand).toHaveBeenCalledWith(['remove', '--username', 'eve']);
+      expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'totp']);
+      expect(process.exitCode).toBe(3);
+      expect(mainFactory).not.toHaveBeenCalled();
+    } finally {
+      process.argv = originalArgv;
+      process.exitCode = originalExitCode;
+    }
+  });
+
+  test('a "totp" command whose configuration cannot be loaded says why and exits 1', async () => {
+    const loadConfigFileIntoLayer = vi.fn(async () => undefined);
+    const mainFactory = vi.fn(() => ({}));
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const originalArgv = process.argv;
+    const originalExitCode = process.exitCode;
+    process.argv = ['node', 'index.js', 'totp', 'status'];
+    process.exitCode = undefined;
+
+    vi.resetModules();
+    vi.doMock('./configuration/file/loader.js', () => ({ loadConfigFileIntoLayer }));
+    vi.doMock('./api/totp-offline-cli.js', () => {
+      throw new Error("ENOENT: no such file or directory, open '/run/secrets/gone'");
+    });
+    vi.doMock('./main.js', mainFactory);
+
+    try {
+      await import('./index.js');
+
+      expect(stderrWrite).toHaveBeenCalledWith(
+        expect.stringContaining('The totp command could not load the configuration: '),
+      );
+      expect(process.exitCode).toBe(1);
+      expect(mainFactory).not.toHaveBeenCalled();
+    } finally {
+      process.argv = originalArgv;
+      process.exitCode = originalExitCode;
+    }
+  });
 });

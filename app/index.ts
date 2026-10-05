@@ -1,6 +1,29 @@
 import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
 
 /**
+ * `totp` (the offline two-factor commands, `api/totp-offline-cli.ts`) runs
+ * after the file layer is loaded and instead of `./main.js`. It needs the
+ * merged configuration, drydock.yml included, to know where the store is,
+ * which key ring to use and which Basic accounts exist, and it must not start
+ * anything: it works on the store while Drydock is stopped. Importing it is
+ * what first evaluates `configuration/index.ts`, which reads every secret
+ * file, so a secret file that cannot be read fails here exactly as it would
+ * fail a normal start. That is reported in one line rather than as a stack.
+ */
+async function runTotpCommandFromBootstrap(argv: string[]): Promise<number> {
+  let cli: typeof import('./api/totp-offline-cli.js');
+  try {
+    cli = await import('./api/totp-offline-cli.js');
+  } catch (error) {
+    process.stderr.write(
+      `The totp command could not load the configuration: ${(error as Error).message}\n`,
+    );
+    return 1;
+  }
+  return cli.runTotpCommand(argv);
+}
+
+/**
  * Loads `drydock.yml` (if present) into `configuration/file/layer.ts` before
  * anything that transitively imports `configuration/index.ts` is evaluated.
  *
@@ -70,6 +93,11 @@ async function bootstrap(): Promise<void> {
   } catch (error) {
     process.stderr.write(`${(error as Error).message}\n`);
     process.exitCode = 1;
+    return;
+  }
+
+  if (argv[0] === 'totp') {
+    process.exitCode = await runTotpCommandFromBootstrap(argv.slice(1));
     return;
   }
 
