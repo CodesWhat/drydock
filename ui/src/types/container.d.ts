@@ -20,7 +20,8 @@ export type UpdateBlockerReason =
   | 'agent-mismatch'
   | 'no-update-trigger-configured'
   | 'self-update-unavailable'
-  | 'maintenance-window-closed';
+  | 'maintenance-window-closed'
+  | 'group-notify-only';
 
 /**
  * Severity controls how the UI gates the Update button:
@@ -56,11 +57,22 @@ export interface ActionPolicy {
   reason?: ActionPolicyBlockedReason;
 }
 
+/**
+ * The update mode that binds this container and whose it is, resolved by the server
+ * (app/model/update-eligibility.ts). The UI renders it and never re-derives the ceiling.
+ */
+export interface UpdateEligibilityUpdateMode {
+  value: 'notify' | 'manual' | 'auto';
+  source: 'global' | 'group';
+  group?: string;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: ActionPolicy;
+  updateMode?: UpdateEligibilityUpdateMode;
 }
 
 /** Shared UI container type used across views, composables, and templates. */

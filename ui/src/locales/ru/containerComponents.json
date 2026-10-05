@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · разблокируется {date}",
       "maturityClockPublished": "Кандидат опубликован {date} — остался {count} день до минимума в {minDays} дн. | Кандидат опубликован {date} — осталось {count} дней до минимума в {minDays} дн.",
       "maturityClockDetected": "Кандидат обнаружен {date} — остался {count} день до минимума в {minDays} дн. | Кандидат обнаружен {date} — осталось {count} дней до минимума в {minDays} дн.",
+      "groupManualOnly": "Политика группы '{group}' разрешает только ручные обновления. Drydock не будет применять это обновление автоматически.",
       "updateButton": "Обновить сейчас",
       "blockedButton": "Обновление заблокировано",
       "notificationsOnlyButton": "Только уведомления",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Триггер обновления не настроен",
         "self-update-unavailable": "Самообновление недоступно",
         "maintenance-window-closed": "Окно обслуживания закрыто",
+        "group-notify-only": "Группа разрешает только уведомления",
+        "group-manual-only": "Группа требует ручных обновлений",
         "dry-run-trigger": "Конфигурация триггера в режиме dry-run"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Настроить триггеры обновления",
         "configureThreshold": "Настроить порог триггера",
         "configureSelfUpdate": "Настроить самообновление",
-        "configureMaintenance": "Настроить окно обслуживания"
+        "configureMaintenance": "Настроить окно обслуживания",
+        "editGroupPolicy": "Изменить политику группы"
       }
     },
     "maturityBadge": {

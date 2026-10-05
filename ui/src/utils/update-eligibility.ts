@@ -29,6 +29,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
   'trigger-excluded': 'hard',
   'trigger-not-included': 'hard',
+  // hard: the group policy allows notifications only (spec 7.3 slice 2a)
+  'group-notify-only': 'hard',
   // soft: manual UI updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
 };
