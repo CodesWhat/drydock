@@ -72,6 +72,8 @@ vi.mock('../store/container', () => ({
   deleteContainer: vi.fn(),
 }));
 
+vi.mock('../store/settings', () => ({ getUpdateMode: vi.fn(() => 'auto') }));
+
 vi.mock('../store/audit', () => ({
   insertAudit: vi.fn(),
   getRecentEntries: vi.fn(() => []),
@@ -315,6 +317,7 @@ describe('Container Router', () => {
         expect.any(Function),
       );
       expect(router.get).toHaveBeenCalledWith('/:id/triggers', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/effective-policy', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith(
         '/:id/triggers/:triggerType/:triggerName',
         expect.any(Function),
@@ -3446,5 +3449,39 @@ describe('Container Router', () => {
       );
       expect(getUpdatedPolicy()).toBeUndefined();
     });
+  });
+});
+
+describe('GET /:id/effective-policy', () => {
+  test('serves the container effective policy from the store, the registry and the update mode', () => {
+    storeContainer.getContainer.mockReturnValue({
+      id: 'c1',
+      labels: { 'dd.group': 'payments' },
+      details: { env: [{ key: 'API_SECRET', value: 'shh' }] }, // gitleaks:allow — fixture value
+    });
+    const handler = getHandler('get', '/:id/effective-policy');
+    const res = createResponse();
+
+    handler({ params: { id: 'c1' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    expect(body.group).toEqual({
+      name: 'payments',
+      label: 'dd.group',
+      policyId: null,
+      revision: null,
+    });
+    expect(body.actions.updateMode).toEqual({ value: 'auto', source: 'global', global: 'auto' });
+    expect(JSON.stringify(body)).not.toContain('shh');
+  });
+
+  test('is 404 for a container the store does not know', () => {
+    storeContainer.getContainer.mockReturnValue(undefined);
+    const res = createResponse();
+
+    getHandler('get', '/:id/effective-policy')({ params: { id: 'missing' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
   });
 });

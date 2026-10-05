@@ -55,6 +55,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/containers → read',
   'GET /api/v1/containers/:id → read',
   'GET /api/v1/containers/:id/backups → read',
+  'GET /api/v1/containers/:id/effective-policy → read',
   'GET /api/v1/containers/:id/intermediate-release-notes → read',
   'GET /api/v1/containers/:id/label-overrides → read',
   'GET /api/v1/containers/:id/logs → read',
