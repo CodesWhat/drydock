@@ -280,7 +280,6 @@ export {
   type GroupPolicyDraft,
   type GroupPolicyFailure,
   type GroupPolicyFailureField,
-  type GroupPolicyFailureKind,
   type GroupPolicyOutcome,
   type GroupPolicyRow,
   groupPolicyFailureField,
