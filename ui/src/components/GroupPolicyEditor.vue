@@ -114,9 +114,6 @@ const minAgeError = computed(() =>
 );
 
 function submit() {
-  if (!canSave.value) {
-    return;
-  }
   emit('save', {
     group: props.nameEditable ? nameDraft.value : props.group,
     body: body.value,

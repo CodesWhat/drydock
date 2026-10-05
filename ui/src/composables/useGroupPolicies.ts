@@ -158,9 +158,9 @@ function failureFromError(
   return { kind: 'unknown', message, field: 'form' };
 }
 
+/** Callers only sort unique names, so equal names never reach the comparator. */
 function compareNames(a: string, b: string): number {
-  if (a < b) return -1;
-  return a > b ? 1 : 0;
+  return a < b ? -1 : 1;
 }
 
 function useGroupPolicies() {

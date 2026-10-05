@@ -11,7 +11,7 @@ import {
   visibleGroupName,
 } from '../../composables/useGroupPolicies';
 import { useUpdateMode } from '../../composables/useUpdateMode';
-import type { GroupPolicyBody } from '../../services/group-policy';
+import type { GroupPolicy, GroupPolicyBody } from '../../services/group-policy';
 import GroupPolicyEditor from '../GroupPolicyEditor.vue';
 
 const { t } = useI18n();
@@ -115,18 +115,12 @@ async function handleSave(payload: { group: string; body: GroupPolicyBody }) {
   );
 }
 
-async function performRemove(policy: NonNullable<typeof selectedPolicy.value>) {
+async function performRemove(policy: GroupPolicy) {
   resetMessages();
   finish(await remove(policy), 'removed');
 }
 
-const selectedPolicy = computed(() => selection.value?.policy);
-
-function confirmRemove() {
-  const policy = selectedPolicy.value;
-  if (!policy) {
-    return;
-  }
+function confirmRemove(policy: GroupPolicy) {
   requireConfirm({
     header: t('groupPolicyEditor.remove.header'),
     message: t('groupPolicyEditor.remove.message', { group: visibleGroupName(policy.group) }),
@@ -301,7 +295,7 @@ void init();
           :read-only="writeForbidden"
           :trigger-suggestions="triggerSuggestions"
           @save="handleSave"
-          @remove="confirmRemove"
+          @remove="confirmRemove(selection.policy as GroupPolicy)"
           @cancel="closeEditor"
           @reload="reload"
         />
