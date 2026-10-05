@@ -1046,7 +1046,7 @@ function parseOfflineOperation(value: string): TotpOfflineOperation | undefined 
     operation,
     subjectId,
     factorId,
-    ...(targetSubjectId === undefined ? {} : { targetSubjectId }),
+    ...(typeof targetSubjectId === 'string' ? { targetSubjectId } : {}),
     at,
   };
 }
