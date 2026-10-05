@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "그룹 정책",
+    "title": "그룹 정책",
+    "description": "그룹당 정책 하나. 현재 모든 멤버와 나중에 합류하는 컨테이너에 적용됩니다.",
+    "ownership": "Docker 레이블이 아니라 Drydock에 저장됩니다. 업데이트 정책 필드에서는 멤버의 레이블과 컨테이너별 재정의가 여전히 우선합니다.",
+    "newPolicy": "새 정책",
+    "loading": "그룹 정책을 불러오는 중…",
+    "empty": "아직 그룹이나 정책이 없습니다. 그룹은 dd.group, Compose 프로젝트, Swarm 스택에서 가져옵니다.",
+    "memberCount": "컨테이너 {count}개",
+    "noMembers": "현재 멤버가 없습니다. 앞으로 합류하는 멤버에 적용됩니다",
+    "hosts": "호스트: {hosts}",
+    "controller": "컨트롤러",
+    "noPolicy": "정책 없음",
+    "whitespaceNotice": "이름의 앞이나 뒤에 공백이 있으며 ␣로 표시됩니다.",
+    "edit": "편집",
+    "create": "정책 만들기",
+    "readOnly": "그룹 정책은 관리자만 변경할 수 있습니다. 이 화면은 읽기 전용입니다.",
+    "summary": {
+      "maturityMode": "성숙도: {value}",
+      "minAge": "최소 경과일: {days}일",
+      "skipTags": "건너뛸 태그: {count}",
+      "skipDigests": "건너뛸 다이제스트: {count}",
+      "updateMode": "업데이트: {mode}",
+      "exclude": "제외된 트리거: {count}"
+    },
+    "editor": {
+      "titleCreate": "새 그룹 정책",
+      "titleEdit": "그룹 정책: {group}",
+      "groupName": "그룹 이름",
+      "groupNameHelp": "정확히 일치해야 합니다. 대소문자와 공백도 구분합니다.",
+      "groupNameInvalid": "비어 있지 않은 그룹 이름을 입력하세요.",
+      "maturityMode": "성숙도 모드",
+      "maturityOptions": {
+        "inherit": "상속",
+        "all": "모든 업데이트",
+        "mature": "성숙한 것만"
+      },
+      "minAge": "최소 경과일 (일)",
+      "minAgeHelp": "1~365 사이의 정수 일수입니다. 상속하려면 비워 두세요.",
+      "minAgeInvalid": "1~365 사이의 정수를 입력하세요.",
+      "skipTags": "건너뛸 태그",
+      "skipDigests": "건너뛸 다이제스트",
+      "listHelp": "한 줄에 하나씩 또는 쉼표로 구분합니다.",
+      "updateMode": "자동 업데이트",
+      "updateModeOptions": {
+        "inherit": "상속",
+        "manual": "수동만",
+        "notify": "알림만"
+      },
+      "updateModeHelp": "그룹 규칙은 제한만 할 수 있습니다. 현재 전역 모드: {mode}.",
+      "exclude": "제외할 액션 트리거",
+      "excludeHelp": "트리거 ID 또는 이름, 필요하면 뒤에 :threshold를 붙입니다. 한 줄에 하나씩 또는 쉼표로 구분합니다.",
+      "noFields": "필드를 하나 이상 설정하거나 정책을 삭제하세요.",
+      "remove": "정책 삭제",
+      "conflict": "다른 사람이 이 정책을 변경했습니다. 다시 불러온 뒤 변경을 다시 적용하세요. 다시 불러올 때까지 초안은 유지됩니다.",
+      "reload": "다시 불러오기",
+      "notFound": "이 정책은 더 이상 존재하지 않습니다. 다시 불러와 최신 목록을 확인하세요.",
+      "forbidden": "그룹 정책을 변경하려면 관리자 권한이 필요합니다."
+    },
+    "remove": {
+      "header": "그룹 정책 삭제",
+      "message": "그룹 {group}의 정책을 삭제할까요? 멤버는 레이블, 워처, 전역 값으로 돌아갑니다.",
+      "accept": "삭제"
+    },
+    "saved": "정책을 저장했습니다. 컨테이너 {members}개를 업데이트했습니다.",
+    "removed": "정책을 삭제했습니다. 컨테이너 {members}개를 업데이트했습니다.",
+    "warningsTitle": "경고",
+    "errors": {
+      "load": "그룹 정책을 불러오지 못했습니다",
+      "requestFailed": "그룹 정책 요청에 실패했습니다 (HTTP {status})",
+      "unknown": "그룹 정책을 저장하지 못했습니다"
+    }
+  }
+}

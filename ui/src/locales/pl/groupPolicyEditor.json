@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Zasady grup",
+    "title": "Zasady grup",
+    "description": "Jedna zasada na grupę, stosowana do każdego obecnego członka i do kontenerów, które dołączą później.",
+    "ownership": "Zapisane w Drydock, a nie w etykietach Dockera. Etykiety i nadpisania per kontener u członków nadal mają pierwszeństwo w polach zasad aktualizacji.",
+    "newPolicy": "Nowa zasada",
+    "loading": "Wczytywanie zasad grup…",
+    "empty": "Nie ma jeszcze grup ani zasad. Grupy pochodzą z dd.group, projektów Compose i stosów Swarm.",
+    "memberCount": "Kontenery: {count}",
+    "noMembers": "Brak obecnych członków; dotyczy przyszłych członków",
+    "hosts": "Hosty: {hosts}",
+    "controller": "Kontroler",
+    "noPolicy": "Brak zasady",
+    "whitespaceNotice": "Nazwa ma spacje na początku lub na końcu, pokazane jako ␣.",
+    "edit": "Edytuj",
+    "create": "Utwórz zasadę",
+    "readOnly": "Tylko administratorzy mogą zmieniać zasady grup. Ten widok jest tylko do odczytu.",
+    "summary": {
+      "maturityMode": "Dojrzałość: {value}",
+      "minAge": "Min. wiek: {days} d",
+      "skipTags": "Pominięte tagi: {count}",
+      "skipDigests": "Pominięte digesty: {count}",
+      "updateMode": "Aktualizacje: {mode}",
+      "exclude": "Wykluczone triggery: {count}"
+    },
+    "editor": {
+      "titleCreate": "Nowa zasada grupy",
+      "titleEdit": "Zasada grupy: {group}",
+      "groupName": "Nazwa grupy",
+      "groupNameHelp": "Dopasowanie jest dokładne. Wielkość liter i spacje mają znaczenie.",
+      "groupNameInvalid": "Podaj nazwę grupy, która nie jest pusta.",
+      "maturityMode": "Tryb dojrzałości",
+      "maturityOptions": {
+        "inherit": "Dziedzicz",
+        "all": "Wszystkie aktualizacje",
+        "mature": "Tylko dojrzałe"
+      },
+      "minAge": "Minimalny wiek (dni)",
+      "minAgeHelp": "Pełne dni, od 1 do 365. Zostaw puste, aby dziedziczyć.",
+      "minAgeInvalid": "Podaj liczbę całkowitą od 1 do 365.",
+      "skipTags": "Pominięte tagi",
+      "skipDigests": "Pominięte digesty",
+      "listHelp": "Jedna na wiersz lub rozdzielone przecinkami.",
+      "updateMode": "Aktualizacje automatyczne",
+      "updateModeOptions": {
+        "inherit": "Dziedzicz",
+        "manual": "Tylko ręcznie",
+        "notify": "Tylko powiadamiaj"
+      },
+      "updateModeHelp": "Reguły grupy mogą tylko ograniczać. Bieżący tryb globalny: {mode}.",
+      "exclude": "Wykluczone triggery akcji",
+      "excludeHelp": "ID lub nazwa triggera, opcjonalnie z :threshold. Jeden na wiersz lub rozdzielone przecinkami.",
+      "noFields": "Ustaw co najmniej jedno pole albo usuń zasadę.",
+      "remove": "Usuń zasadę",
+      "conflict": "Ta zasada została zmieniona przez kogoś innego. Wczytaj ją ponownie, a potem zastosuj swoją zmianę jeszcze raz. Twój szkic zostaje do czasu ponownego wczytania.",
+      "reload": "Wczytaj ponownie",
+      "notFound": "Ta zasada już nie istnieje. Wczytaj ponownie, aby zobaczyć aktualną listę.",
+      "forbidden": "Zmiana zasad grup wymaga uprawnień administratora."
+    },
+    "remove": {
+      "header": "Usuń zasadę grupy",
+      "message": "Usunąć zasadę grupy {group}? Członkowie wracają do wartości z etykiet, watchera i globalnych.",
+      "accept": "Usuń"
+    },
+    "saved": "Zasada zapisana. Zaktualizowane kontenery: {members}.",
+    "removed": "Zasada usunięta. Zaktualizowane kontenery: {members}.",
+    "warningsTitle": "Ostrzeżenia",
+    "errors": {
+      "load": "Nie udało się wczytać zasad grup",
+      "requestFailed": "Żądanie zasady grupy nie powiodło się (HTTP {status})",
+      "unknown": "Nie udało się zapisać zasady grupy"
+    }
+  }
+}

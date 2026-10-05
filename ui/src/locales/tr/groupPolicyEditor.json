@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Grup ilkeleri",
+    "title": "Grup ilkeleri",
+    "description": "Grup başına bir ilke. Her mevcut üyeye ve sonradan katılan konteynerlere uygulanır.",
+    "ownership": "Drydock içinde saklanır, Docker etiketlerinde değil. Üyelerdeki etiketler ve konteyner başına geçersiz kılmalar güncelleme ilkesi alanlarında yine öncelikli.",
+    "newPolicy": "Yeni ilke",
+    "loading": "Grup ilkeleri yükleniyor…",
+    "empty": "Henüz grup veya ilke yok. Gruplar dd.group, Compose projeleri ve Swarm yığınlarından gelir.",
+    "memberCount": "{count} konteyner",
+    "noMembers": "Mevcut üye yok; gelecekteki üyelere uygulanır",
+    "hosts": "Sunucular: {hosts}",
+    "controller": "Denetleyici",
+    "noPolicy": "İlke yok",
+    "whitespaceNotice": "Adın başında veya sonunda boşluk var, ␣ olarak gösteriliyor.",
+    "edit": "Düzenle",
+    "create": "İlke oluştur",
+    "readOnly": "Grup ilkelerini yalnızca yöneticiler değiştirebilir. Bu görünüm salt okunurdur.",
+    "summary": {
+      "maturityMode": "Olgunluk: {value}",
+      "minAge": "Min. yaş: {days} g",
+      "skipTags": "Atlanan etiketler: {count}",
+      "skipDigests": "Atlanan digest'ler: {count}",
+      "updateMode": "Güncellemeler: {mode}",
+      "exclude": "Hariç tutulan tetikleyiciler: {count}"
+    },
+    "editor": {
+      "titleCreate": "Yeni grup ilkesi",
+      "titleEdit": "Grup ilkesi: {group}",
+      "groupName": "Grup adı",
+      "groupNameHelp": "Tam eşleşme aranır. Büyük/küçük harf ve boşluklar önemlidir.",
+      "groupNameInvalid": "Boş olmayan bir grup adı girin.",
+      "maturityMode": "Olgunluk modu",
+      "maturityOptions": {
+        "inherit": "Devral",
+        "all": "Tüm güncellemeler",
+        "mature": "Yalnızca olgun olanlar"
+      },
+      "minAge": "Minimum yaş (gün)",
+      "minAgeHelp": "Tam gün, 1 ile 365 arası. Devralmak için boş bırakın.",
+      "minAgeInvalid": "1 ile 365 arasında bir tam sayı girin.",
+      "skipTags": "Atlanan etiketler",
+      "skipDigests": "Atlanan digest'ler",
+      "listHelp": "Satır başına bir tane veya virgülle ayırın.",
+      "updateMode": "Otomatik güncellemeler",
+      "updateModeOptions": {
+        "inherit": "Devral",
+        "manual": "Yalnızca manuel",
+        "notify": "Yalnızca bildir"
+      },
+      "updateModeHelp": "Grup kuralları yalnızca kısıtlayabilir. Geçerli genel mod: {mode}.",
+      "exclude": "Hariç tutulan eylem tetikleyicileri",
+      "excludeHelp": "Tetikleyici kimliği veya adı, isteğe bağlı olarak :threshold ile. Satır başına bir tane veya virgülle ayırın.",
+      "noFields": "En az bir alan ayarlayın veya ilkeyi kaldırın.",
+      "remove": "İlkeyi kaldır",
+      "conflict": "Bu ilke başka biri tarafından değiştirildi. Yeniden yükleyin, sonra değişikliğinizi tekrar uygulayın. Taslağınız yeniden yükleyene kadar korunur.",
+      "reload": "Yeniden yükle",
+      "notFound": "Bu ilke artık yok. Güncel listeyi görmek için yeniden yükleyin.",
+      "forbidden": "Grup ilkelerini değiştirmek için yönetici erişimi gerekir."
+    },
+    "remove": {
+      "header": "Grup ilkesini kaldır",
+      "message": "{group} grubunun ilkesi kaldırılsın mı? Üyeler etiket, watcher ve genel değerlerine döner.",
+      "accept": "Kaldır"
+    },
+    "saved": "İlke kaydedildi. {members} konteyner güncellendi.",
+    "removed": "İlke kaldırıldı. {members} konteyner güncellendi.",
+    "warningsTitle": "Uyarılar",
+    "errors": {
+      "load": "Grup ilkeleri yüklenemedi",
+      "requestFailed": "Grup ilkesi isteği başarısız oldu (HTTP {status})",
+      "unknown": "Grup ilkesi kaydedilemedi"
+    }
+  }
+}

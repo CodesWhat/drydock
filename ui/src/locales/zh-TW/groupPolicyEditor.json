@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "群組政策",
+    "title": "群組政策",
+    "description": "每個群組一條政策，套用到目前所有成員，以及之後加入的容器。",
+    "ownership": "儲存在 Drydock 中，而不是 Docker 標籤裡。對更新政策欄位來說，成員上的標籤和單一容器的覆寫設定仍然優先。",
+    "newPolicy": "新增政策",
+    "loading": "正在載入群組政策…",
+    "empty": "還沒有群組或政策。群組來自 dd.group、Compose 專案和 Swarm 堆疊。",
+    "memberCount": "{count} 個容器",
+    "noMembers": "目前沒有成員；適用於之後加入的成員",
+    "hosts": "主機：{hosts}",
+    "controller": "控制器",
+    "noPolicy": "無政策",
+    "whitespaceNotice": "名稱開頭或結尾有空白字元，以 ␣ 顯示。",
+    "edit": "編輯",
+    "create": "建立政策",
+    "readOnly": "只有管理員可以變更群組政策。此檢視為唯讀。",
+    "summary": {
+      "maturityMode": "成熟度：{value}",
+      "minAge": "最短時間：{days} 天",
+      "skipTags": "略過的標籤：{count}",
+      "skipDigests": "略過的摘要：{count}",
+      "updateMode": "更新：{mode}",
+      "exclude": "排除的觸發器：{count}"
+    },
+    "editor": {
+      "titleCreate": "新增群組政策",
+      "titleEdit": "群組政策：{group}",
+      "groupName": "群組名稱",
+      "groupNameHelp": "依原樣精確比對，區分大小寫和空格。",
+      "groupNameInvalid": "請輸入不是空白的群組名稱。",
+      "maturityMode": "成熟度模式",
+      "maturityOptions": {
+        "inherit": "繼承",
+        "all": "所有更新",
+        "mature": "僅成熟的更新"
+      },
+      "minAge": "最短時間（天）",
+      "minAgeHelp": "整數天數，1 到 365。留空則繼承。",
+      "minAgeInvalid": "請輸入 1 到 365 之間的整數。",
+      "skipTags": "略過的標籤",
+      "skipDigests": "略過的摘要",
+      "listHelp": "每行一個，或用逗號分隔。",
+      "updateMode": "自動更新",
+      "updateModeOptions": {
+        "inherit": "繼承",
+        "manual": "僅手動",
+        "notify": "僅通知"
+      },
+      "updateModeHelp": "群組規則只能收緊限制。目前全域模式：{mode}。",
+      "exclude": "排除的動作觸發器",
+      "excludeHelp": "觸發器 ID 或名稱，可在後面加 :threshold。每行一個，或用逗號分隔。",
+      "noFields": "請至少設定一個欄位，或刪除該政策。",
+      "remove": "刪除政策",
+      "conflict": "此政策已被其他人變更。請重新載入，然後再次套用你的變更。重新載入之前會保留你的草稿。",
+      "reload": "重新載入",
+      "notFound": "此政策已不存在。請重新載入以查看目前的清單。",
+      "forbidden": "變更群組政策需要管理員權限。"
+    },
+    "remove": {
+      "header": "刪除群組政策",
+      "message": "要刪除群組 {group} 的政策嗎？成員將回到各自的標籤、監看器和全域值。",
+      "accept": "刪除"
+    },
+    "saved": "政策已儲存。已更新 {members} 個容器。",
+    "removed": "政策已刪除。已更新 {members} 個容器。",
+    "warningsTitle": "警告",
+    "errors": {
+      "load": "無法載入群組政策",
+      "requestFailed": "群組政策要求失敗（HTTP {status}）",
+      "unknown": "無法儲存群組政策"
+    }
+  }
+}

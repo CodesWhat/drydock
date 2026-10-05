@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Criteri di gruppo",
+    "title": "Criteri di gruppo",
+    "description": "Un criterio per gruppo, applicato a ogni membro attuale e ai container che si aggiungeranno in seguito.",
+    "ownership": "Salvato in Drydock, non nelle etichette Docker. Le etichette e gli override per container dei membri hanno ancora la precedenza sui campi del criterio di aggiornamento.",
+    "newPolicy": "Nuovo criterio",
+    "loading": "Caricamento dei criteri di gruppo…",
+    "empty": "Ancora nessun gruppo o criterio. I gruppi derivano da dd.group, progetti Compose e stack Swarm.",
+    "memberCount": "{count} container",
+    "noMembers": "Nessun membro attuale; si applica ai membri futuri",
+    "hosts": "Host: {hosts}",
+    "controller": "Controller",
+    "noPolicy": "Nessun criterio",
+    "whitespaceNotice": "Il nome ha spazi iniziali o finali, mostrati come ␣.",
+    "edit": "Modifica",
+    "create": "Crea criterio",
+    "readOnly": "Solo gli amministratori possono modificare i criteri di gruppo. Questa vista è di sola lettura.",
+    "summary": {
+      "maturityMode": "Maturità: {value}",
+      "minAge": "Età min.: {days} g",
+      "skipTags": "Tag ignorati: {count}",
+      "skipDigests": "Digest ignorati: {count}",
+      "updateMode": "Aggiornamenti: {mode}",
+      "exclude": "Trigger esclusi: {count}"
+    },
+    "editor": {
+      "titleCreate": "Nuovo criterio di gruppo",
+      "titleEdit": "Criterio di gruppo: {group}",
+      "groupName": "Nome del gruppo",
+      "groupNameHelp": "Il confronto è esatto. Contano maiuscole e spazi.",
+      "groupNameInvalid": "Inserisci un nome di gruppo non vuoto.",
+      "maturityMode": "Modalità di maturità",
+      "maturityOptions": {
+        "inherit": "Eredita",
+        "all": "Tutti gli aggiornamenti",
+        "mature": "Solo maturi"
+      },
+      "minAge": "Età minima (giorni)",
+      "minAgeHelp": "Giorni interi, da 1 a 365. Lascia vuoto per ereditare.",
+      "minAgeInvalid": "Inserisci un numero intero da 1 a 365.",
+      "skipTags": "Tag ignorati",
+      "skipDigests": "Digest ignorati",
+      "listHelp": "Uno per riga o separati da virgole.",
+      "updateMode": "Aggiornamenti automatici",
+      "updateModeOptions": {
+        "inherit": "Eredita",
+        "manual": "Solo manuale",
+        "notify": "Solo notifica"
+      },
+      "updateModeHelp": "Le regole di gruppo possono solo limitare. Modalità globale attuale: {mode}.",
+      "exclude": "Trigger di azione esclusi",
+      "excludeHelp": "ID o nome del trigger, seguito facoltativamente da :threshold. Uno per riga o separati da virgole.",
+      "noFields": "Imposta almeno un campo oppure rimuovi il criterio.",
+      "remove": "Rimuovi criterio",
+      "conflict": "Questo criterio è stato modificato da qualcun altro. Ricaricalo e poi applica di nuovo la tua modifica. La bozza resta finché non ricarichi.",
+      "reload": "Ricarica",
+      "notFound": "Questo criterio non esiste più. Ricarica per vedere l’elenco aggiornato.",
+      "forbidden": "Servono i permessi di amministratore per modificare i criteri di gruppo."
+    },
+    "remove": {
+      "header": "Rimuovi criterio di gruppo",
+      "message": "Rimuovere il criterio del gruppo {group}? I membri tornano ai valori di etichetta, watcher e globali.",
+      "accept": "Rimuovi"
+    },
+    "saved": "Criterio salvato. {members} container aggiornati.",
+    "removed": "Criterio rimosso. {members} container aggiornati.",
+    "warningsTitle": "Avvisi",
+    "errors": {
+      "load": "Impossibile caricare i criteri di gruppo",
+      "requestFailed": "Richiesta del criterio di gruppo non riuscita (HTTP {status})",
+      "unknown": "Impossibile salvare il criterio di gruppo"
+    }
+  }
+}
