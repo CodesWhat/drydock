@@ -113,6 +113,20 @@ function audit(action: AuditEntry['action'], details: string): void {
   });
 }
 
+/**
+ * A recovery code that proved a call which then went through stays spent, so
+ * it goes on the record the way one spent on a login does. A code handed back
+ * by {@link refundReauthentication} was never used and records nothing.
+ */
+function auditSpentRecoveryCode(
+  context: ManagementContext,
+  reauthenticated: Reauthenticated,
+): void {
+  if (reauthenticated.spentRecoveryCodeId !== undefined) {
+    audit('totp-recovery-used', `subject=${context.subjectId}`);
+  }
+}
+
 /** The key ring, or a 503 and undefined: nothing has been read or changed yet. */
 function keyringOrRefuse(res: Response): TotpKeyring | undefined {
   try {
@@ -247,6 +261,7 @@ async function startEnrollment(req: Request, res: Response): Promise<void> {
   }
 
   audit('totp-enrollment-started', `subject=${context.subjectId} enrollment=${enrollmentId}`);
+  auditSpentRecoveryCode(context, reauthenticated);
   const secret = base32Encode(seed);
   res
     .status(201)
@@ -430,6 +445,7 @@ async function removeActiveFactor(req: Request, res: Response): Promise<void> {
   }
 
   audit('totp-disabled', `subject=${context.subjectId} factor=${factor.factorId}`);
+  auditSpentRecoveryCode(context, reauthenticated);
   await replaceSessionAfterFactorChange(
     req as AuthRequest,
     principalAfterChange(context, 'password', nextVersion),
@@ -460,6 +476,7 @@ async function replaceRecoveryCodeSet(req: Request, res: Response): Promise<void
   }
 
   audit('totp-recovery-codes-replaced', `subject=${context.subjectId} factor=${factor.factorId}`);
+  auditSpentRecoveryCode(context, reauthenticated);
   res.status(201).json({ recoveryCodes, recoveryCodesRemaining: recoveryCodes.length });
 }
 

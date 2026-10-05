@@ -511,6 +511,8 @@ function expectContract(
 }
 
 const auditActions = () => managementAudit().map((event) => event.action);
+const recoveryUsedAudit = () =>
+  auditEvents.filter((event) => event.action === 'totp-recovery-used');
 
 describe('TOTP slice 4: factor-management API', () => {
   const harnesses: Harness[] = [];
@@ -1860,6 +1862,73 @@ describe('TOTP slice 4: factor-management API', () => {
       });
       expect(conflict.status).toBe(409);
       expect(totpStore.countUnusedRecoveryCodes(enrolled.factorId)).toBe(9);
+      // Only the code that stayed spent is on the record; the one handed back is not.
+      expect(recoveryUsedAudit()).toHaveLength(1);
+    });
+
+    test('a recovery code spent to prove a management call is audited, whichever call it proved', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const used = {
+        action: 'totp-recovery-used',
+        status: 'success',
+        containerName: 'authentication',
+        details: `subject=${SUBJECT_ID}`,
+      };
+      expect(recoveryUsedAudit()).toEqual([]);
+
+      const replaced = await call(h, 'POST', '/totp-recovery-code-sets', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: enrolled.recoveryCodes[0] },
+      });
+      expect(replaced.status).toBe(201);
+      const { recoveryCodes } = (await replaced.json()) as { recoveryCodes: string[] };
+      expect(recoveryUsedAudit()).toEqual([used]);
+
+      const reveal = await revealEnrollment(h, cookie, { recoveryCode: recoveryCodes[0] });
+      expect(recoveryUsedAudit()).toEqual([used, used]);
+      await call(h, 'DELETE', `/totp-enrollments/${reveal.id}`, { cookie });
+
+      const removed = await call(h, 'DELETE', '/totp-factor', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: recoveryCodes[1] },
+      });
+      expect(removed.status).toBe(204);
+      expect(recoveryUsedAudit()).toEqual([used, used, used]);
+      expect(auditActions()).toEqual([
+        'totp-recovery-codes-replaced',
+        'totp-recovery-used',
+        'totp-enrollment-started',
+        'totp-recovery-used',
+        'totp-disabled',
+        'totp-recovery-used',
+      ]);
+      // The code itself is nowhere in what was recorded.
+      const recorded = JSON.stringify(auditEvents);
+      for (const secret of [enrolled.recoveryCodes[0], recoveryCodes[0], recoveryCodes[1]]) {
+        expect(recorded).not.toContain(secret);
+        expect(recorded).not.toContain(secret.replaceAll('-', ''));
+      }
+    });
+
+    test('a wrong recovery code and a TOTP proof record no recovery use', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+
+      const wrong = await call(h, 'POST', '/totp-recovery-code-sets', {
+        cookie,
+        body: { password: TEST_PASSWORD, recoveryCode: 'f'.repeat(32) },
+      });
+      expect(wrong.status).toBe(403);
+      const viaCode = await call(h, 'POST', '/totp-recovery-code-sets', {
+        cookie,
+        body: { password: TEST_PASSWORD, code: code(enrolled.seed, 1) },
+      });
+      expect(viaCode.status).toBe(201);
+
+      expect(recoveryUsedAudit()).toEqual([]);
     });
   });
 
