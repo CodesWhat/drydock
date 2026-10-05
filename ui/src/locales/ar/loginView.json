@@ -25,12 +25,33 @@
       "providerBasic": "المصادقة الأساسية '{name}': {error}",
       "providerOidc": "موفر OIDC '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "لم يعمل هذا الرمز. تحقق منه وحاول مرة أخرى.",
+      "challengeMalformed": "أدخل رمزًا صالحًا.",
+      "challengeExpired": "انتهت صلاحية التحقق. سجّل الدخول مرة أخرى.",
+      "challengeLocked": "محاولات كثيرة جدًا. حاول مرة أخرى بعد {time}.",
+      "challengeLockedLater": "محاولات كثيرة جدًا. حاول مرة أخرى لاحقًا.",
+      "challengeUnavailable": "التحقق غير متاح حاليًا. حاول مرة أخرى بعد قليل."
     },
     "connectionLost": {
       "title": "انقطع الاتصال",
       "body": "الخادم غير قابل للوصول. في انتظار عودته...",
       "reconnecting": "جارٍ إعادة الاتصال"
+    },
+    "challenge": {
+      "heading": "التحقق بخطوتين",
+      "codeHint": "أدخل الرمز المكوّن من 6 أرقام من تطبيق المصادقة.",
+      "codeLabel": "رمز المصادقة",
+      "codePlaceholder": "رمز من 6 أرقام",
+      "recoveryHint": "أدخل أحد رموز الاسترداد المحفوظة لديك. كل رمز يعمل مرة واحدة فقط.",
+      "recoveryLabel": "رمز الاسترداد",
+      "recoveryPlaceholder": "أدخل رمز الاسترداد",
+      "expiresAt": "أدخل الرمز قبل {time}.",
+      "verify": "تحقق",
+      "verifying": "جارٍ التحقق...",
+      "useRecovery": "استخدام رمز الاسترداد",
+      "useCode": "استخدام رمز المصادقة",
+      "cancel": "العودة إلى تسجيل الدخول"
     }
   }
 }

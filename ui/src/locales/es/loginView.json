@@ -25,12 +25,33 @@
       "providerBasic": "Auth básica '{name}': {error}",
       "providerOidc": "Proveedor OIDC '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Ese código no funcionó. Compruébalo e inténtalo de nuevo.",
+      "challengeMalformed": "Introduce un código válido.",
+      "challengeExpired": "La verificación ha caducado. Inicia sesión de nuevo.",
+      "challengeLocked": "Demasiados intentos. Inténtalo de nuevo en {time}.",
+      "challengeLockedLater": "Demasiados intentos. Inténtalo de nuevo más tarde.",
+      "challengeUnavailable": "La verificación no está disponible ahora mismo. Inténtalo de nuevo en breve."
     },
     "connectionLost": {
       "title": "Conexión perdida",
       "body": "No se puede alcanzar el servidor. Esperando a que vuelva a estar en línea...",
       "reconnecting": "Reconectando"
+    },
+    "challenge": {
+      "heading": "Verificación en dos pasos",
+      "codeHint": "Introduce el código de 6 dígitos de tu aplicación de autenticación.",
+      "codeLabel": "Código de autenticación",
+      "codePlaceholder": "Código de 6 dígitos",
+      "recoveryHint": "Introduce uno de tus códigos de recuperación guardados. Cada uno solo funciona una vez.",
+      "recoveryLabel": "Código de recuperación",
+      "recoveryPlaceholder": "Introduce un código de recuperación",
+      "expiresAt": "Introduce el código antes de las {time}.",
+      "verify": "Verificar",
+      "verifying": "Verificando...",
+      "useRecovery": "Usar un código de recuperación",
+      "useCode": "Usar un código de autenticación",
+      "cancel": "Volver a iniciar sesión"
     }
   }
 }

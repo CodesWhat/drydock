@@ -25,12 +25,33 @@
       "providerBasic": "Basisverificatie '{name}': {error}",
       "providerOidc": "OIDC-provider '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Die code werkte niet. Controleer hem en probeer opnieuw.",
+      "challengeMalformed": "Voer een geldige code in.",
+      "challengeExpired": "De verificatie is verlopen. Log opnieuw in.",
+      "challengeLocked": "Te veel pogingen. Probeer het over {time} opnieuw.",
+      "challengeLockedLater": "Te veel pogingen. Probeer het later opnieuw.",
+      "challengeUnavailable": "Verificatie is momenteel niet beschikbaar. Probeer het zo meteen opnieuw."
     },
     "connectionLost": {
       "title": "Verbinding verloren",
       "body": "De server is onbereikbaar. Wachten tot hij weer online komt...",
       "reconnecting": "Opnieuw verbinding maken"
+    },
+    "challenge": {
+      "heading": "Verificatie in twee stappen",
+      "codeHint": "Voer de 6-cijferige code uit je authenticator-app in.",
+      "codeLabel": "Verificatiecode",
+      "codePlaceholder": "6-cijferige code",
+      "recoveryHint": "Voer een van je opgeslagen herstelcodes in. Elke code werkt maar één keer.",
+      "recoveryLabel": "Herstelcode",
+      "recoveryPlaceholder": "Voer een herstelcode in",
+      "expiresAt": "Voer de code in vóór {time}.",
+      "verify": "Verifiëren",
+      "verifying": "Verifiëren...",
+      "useRecovery": "Een herstelcode gebruiken",
+      "useCode": "Een authenticatiecode gebruiken",
+      "cancel": "Terug naar inloggen"
     }
   }
 }

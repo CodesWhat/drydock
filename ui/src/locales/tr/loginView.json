@@ -25,12 +25,33 @@
       "providerBasic": "Temel kimlik doğrulama '{name}': {error}",
       "providerOidc": "OIDC sağlayıcısı '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Bu kod çalışmadı. Kontrol edip tekrar deneyin.",
+      "challengeMalformed": "Geçerli bir kod girin.",
+      "challengeExpired": "Doğrulama süresi doldu. Tekrar oturum açın.",
+      "challengeLocked": "Çok fazla deneme yapıldı. {time} sonra tekrar deneyin.",
+      "challengeLockedLater": "Çok fazla deneme yapıldı. Daha sonra tekrar deneyin.",
+      "challengeUnavailable": "Doğrulama şu anda kullanılamıyor. Biraz sonra tekrar deneyin."
     },
     "connectionLost": {
       "title": "Bağlantı Kesildi",
       "body": "Sunucuya ulaşılamıyor. Tekrar internete dönmesini bekliyorum...",
       "reconnecting": "Yeniden bağlanılıyor"
+    },
+    "challenge": {
+      "heading": "İki adımlı doğrulama",
+      "codeHint": "Kimlik doğrulama uygulamanızdaki 6 haneli kodu girin.",
+      "codeLabel": "Doğrulama kodu",
+      "codePlaceholder": "6 haneli kod",
+      "recoveryHint": "Kayıtlı kurtarma kodlarınızdan birini girin. Her kod yalnızca bir kez çalışır.",
+      "recoveryLabel": "Kurtarma kodu",
+      "recoveryPlaceholder": "Kurtarma kodunu girin",
+      "expiresAt": "Kodu {time} saatinden önce girin.",
+      "verify": "Doğrula",
+      "verifying": "Doğrulanıyor...",
+      "useRecovery": "Kurtarma kodu kullan",
+      "useCode": "Doğrulama kodu kullan",
+      "cancel": "Oturum açmaya dön"
     }
   }
 }

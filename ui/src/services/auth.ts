@@ -8,6 +8,27 @@ interface CurrentUser {
   username: string;
 }
 
+interface LoginChallenge {
+  id: string;
+  expiresAt: string;
+  methods: string[];
+}
+
+type ChallengeProof = { code: string } | { recoveryCode: string };
+
+/** A failed auth request that keeps the status (and Retry-After) the view branches on. */
+class AuthRequestError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds: number | undefined;
+
+  constructor(message: string, status: number, retryAfterSeconds?: number) {
+    super(message);
+    this.name = 'AuthRequestError';
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 let pendingUserRequest: Promise<CurrentUser | undefined> | undefined;
 
 function clearCachedUser() {
@@ -24,6 +45,31 @@ function getPayloadErrorMessage(payload: unknown): string {
 
   const error = payload.error;
   return typeof error === 'string' ? error.trim() : '';
+}
+
+function parseRetryAfterSeconds(response: Response): number | undefined {
+  const value = response.headers?.get('Retry-After');
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+    return undefined;
+  }
+  return Number.parseInt(value, 10);
+}
+
+function parseLoginChallenge(payload: unknown): LoginChallenge {
+  const candidate =
+    typeof payload === 'object' && payload !== null && 'challenge' in payload
+      ? payload.challenge
+      : undefined;
+  if (typeof candidate === 'object' && candidate !== null) {
+    const { id, expiresAt, methods } = candidate as Record<string, unknown>;
+    const known = Array.isArray(methods)
+      ? methods.filter((method): method is string => method === 'totp' || method === 'recovery')
+      : [];
+    if (typeof id === 'string' && typeof expiresAt === 'string' && known.length > 0) {
+      return { id, expiresAt, methods: known };
+    }
+  }
+  throw new Error('Unexpected login challenge response');
 }
 
 /**
@@ -106,8 +152,47 @@ async function loginBasic(username: string, password: string, remember: boolean 
 
     throw new Error(message || 'Username or password error');
   }
+  if (response.status === 202) {
+    // Password was right but a second factor is owed: no session exists yet,
+    // so the cached user stays untouched and the challenge is handed back.
+    return { challenge: parseLoginChallenge(await response.json()) };
+  }
   clearCachedUser();
   return await response.json();
+}
+
+/**
+ * Complete a login challenge with a TOTP or recovery code. The challenge id is
+ * a credential: it only ever travels in this request path, never stored.
+ */
+async function completeLoginChallenge(id: string, proof: ChallengeProof, remember: boolean) {
+  const response = await fetch(`/auth/login-challenges/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...proof, remember }),
+  });
+  if (!response.ok) {
+    throw new AuthRequestError(
+      `Login challenge failed (${response.status})`,
+      response.status,
+      parseRetryAfterSeconds(response),
+    );
+  }
+  clearCachedUser();
+  return await response.json();
+}
+
+/** Best-effort cancel: the server expires the challenge on its own anyway. */
+async function cancelLoginChallenge(id: string): Promise<void> {
+  try {
+    await fetch(`/auth/login-challenges/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+  } catch {
+    // Nothing to do: the challenge lapses by itself.
+  }
 }
 
 /**
@@ -145,4 +230,15 @@ async function logout() {
   return response.json();
 }
 
-export { getOidcRedirection, getStrategies, getUser, loginBasic, logout, setRememberMe };
+export type { ChallengeProof, LoginChallenge };
+export {
+  AuthRequestError,
+  cancelLoginChallenge,
+  completeLoginChallenge,
+  getOidcRedirection,
+  getStrategies,
+  getUser,
+  loginBasic,
+  logout,
+  setRememberMe,
+};

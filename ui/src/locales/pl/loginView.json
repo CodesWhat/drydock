@@ -25,12 +25,33 @@
       "providerBasic": "Uwierzytelnianie podstawowe „{name}”: {error}",
       "providerOidc": "Dostawca OIDC „{name}”: {error}",
       "providerNamed": "{type} „{name}”: {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Ten kod nie zadziałał. Sprawdź go i spróbuj ponownie.",
+      "challengeMalformed": "Wpisz prawidłowy kod.",
+      "challengeExpired": "Weryfikacja wygasła. Zaloguj się ponownie.",
+      "challengeLocked": "Zbyt wiele prób. Spróbuj ponownie za {time}.",
+      "challengeLockedLater": "Zbyt wiele prób. Spróbuj ponownie później.",
+      "challengeUnavailable": "Weryfikacja jest teraz niedostępna. Spróbuj ponownie za chwilę."
     },
     "connectionLost": {
       "title": "Połączenie utracone",
       "body": "Serwer jest nieosiągalny. Czekam, aż znów będzie online...",
       "reconnecting": "Ponowne łączenie"
+    },
+    "challenge": {
+      "heading": "Weryfikacja dwuetapowa",
+      "codeHint": "Wpisz 6-cyfrowy kod z aplikacji uwierzytelniającej.",
+      "codeLabel": "Kod uwierzytelniający",
+      "codePlaceholder": "6-cyfrowy kod",
+      "recoveryHint": "Wpisz jeden z zapisanych kodów odzyskiwania. Każdy działa tylko raz.",
+      "recoveryLabel": "Kod odzyskiwania",
+      "recoveryPlaceholder": "Wpisz kod odzyskiwania",
+      "expiresAt": "Wpisz kod przed {time}.",
+      "verify": "Zweryfikuj",
+      "verifying": "Weryfikowanie...",
+      "useRecovery": "Użyj kodu odzyskiwania",
+      "useCode": "Użyj kodu uwierzytelniającego",
+      "cancel": "Wróć do logowania"
     }
   }
 }

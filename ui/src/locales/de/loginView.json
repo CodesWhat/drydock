@@ -25,12 +25,33 @@
       "providerBasic": "Basic-Auth '{name}': {error}",
       "providerOidc": "OIDC-Anbieter '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Dieser Code hat nicht funktioniert. Prüfe ihn und versuche es erneut.",
+      "challengeMalformed": "Gib einen gültigen Code ein.",
+      "challengeExpired": "Die Bestätigung ist abgelaufen. Melde dich erneut an.",
+      "challengeLocked": "Zu viele Versuche. Versuche es in {time} erneut.",
+      "challengeLockedLater": "Zu viele Versuche. Versuche es später erneut.",
+      "challengeUnavailable": "Die Bestätigung ist derzeit nicht verfügbar. Versuche es gleich noch einmal."
     },
     "connectionLost": {
       "title": "Verbindung verloren",
       "body": "Der Server ist nicht erreichbar. Warten auf Wiederverbindung...",
       "reconnecting": "Verbindet neu"
+    },
+    "challenge": {
+      "heading": "Zwei-Schritt-Bestätigung",
+      "codeHint": "Gib den 6-stelligen Code aus deiner Authenticator-App ein.",
+      "codeLabel": "Authentifizierungscode",
+      "codePlaceholder": "6-stelliger Code",
+      "recoveryHint": "Gib einen deiner gespeicherten Wiederherstellungscodes ein. Jeder Code funktioniert nur einmal.",
+      "recoveryLabel": "Wiederherstellungscode",
+      "recoveryPlaceholder": "Wiederherstellungscode eingeben",
+      "expiresAt": "Gib den Code vor {time} ein.",
+      "verify": "Bestätigen",
+      "verifying": "Wird bestätigt...",
+      "useRecovery": "Wiederherstellungscode verwenden",
+      "useCode": "Authenticator-Code verwenden",
+      "cancel": "Zurück zur Anmeldung"
     }
   }
 }
