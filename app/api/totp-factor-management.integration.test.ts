@@ -1546,6 +1546,77 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(right.status).toBe(201);
     });
 
+    test('five wrong codes use the enrollment up: the right code is then a 404, and starting again works', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const reveal = await revealEnrollment(h, cookie);
+      const seed = base32Decode(reveal.secret);
+      const confirm = (value: string) =>
+        call(h, 'PUT', `/totp-enrollments/${reveal.id}`, { cookie, body: { code: value } });
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const wrong = await confirm(wrongCode(seed));
+        expect(wrong.status).toBe(422);
+        expect(await wrong.json()).toEqual({ error: 'Invalid code' });
+      }
+
+      expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+      const right = await confirm(code(seed));
+      expect(right.status).toBe(404);
+      expect(totpStore.getSubjectVersion(SUBJECT_ID)).toBe(0);
+      expect(totpStore.getFactorBySubject(SUBJECT_ID)).toBeUndefined();
+      expect(auditActions()).toEqual(['totp-enrollment-started']);
+
+      // Nothing is locked: the person starts over with a new seed.
+      const again = await enrollThroughApi(h, cookie);
+      expect(again.activated.status).toBe('active');
+    });
+
+    test('a parallel burst of wrong codes gets five guesses at the seed, not one each', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const reveal = await revealEnrollment(h, cookie);
+      const seed = base32Decode(reveal.secret);
+
+      const statuses = (
+        await Promise.all(
+          Array.from({ length: 20 }, () =>
+            call(h, 'PUT', `/totp-enrollments/${reveal.id}`, {
+              cookie,
+              body: { code: wrongCode(seed) },
+            }),
+          ),
+        )
+      ).map((response) => response.status);
+
+      expect(statuses.filter((status) => status === 422)).toHaveLength(5);
+      expect(statuses.filter((status) => status === 404)).toHaveLength(15);
+      expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+    });
+
+    test('wrong codes use up a pending replacement and leave the active factor alone', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const reveal = await revealEnrollment(h, cookie, { code: code(enrolled.seed, 1) });
+      const newSeed = base32Decode(reveal.secret);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const wrong = await call(h, 'PUT', `/totp-enrollments/${reveal.id}`, {
+          cookie,
+          body: { code: wrongCode(newSeed) },
+        });
+        expect(wrong.status).toBe(422);
+      }
+
+      expect((await factorStatus(h, cookie)).body.pendingEnrollment).toBeUndefined();
+      expect(totpStore.getFactorBySubject(SUBJECT_ID)?.factorId).toBe(enrolled.factorId);
+      expect(totpStore.getSubjectVersion(SUBJECT_ID)).toBe(1);
+      expect(await protectedStatus(h, cookie)).toBe(200);
+      // Confirmation guesses are not second-factor failures: nothing locks.
+      expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(0);
+    });
+
     test.each([
       ['no code', {}],
       ['a recovery code instead', { recoveryCode: 'x' }],

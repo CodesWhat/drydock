@@ -589,6 +589,29 @@ export function deleteEnrollment(enrollmentId: string): boolean {
   );
 }
 
+/**
+ * Count one wrong confirmation code against a pending enrollment. The failure
+ * that brings the count to `maxFailures` deletes the enrollment, so its seed
+ * takes no more guesses and the person starts over with a new one. Both writes
+ * are one transaction, so a failure is never counted without being acted on.
+ * @returns whether this failure deleted the enrollment
+ */
+export function recordEnrollmentFailure(enrollmentId: string, maxFailures: number): boolean {
+  const database = requireDb();
+  return database.transaction((): boolean => {
+    database
+      .prepare(
+        'UPDATE totp_enrollments SET failed_attempts = failed_attempts + 1 WHERE enrollment_id = ?',
+      )
+      .run(enrollmentId);
+    return (
+      database
+        .prepare('DELETE FROM totp_enrollments WHERE enrollment_id = ? AND failed_attempts >= ?')
+        .run(enrollmentId, maxFailures).changes === 1
+    );
+  });
+}
+
 /** Delete every expired enrollment (the hourly sweep). Returns how many. */
 export function sweepExpiredEnrollments(now: Date = new Date()): number {
   return requireDb()

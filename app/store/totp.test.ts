@@ -762,6 +762,65 @@ describe('accepted counter replay', () => {
   });
 });
 
+describe('wrong confirmation codes', () => {
+  test('are counted per enrollment, and the one that reaches the limit deletes it', () => {
+    const enrollment = enrollmentFor();
+    totp.createEnrollment(enrollment, NOW);
+
+    for (let failure = 1; failure < 5; failure += 1) {
+      expect(totp.recordEnrollmentFailure(enrollment.enrollmentId, 5)).toBe(false);
+      expect(
+        db
+          .prepare('SELECT failed_attempts FROM totp_enrollments WHERE enrollment_id = ?')
+          .get(enrollment.enrollmentId),
+      ).toEqual({ failed_attempts: failure });
+    }
+    expect(totp.getEnrollmentIncludingExpired(enrollment.enrollmentId)).toBeDefined();
+
+    expect(totp.recordEnrollmentFailure(enrollment.enrollmentId, 5)).toBe(true);
+    expect(totp.getEnrollmentIncludingExpired(enrollment.enrollmentId)).toBeUndefined();
+  });
+
+  test('an unknown enrollment counts nothing and deletes nothing', () => {
+    totp.createEnrollment(enrollmentFor('subject-b'), NOW);
+    expect(totp.recordEnrollmentFailure('nope', 1)).toBe(false);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 1 });
+  });
+
+  test('one enrollment running out does not touch another subject’s', () => {
+    const mine = enrollmentFor('subject-a');
+    const theirs = enrollmentFor('subject-b');
+    totp.createEnrollment(mine, NOW);
+    totp.createEnrollment(theirs, NOW);
+
+    expect(totp.recordEnrollmentFailure(mine.enrollmentId, 1)).toBe(true);
+
+    expect(totp.getEnrollmentIncludingExpired(theirs.enrollmentId)).toBeDefined();
+    expect(
+      db
+        .prepare('SELECT failed_attempts FROM totp_enrollments WHERE enrollment_id = ?')
+        .get(theirs.enrollmentId),
+    ).toEqual({ failed_attempts: 0 });
+  });
+
+  test('the enrollment that replaces a used-up one starts from zero', () => {
+    const first = enrollmentFor();
+    totp.createEnrollment(first, NOW);
+    totp.recordEnrollmentFailure(first.enrollmentId, 1);
+
+    const second = enrollmentFor('subject-a', { enrollmentId: 'second' });
+    totp.createEnrollment(second, NOW);
+    expect(totp.recordEnrollmentFailure('second', 2)).toBe(false);
+    expect(totp.getEnrollmentIncludingExpired('second')).toBeDefined();
+  });
+
+  test('fails with a clear error before the collection exists', async () => {
+    vi.resetModules();
+    const fresh = await import('./totp.js');
+    expectCode(() => fresh.recordEnrollmentFailure('e', 5), 'NOT_INITIALIZED');
+  });
+});
+
 describe('enrollment lookup that keeps expired rows', () => {
   test('returns an expired enrollment without deleting it, and undefined for an unknown id', () => {
     const enrollment = enrollmentFor();

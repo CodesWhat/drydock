@@ -26,6 +26,7 @@ import {
   getEnrollmentBySubject,
   getEnrollmentIncludingExpired,
   getFactorBySubject,
+  recordEnrollmentFailure,
   removeFactor,
   replaceRecoveryCodes,
   sweepExpiredEnrollments,
@@ -70,6 +71,8 @@ import { replaceSessionAfterFactorChange } from './totp-session.js';
 
 const BASE_PATH = '/api/v1/auth';
 const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+/** Wrong confirmation codes one pending enrollment takes; the last one deletes it, as a login challenge's does. */
+const ENROLLMENT_MAX_FAILED_ATTEMPTS = 5;
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 60;
@@ -304,6 +307,11 @@ async function confirmEnrollment(req: Request, res: Response): Promise<void> {
   );
   const verified = verifyTotp({ secret: seed, code, nowMs: Date.now() });
   if (!verified.valid) {
+    // A confirmation is a guess at the pending seed, and the session that
+    // makes it may not be the person who was shown that seed. The guesses are
+    // counted on the enrollment, and everything from reading it to here is
+    // synchronous, so a burst cannot get more of them than a queue would.
+    recordEnrollmentFailure(enrollmentId, ENROLLMENT_MAX_FAILED_ATTEMPTS);
     sendErrorResponse(res, 422, 'Invalid code');
     return;
   }

@@ -482,6 +482,16 @@ ALTER TABLE totp_subject_versions ADD COLUMN factor_failures INTEGER NOT NULL DE
 ALTER TABLE totp_subject_versions ADD COLUMN factor_locked_until INTEGER NOT NULL DEFAULT 0;
 `;
 
+/**
+ * Migration 13: wrong confirmation codes counted against a pending enrollment.
+ * The seed of an enrollment is what a confirmation guesses at, so the count
+ * lives on its row and goes when the row does. Rows written before this
+ * migration start from zero.
+ */
+export const TOTP_ENROLLMENT_FAILURES_SQL = `
+ALTER TABLE totp_enrollments ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0;
+`;
+
 /** Every table TOTP_TABLES_SQL creates. */
 export const TOTP_TABLES: readonly string[] = [
   'totp_enrollments',
