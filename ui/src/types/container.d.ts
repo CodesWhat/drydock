@@ -65,6 +65,26 @@ export interface UpdateEligibility {
 
 /** Shared UI container type used across views, composables, and templates. */
 
+/** Where an effective update-policy field came from, as resolved by the server. */
+export type ContainerUpdatePolicySource = 'env' | 'group' | 'label' | 'override';
+
+/** The declarative (non-snooze) update-policy fields a group policy can set. */
+export interface ContainerDeclarativeUpdatePolicy {
+  maturityMode?: 'all' | 'mature';
+  maturityMinAgeDays?: number;
+  skipTags?: string[];
+  skipDigests?: string[];
+}
+
+/** The group policy snapshot the server applied to a container; absent when none applies. */
+export interface ContainerGroupPolicySnapshot {
+  id: string;
+  group: string;
+  revision: number;
+  updatePolicy: ContainerDeclarativeUpdatePolicy;
+  actions: { updateMode?: 'manual' | 'notify'; exclude?: string[] };
+}
+
 export interface ContainerDetails {
   ports: string[];
   volumes: string[];
