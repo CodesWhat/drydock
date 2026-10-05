@@ -79,6 +79,9 @@ function closeTrackedStreams(revokedSessionIds: ReadonlySet<string>): number {
         warnOfFailedClose(error);
       }
     }
+    // The session is gone for good, so nothing of it is kept: not a stream
+    // that failed to close, and not one that never reports that it ended.
+    streamsBySession.delete(sessionId);
   }
   return closed;
 }

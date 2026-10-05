@@ -256,8 +256,6 @@ function createStreamContainerStatsHandler({
       (snapshot: NonNullable<ContainerStatsSnapshot>) => writeStatsEvent(streamResponse, snapshot),
       closeStream,
     );
-    // The request authenticated once; a session revoked afterwards ends the stream here.
-    const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
 
     const latestSnapshot = statsCollector.getLatest(container.id);
     if (latestSnapshot) {
@@ -273,6 +271,10 @@ function createStreamContainerStatsHandler({
       pressureController.writeHeartbeat();
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
+    // The request authenticated once; a session revoked afterwards ends the
+    // stream here. Tracked only now, with the cleanup that forgets it, so a
+    // failure above never leaves a stream tracked that nothing would forget.
+    const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
     let disconnected = false;
     cleanup = () => {
       if (disconnected) {
@@ -343,8 +345,6 @@ function createStreamStatsSummaryHandler(
       (summary: unknown) => writeSummaryStatsEvent(streamResponse, summary),
       closeStream,
     );
-    // The request authenticated once; a session revoked afterwards ends the stream here.
-    const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
 
     pressureController.enqueueSnapshot(aggregator.getCurrent());
 
@@ -356,6 +356,10 @@ function createStreamStatsSummaryHandler(
       pressureController.writeHeartbeat();
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
+    // The request authenticated once; a session revoked afterwards ends the
+    // stream here. Tracked only now, with the cleanup that forgets it, so a
+    // failure above never leaves a stream tracked that nothing would forget.
+    const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
     let disconnected = false;
     let streamClient: SummaryStatsStreamClient;
     cleanup = () => {

@@ -153,4 +153,22 @@ describe('a closer that throws', () => {
       release();
     }
   });
+
+  test('a stream that never says it ended is not kept once its session is gone', () => {
+    // Neither stream calls the function that forgets it: one throws while
+    // closing, the other closes and stays silent.
+    const failing = vi.fn(() => {
+      throw new Error('destroy failed');
+    });
+    const silent = vi.fn();
+    trackSessionStream('ended-session', failing);
+    trackSessionStream('ended-session', silent);
+
+    expect(closeStreamsForRevokedSessions(['ended-session'])).toBe(1);
+    expect(closeStreamsForRevokedSessions(['ended-session'])).toBe(0);
+
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(silent).toHaveBeenCalledTimes(1);
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+  });
 });
