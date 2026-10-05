@@ -170,7 +170,7 @@ function readKeyState(factor: TotpFactorRecord, keyring: KeyringState): FactorKe
   return totpSeedNeedsRewrap(factor, keyring.keyring) ? 'needs-rewrap' : 'ok';
 }
 
-export interface FactorStatus {
+interface FactorStatus {
   factor: TotpFactorRecord;
   keyState: FactorKeyState;
   /** No configured account derives this factor's subject: it was renamed or removed. */
