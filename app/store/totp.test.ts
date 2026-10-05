@@ -1279,3 +1279,353 @@ describe('stored factor parameters', () => {
     expectCode(() => totp.listFactors(), 'INVALID_ARGUMENT');
   });
 });
+
+describe('encryption key usage', () => {
+  test('is empty when nothing is stored', () => {
+    expect(totp.listKeyUsage()).toEqual([]);
+  });
+
+  test('counts factors and pending enrollments per key id', () => {
+    activate('subject-a');
+    activate('subject-b');
+    db.prepare("UPDATE totp_factors SET encryption_key_id = 'k2' WHERE subject_id = ?").run(
+      'subject-b',
+    );
+    totp.createEnrollment(enrollmentFor('subject-c'), NOW);
+
+    expect(totp.listKeyUsage()).toEqual([
+      { keyId: 'k1', factors: 1, enrollments: 1 },
+      { keyId: 'k2', factors: 1, enrollments: 0 },
+    ]);
+  });
+
+  test('deletes only the pending enrollments encrypted under another key', () => {
+    totp.createEnrollment(enrollmentFor('subject-a'), NOW);
+    totp.createEnrollment(enrollmentFor('subject-b'), NOW);
+    db.prepare("UPDATE totp_enrollments SET encryption_key_id = 'k2' WHERE subject_id = ?").run(
+      'subject-b',
+    );
+
+    expect(totp.deleteEnrollmentsNotUnderKey('k2')).toBe(1);
+    expect(totp.getEnrollmentBySubject('subject-a', NOW)).toBeUndefined();
+    expect(totp.getEnrollmentBySubject('subject-b', NOW)).toBeDefined();
+    expect(totp.deleteEnrollmentsNotUnderKey('k2')).toBe(0);
+  });
+});
+
+describe('rebinding a factor to another subject', () => {
+  function rebindInput(
+    factor: totp.NewTotpFactor,
+    seed: Buffer,
+    overrides: Partial<Parameters<typeof totp.rebindFactor>[0]> = {},
+  ): Parameters<typeof totp.rebindFactor>[0] {
+    const stored = totp.getFactor(factor.factorId) as totp.TotpFactorRecord;
+    return {
+      factorId: factor.factorId,
+      from: stored,
+      subjectId: 'subject-new',
+      providerId: 'basic.renamed',
+      username: 'scott-renamed',
+      secret: encryptTotpSeed(seed, bindingFor('subject-new', factor.factorId), keyring),
+      now: LATER,
+      ...overrides,
+    };
+  }
+
+  function activateWithSeed(subjectId = 'subject-a') {
+    const seed = generateTotpSeed();
+    const enrollment = enrollmentFor(subjectId);
+    totp.createEnrollment(enrollment, NOW);
+    const codes = generateRecoveryCodes();
+    const factor = factorFor(enrollment, `factor-${subjectId}`, seed);
+    totp.activateEnrollment({
+      enrollmentId: enrollment.enrollmentId,
+      acceptedCounter: CONFIRM_COUNTER,
+      factor,
+      recoveryCodeDigests: codes.map(digestRecoveryCode),
+      now: NOW,
+    });
+    return { factor, seed, codes };
+  }
+
+  test('moves the factor, its recovery codes and its replay counter, and nothing else of it', () => {
+    const { factor, seed, codes } = activateWithSeed();
+    const input = rebindInput(factor, seed);
+
+    const moved = totp.rebindFactor(input);
+
+    expect(totp.getFactorBySubject('subject-a')).toBeUndefined();
+    expect(totp.getFactorBySubject('subject-new')).toEqual(moved);
+    expect(moved).toMatchObject({
+      factorId: factor.factorId,
+      subjectId: 'subject-new',
+      providerId: 'basic.renamed',
+      username: 'scott-renamed',
+      ...input.secret,
+      lastAcceptedCounter: CONFIRM_COUNTER,
+      recoveryGeneration: 1,
+      activatedAt: NOW.toISOString(),
+      updatedAt: LATER.toISOString(),
+    });
+    expect(
+      decryptTotpSeed(moved, bindingFor('subject-new', factor.factorId), keyring).equals(seed),
+    ).toBe(true);
+    expect(totp.countUnusedRecoveryCodes(factor.factorId)).toBe(10);
+    expect(db.prepare('SELECT DISTINCT subject_id FROM totp_recovery_codes').all()).toEqual([
+      { subject_id: 'subject-new' },
+    ]);
+    expect(findRecoveryCodeMatch(codes[0], totp.listRecoveryCodes(factor.factorId))).toBeDefined();
+  });
+
+  test('moves both subjects to a version no earlier session of either carries', () => {
+    const { factor, seed } = activateWithSeed();
+
+    const moved = totp.rebindFactor(rebindInput(factor, seed));
+
+    expect(moved.factorVersion).toBe(2);
+    expect(totp.getSubjectVersion('subject-new')).toBe(2);
+    expect(totp.getSubjectVersion('subject-a')).toBe(2);
+    expect(totp.hasEnrolledUsername('scott-renamed')).toBe(true);
+    expect(totp.hasEnrolledUsername('scott')).toBe(true);
+  });
+
+  test('starts above the version the target subject already reached', () => {
+    const { factor, seed } = activateWithSeed();
+    activate('subject-new');
+    totp.removeFactor({ subjectId: 'subject-new', expectedFactorVersion: 1 });
+    totp.removeFactor({ subjectId: 'subject-a', expectedFactorVersion: 1 });
+    const again = activateWithSeedAtVersion('subject-a', 2);
+    db.prepare('UPDATE totp_subject_versions SET factor_version = 7 WHERE subject_id = ?').run(
+      'subject-new',
+    );
+
+    const moved = totp.rebindFactor(rebindInput(again.factor, again.seed));
+
+    expect(moved.factorVersion).toBe(8);
+    expect(totp.getSubjectVersion('subject-new')).toBe(8);
+    expect(totp.getSubjectVersion('subject-a')).toBe(4);
+    expect(factor.factorId).toBe(again.factor.factorId);
+    expect(seed.equals(again.seed)).toBe(false);
+  });
+
+  function activateWithSeedAtVersion(subjectId: string, expectedFactorVersion: number) {
+    const seed = generateTotpSeed();
+    const enrollment = enrollmentFor(subjectId, { expectedFactorVersion });
+    totp.createEnrollment(enrollment, NOW);
+    const factor = factorFor(enrollment, `factor-${subjectId}`, seed);
+    totp.activateEnrollment({
+      enrollmentId: enrollment.enrollmentId,
+      acceptedCounter: CONFIRM_COUNTER,
+      factor,
+      recoveryCodeDigests: [],
+      now: NOW,
+    });
+    return { factor, seed };
+  }
+
+  test('carries the second-factor failure count and lock over with the factor', () => {
+    const { factor, seed } = activateWithSeed();
+    for (let count = 0; count < 5; count += 1) {
+      totp.recordFactorFailure({
+        subjectId: 'subject-a',
+        username: 'scott',
+        now: 1_000,
+        threshold: 5,
+        baseLockMs: 60_000,
+        maxLockMs: 600_000,
+      });
+    }
+
+    totp.rebindFactor(rebindInput(factor, seed));
+
+    expect(totp.getFactorFailureState('subject-new')).toEqual({ failures: 5, lockedUntil: 61_000 });
+  });
+
+  test('drops the pending enrollments of both subjects', () => {
+    const { factor, seed } = activateWithSeed();
+    totp.createEnrollment(
+      enrollmentFor('subject-a', {
+        enrollmentId: 'replacement',
+        expectedFactorVersion: 1,
+        replacesFactorId: factor.factorId,
+      }),
+      NOW,
+    );
+    totp.createEnrollment(enrollmentFor('subject-new'), NOW);
+
+    totp.rebindFactor(rebindInput(factor, seed));
+
+    expect(totp.getEnrollmentBySubject('subject-a', NOW)).toBeUndefined();
+    expect(totp.getEnrollmentBySubject('subject-new', NOW)).toBeUndefined();
+  });
+
+  test('leaves every other subject exactly as it was', () => {
+    const { factor, seed } = activateWithSeed();
+    activate('subject-b');
+    const before = totp.getFactorBySubject('subject-b');
+
+    totp.rebindFactor(rebindInput(factor, seed));
+
+    expect(totp.getFactorBySubject('subject-b')).toEqual(before);
+    expect(totp.getSubjectVersion('subject-b')).toBe(1);
+    expect(totp.countUnusedRecoveryCodes('factor-subject-b')).toBe(10);
+  });
+
+  test('refuses a target subject that already has a factor and changes nothing', () => {
+    const { factor, seed } = activateWithSeed();
+    activate('subject-new');
+    const before = totp.listFactors();
+
+    expectCode(() => totp.rebindFactor(rebindInput(factor, seed)), 'SUBJECT_HAS_FACTOR');
+
+    expect(totp.listFactors()).toEqual(before);
+    expect(totp.getSubjectVersion('subject-a')).toBe(1);
+  });
+
+  test('refuses an unknown factor and a factor that is already on the target subject', () => {
+    const { factor, seed } = activateWithSeed();
+
+    expectCode(
+      () => totp.rebindFactor(rebindInput(factor, seed, { factorId: 'nope' })),
+      'FACTOR_NOT_FOUND',
+    );
+    expectCode(
+      () => totp.rebindFactor(rebindInput(factor, seed, { subjectId: 'subject-a' })),
+      'INVALID_ARGUMENT',
+    );
+  });
+
+  test('refuses when the stored ciphertext is no longer the one that was read, and changes nothing', () => {
+    const { factor, seed } = activateWithSeed();
+    totp.createEnrollment(enrollmentFor('subject-new'), NOW);
+
+    expectCode(
+      () =>
+        totp.rebindFactor(
+          rebindInput(factor, seed, { from: { encryptionKeyId: 'k1', secretNonce: 'stale' } }),
+        ),
+      'VERSION_CONFLICT',
+    );
+
+    expect(totp.getFactorBySubject('subject-a')).toBeDefined();
+    expect(totp.getEnrollmentBySubject('subject-new', NOW)).toBeDefined();
+    expect(totp.getSubjectVersion('subject-a')).toBe(1);
+  });
+
+  test('stamps the current time when none is given', () => {
+    const live = Date.now();
+    const { factor, seed } = activateWithSeed();
+
+    const moved = totp.rebindFactor(rebindInput(factor, seed, { now: undefined }));
+
+    expect(Date.parse(moved.updatedAt)).toBeGreaterThanOrEqual(live);
+  });
+});
+
+describe('offline operation markers', () => {
+  const removal: totp.TotpOfflineOperation = {
+    operation: 'remove',
+    subjectId: 'subject-a',
+    factorId: 'factor-a',
+    at: '2026-10-05T08:00:00.000Z',
+  };
+  const rebind: totp.TotpOfflineOperation = {
+    operation: 'rebind',
+    subjectId: 'subject-old',
+    factorId: 'factor-b',
+    targetSubjectId: 'subject-new',
+    at: '2026-10-05T09:00:00.000Z',
+  };
+  const markerRows = () =>
+    db.prepare("SELECT key FROM store_metadata WHERE key LIKE 'totp-offline-operation:%'").all();
+
+  test('nothing is pending on a store no offline command has touched', () => {
+    const seen: totp.TotpOfflineOperation[] = [];
+    expect(totp.countPendingOfflineOperations()).toBe(0);
+    expect(totp.consumeOfflineOperations((operation) => seen.push(operation))).toEqual({
+      recorded: 0,
+      discarded: 0,
+    });
+    expect(seen).toEqual([]);
+  });
+
+  test('hands each recorded operation to the consumer once, then forgets it', () => {
+    totp.recordOfflineOperation(removal);
+    totp.recordOfflineOperation(rebind);
+    expect(totp.countPendingOfflineOperations()).toBe(2);
+    const seen: totp.TotpOfflineOperation[] = [];
+
+    expect(totp.consumeOfflineOperations((operation) => seen.push(operation))).toEqual({
+      recorded: 2,
+      discarded: 0,
+    });
+
+    expect(seen).toEqual(expect.arrayContaining([removal, rebind]));
+    expect(seen).toHaveLength(2);
+    expect(totp.countPendingOfflineOperations()).toBe(0);
+    expect(totp.consumeOfflineOperations(() => undefined)).toEqual({ recorded: 0, discarded: 0 });
+  });
+
+  test('keeps every marker when the consumer fails, so the next start records them', () => {
+    totp.recordOfflineOperation(removal);
+    totp.recordOfflineOperation(rebind);
+
+    expect(() =>
+      totp.consumeOfflineOperations(() => {
+        throw new Error('audit store down');
+      }),
+    ).toThrow('audit store down');
+
+    expect(totp.countPendingOfflineOperations()).toBe(2);
+  });
+
+  test.each([
+    ['text that is not JSON', 'not json'],
+    ['a JSON value that is not an object', '7'],
+    ['null', 'null'],
+    ['an unknown operation', JSON.stringify({ ...removal, operation: 'grant' })],
+    ['a missing subject', JSON.stringify({ ...removal, subjectId: undefined })],
+    ['a missing factor', JSON.stringify({ ...removal, factorId: 7 })],
+    ['a missing time', JSON.stringify({ ...removal, at: null })],
+    ['a target that is not text', JSON.stringify({ ...rebind, targetSubjectId: 3 })],
+  ])('discards a marker holding %s without handing it on', (_label, value) => {
+    db.prepare('INSERT INTO store_metadata (key, value, updated_at) VALUES (?, ?, ?)').run(
+      'totp-offline-operation:tampered',
+      value,
+      NOW.toISOString(),
+    );
+    totp.recordOfflineOperation(removal);
+    const seen: totp.TotpOfflineOperation[] = [];
+
+    expect(totp.consumeOfflineOperations((operation) => seen.push(operation))).toEqual({
+      recorded: 1,
+      discarded: 1,
+    });
+    expect(seen).toEqual([removal]);
+    expect(markerRows()).toEqual([]);
+  });
+
+  test('never touches other store metadata', () => {
+    db.prepare('INSERT INTO store_metadata (key, value, updated_at) VALUES (?, ?, ?)').run(
+      'totp-offline-operation;neighbour',
+      'kept',
+      NOW.toISOString(),
+    );
+    db.prepare('INSERT INTO store_metadata (key, value, updated_at) VALUES (?, ?, ?)').run(
+      'legacy-import',
+      'kept',
+      NOW.toISOString(),
+    );
+    totp.recordOfflineOperation(removal);
+
+    expect(totp.countPendingOfflineOperations()).toBe(1);
+    totp.consumeOfflineOperations(() => undefined);
+
+    expect(
+      db
+        .prepare('SELECT key FROM store_metadata ORDER BY key')
+        .all()
+        .map((row) => row.key),
+    ).toEqual(['legacy-import', 'totp-offline-operation;neighbour']);
+  });
+});
