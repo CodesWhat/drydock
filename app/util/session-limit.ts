@@ -4,6 +4,7 @@ import { deserializeSessionUser, readSessionUsername } from '../api/session-user
 
 interface SessionStoreLike {
   all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
+  get?: (sid: string, callback: (error: unknown, session?: unknown) => void) => void;
   destroy?: (sid: string, callback: (error?: unknown) => void) => void;
 }
 
@@ -177,6 +178,21 @@ function destroyStoredSession(sessionStore: SessionStoreLike, sid: string): Prom
   });
 }
 
+function hasStoredSession(
+  getSession: NonNullable<SessionStoreLike['get']>,
+  sid: string,
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    getSession(sid, (error, session) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(session !== undefined && session !== null);
+    });
+  });
+}
+
 function buildUsernameSessionIndex(sessions: StoredSession[]): UsernameSessionIndex {
   const sessionIndex: UsernameSessionIndex = new Map();
   for (const session of sessions) {
@@ -289,6 +305,33 @@ function removeDestroyedSessionsFromIndex(
   }
 }
 
+/**
+ * The index hears of a session when a login records it and never hears that it
+ * ended: a logout, an expiry and a regenerated id all remove the row behind its
+ * back. A session with no row cannot authenticate, so it must not hold a slot
+ * against one that can. Each of these sessions is checked against the store,
+ * and the ones whose row is gone are dropped from the index.
+ */
+async function forgetEndedSessions(
+  sessionStore: SessionStoreLike,
+  sessionIndex: UsernameSessionIndex,
+  username: string,
+  sessions: StoredSession[],
+): Promise<void> {
+  if (typeof sessionStore.get !== 'function') {
+    return;
+  }
+  const getSession = sessionStore.get.bind(sessionStore);
+  const stored = await Promise.all(
+    sessions.map((session) => hasStoredSession(getSession, session.sid)),
+  );
+  removeDestroyedSessionsFromIndex(
+    sessionIndex,
+    username,
+    sessions.filter((_session, position) => !stored[position]),
+  );
+}
+
 function recordCurrentSessionInIndex(
   sessionIndex: UsernameSessionIndex,
   username: string,
@@ -334,6 +377,14 @@ export async function enforceConcurrentSessionLimit({
 
   const normalizedUsername = username.trim();
   const sessionIndex = await getOrCreateUsernameSessionIndex(sessionStore);
+  await forgetEndedSessions(
+    sessionStore,
+    sessionIndex,
+    normalizedUsername,
+    listIndexedSessionsForUser(sessionIndex, normalizedUsername, currentSessionId),
+  );
+  // Listed again after the store was read, so a login that recorded its session
+  // in the meantime is still counted.
   const existingUserSessions = listIndexedSessionsForUser(
     sessionIndex,
     normalizedUsername,

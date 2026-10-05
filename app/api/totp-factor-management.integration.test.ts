@@ -2686,6 +2686,48 @@ describe('TOTP slice 4: factor-management API', () => {
     });
   });
 
+  describe('the concurrent-session limit counts live sessions only', () => {
+    // What a logout does to the store: regenerating the session destroys the old id.
+    const logOut = (h: Harness, cookie: string) =>
+      new Promise<void>((resolve, reject) => {
+        h.store.destroy(sidOf(cookie), (error) => (error ? reject(error) : resolve()));
+      });
+
+    test('four login and logout cycles on another device do not log the first device out', async () => {
+      const h = await boot();
+      const desktop = await sessionCookie(h);
+      for (let cycle = 0; cycle < 4; cycle += 1) {
+        const phone = await sessionCookie(h);
+        await logOut(h, phone);
+        expect(await protectedStatus(h, phone)).toBe(401);
+      }
+
+      const fifth = await sessionCookie(h);
+
+      expect(await protectedStatus(h, desktop)).toBe(200);
+      expect(await protectedStatus(h, fifth)).toBe(200);
+      expect(closedStreams.flat()).not.toContain(sidOf(desktop));
+    });
+
+    test('a sixth live session still evicts the oldest one, and closes its streams', async () => {
+      const h = await boot();
+      const cookies: string[] = [];
+      for (let device = 0; device < 5; device += 1) {
+        cookies.push(await sessionCookie(h));
+      }
+      closedStreams.length = 0;
+
+      const sixth = await sessionCookie(h);
+
+      expect(await protectedStatus(h, cookies[0])).toBe(401);
+      for (const cookie of cookies.slice(1)) {
+        expect(await protectedStatus(h, cookie)).toBe(200);
+      }
+      expect(await protectedStatus(h, sixth)).toBe(200);
+      expect(closedStreams.flat()).toContain(sidOf(cookies[0]));
+    });
+  });
+
   describe('a stats stream ends with the session that opened it', () => {
     const STREAMS = [
       ['container stats', '/api/v1/containers/c1/stats/stream'],

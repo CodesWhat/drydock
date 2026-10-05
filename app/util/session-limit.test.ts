@@ -656,6 +656,184 @@ describe('stale sessions', () => {
   });
 });
 
+describe('sessions that ended without the limit being asked', () => {
+  const oidc = (username: string) => JSON.stringify({ v: 2, kind: 'oidc', username });
+
+  /**
+   * A store that behaves like the real one: a login records its session with
+   * the limit and then saves the row, and a logout or an expiry removes the row
+   * without the limit ever hearing of it.
+   */
+  function createStore(initial: Record<string, unknown> = {}) {
+    const rows = new Map<string, unknown>(Object.entries(initial));
+    const evicted: string[] = [];
+    const sessionStore = {
+      all: vi.fn((done: (error: unknown, sessions?: unknown) => void) =>
+        done(null, Object.fromEntries(rows)),
+      ),
+      get: vi.fn((sid: string, done: (error: unknown, session?: unknown) => void) =>
+        done(null, rows.get(sid) ?? null),
+      ),
+      destroy: vi.fn((sid: string, done: (error?: unknown) => void) => {
+        evicted.push(sid);
+        rows.delete(sid);
+        done();
+      }),
+    };
+    return {
+      sessionStore,
+      rows,
+      evicted,
+      async login(sid: string, maxConcurrentSessions = 5, username = 'john') {
+        const destroyed = await enforceConcurrentSessionLimit({
+          username,
+          maxConcurrentSessions,
+          currentSessionId: sid,
+          sessionStore,
+        });
+        rows.set(sid, { passport: { user: oidc(username) }, cookie: {} });
+        // Logins are never in the same millisecond, so the order is theirs.
+        vi.advanceTimersByTime(1_000);
+        return destroyed;
+      },
+      /** What a logout, an expiry sweep or a regenerated id does: the row goes, nothing else. */
+      end(sid: string) {
+        rows.delete(sid);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-01-01T00:00:00.000Z') });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('four login and logout cycles elsewhere do not cost the one other live session its place', async () => {
+    const store = createStore();
+    await store.login('desktop');
+    for (const sid of ['phone-1', 'phone-2', 'phone-3', 'phone-4']) {
+      await store.login(sid);
+      store.end(sid);
+    }
+
+    await expect(store.login('phone-5')).resolves.toBe(0);
+
+    expect(store.evicted).toEqual([]);
+    expect([...store.rows.keys()]).toEqual(['desktop', 'phone-5']);
+  });
+
+  test('the limit still evicts the oldest live session, and only that one', async () => {
+    const store = createStore();
+    for (const sid of ['s1', 's2', 's3', 's4', 's5']) {
+      await expect(store.login(sid)).resolves.toBe(0);
+    }
+
+    await expect(store.login('s6')).resolves.toBe(1);
+    expect(store.evicted).toEqual(['s1']);
+
+    await expect(store.login('s7')).resolves.toBe(1);
+    expect(store.evicted).toEqual(['s1', 's2']);
+    expect([...store.rows.keys()]).toEqual(['s3', 's4', 's5', 's6', 's7']);
+  });
+
+  test('an ended session frees its slot, and the next overflow evicts the oldest live one', async () => {
+    const store = createStore();
+    await store.login('a', 3);
+    await store.login('b', 3);
+    await store.login('c', 3);
+    store.end('b');
+
+    await expect(store.login('d', 3)).resolves.toBe(0);
+    expect(store.evicted).toEqual([]);
+
+    await expect(store.login('e', 3)).resolves.toBe(1);
+    expect(store.evicted).toEqual(['a']);
+  });
+
+  test('a session the index loaded at startup stops counting once its row has expired', async () => {
+    const store = createStore({
+      'from-disk-old': {
+        passport: { user: oidc('john') },
+        cookie: { expires: '2026-01-02T00:00:00.000Z' },
+      },
+      'from-disk-new': {
+        passport: { user: oidc('john') },
+        cookie: { expires: '2026-01-03T00:00:00.000Z' },
+      },
+    });
+    await expect(store.login('first', 3)).resolves.toBe(0);
+    store.end('from-disk-old');
+
+    await expect(store.login('second', 3)).resolves.toBe(0);
+
+    expect(store.evicted).toEqual([]);
+    expect(store.sessionStore.all).toHaveBeenCalledTimes(1);
+  });
+
+  test('an ended session is forgotten, not asked about again on every login', async () => {
+    const store = createStore();
+    await store.login('gone');
+    store.end('gone');
+    await store.login('second');
+    expect(store.sessionStore.get).toHaveBeenCalledWith('gone', expect.any(Function));
+    store.sessionStore.get.mockClear();
+
+    await store.login('third');
+
+    expect(store.sessionStore.get.mock.calls.map(([sid]) => sid)).toEqual(['second']);
+  });
+
+  test('one person’s ended sessions do not touch another person’s', async () => {
+    const store = createStore();
+    await store.login('jane-1', 1, 'jane');
+    await store.login('john-1', 1);
+    store.end('john-1');
+
+    await expect(store.login('john-2', 1)).resolves.toBe(0);
+
+    expect(store.evicted).toEqual([]);
+    expect(store.rows.has('jane-1')).toBe(true);
+    expect(store.sessionStore.get).not.toHaveBeenCalledWith('jane-1', expect.any(Function));
+  });
+
+  test('a login that recorded its session while the store was being read is still counted', async () => {
+    const store = createStore({
+      a: { passport: { user: oidc('john') }, cookie: { expires: '2025-01-01T00:00:00.000Z' } },
+    });
+    let answerFirstRead: () => void = () => {};
+    store.sessionStore.get.mockImplementationOnce((sid, done) => {
+      answerFirstRead = () => done(null, store.rows.get(sid) ?? null);
+    });
+    const slow = enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 2,
+      currentSessionId: 'b',
+      sessionStore: store.sessionStore,
+    });
+    await vi.waitFor(() => expect(store.sessionStore.get).toHaveBeenCalledTimes(1));
+
+    await expect(store.login('c', 2)).resolves.toBe(0);
+    answerFirstRead();
+
+    // `a`, `c` and now `b` are one more than the limit allows.
+    await expect(slow).resolves.toBe(1);
+    expect(store.evicted).toEqual(['a']);
+  });
+
+  test('a store that cannot be read fails the check and destroys nothing', async () => {
+    const store = createStore();
+    await store.login('desktop', 1);
+    store.sessionStore.get.mockImplementationOnce((_sid, done) => done(new Error('disk gone')));
+
+    await expect(store.login('phone', 1)).rejects.toThrow('disk gone');
+
+    expect(store.evicted).toEqual([]);
+  });
+});
+
 describe('destroyOtherSubjectSessions', () => {
   const subjectId = deriveSubjectId('basic.default', 'john');
   const local = (username: string, subject = subjectId) =>
