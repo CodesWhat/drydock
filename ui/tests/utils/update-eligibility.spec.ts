@@ -48,6 +48,8 @@ describe('BLOCKER_SEVERITY', () => {
     // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
     expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('hard');
     expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('hard');
+    // Hard as of spec 7.3 slice 2a: a group policy that allows notifications only.
+    expect(BLOCKER_SEVERITY['group-notify-only']).toBe('hard');
   });
 
   it('maps soft blockers correctly', () => {
@@ -221,6 +223,21 @@ describe('getPrimarySoftBlocker', () => {
 });
 
 describe('updateButtonState', () => {
+  it('locks the button for a group-notify-only blocker that carries no severity', () => {
+    const eligibility = {
+      eligible: false,
+      evaluatedAt: '2026-07-12T00:00:00.000Z',
+      blockers: [
+        {
+          reason: 'group-notify-only' as const,
+          message: "Group policy 'payments' allows notifications only.",
+          actionable: true,
+        },
+      ],
+    };
+    expect(updateButtonState(eligibility, true)).toBe('hard');
+  });
+
   it('returns none when hasNewTag is false regardless of eligibility', () => {
     expect(updateButtonState(undefined, false)).toBe('none');
     const withHard = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });

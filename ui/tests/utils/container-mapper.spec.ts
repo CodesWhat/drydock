@@ -2037,6 +2037,40 @@ describe('container-mapper', () => {
   });
 
   describe('mapApiContainer — updateEligibility', () => {
+    const baseEligibility = {
+      eligible: true,
+      evaluatedAt: '2026-04-25T12:00:00.000Z',
+      blockers: [],
+    };
+
+    it.each([
+      [{ value: 'manual', source: 'group', group: 'payments' }],
+      [{ value: 'notify', source: 'global' }],
+    ] as const)('passes the server updateMode through unchanged: %j', (updateMode) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, updateMode } }),
+      );
+      expect(c.updateEligibility?.updateMode).toEqual(updateMode);
+    });
+
+    it.each([
+      ['not an object', 'manual'],
+      ['unknown value', { value: 'weekly', source: 'global' }],
+      ['unknown source', { value: 'manual', source: 'label' }],
+      ['non-string group', { value: 'manual', source: 'group', group: 7 }],
+    ])('drops a malformed updateMode (%s)', (_label, updateMode) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, updateMode } }),
+      );
+      expect(c.updateEligibility).toBeDefined();
+      expect(c.updateEligibility).not.toHaveProperty('updateMode');
+    });
+
+    it('omits updateMode when the server did not send one', () => {
+      const c = mapApiContainer(makeApiContainer({ updateEligibility: baseEligibility }));
+      expect(c.updateEligibility).not.toHaveProperty('updateMode');
+    });
+
     it('maps a complete eligibility object with all fields populated', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -2283,6 +2317,7 @@ describe('container-mapper', () => {
       'agent-mismatch',
       'no-update-trigger-configured',
       'maintenance-window-closed',
+      'group-notify-only',
     ] as const;
 
     for (const reason of ALL_VALID_REASONS) {

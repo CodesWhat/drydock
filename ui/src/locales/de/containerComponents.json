@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · entsperrt am {date}",
       "maturityClockPublished": "Kandidat veröffentlicht am {date} — noch {count} Tag bis zum {minDays}-Tage-Minimum | Kandidat veröffentlicht am {date} — noch {count} Tage bis zum {minDays}-Tage-Minimum",
       "maturityClockDetected": "Kandidat erkannt am {date} — noch {count} Tag bis zum {minDays}-Tage-Minimum | Kandidat erkannt am {date} — noch {count} Tage bis zum {minDays}-Tage-Minimum",
+      "groupManualOnly": "Die Gruppenrichtlinie '{group}' erlaubt nur manuelle Updates. Drydock wendet dieses Update nicht automatisch an.",
       "updateButton": "Jetzt aktualisieren",
       "blockedButton": "Update blockiert",
       "notificationsOnlyButton": "Nur Benachrichtigungen",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Kein Update-Trigger konfiguriert",
         "self-update-unavailable": "Selbstaktualisierung nicht verfügbar",
         "maintenance-window-closed": "Wartungsfenster geschlossen",
+        "group-notify-only": "Gruppe erlaubt nur Benachrichtigungen",
+        "group-manual-only": "Gruppe verlangt manuelle Updates",
         "dry-run-trigger": "Trigger-Konfiguration im Dry-Run-Modus"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Update-Trigger konfigurieren",
         "configureThreshold": "Trigger-Schwelle konfigurieren",
         "configureSelfUpdate": "Selbstaktualisierung konfigurieren",
-        "configureMaintenance": "Wartungsfenster konfigurieren"
+        "configureMaintenance": "Wartungsfenster konfigurieren",
+        "editGroupPolicy": "Gruppenrichtlinie bearbeiten"
       }
     },
     "maturityBadge": {

@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · يُفتح في {date}",
       "maturityClockPublished": "نُشر المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | نُشر المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
       "maturityClockDetected": "اكتُشف المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | اكتُشف المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
+      "groupManualOnly": "سياسة المجموعة '{group}' تسمح بالتحديثات اليدوية فقط. لن يطبّق Drydock هذا التحديث تلقائيًا.",
       "updateButton": "تحديث الآن",
       "blockedButton": "التحديث محظور",
       "notificationsOnlyButton": "إشعارات فقط",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "لم يُهيَّأ مشغّل تحديث",
         "self-update-unavailable": "التحديث الذاتي غير متاح",
         "maintenance-window-closed": "نافذة الصيانة مغلقة",
+        "group-notify-only": "المجموعة تسمح بالإشعارات فقط",
+        "group-manual-only": "المجموعة تتطلب تحديثات يدوية",
         "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "تهيئة مشغّلات التحديث",
         "configureThreshold": "تهيئة حد المشغّل",
         "configureSelfUpdate": "تهيئة التحديث الذاتي",
-        "configureMaintenance": "تهيئة نافذة الصيانة"
+        "configureMaintenance": "تهيئة نافذة الصيانة",
+        "editGroupPolicy": "تعديل سياسة المجموعة"
       }
     },
     "maturityBadge": {

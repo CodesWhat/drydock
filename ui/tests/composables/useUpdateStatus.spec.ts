@@ -690,4 +690,228 @@ describe('deriveUpdateStatus', () => {
       formatLiftCountdown('not-a-date', Date.parse('2026-07-12T12:00:00.000Z')),
     ).toBeUndefined();
   });
+
+  describe('group action rules (spec 7.3 slice 3b)', () => {
+    function groupContainer(updateEligibility: UpdateEligibility): UpdateStatusInput['container'] {
+      return { id: 'container-1', name: 'nginx', newTag: '1.2.3', updateEligibility };
+    }
+
+    const notifyOnly = blocker({
+      reason: 'group-notify-only',
+      severity: 'hard',
+      message: "Group policy 'payments' allows notifications only.",
+      details: { group: 'payments', policyId: 'p1' },
+    });
+
+    it('renders group-notify-only as a hard condition, disables the CTA and links to the group editor', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer({
+            ...eligibility([notifyOnly]),
+            updateMode: { value: 'notify', source: 'group', group: 'payments' },
+          }),
+        }),
+      );
+
+      expect(status.state).toBe('hard-blocked');
+      expect(status.manualUpdateDisabled).toBe(true);
+      const condition = status.conditions[0];
+      expect(condition.reason).toBe('group-notify-only');
+      expect(condition.severity).toBe('hard');
+      expect(condition.tone).toBe('danger');
+      expect(condition.heading).toBe('Group allows notifications only');
+      expect(condition.body).toBe("Group policy 'payments' allows notifications only.");
+      expect(condition.action).toEqual({
+        kind: 'route',
+        label: 'Edit group policy',
+        to: { path: '/config', query: { tab: 'groupPolicies', group: 'payments' } },
+      });
+    });
+
+    it('treats a group-notify-only blocker without severity as hard', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer(eligibility([{ ...notifyOnly, severity: undefined }])),
+        }),
+      );
+      expect(status.manualUpdateDisabled).toBe(true);
+    });
+
+    it('offers no group link when the blocker carries no group name', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer(eligibility([{ ...notifyOnly, details: undefined }])),
+        }),
+      );
+      expect(status.conditions[0].action).toBeUndefined();
+    });
+
+    it('links a group-attributed trigger exclusion to the group editor instead of the labels docs', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer(
+            eligibility([
+              blocker({
+                reason: 'trigger-excluded',
+                severity: 'hard',
+                details: { excludedBy: 'group', group: 'payments', triggerId: 'docker.local' },
+              }),
+            ]),
+          ),
+        }),
+      );
+      expect(status.conditions[0].action).toEqual({
+        kind: 'route',
+        label: 'Edit group policy',
+        to: { path: '/config', query: { tab: 'groupPolicies', group: 'payments' } },
+      });
+    });
+
+    it('keeps the labels docs link for a label-attributed trigger exclusion', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer(
+            eligibility([
+              blocker({
+                reason: 'trigger-excluded',
+                severity: 'hard',
+                details: { excludedBy: 'label', triggerId: 'docker.local' },
+              }),
+            ]),
+          ),
+        }),
+      );
+      expect(status.conditions[0].action?.kind).toBe('external');
+    });
+
+    it('keeps the labels docs link for a group-attributed exclusion without a group name', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer(
+            eligibility([
+              blocker({
+                reason: 'trigger-excluded',
+                severity: 'hard',
+                details: { excludedBy: 'group' },
+              }),
+            ]),
+          ),
+        }),
+      );
+      expect(status.conditions[0].action?.kind).toBe('external');
+    });
+
+    const groupManual: UpdateEligibility = {
+      ...eligibility(),
+      actionPolicy: { state: 'auto', triggerId: 'docker.update' },
+      updateMode: { value: 'manual', source: 'group', group: 'payments' },
+    };
+
+    it('explains a group manual ceiling with a condition row, no Auto badge and manual summary', () => {
+      const status = deriveUpdateStatus(
+        input({ mode: 'auto', container: groupContainer(groupManual) }),
+      );
+
+      expect(status.state).toBe('ready');
+      expect(status.summary).toBe('Update available — ready to apply manually.');
+      expect(status.manualUpdateDisabled).toBe(false);
+      expect(status.actionPolicyBadge).toBeUndefined();
+      expect(status.conditions).toHaveLength(1);
+      expect(status.conditions[0]).toMatchObject({
+        reason: 'group-manual-only',
+        severity: 'soft',
+        tone: 'info',
+        heading: 'Group requires manual updates',
+        body: "Group policy 'payments' allows manual updates only. Drydock won't apply this one automatically.",
+        action: {
+          kind: 'route',
+          label: 'Edit group policy',
+          to: { path: '/config', query: { tab: 'groupPolicies', group: 'payments' } },
+        },
+      });
+    });
+
+    it('downgrades the filtered summary to manual wording under a group manual ceiling', () => {
+      const status = deriveUpdateStatus(
+        input({
+          mode: 'auto',
+          container: groupContainer({
+            ...groupManual,
+            blockers: [blocker({ reason: 'snoozed', severity: 'soft' })],
+          }),
+        }),
+      );
+      expect(status.state).toBe('soft-blocked');
+      expect(status.summary).toBe(
+        'Update available — a policy condition will require confirmation.',
+      );
+    });
+
+    it('lists the manual-group condition after the real blockers', () => {
+      const status = deriveUpdateStatus(
+        input({
+          mode: 'manual',
+          container: groupContainer({
+            ...groupManual,
+            blockers: [blocker({ reason: 'snoozed', severity: 'soft' })],
+          }),
+        }),
+      );
+      expect(status.conditions.map((condition) => condition.reason)).toEqual([
+        'snoozed',
+        'group-manual-only',
+      ]);
+    });
+
+    it('omits the manual-group condition when there is no update to apply', () => {
+      const status = deriveUpdateStatus(
+        input({
+          mode: 'auto',
+          container: { id: 'c', name: 'nginx', newTag: null, updateEligibility: groupManual },
+        }),
+      );
+      expect(status.hasUpdate).toBe(false);
+      expect(status.conditions).toEqual([]);
+    });
+
+    it('omits the manual-group condition without a group name', () => {
+      const status = deriveUpdateStatus(
+        input({
+          container: groupContainer({
+            ...groupManual,
+            updateMode: { value: 'manual', source: 'group' },
+          }),
+        }),
+      );
+      expect(status.conditions).toEqual([]);
+    });
+
+    it('ignores a global-sourced manual updateMode', () => {
+      const status = deriveUpdateStatus(
+        input({
+          mode: 'manual',
+          container: groupContainer({
+            ...eligibility(),
+            updateMode: { value: 'manual', source: 'global' },
+          }),
+        }),
+      );
+      expect(status.conditions).toEqual([]);
+    });
+
+    it('keeps the Auto badge when the group does not restrict', () => {
+      const status = deriveUpdateStatus(
+        input({
+          mode: 'auto',
+          container: groupContainer({
+            ...eligibility(),
+            actionPolicy: { state: 'auto', triggerId: 'docker.update' },
+            updateMode: { value: 'auto', source: 'global' },
+          }),
+        }),
+      );
+      expect(status.actionPolicyBadge?.state).toBe('auto');
+      expect(status.summary).toBe('Update available — eligible for automatic dispatch.');
+    });
+  });
 });

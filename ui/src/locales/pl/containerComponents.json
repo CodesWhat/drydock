@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · odblokuje się {date}",
       "maturityClockPublished": "Kandydat opublikowany {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat opublikowany {date} — jeszcze {count} dni do minimum {minDays} dni",
       "maturityClockDetected": "Kandydat wykryty {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat wykryty {date} — jeszcze {count} dni do minimum {minDays} dni",
+      "groupManualOnly": "Zasady grupy '{group}' dopuszczają tylko ręczne aktualizacje. Drydock nie zastosuje tej automatycznie.",
       "updateButton": "Aktualizuj teraz",
       "blockedButton": "Aktualizacja zablokowana",
       "notificationsOnlyButton": "Tylko powiadomienia",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Nie skonfigurowano wyzwalacza aktualizacji",
         "self-update-unavailable": "Samoaktualizacja niedostępna",
         "maintenance-window-closed": "Okno konserwacji zamknięte",
+        "group-notify-only": "Grupa zezwala tylko na powiadomienia",
+        "group-manual-only": "Grupa wymaga ręcznych aktualizacji",
         "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Skonfiguruj wyzwalacze aktualizacji",
         "configureThreshold": "Skonfiguruj próg wyzwalacza",
         "configureSelfUpdate": "Skonfiguruj samoaktualizację",
-        "configureMaintenance": "Skonfiguruj okno konserwacji"
+        "configureMaintenance": "Skonfiguruj okno konserwacji",
+        "editGroupPolicy": "Edytuj zasady grupy"
       }
     },
     "maturityBadge": {

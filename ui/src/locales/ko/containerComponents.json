@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · {date}에 잠금 해제",
       "maturityClockPublished": "후보가 {date}에 게시됨 — {minDays}일 최소 기간까지 {count}일 남음",
       "maturityClockDetected": "후보가 {date}에 감지됨 — {minDays}일 최소 기간까지 {count}일 남음",
+      "groupManualOnly": "그룹 정책 '{group}'은(는) 수동 업데이트만 허용합니다. Drydock이 이 업데이트를 자동으로 적용하지 않습니다.",
       "updateButton": "지금 업데이트",
       "blockedButton": "업데이트 차단됨",
       "notificationsOnlyButton": "알림만",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "구성된 업데이트 트리거 없음",
         "self-update-unavailable": "자체 업데이트를 사용할 수 없음",
         "maintenance-window-closed": "유지 관리 시간이 종료됨",
+        "group-notify-only": "그룹이 알림만 허용합니다",
+        "group-manual-only": "그룹이 수동 업데이트를 요구합니다",
         "dry-run-trigger": "트리거 구성이 드라이런 모드임"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "업데이트 트리거 구성",
         "configureThreshold": "트리거 임계값 구성",
         "configureSelfUpdate": "자체 업데이트 구성",
-        "configureMaintenance": "유지 관리 시간 구성"
+        "configureMaintenance": "유지 관리 시간 구성",
+        "editGroupPolicy": "그룹 정책 편집"
       }
     },
     "maturityBadge": {
