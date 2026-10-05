@@ -79,6 +79,7 @@
       "totp-replaced": "Zastąpiono uwierzytelnianie dwuskładnikowe",
       "totp-disabled": "Wyłączono uwierzytelnianie dwuskładnikowe",
       "totp-recovery-codes-replaced": "Zastąpiono kody odzyskiwania",
+      "totp-break-glass": "Odzyskiwanie offline uwierzytelniania dwuskładnikowego",
       "authenticated": "Uwierzytelniony",
       "authfail": "Błąd uwierzytelniania",
       "hook-configured": "Hak skonfigurowany",

@@ -79,6 +79,7 @@
       "totp-replaced": "Verificación en dos pasos reemplazada",
       "totp-disabled": "Verificación en dos pasos desactivada",
       "totp-recovery-codes-replaced": "Códigos de recuperación reemplazados",
+      "totp-break-glass": "Recuperación sin conexión de la verificación en dos pasos",
       "authenticated": "Autenticado",
       "authfail": "Autenticación fallida",
       "hook-configured": "Hook configurado",
