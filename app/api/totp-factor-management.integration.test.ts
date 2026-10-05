@@ -549,6 +549,7 @@ describe('TOTP slice 4: factor-management API', () => {
     resetLoginChallengesForTests();
     delete ddEnvVars.DD_AUTH_TOTP_KEYRING;
     delete ddEnvVars.DD_AUTH_TOTP_ACTIVE_KEY_ID;
+    delete ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP;
   });
 
   describe('status', () => {
@@ -799,6 +800,126 @@ describe('TOTP slice 4: factor-management API', () => {
         expect(response.status).toBe(403);
       },
     );
+
+    describe('DD_AUTH_TOTP_ALLOWHTTP', () => {
+      const remote = { 'X-Forwarded-For': '203.0.113.9' };
+      const plainHttpWarnings = () =>
+        logLines.filter((line) => String(line[0]).includes('DD_AUTH_TOTP_ALLOWHTTP'));
+
+      test('left unset or set to false, plain HTTP from a non-loopback peer is still refused and nothing is warned', async () => {
+        for (const value of [undefined, 'false']) {
+          if (value === undefined) {
+            delete ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP;
+          } else {
+            ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = value;
+          }
+          const h = await boot();
+          const cookie = await sessionCookie(h);
+          const response = await call(h, 'POST', '/totp-enrollments', {
+            cookie,
+            https: false,
+            headers: remote,
+            body: { password: TEST_PASSWORD },
+          });
+          expect(response.status).toBe(403);
+          expect(await response.json()).toEqual({
+            error: 'Two-factor management requires HTTPS',
+            details: { reason: 'https-required' },
+          });
+        }
+        expect(plainHttpWarnings()).toEqual([]);
+      });
+
+      test('set to true, every mutation is allowed over plain HTTP from a non-loopback peer', async () => {
+        ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'true';
+        const h = await boot();
+        const cookie = await sessionCookie(h);
+        const over = (method: string, path: string, body?: unknown) =>
+          call(h, method, path, { cookie, https: false, headers: remote, body });
+
+        const started = await over('POST', '/totp-enrollments', { password: TEST_PASSWORD });
+        expect(started.status).toBe(201);
+        const reveal = (await started.json()) as EnrollmentReveal;
+        expect((await over('DELETE', `/totp-enrollments/${reveal.id}`)).status).toBe(204);
+
+        const again = await over('POST', '/totp-enrollments', { password: TEST_PASSWORD });
+        const second = (await again.json()) as EnrollmentReveal;
+        const seed = base32Decode(second.secret);
+        const confirmed = await over('PUT', `/totp-enrollments/${second.id}`, { code: code(seed) });
+        expect(confirmed.status).toBe(201);
+        const fresh = cookieOf(confirmed);
+        const overFresh = (method: string, path: string, body?: unknown) =>
+          call(h, method, path, { cookie: fresh, https: false, headers: remote, body });
+
+        const codes = await overFresh('POST', '/totp-recovery-code-sets', {
+          password: TEST_PASSWORD,
+          code: code(seed, 1),
+        });
+        expect(codes.status).toBe(201);
+        const { recoveryCodes } = (await codes.json()) as { recoveryCodes: string[] };
+        const removed = await overFresh('DELETE', '/totp-factor', {
+          password: TEST_PASSWORD,
+          recoveryCode: recoveryCodes[0],
+        });
+        expect(removed.status).toBe(204);
+      });
+
+      test('set to true, startup warns once that the seed and recovery codes cross the network unencrypted', async () => {
+        ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'true';
+        const h = await boot();
+        const cookie = await sessionCookie(h);
+        for (let request = 0; request < 3; request += 1) {
+          await call(h, 'GET', '/totp-factor', { cookie, https: false, headers: remote });
+          await call(h, 'POST', '/totp-enrollments', {
+            cookie,
+            https: false,
+            headers: remote,
+            body: { password: 'nope' },
+          });
+        }
+
+        expect(plainHttpWarnings()).toHaveLength(1);
+        const [message] = plainHttpWarnings()[0] as [string];
+        expect(message).toContain('plain HTTP');
+        expect(message).toContain('TOTP seed and recovery codes');
+        expect(message).toContain('unencrypted');
+      });
+
+      test('a value that is not a boolean stops the router from starting', async () => {
+        ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'sometimes';
+        await expect(boot()).rejects.toThrow('allowhttp');
+        expect(plainHttpWarnings()).toEqual([]);
+      });
+
+      test('it does not lift the other gates: CSRF, the session and re-authentication still apply', async () => {
+        ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'true';
+        const h = await boot();
+        const cookie = await sessionCookie(h);
+
+        const crossOrigin = await call(h, 'POST', '/totp-enrollments', {
+          cookie,
+          https: false,
+          headers: { ...remote, Origin: 'http://evil.example' },
+          body: { password: TEST_PASSWORD },
+        });
+        expect(crossOrigin.status).toBe(403);
+        const noSession = await call(h, 'POST', '/totp-enrollments', {
+          https: false,
+          headers: remote,
+          body: { password: TEST_PASSWORD },
+        });
+        expect(noSession.status).toBe(401);
+        const wrongPassword = await call(h, 'POST', '/totp-enrollments', {
+          cookie,
+          https: false,
+          headers: remote,
+          body: { password: 'nope' },
+        });
+        expect(wrongPassword.status).toBe(403);
+        expect(await wrongPassword.json()).toEqual({ error: 'Reauthentication failed' });
+        expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+      });
+    });
 
     test('with trust proxy off, a spoofed X-Forwarded-Proto: https does not make the request HTTPS', async () => {
       const h = await boot({ trustProxy: false });

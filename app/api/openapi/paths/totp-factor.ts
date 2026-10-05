@@ -2,8 +2,9 @@ import { errorResponse, jsonResponse } from '../common.js';
 
 const securityNote =
   'Session-only: an API key at any scope, a Basic header, OIDC and anonymous access are all refused with 403. The session must belong to a local account.';
-const mutationNote =
-  'Needs same-origin CSRF validation, a JSON body, and HTTPS (or a genuinely local client). The caller re-authenticates in the request itself with their password and, while a factor is active, exactly one current TOTP code or unused recovery code.';
+const transportNote =
+  'HTTPS (or a genuinely local client), unless the operator has allowed plain HTTP with `DD_AUTH_TOTP_ALLOWHTTP=true`';
+const mutationNote = `Needs same-origin CSRF validation, a JSON body, and ${transportNote}. The caller re-authenticates in the request itself with their password and, while a factor is active, exactly one current TOTP code or unused recovery code.`;
 const noStoreHeader = {
   'Cache-Control': { description: 'Always `no-store`', schema: { type: 'string' } },
 } as const;
@@ -99,7 +100,7 @@ export const totpFactorPaths = {
       tags: ['Authentication', 'Actions'],
       summary: 'Confirm a two-factor enrollment with a code',
       operationId: 'confirmTotpEnrollment',
-      description: `Activates the factor atomically when the code from the authenticator app is right. The confirmation code is recorded as spent, so it cannot be replayed to log in. Activation moves the account to a new factor version, which ends every other session and closes their streams; the caller keeps a fresh session at factor assurance. The response carries the ten recovery codes **once**. ${securityNote} Needs same-origin CSRF validation, a JSON body, and HTTPS (or a genuinely local client).`,
+      description: `Activates the factor atomically when the code from the authenticator app is right. The confirmation code is recorded as spent, so it cannot be replayed to log in. Activation moves the account to a new factor version, which ends every other session and closes their streams; the caller keeps a fresh session at factor assurance. The response carries the ten recovery codes **once**. ${securityNote} Needs same-origin CSRF validation, a JSON body, and ${transportNote}.`,
       parameters: [enrollmentIdPathParam],
       requestBody: {
         required: true,
@@ -127,7 +128,7 @@ export const totpFactorPaths = {
       tags: ['Authentication', 'Actions'],
       summary: 'Cancel a pending two-factor enrollment',
       operationId: 'cancelTotpEnrollment',
-      description: `Idempotent: an unknown, expired, already-cancelled or foreign enrollment answers the same 204. An active factor is untouched. ${securityNote} Needs same-origin CSRF validation and HTTPS (or a genuinely local client).`,
+      description: `Idempotent: an unknown, expired, already-cancelled or foreign enrollment answers the same 204. An active factor is untouched. ${securityNote} Needs same-origin CSRF validation and ${transportNote}.`,
       parameters: [enrollmentIdPathParam],
       responses: {
         204: { description: 'Nothing pending for this id any more', headers: noStoreHeader },

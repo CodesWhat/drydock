@@ -69,10 +69,11 @@ function isLoopbackHost(hostHeader: string | undefined): boolean {
  * or a client that is really on this machine. Loopback means the socket peer
  * is loopback, the request names a loopback host, and nothing marks it as
  * forwarded: a reverse proxy on the same machine connects from 127.0.0.1 too,
- * and must not turn the public internet into "local".
+ * and must not turn the public internet into "local". `allowPlainHttp` is the
+ * operator's explicit opt-out of all of that (`DD_AUTH_TOTP_ALLOWHTTP`).
  */
-function isAllowedTransport(req: Request): boolean {
-  if (req.secure) {
+function isAllowedTransport(req: Request, allowPlainHttp: boolean): boolean {
+  if (allowPlainHttp || req.secure) {
     return true;
   }
   return (
@@ -85,9 +86,22 @@ function isAllowedTransport(req: Request): boolean {
 /**
  * The gate in front of every management route: a session of a local account
  * (never a key, a Basic header, OIDC or anonymous access), and for anything
- * that changes state, HTTPS or loopback.
+ * that changes state, HTTPS or loopback unless the operator allowed plain HTTP.
  */
-export const requireManagementSession: RequestHandler = (req, res, next) => {
+export function createManagementSessionGate({
+  allowPlainHttp,
+}: {
+  allowPlainHttp: boolean;
+}): RequestHandler {
+  return (req, res, next) => requireManagementSession(req, res, next, allowPlainHttp);
+}
+
+function requireManagementSession(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  allowPlainHttp: boolean,
+): void {
   const principal = getPrincipal(req);
   if (principal?.kind === 'api-key') {
     enforceApiKeyScope(req, res, SESSION_ONLY);
@@ -110,7 +124,7 @@ export const requireManagementSession: RequestHandler = (req, res, next) => {
     sendErrorResponse(res, 403, 'Two-factor authentication is only available for local accounts');
     return;
   }
-  if (req.method !== 'GET' && !isAllowedTransport(req)) {
+  if (req.method !== 'GET' && !isAllowedTransport(req, allowPlainHttp)) {
     sendErrorResponse(res, 403, {
       message: 'Two-factor management requires HTTPS',
       details: { reason: 'https-required' },
@@ -125,7 +139,7 @@ export const requireManagementSession: RequestHandler = (req, res, next) => {
   } satisfies ManagementContext;
   res.set('Cache-Control', 'no-store');
   next();
-};
+}
 
 /** What a call that must re-authenticate carries: the password, and a proof when a factor is active. */
 export interface ReauthBody {

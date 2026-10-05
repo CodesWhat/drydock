@@ -14,7 +14,7 @@
  * — the store's own configuration schema lives behind a module with real
  * side effects (opening the SQLite database) at import time, which a pure
  * validator must not trigger merely by being called. That's also why this
- * validates five section schemas, not eight: `getStoreConfiguration` in
+ * validates six section schemas, not nine: `getStoreConfiguration` in
  * `../index.ts` performs no Joi validation of its own — the schema that
  * validates its output lives in `../../store/index.ts`, which this module
  * deliberately never imports.
@@ -38,6 +38,7 @@ import {
   getRegistryConfigurations,
   getSecurityConfiguration,
   getServerConfiguration,
+  getTotpConfiguration,
   getTriggerConfigurations,
   getWatcherConfigurations,
   getWebhookConfiguration,
@@ -225,7 +226,7 @@ interface SectionSchema {
   getter: () => unknown;
 }
 
-// The five section-level Joi schemas that live in ../index.ts and validate
+// The six section-level Joi schemas that live in ../index.ts and validate
 // on every call (throwing on failure) rather than lazily on first read.
 // getStoreConfiguration is deliberately excluded — see the module doc
 // comment above for why.
@@ -235,6 +236,7 @@ const SECTION_SCHEMAS: SectionSchema[] = [
   { path: 'server.webhook', getter: getWebhookConfiguration },
   { path: 'security', getter: getSecurityConfiguration },
   { path: 'maturity.sweep', getter: getMaturitySweepConfiguration },
+  { path: 'auth.totp', getter: getTotpConfiguration },
 ];
 
 interface JoiLikeDetail {

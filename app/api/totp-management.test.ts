@@ -1,6 +1,6 @@
 vi.mock('../log/index.js', () => ({ default: { warn: vi.fn(), child: vi.fn() } }));
 
-import { guarded, requireManagementSession } from './totp-management.js';
+import { createManagementSessionGate, guarded } from './totp-management.js';
 
 function response(headersSent: boolean) {
   const res = { headersSent, status: vi.fn(), json: vi.fn() };
@@ -28,7 +28,7 @@ describe('guarded', () => {
   });
 });
 
-describe('requireManagementSession transport', () => {
+describe('the management session gate: transport', () => {
   const principal = {
     kind: 'session',
     username: 'scott',
@@ -42,11 +42,11 @@ describe('requireManagementSession transport', () => {
     },
   };
 
-  function run(remoteAddress: string | undefined) {
+  function run(remoteAddress: string | undefined, allowPlainHttp = false) {
     const res = { locals: {}, set: vi.fn(), status: vi.fn(), json: vi.fn() };
     res.status.mockReturnValue(res);
     const next = vi.fn();
-    requireManagementSession(
+    createManagementSessionGate({ allowPlainHttp })(
       {
         method: 'POST',
         principal,
@@ -70,6 +70,15 @@ describe('requireManagementSession transport', () => {
       const { res, next } = run(address);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+    },
+  );
+
+  test.each([['10.0.0.5'], ['::ffff:10.0.0.5'], [undefined]])(
+    'with plain HTTP allowed, a peer of %s gets through',
+    (address) => {
+      const { res, next } = run(address, true);
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
     },
   );
 });

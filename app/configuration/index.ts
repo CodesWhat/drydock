@@ -186,7 +186,7 @@ await replaceSecrets(ddEnvVars);
  * roadmap 7.1 slice 2 — so a drydock.yml mistake is reported with its YAML
  * path and the underlying Joi message before anything starts, instead of
  * surfacing later as a partial-degrade warning (a bad trigger silently
- * skipped) or, for the five section schemas, an unhandled throw from
+ * skipped) or, for the six section schemas, an unhandled throw from
  * whichever call site reads them first (`getServerConfiguration()` during
  * `api.init()`, etc).
  *
@@ -646,6 +646,34 @@ export function getAuthenticationConfigurations() {
     Object.entries(ddEnvVars).filter(([key]) => !key.toUpperCase().startsWith('DD_AUTH_TOTP_')),
   );
   return get('dd.auth', authEnvVars);
+}
+
+/**
+ * Get two-factor (TOTP) settings.
+ *
+ * `DD_AUTH_TOTP_ALLOWHTTP` is the one operator switch under the prefix: it
+ * lets factor management run over plain HTTP, which is refused otherwise
+ * because the seed and the recovery codes are shown in those responses. The
+ * key ring and its active key id share the prefix but are secrets with a
+ * loader of their own (`loadTotpKeyringFromEnv`), so this schema passes them
+ * by: they are neither validated nor returned here.
+ *
+ * Only the switch is handed to the validator, rather than everything under
+ * the prefix the way the other section getters do. A Joi error keeps the whole
+ * object it was given, and the key ring must never ride out of here in one.
+ */
+export function getTotpConfiguration(): { allowhttp: boolean } {
+  const configurationSchema = joi.object().keys({
+    allowhttp: joi.boolean().default(false),
+  });
+
+  const configurationToValidate = configurationSchema.validate({
+    allowhttp: ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP,
+  });
+  if (configurationToValidate.error) {
+    throw configurationToValidate.error;
+  }
+  return configurationToValidate.value;
 }
 
 /**

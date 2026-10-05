@@ -262,6 +262,29 @@ describe('validateConfiguration', () => {
       expect(result.errors[0].envKey).toBe('DD_SECURITY_SCANNER');
     });
 
+    test('auth.totp: rejects a non-boolean allowhttp, by its YAML path and env key', async () => {
+      const result = await validateConfiguration({ DD_AUTH_TOTP_ALLOWHTTP: 'banana' });
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe('auth.totp.allowhttp');
+      expect(result.errors[0].envKey).toBe('DD_AUTH_TOTP_ALLOWHTTP');
+    });
+
+    test('auth.totp: a boolean allowhttp beside the key ring produces no errors', async () => {
+      const result = await validateConfiguration({
+        DD_AUTH_TOTP_ALLOWHTTP: 'true',
+        DD_AUTH_TOTP_KEYRING: '{"k1":"x"}',
+        DD_AUTH_TOTP_ACTIVE_KEY_ID: 'k1',
+      });
+      expect(result.errors).toEqual([]);
+    });
+
+    test('auth.totp: the setting can be written in drydock.yml as auth.totp.allowhttp', async () => {
+      const values = flattenConfigTree({ auth: { totp: { allowhttp: 'sometimes' } } });
+      expect(values.DD_AUTH_TOTP_ALLOWHTTP).toBe('sometimes');
+      const result = await validateConfiguration(values);
+      expect(result.errors.map((error) => error.path)).toEqual(['auth.totp.allowhttp']);
+    });
+
     // maturity.sweep's only field (cron) is `joi.string().allow('')` with no
     // further constraint, and every value the env pipeline can hand it is
     // already a string (get() only ever produces strings from DD_* env

@@ -3,8 +3,9 @@
  *
  * Every route needs a browser session of a local account, same-origin CSRF and
  * its own session-keyed rate limit; every route that changes something also
- * needs HTTPS (or a genuinely local client) and the person to prove
- * themselves again in the request: their password, and, while a factor is
+ * needs HTTPS (or a genuinely local client, or the operator's explicit
+ * `DD_AUTH_TOTP_ALLOWHTTP` opt-in) and the person to prove themselves again in
+ * the request: their password, and, while a factor is
  * active, a current code or recovery code. The seed is generated here, held
  * encrypted under the external key ring, and shown once in the response that
  * starts the enrollment. Recovery codes are shown once in the response that
@@ -15,7 +16,7 @@
 import crypto from 'node:crypto';
 import express, { type Request, type RequestHandler, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import { getPublicUrl, getServerName } from '../configuration/index.js';
+import { getPublicUrl, getServerName, getTotpConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import type { AuditEntry } from '../model/audit.js';
 import {
@@ -54,6 +55,7 @@ import {
   verifyTotp,
 } from './totp-crypto.js';
 import {
+  createManagementSessionGate,
   getManagementContext,
   guarded,
   INVALID_BODY_MESSAGE,
@@ -62,7 +64,6 @@ import {
   type Reauthenticated,
   reauthenticate,
   refundReauthentication,
-  requireManagementSession,
   UNAVAILABLE_MESSAGE,
 } from './totp-management.js';
 import { requireTotpKeyring, seedBindingFor } from './totp-proof.js';
@@ -502,9 +503,22 @@ function createDeleteBodyReader(): RequestHandler {
   };
 }
 
+const PLAIN_HTTP_WARNING =
+  'DD_AUTH_TOTP_ALLOWHTTP=true: two-factor enrollment and management are allowed over plain HTTP. ' +
+  'The TOTP seed and recovery codes will cross the network unencrypted, where anyone on the path can read them. ' +
+  'Serve Drydock over HTTPS (set DD_SERVER_TRUSTPROXY behind a TLS-terminating proxy) and unset this.';
+
 export function init(): express.Router {
   const router = express.Router();
   startEnrollmentSweep();
+
+  // Read once, here: the router is built once at startup, so this is also
+  // where the operator is told, once, what the opt-in costs. An invalid value
+  // throws and stops the API from starting rather than being read as off.
+  const { allowhttp: allowPlainHttp } = getTotpConfiguration();
+  if (allowPlainHttp) {
+    log.warn(PLAIN_HTTP_WARNING);
+  }
 
   // Post-authentication, so the budget is per session: a person cannot be
   // starved by another caller behind the same address, and one session cannot
@@ -522,7 +536,7 @@ export function init(): express.Router {
     limiter,
     requireSameOriginForMutations,
     createDeleteBodyReader(),
-    requireManagementSession,
+    createManagementSessionGate({ allowPlainHttp }),
   ];
 
   router.get('/totp-factor', ...gates, scoped(SESSION_ONLY, guarded(getFactorStatus)));
