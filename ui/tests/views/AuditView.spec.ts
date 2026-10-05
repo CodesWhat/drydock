@@ -217,6 +217,29 @@ describe('AuditView', () => {
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
   });
 
+  it.each(['group-policy-set', 'group-policy-cleared'])(
+    'labels the target of %s as a group in the detail panel',
+    async (action) => {
+      setI18nLocale('en');
+      const entry = makeEntry({
+        action,
+        containerName: 'payments',
+        details: '{"group":"payments"}',
+      });
+      mockGetAuditLog.mockResolvedValue({ entries: [entry], total: 1, page: 1, limit: 50 });
+      const wrapper = await mountAuditView();
+      try {
+        await wrapper.get('.row-click-first').trigger('click');
+        const content = wrapper.get('.detail-content').text();
+        expect(content).toContain('Group');
+        expect(content).not.toContain('Container');
+        expect(content).toContain('payments');
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
   it.each([
     ['ar', 'انتهت فترة الانتظار'],
     ['de', 'Reifezeit abgelaufen'],

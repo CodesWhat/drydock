@@ -75,13 +75,16 @@ export function targetLabel(
   action: string,
   i18n?: { t: (key: string) => string; te: (key: string) => boolean },
 ): string {
+  const kind = action.includes('agent-disconnect')
+    ? 'agent'
+    : action.startsWith('group-policy-')
+      ? 'group'
+      : 'container';
   if (i18n) {
-    const key = action.includes('agent-disconnect')
-      ? 'auditView.target.agent'
-      : 'auditView.target.container';
+    const key = `auditView.target.${kind}`;
     if (i18n.te(key)) return i18n.t(key);
   }
-  return action.includes('agent-disconnect') ? 'Agent' : 'Container';
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 export function timeAgo(isoString: string, locale?: string, t?: TranslateFn): string {

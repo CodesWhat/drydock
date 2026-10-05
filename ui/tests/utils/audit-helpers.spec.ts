@@ -132,6 +132,16 @@ describe('audit-helpers', () => {
     it('returns Agent for agent-disconnect', () => {
       expect(targetLabel('agent-disconnect')).toBe('Agent');
     });
+    it.each(['group-policy-set', 'group-policy-cleared'])('returns Group for %s', (action) => {
+      expect(targetLabel(action)).toBe('Group');
+    });
+    it('uses i18n translation for group policy target when key exists', () => {
+      const i18n = {
+        te: (key: string) => key === 'auditView.target.group',
+        t: (key: string) => (key === 'auditView.target.group' ? 'グループ' : key),
+      };
+      expect(targetLabel('group-policy-set', i18n)).toBe('グループ');
+    });
     it('returns Container for other actions', () => {
       expect(targetLabel('update-available')).toBe('Container');
     });
