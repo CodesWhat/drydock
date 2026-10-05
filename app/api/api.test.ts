@@ -113,6 +113,7 @@ vi.mock('../configuration/index.js', async (importOriginal) => {
   };
 });
 vi.mock('./portwing', mockInit);
+vi.mock('./totp-factor', mockInit);
 
 describe('API Router', () => {
   let api;

@@ -10,6 +10,7 @@ import * as agentKeys from '../store/agent-keys.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { disconnectByKeyId } from './portwing-ws.js';
+import { refuseRecoveryAssuranceSession } from './recovery-assurance.js';
 import { SESSION_ONLY, scoped } from './route-scopes.js';
 
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
@@ -38,6 +39,12 @@ router.get(
 router.post(
   '/keys',
   scoped(SESSION_ONLY, (req: Request, res: Response) => {
+    // An agent key keeps working after a factor reset, so a session that
+    // signed in with a recovery code cannot register one.
+    if (refuseRecoveryAssuranceSession(req, res, 'register agent keys')) {
+      return;
+    }
+
     const { pubkeyBase64, label } = req.body as { pubkeyBase64?: unknown; label?: unknown };
 
     if (typeof pubkeyBase64 !== 'string' || !pubkeyBase64) {

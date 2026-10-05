@@ -211,6 +211,8 @@ The editors are new in unreleased v1.8 builds. They edit existing, local file-ow
 
 An invalid candidate body is a `400` with the same `path`/`envKey`/`message` shape `/validate` uses, and the file on disk is left byte-identical. A successful write reports `restartRequired` when the section it wrote needs a restart to take effect.
 
+A session that signed in with a two-factor recovery code can't write the `auth` section. The request gets `403` with `details.reason` set to `recovery-assurance`, under `auth` or any section name that flattens into it, such as `auth_basic_eve`. Every other section stays writable from that session. See [what a recovery login can't do](/docs/api#what-a-recovery-login-cant-do).
+
 ## Coexistence with the settings database
 
 The file and the SQLite `settings` table are disjoint by design: no `DD_*` variable sets a database-owned value (`internetlessMode`, `updateMode`, UI preferences, notification rules, API keys, approvals), and no database row names a component. A test pins that the section keys `GET /api/v1/config` can report never overlap the settings schema's own keys.

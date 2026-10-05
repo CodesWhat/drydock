@@ -3,10 +3,13 @@ import type { Database } from '../store/db/driver.js';
 import * as sessionModel from '../store/session.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import { SessionStore } from './session-store.js';
+import { registerSessionStreamCloser, trackSessionStream } from './session-streams.js';
+
+const { mockWarn } = vi.hoisted(() => ({ mockWarn: vi.fn() }));
 
 vi.mock('../log/index.js', () => ({
   default: {
-    child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
+    child: () => ({ info: vi.fn(), warn: mockWarn, debug: vi.fn(), error: vi.fn() }),
   },
 }));
 
@@ -255,6 +258,95 @@ describe('SessionStore', () => {
     } finally {
       timerStore.stop();
     }
+  });
+
+  describe('destroying a session closes the streams it opened', () => {
+    const closed: string[][] = [];
+    registerSessionStreamCloser((revoked) => {
+      closed.push([...revoked]);
+      return revoked.size;
+    });
+
+    beforeEach(() => {
+      closed.length = 0;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test('destroy tells the stream closers which session ended, and no other', async () => {
+      await setAsync('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+      await setAsync('sid-2', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+
+      await destroyAsync('sid-1');
+
+      expect(closed).toEqual([['sid-1']]);
+    });
+
+    test('destroy closes a stream tracked under that session, and leaves another session’s open', async () => {
+      const mine = vi.fn();
+      const theirs = vi.fn();
+      const forgetMine = trackSessionStream('sid-1', mine);
+      const forgetTheirs = trackSessionStream('sid-2', theirs);
+      await setAsync('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+      await setAsync('sid-2', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+
+      await destroyAsync('sid-1');
+
+      expect(mine).toHaveBeenCalledTimes(1);
+      expect(theirs).not.toHaveBeenCalled();
+      forgetMine();
+      forgetTheirs();
+    });
+
+    test('a tracked stream that throws while closing is logged and the row is still deleted', async () => {
+      const forget = trackSessionStream('sid-1', () => {
+        throw new Error('destroy exploded');
+      });
+      mockWarn.mockClear();
+      await setAsync('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+
+      await expect(destroyAsync('sid-1')).resolves.toBeUndefined();
+      forget();
+
+      expect(sessionModel.getSession('sid-1')).toBeUndefined();
+      expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('destroy exploded'));
+    });
+
+    test('a closer that throws is logged and the row is still deleted', async () => {
+      let armed = true;
+      registerSessionStreamCloser(() => {
+        if (armed) {
+          throw new Error('closer exploded');
+        }
+        return 0;
+      });
+      mockWarn.mockClear();
+      await setAsync('sid-1', sessionWithExpiry(new Date(Date.now() + TTL_MS)));
+
+      try {
+        await expect(destroyAsync('sid-1')).resolves.toBeUndefined();
+      } finally {
+        armed = false;
+      }
+
+      expect(sessionModel.getSession('sid-1')).toBeUndefined();
+      await expect(getAsync('sid-1')).resolves.toBeNull();
+      // The closers registered before it still heard about the session.
+      expect(closed).toEqual([['sid-1']]);
+      expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('closer exploded'));
+    });
+
+    test('the streams are closed before the row goes, so a delete that fails still closes them', async () => {
+      vi.spyOn(sessionModel, 'destroySession').mockImplementationOnce(() => {
+        expect(closed).toEqual([['sid-1']]);
+        throw new Error('boom');
+      });
+
+      await expect(destroyAsync('sid-1')).rejects.toThrow('boom');
+      expect(closed).toEqual([['sid-1']]);
+    });
   });
 
   describe('destroyed sessions stay destroyed', () => {

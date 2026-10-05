@@ -21,6 +21,7 @@
 import session from 'express-session';
 import logger from '../log/index.js';
 import * as sessionStore from '../store/session.js';
+import { closeStreamsForRevokedSessions } from './session-streams.js';
 
 const log = logger.child({ component: 'api.session-store' });
 
@@ -163,9 +164,18 @@ export class SessionStore extends session.Store {
     }
   }
 
+  /**
+   * Every way a session ends early comes through here: a logout, an eviction,
+   * a revocation, and the old id express-session drops when it regenerates. A
+   * stream authenticated once with that id and never reads the store again, so
+   * this is where it is told, and before the row goes so that a delete that
+   * fails still closes it. Closing never throws (a stream that fails to close
+   * is logged there), so nothing a stream does can keep the row alive.
+   */
   destroy(sid: string, callback?: (err?: unknown) => void): void {
     try {
       this.bury(sid);
+      closeStreamsForRevokedSessions([sid]);
       sessionStore.destroySession(sid);
       callback?.();
     } catch (error: unknown) {

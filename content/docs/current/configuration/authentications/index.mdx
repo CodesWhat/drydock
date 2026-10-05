@@ -28,6 +28,18 @@ To limit brute-force attempts on `POST /auth/login`, drydock tracks failed login
 
 If a lockout value is missing or invalid, drydock falls back to the corresponding default.
 
+## Two-factor (TOTP)
+
+Local Basic accounts can add a TOTP second factor through the [two-factor management API](/docs/api#two-factor-management). Enrolling, replacing or removing a factor is only allowed over HTTPS or from loopback, because those responses carry the TOTP secret and the recovery codes.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_AUTH_TOTP_ALLOWHTTP` | ⚪ | Allow two-factor enrollment and management over plain HTTP from any address | `true`, `false` | `false` |
+
+<Callout type="warn">With `DD_AUTH_TOTP_ALLOWHTTP=true`, the TOTP secret, the recovery codes and the password sent with each management call cross the network unencrypted. Anyone who can read that traffic can copy the second factor as it's being set up, which leaves the account with no second factor in practice. Drydock logs a warning at startup while it's on. Prefer HTTPS, or `DD_SERVER_TRUSTPROXY` behind a TLS-terminating proxy, and leave this unset.</Callout>
+
+The setting is read at startup. Any value other than `true` or `false` is a configuration error and Drydock won't start. In `drydock.yml` it's `auth.totp.allowhttp`.
+
 Currently, the following strategies are supported:
 
 - [**Basic**](/docs/configuration/authentications/basic)

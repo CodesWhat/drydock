@@ -1186,6 +1186,91 @@ describe('Config Router', () => {
       expect(auditCall.details).not.toContain('https://new.example/hook');
     });
 
+    describe('from a session that signed in with a recovery code', () => {
+      const localIdentity = (assurance: 'password' | 'totp' | 'recovery') => ({
+        type: 'local',
+        subjectId: 's'.repeat(64),
+        providerId: 'basic.default',
+        assurance,
+        factorVersion: 1,
+        issuedAt: 1,
+      });
+      const recoveryPrincipal = {
+        kind: 'session',
+        username: 'scott',
+        identity: localIdentity('recovery'),
+      };
+      const newAccount = { basic: { eve: { user: 'eve', hash: 'argon2id$...' } } };
+
+      async function put(section: string, principal: unknown, body: unknown = newAccount) {
+        mockWriteConfigurationSection.mockResolvedValue(writtenOutcome());
+        configRouter.init();
+        const res = createResponse();
+        await getPutHandler('/:section')({ params: { section }, body, principal }, res);
+        return res;
+      }
+
+      // A section name is flattened to DD_<SECTION>_..., so `auth_basic_eve`
+      // writes DD_AUTH_BASIC_EVE_* exactly as `auth` with a nested body does.
+      test.each([
+        ['auth'],
+        ['AUTH'],
+        [' Auth '],
+        ['auth_basic_eve'],
+        ['AUTH_Basic_Eve'],
+        ['auth_totp'],
+        ['auth_'],
+      ])(
+        'cannot write the authentication section, spelled %j: 403 with the reason, nothing written or audited',
+        async (section) => {
+          const res = await put(section, recoveryPrincipal);
+
+          expect(res.status).toHaveBeenCalledWith(403);
+          expect(res.json).toHaveBeenCalledWith({
+            error:
+              'A session that signed in with a recovery code cannot change the authentication configuration. Sign in with a code from your authenticator app and try again.',
+            details: { reason: 'recovery-assurance' },
+          });
+          expect(mockWriteConfigurationSection).not.toHaveBeenCalled();
+          expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+        },
+      );
+
+      test.each([['notification'], ['server'], ['watcher'], ['authx'], ['_auth'], ['oauth'], ['']])(
+        'can still write a section that is not authentication, such as %j',
+        async (section) => {
+          const res = await put(section, recoveryPrincipal, { anything: 'at all' });
+
+          expect(mockWriteConfigurationSection).toHaveBeenCalledWith(section, {
+            anything: 'at all',
+          });
+          expect(res.status).toHaveBeenCalledWith(200);
+        },
+      );
+
+      test.each([
+        [
+          'a code from the authenticator app',
+          { kind: 'session', username: 'scott', identity: localIdentity('totp') },
+        ],
+        [
+          'a password and no factor',
+          { kind: 'session', username: 'scott', identity: localIdentity('password') },
+        ],
+        ['an OIDC provider', { kind: 'session', username: 'scott', identity: { type: 'oidc' } }],
+        ['a release before two-factor support', { kind: 'session', username: 'scott' }],
+        ['an API key holding admin', { kind: 'api-key', username: 'ci', scopes: ['admin'] }],
+      ])(
+        'a caller that signed in with %s still writes the authentication section',
+        async (_name, principal) => {
+          const res = await put('auth', principal);
+
+          expect(mockWriteConfigurationSection).toHaveBeenCalledWith('auth', newAccount);
+          expect(res.status).toHaveBeenCalledWith(200);
+        },
+      );
+    });
+
     test('a db-owned outcome refuses with 409 pointing at PATCH /api/v1/settings', async () => {
       mockWriteConfigurationSection.mockResolvedValue({ kind: 'db-owned', section: 'settings' });
       configRouter.init();

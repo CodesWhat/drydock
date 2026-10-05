@@ -13,6 +13,7 @@ import type { Database } from './driver.js';
 import {
   INITIAL_SCHEMA_SQL,
   SCHEMA_MIGRATIONS_TABLE_SQL,
+  TOTP_ENROLLMENT_FAILURES_SQL,
   TOTP_SUBJECT_STATE_SQL,
   TOTP_SUBJECT_USERNAME_SQL,
   TOTP_TABLES_SQL,
@@ -47,6 +48,9 @@ export const TOTP_SUBJECT_USERNAME_MIGRATION_VERSION = 11;
 
 /** Per-subject session revocation marker and second-factor failure state. */
 export const TOTP_SUBJECT_STATE_MIGRATION_VERSION = 12;
+
+/** Wrong confirmation codes counted per pending enrollment. */
+export const TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION = 13;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -212,6 +216,13 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
     // and wrong second-factor proofs are counted per subject and persisted.
     note: 'add session revocation marker and factor failure state to totp_subject_versions (spec 11.1.2 slice 3)',
     sql: TOTP_SUBJECT_STATE_SQL,
+  },
+  {
+    version: TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+    // Spec 11.1.2 slice 4: a confirmation is a guess at the pending seed, so
+    // wrong ones are counted on the enrollment and the fifth deletes it.
+    note: 'add totp_enrollments.failed_attempts (spec 11.1.2 slice 4)',
+    sql: TOTP_ENROLLMENT_FAILURES_SQL,
   },
 ];
 

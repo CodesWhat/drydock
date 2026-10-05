@@ -19,6 +19,7 @@ var {
   mockLoggerDebug,
   mockLoggerWarn,
   mockFindApiKeyById,
+  mockCheckSessionIdentity,
   mockBootId,
   mockSseEventBuffer,
 } = vi.hoisted(() => {
@@ -92,6 +93,7 @@ var {
     mockLoggerDebug: vi.fn(),
     mockLoggerWarn: vi.fn(),
     mockFindApiKeyById: vi.fn(),
+    mockCheckSessionIdentity: vi.fn(),
     mockBootId: bootId,
     mockSseEventBuffer,
   };
@@ -154,6 +156,8 @@ vi.mock('../store/api-key.js', async (importOriginal) => ({
   findApiKeyById: mockFindApiKeyById,
 }));
 
+vi.mock('./totp-identity.js', () => ({ checkSessionIdentity: mockCheckSessionIdentity }));
+
 vi.mock('../log', () => ({
   default: {
     child: vi.fn(() => ({
@@ -163,7 +167,7 @@ vi.mock('../log', () => ({
   },
 }));
 
-import { closeStreamsForRevokedSessions } from './session-streams.js';
+import { closeStreamsForRevokedSessions, registerSessionStreamCloser } from './session-streams.js';
 import * as sseRouter from './sse.js';
 
 function getHandler() {
@@ -305,6 +309,9 @@ describe('SSE Router', () => {
     sseRouter._connectionsPerIp.clear();
     sseRouter._connectionsPerSession.clear();
     sseRouter._clearPendingSelfUpdateAcks();
+    // Every session is good unless a test says otherwise.
+    mockCheckSessionIdentity.mockReset();
+    mockCheckSessionIdentity.mockReturnValue('valid');
   });
 
   afterEach(() => {
@@ -2632,6 +2639,82 @@ describe('SSE Router', () => {
 
         expect(mockFindApiKeyById).not.toHaveBeenCalled();
         expect(res.write).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('the heartbeat asks the session validator again', () => {
+      const identity = {
+        type: 'local',
+        subjectId: 's'.repeat(64),
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+        issuedAt: 1,
+      };
+
+      test('a stream whose session is still valid keeps its heartbeat', () => {
+        const handler = getHandler();
+        const local = connectSseClient(handler, '10.2.0.1', {
+          kind: 'session',
+          username: 'scott',
+          identity,
+        });
+        const legacy = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        local.res.write.mockClear();
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        // The validator sees what the session restored, a legacy one included.
+        expect(mockCheckSessionIdentity).toHaveBeenCalledWith({ username: 'scott', identity });
+        expect(mockCheckSessionIdentity).toHaveBeenCalledWith({
+          username: 'jo',
+          identity: undefined,
+        });
+        expect(local.res.destroy).not.toHaveBeenCalled();
+        expect(legacy.res.destroy).not.toHaveBeenCalled();
+        expect(local.res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+      });
+
+      test.each([['stale'], ['unavailable']])(
+        'a stream whose session reads as %s is closed instead of sent a heartbeat, and no other',
+        (status) => {
+          const handler = getHandler();
+          const gone = connectSseClient(handler, '10.2.0.1', {
+            kind: 'session',
+            username: 'scott',
+          });
+          const kept = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+          const anonymous = connectSseClient(handler, '10.2.0.3');
+          mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+            user.username === 'scott' ? status : 'valid',
+          );
+          gone.res.write.mockClear();
+
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+          expect(gone.res.destroy).toHaveBeenCalled();
+          expect(gone.res.write).not.toHaveBeenCalled();
+          expect(sseRouter._clients.has(gone.res)).toBe(false);
+          expect(kept.res.destroy).not.toHaveBeenCalled();
+          expect(anonymous.res.destroy).not.toHaveBeenCalled();
+          expect(mockCheckSessionIdentity).toHaveBeenCalledTimes(2);
+        },
+      );
+
+      test('the verdict goes through the shared hook, so the session’s other streams close with it', () => {
+        const closer = vi.fn(() => 0);
+        registerSessionStreamCloser(closer);
+        const handler = getHandler();
+        connectSseClient(handler, '10.2.0.1', { kind: 'session', username: 'scott' });
+        connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+          user.username === 'scott' ? 'stale' : 'valid',
+        );
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(closer).toHaveBeenCalledTimes(1);
+        expect(closer).toHaveBeenCalledWith(new Set(['session-10.2.0.1']));
       });
     });
 

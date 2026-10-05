@@ -1,0 +1,38 @@
+const { mockSweep, mockWarn } = vi.hoisted(() => ({ mockSweep: vi.fn(), mockWarn: vi.fn() }));
+
+vi.mock('../log/index.js', () => ({ default: { warn: mockWarn, child: vi.fn() } }));
+vi.mock('../store/totp.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../store/totp.js')>()),
+  sweepExpiredEnrollments: mockSweep,
+}));
+
+import { init } from './totp-factor.js';
+
+describe('the hourly enrollment sweep', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('deletes expired enrollments every hour, once per timer even after a second init', () => {
+    init();
+    init();
+    vi.advanceTimersByTime(60 * 60 * 1000);
+    expect(mockSweep).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(60 * 60 * 1000);
+    expect(mockSweep).toHaveBeenCalledTimes(2);
+  });
+
+  test('a store fault is logged and the timer keeps running', () => {
+    mockSweep.mockImplementationOnce(() => {
+      throw new Error('store down');
+    });
+    init();
+    vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+    expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('store down'));
+    expect(mockSweep).toHaveBeenCalledTimes(2);
+  });
+});

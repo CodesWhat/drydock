@@ -49,6 +49,7 @@ import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
 import * as statsRouter from './stats.js';
 import * as storeRouter from './store.js';
+import * as totpFactorRouter from './totp-factor.js';
 import * as triggerRouter from './trigger.js';
 import * as updateOperationsRouter from './update-operations.js';
 import * as watcherRouter from './watcher.js';
@@ -191,6 +192,10 @@ export function init(): express.Router {
 
   // Mount debug dump router
   mountRouter(router, '/debug', debugRouter.init());
+
+  // Mount the two-factor management router (session-only, HTTPS, reauthenticated —
+  // spec 11.1.2 slice 4)
+  mountRouter(router, '/auth', totpFactorRouter.init());
 
   // Mount config router (effective configuration, redacted, session-only —
   // roadmap 7.1 slice 4)
