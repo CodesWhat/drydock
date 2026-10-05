@@ -1,4 +1,5 @@
 import type { Container } from '../../../model/container.js';
+import { getUpdateMode } from '../../../store/settings.js';
 import type { CrudHandlerContext } from '../crud-context.js';
 import { toApiContainer } from '../shared.js';
 import {
@@ -7,6 +8,8 @@ import {
   buildContainerListResponse,
   createGetContainersHandler,
 } from './list.js';
+
+vi.mock('../../../store/settings.js', () => ({ getUpdateMode: vi.fn(() => 'auto') }));
 
 function createMockContext(operation?: unknown): CrudHandlerContext {
   return {
@@ -1450,6 +1453,31 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
       ...overrides,
     });
   }
+
+  test('supplies the global update mode and lets a stricter group policy lower it', () => {
+    const context = createMockContext();
+    expect(
+      (attachUpdateEligibility(context, createContainerWithUpdate()) as any).updateEligibility
+        .updateMode,
+    ).toEqual({ value: 'auto', source: 'global' });
+
+    const grouped = createContainerWithUpdate({
+      groupPolicy: {
+        id: 'policy-1',
+        group: 'payments',
+        revision: 1,
+        updatePolicy: {},
+        actions: { updateMode: 'manual' },
+      },
+    });
+    expect((attachUpdateEligibility(context, grouped) as any).updateEligibility.updateMode).toEqual(
+      { value: 'manual', source: 'group', group: 'payments' },
+    );
+    vi.mocked(getUpdateMode).mockReturnValueOnce('notify');
+    expect((attachUpdateEligibility(context, grouped) as any).updateEligibility.updateMode).toEqual(
+      { value: 'notify', source: 'global' },
+    );
+  });
 
   test('calls getTriggers when it is defined on the context', () => {
     const getTriggers = vi.fn().mockReturnValue({});

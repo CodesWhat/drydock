@@ -19,6 +19,8 @@ import {
   isRollbackContainer as isRollbackContainerHelper,
 } from '../../model/container.js';
 import { getContainerGroup } from '../../model/container-group.js';
+import { getGroupExcludeEntries, resolveUpdateModeCeiling } from '../../model/group-policy.js';
+import { withCurrentGroupPolicy } from '../../store/group-policy.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
@@ -933,6 +935,21 @@ class Trigger<
 
   private isAutomaticActionDispatchBlocked() {
     return this.getCategory() === 'action' && getUpdateMode() !== 'auto';
+  }
+
+  /**
+   * The per-container half of the mode gate (spec 7.3): a group policy's `updateMode` is a
+   * ceiling below `auto`, so any container whose group sets one is never dispatched
+   * automatically, whatever the global mode is. Always checked after the trigger-level
+   * global gate above, and it reads only the container's own group snapshot, so it never
+   * grants anything the global mode refused. Notification triggers are not action-category
+   * and are never held back by it.
+   */
+  private isAutomaticActionDispatchBlockedFor(container: Container) {
+    return (
+      this.getCategory() === 'action' &&
+      resolveUpdateModeCeiling(container, 'auto').value !== 'auto'
+    );
   }
 
   private getAutoMode() {
@@ -2297,6 +2314,21 @@ class Trigger<
       };
     }
 
+    // A group's exclusion list reaches exactly what dd.action.exclude reaches: this plain
+    // path serves the command triggers, and notification triggers never read it.
+    const groupExcludes =
+      category === 'action'
+        ? getGroupExcludeEntries(containerResult).filter((entry) =>
+            this.isTriggerExcluded(containerResult, entry),
+          )
+        : [];
+    if (groupExcludes.length > 0) {
+      return {
+        allowed: false,
+        reason: `group policy '${(containerResult.groupPolicy as NonNullable<Container['groupPolicy']>).group}' excludes this trigger (${groupExcludes.join(',')}), triggerInclude=${containerResult.actionTriggerInclude ?? '<none>'}`,
+      };
+    }
+
     const { include: triggerInclude, exclude: triggerExclude } =
       getContainerTriggerFiltersForCategory(containerResult, category);
     const included = this.isTriggerIncluded(containerResult, triggerInclude);
@@ -2475,6 +2507,10 @@ class Trigger<
       logContainer.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
+    if (this.isAutomaticActionDispatchBlockedFor(container)) {
+      logContainer.debug('Group policy update mode does not allow automatic actions => ignore');
+      return;
+    }
     // Every action-category trigger is held back by the window, not only the ones that run
     // the Docker update lifecycle. A `command` action runs an arbitrary shell command the
     // operator attached to an update, which is exactly the kind of unattended work a window
@@ -2542,9 +2578,10 @@ class Trigger<
    * @param containerReport
    * @returns {Promise<void>}
    */
-  async handleContainerReport(containerReport: ContainerReport) {
+  async handleContainerReport(emittedReport: ContainerReport) {
     // Strip Docker recreate alias prefixes before any trigger processing
-    Trigger.canonicalizeReportName(containerReport);
+    Trigger.canonicalizeReportName(emittedReport);
+    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
 
     // Confirmation cleanup must run regardless of the current global mode or
     // notification-rule routing. Otherwise an auto -> manual/notify -> auto
@@ -2557,6 +2594,12 @@ class Trigger<
 
     if (this.isAutomaticActionDispatchBlocked()) {
       this.log.debug('Global update mode does not allow automatic actions => ignore');
+      return;
+    }
+    if (this.isAutomaticActionDispatchBlockedFor(containerReport.container)) {
+      this.log.debug(
+        `Group policy update mode does not allow automatic actions for ${fullName(containerReport.container)} => ignore`,
+      );
       return;
     }
 
@@ -2604,15 +2647,16 @@ class Trigger<
    * @param containerReports
    * @returns {Promise<void>}
    */
-  async handleContainerReports(containerReports: ContainerReport[]) {
+  async handleContainerReports(emittedReports: ContainerReport[]) {
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
 
     // Strip Docker recreate alias prefixes before any trigger processing
-    for (const report of containerReports) {
+    for (const report of emittedReports) {
       Trigger.canonicalizeReportName(report);
     }
+    const containerReports = emittedReports.map((report) => Trigger.withCurrentGroupPolicy(report));
 
     // Mirror the simple/digest suppression-lift (#408): a watcher report
     // confirming updateAvailable=false means the post-update state has landed,
@@ -2629,6 +2673,11 @@ class Trigger<
       this.log.debug('Global update mode does not allow automatic batch actions => ignore');
       return;
     }
+    // Per report, after the global gate: a member whose group caps the mode never enters the
+    // batch, so it is never reserved, sent or recorded as notified.
+    const dispatchableReports = containerReports.filter(
+      (report) => !this.isAutomaticActionDispatchBlockedFor(report.container),
+    );
 
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
@@ -2639,7 +2688,13 @@ class Trigger<
     // exact token its own reserve call returned, so the release loop below
     // frees only the reservation it actually holds (DR-62).
     const reservedContainers: Array<{ container: Container; token: OnceReservationToken }> = [];
-    for (const container of this.getBatchRetryContainers(containerReports)) {
+    for (const retried of this.getBatchRetryContainers(containerReports)) {
+      const container = withCurrentGroupPolicy(retried);
+      // A retry is judged on the current container, so a group that has since capped the mode
+      // holds it back without a reservation. It stays buffered, as it does under a global gate.
+      if (this.isAutomaticActionDispatchBlockedFor(container)) {
+        continue;
+      }
       const businessId = getContainerNotificationKey(container) || fullName(container);
       // Retry entries skip the eligibility check - they already passed it when
       // they were first batched - but they take the same reservation, or two
@@ -2660,7 +2715,7 @@ class Trigger<
       reservedContainers.push({ container, token });
       containersToSendByBusinessId.set(businessId, container);
     }
-    for (const containerReport of containerReports) {
+    for (const containerReport of dispatchableReports) {
       const token = this.shouldHandleBatchContainerReport(containerReport);
       if (token) {
         reservedContainers.push({ container: containerReport.container, token });
@@ -2672,6 +2727,9 @@ class Trigger<
       }
     }
     const containersToSend = Array.from(containersToSendByBusinessId.values());
+    const groupHeldReports = containerReports
+      .filter((report) => this.isAutomaticActionDispatchBlockedFor(report.container))
+      .map((report) => report.container);
     // Nothing to release here: every reserved container was also set into the
     // map above, so an empty send list means no reservation was taken.
     if (containersToSend.length === 0) {
@@ -2687,14 +2745,16 @@ class Trigger<
     try {
       this.log.debug('Run batch');
       if (this.isUpdateActionTrigger()) {
-        const batchResult = await this.runAcceptedUpdateBatch(containersToSend);
+        const batchResult = await this.runAcceptedUpdateBatch(containersToSend, groupHeldReports);
         if (!batchResult.dispatched) {
           return;
         }
         maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        maintenanceWindowDeferredIds =
-          this.collectBatchMaintenanceWindowDeferredIds(containersToSend);
+        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(
+          containersToSend,
+          groupHeldReports,
+        );
         const readyToSend = containersToSend.filter(
           (container) =>
             !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
@@ -2767,8 +2827,9 @@ class Trigger<
   /**
    * Handle container report (digest mode — single container from simple event).
    */
-  async handleContainerReportDigest(containerReport: ContainerReport) {
-    Trigger.canonicalizeReportName(containerReport);
+  async handleContainerReportDigest(emittedReport: ContainerReport) {
+    Trigger.canonicalizeReportName(emittedReport);
+    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
 
     const { container } = containerReport;
     const containerName = getContainerNotificationKey(container) || fullName(container);
@@ -2789,6 +2850,12 @@ class Trigger<
     }
     if (this.isAutomaticActionDispatchBlocked()) {
       this.log.debug('Global update mode does not allow automatic digest actions => ignore');
+      return;
+    }
+    if (this.isAutomaticActionDispatchBlockedFor(container)) {
+      this.log.debug(
+        `Group policy update mode does not allow automatic digest actions for ${containerName} => ignore`,
+      );
       return;
     }
     // One binding for the kind this method reserves, logs and releases on, so
@@ -2918,13 +2985,20 @@ class Trigger<
     }
     const bufferedEntries = Array.from(this.digestBuffer.entries());
     const currentContainersByBusinessId = this.getCurrentNotificationContainers();
+    // Entries evicted because their group holds them: they are not sent, but the entries that
+    // depend on them must not be sent without them.
+    const groupHeldAtFlush: Container[] = [];
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId(bufferedContainer);
       const stillHasUpdate = !currentContainer || currentContainer.updateAvailable;
 
       if (stillHasUpdate) {
-        const evaluatedContainer =
-          currentContainer === undefined ? bufferedContainer : currentContainer;
+        const toEvaluate = currentContainer === undefined ? bufferedContainer : currentContainer;
+        const evaluatedContainer = toEvaluate ? withCurrentGroupPolicy(toEvaluate) : toEvaluate;
+
+        if (evaluatedContainer && this.isAutomaticActionDispatchBlockedFor(evaluatedContainer)) {
+          groupHeldAtFlush.push(evaluatedContainer);
+        }
 
         // Re-check the action-policy dispatch winner at flush time, not just
         // at buffer time (handleContainerReportDigest / shouldHandleDigest-
@@ -2939,6 +3013,11 @@ class Trigger<
         // `isActionPolicyDispatchWinner`.
         if (
           evaluatedContainer &&
+          !this.isAutomaticActionDispatchBlockedFor(evaluatedContainer) &&
+          // `isActionPolicyDispatchWinner` is true for every non-update action trigger, so a
+          // command trigger is re-checked against its include and exclude lists (the group's
+          // exclusion list among them) here, as buffering checked them.
+          (this.getCategory() !== 'action' || this.mustTrigger(evaluatedContainer)) &&
           this.isActionPolicyDispatchWinner(evaluatedContainer) &&
           this.isGroupRoutedNotificationEligible(evaluatedContainer, 'update-available')
         ) {
@@ -2952,7 +3031,7 @@ class Trigger<
         }
 
         this.log.debug(
-          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner or eligible for the notification group)`,
+          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner, capped or excluded by its group policy, or eligible for the notification group)`,
         );
       }
 
@@ -3022,13 +3101,16 @@ class Trigger<
     this.isDigestFlushInProgress = true;
     try {
       if (this.isUpdateActionTrigger()) {
-        const batchResult = await this.runAcceptedUpdateBatch(containers);
+        const batchResult = await this.runAcceptedUpdateBatch(containers, groupHeldAtFlush);
         if (!batchResult.dispatched) {
           return;
         }
         maintenanceWindowDeferredIds = batchResult.deferredIds;
       } else {
-        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(containers);
+        maintenanceWindowDeferredIds = this.collectBatchMaintenanceWindowDeferredIds(
+          containers,
+          groupHeldAtFlush,
+        );
         const readyToSend = containers.filter(
           (container) =>
             !maintenanceWindowDeferredIds.has(getMaintenanceWindowDeferralKey(container)),
@@ -3365,6 +3447,19 @@ class Trigger<
    * Belt-and-suspenders guard — the watcher should have already canonicalized,
    * but this catches any remaining leaks regardless of environment quirks.
    */
+  /**
+   * The report with its container's group policy read live. The report's snapshot is as old
+   * as the store write that produced it, and the group rule has to apply the way the global
+   * mode does, as of this dispatch. Returns the same report when nothing changed.
+   */
+  static withCurrentGroupPolicy(report: ContainerReport): ContainerReport {
+    if (!report.container) {
+      return report;
+    }
+    const container = withCurrentGroupPolicy(report.container);
+    return container === report.container ? report : { ...report, container };
+  }
+
   static canonicalizeReportName(report: ContainerReport): void {
     const name = report.container?.name;
     if (typeof name !== 'string') return;
@@ -3819,8 +3914,17 @@ class Trigger<
    * straight to `triggerBatch`, and both must leave a window-deferred container alone.
    * Callers outside `runAcceptedUpdateBatch` check the action category first; a notification
    * trigger never defers.
+   *
+   * `groupHeld` are containers a group policy holds back that are not part of `containers`
+   * (the caller already took them out). They are never in the returned set, but they seed
+   * the same dependent walk a window-deferred upstream does: a dependent whose upstream is
+   * held would otherwise lose its `depends_on` edge, which is unresolved without the
+   * upstream in the graph, and update alone.
    */
-  private collectMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
+  private collectMaintenanceWindowDeferredIds(
+    containers: Container[],
+    groupHeld: Container[] = [],
+  ): Set<string> {
     const windowDeferred: Container[] = [];
     // Two views of one decision. The dependency walk below keys on `container.id` because
     // that is what buildDependencyGraph emits; callers get the business-id view, which stays
@@ -3845,11 +3949,14 @@ class Trigger<
     // §3): defer it too. It re-enters together with its now-eligible
     // dependency on a later scan once the window opens.
     const dependencyDeferred: Container[] = [];
-    if (windowDeferred.length > 0) {
-      const { edges } = buildDependencyGraph(containers);
+    const groupDeferred: Container[] = [];
+    const upstreamBlocked = [...windowDeferred, ...groupHeld];
+    if (upstreamBlocked.length > 0) {
+      const { edges } = buildDependencyGraph([...containers, ...groupHeld]);
       const dependentsByDependency = buildDependentsByDependency(edges);
       const containerById = new Map(containers.map((container) => [container.id, container]));
-      for (const blockedContainer of windowDeferred) {
+      for (const blockedContainer of upstreamBlocked) {
+        const blockedByWindow = windowDeferred.includes(blockedContainer);
         for (const dependentId of collectTransitiveDependents(
           blockedContainer.id,
           dependentsByDependency,
@@ -3857,14 +3964,16 @@ class Trigger<
           if (deferredContainerIds.has(dependentId)) {
             continue;
           }
+          // A dependent that is itself group-held is not part of this batch.
           const dependent = containerById.get(dependentId);
-          /* v8 ignore next 3 -- defensive only: every dependent id originates from
-             buildDependencyGraph(containers), so containerById (keyed the same way)
-             always has a match. */
           if (!dependent) {
             continue;
           }
           markDeferred(dependent);
+          if (!blockedByWindow) {
+            groupDeferred.push(dependent);
+            continue;
+          }
           dependencyDeferred.push(dependent);
           // Counted on the same metric as a directly window-deferred container, labelled by
           // the dependent's own watcher, which is not necessarily the one holding the window.
@@ -3890,6 +3999,12 @@ class Trigger<
       );
     }
 
+    for (const container of groupDeferred) {
+      this.log.debug(
+        `Deferring auto update for ${fullName(container)} because an upstream dependency is held by its group policy this cycle`,
+      );
+    }
+
     return deferredKeys;
   }
 
@@ -3897,9 +4012,12 @@ class Trigger<
    * The window-deferred ids for a batch a non-update action trigger (`command`) is about to
    * send itself, or an empty set for a notification trigger, which the window never gates.
    */
-  private collectBatchMaintenanceWindowDeferredIds(containers: Container[]): Set<string> {
+  private collectBatchMaintenanceWindowDeferredIds(
+    containers: Container[],
+    groupHeld: Container[] = [],
+  ): Set<string> {
     return this.getCategory() === 'action'
-      ? this.collectMaintenanceWindowDeferredIds(containers)
+      ? this.collectMaintenanceWindowDeferredIds(containers, groupHeld)
       : new Set<string>();
   }
 
@@ -3914,14 +4032,27 @@ class Trigger<
    */
   private async runAcceptedUpdateBatch(
     containers: Container[],
+    heldBeforeBatch: Container[] = [],
   ): Promise<{ dispatched: boolean; deferredIds: Set<string> }> {
     if (getUpdateMode() !== 'auto') {
       this.log.debug('Global update mode does not allow automatic batch updates => ignore');
       return { dispatched: false, deferredIds: new Set<string>() };
     }
 
-    const deferredIds = this.collectMaintenanceWindowDeferredIds(containers);
-    const ready = containers.filter(
+    // A member whose group caps the mode is held back like a window-deferred one: not
+    // enqueued, and not recorded as notified, so lifting the cap lets the same result through.
+    const groupHeld = containers.filter((container) =>
+      this.isAutomaticActionDispatchBlockedFor(container),
+    );
+    const groupAllowed = containers.filter((container) => !groupHeld.includes(container));
+    const deferredIds = this.collectMaintenanceWindowDeferredIds(groupAllowed, [
+      ...groupHeld,
+      ...heldBeforeBatch,
+    ]);
+    for (const container of groupHeld) {
+      deferredIds.add(getMaintenanceWindowDeferralKey(container));
+    }
+    const ready = groupAllowed.filter(
       (container) => !deferredIds.has(getMaintenanceWindowDeferralKey(container)),
     );
 

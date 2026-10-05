@@ -14,6 +14,7 @@
 import type { UpdateMode } from '../store/settings.js';
 import { type ActionPolicyTrigger, selectActionTrigger } from './action-policy.js';
 import { type Container, getContainerIdentityKey, hasRawUpdate } from './container.js';
+import { resolveUpdateModeCeiling } from './group-policy.js';
 import {
   computeUpdateEligibility,
   getPrimaryHardBlocker,
@@ -116,15 +117,18 @@ export interface ShouldQueueForApprovalOptions {
 
 /**
  * Whether the normal trigger path will apply this candidate on its own. The global
- * `updateMode` ceiling is applied here rather than inside the 6.0.1 resolver, which
- * stays mode-agnostic so display, manual admission and auto-dispatch can all reuse it.
+ * `updateMode` ceiling, lowered to the container's group ceiling when that is stricter, is
+ * applied here rather than inside the 6.0.1 resolver, which stays mode-agnostic so display,
+ * manual admission and auto-dispatch can all reuse it.
  */
 export function isAutoDispatchable(
   container: Container,
   triggers: Record<string, ActionPolicyTrigger> | undefined,
   updateMode: UpdateMode,
 ): boolean {
-  if (updateMode !== 'auto') {
+  // The group ceiling is composed here too, so a `manual` group routes its members'
+  // candidates into the queue and `reconcile.ts` needs no change of its own.
+  if (resolveUpdateModeCeiling(container, updateMode).value !== 'auto') {
     return false;
   }
   return selectActionTrigger(triggers, container, { requireAuto: true })?.state === 'auto';
@@ -184,6 +188,7 @@ export function classifyApprovalCandidate(
     // Without this, approving a row would make the next watch cycle stop seeing its own
     // candidate.
     getActiveOperation: () => undefined,
+    updateMode,
     ...(options.isSelfUpdateAvailable !== undefined
       ? { isSelfUpdateAvailable: options.isSelfUpdateAvailable }
       : {}),

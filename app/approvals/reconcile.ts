@@ -52,6 +52,7 @@ import {
   insertApproval,
   updateApproval,
 } from '../store/approval.js';
+import { withCurrentGroupPolicy } from '../store/group-policy.js';
 import { getUpdateMode } from '../store/settings.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 import { getErrorMessage } from '../util/error.js';
@@ -100,10 +101,14 @@ function resolveRows(
  * policy changed), and `changed` only describes the detection result.
  * @param container
  */
-function reconcileContainer(container: Container | undefined): void {
-  if (!container?.id) {
+function reconcileContainer(reported: Container | undefined): void {
+  if (!reported?.id) {
     return;
   }
+  // The group rule is read live, as the global mode is: a report is built at store-write
+  // time and can predate a policy saved since, which would resolve a row `auto-applied` on
+  // a stale read that the dedupe on container and candidate below never requeues.
+  const container = withCurrentGroupPolicy(reported);
 
   const openRows = findApprovalsByContainerId(container.id).filter(isOpen);
   const verdict = classifyApprovalCandidate(

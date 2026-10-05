@@ -3,14 +3,20 @@ var {
   mockGetActiveOperationByContainerId,
   mockGetActiveOperationByContainerIdentity,
   mockGetAgent,
+  mockGetUpdateMode,
 } = vi.hoisted(() => {
   return {
     mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
     mockGetActiveOperationByContainerId: vi.fn(() => undefined),
     mockGetActiveOperationByContainerIdentity: vi.fn(() => undefined),
     mockGetAgent: vi.fn(() => undefined),
+    mockGetUpdateMode: vi.fn(() => 'auto' as 'notify' | 'manual' | 'auto'),
   };
 });
+
+vi.mock('../store/settings.js', () => ({
+  getUpdateMode: mockGetUpdateMode,
+}));
 
 vi.mock('../registry/index.js', () => ({
   getState: mockGetState,
@@ -38,6 +44,43 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
     mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetAgent.mockReturnValue(undefined);
+    mockGetUpdateMode.mockReturnValue('auto');
+  });
+
+  describe('update mode reflection', () => {
+    const updatePayload = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: 'c1',
+        name: 'mysql',
+        image: { tag: { value: '9.6.0' } },
+        result: { tag: '9.7.0' },
+        ...overrides,
+      }) as any;
+
+    test('carries the global update mode on the eligibility', () => {
+      mockGetUpdateMode.mockReturnValue('manual');
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+      expect(result.updateEligibility.updateMode).toEqual({ value: 'manual', source: 'global' });
+    });
+
+    test('names the group when its policy is stricter than the global mode', () => {
+      const result = enrichContainerLifecyclePayloadWithEligibility(
+        updatePayload({
+          groupPolicy: {
+            id: 'policy-1',
+            group: 'payments',
+            revision: 1,
+            updatePolicy: {},
+            actions: { updateMode: 'manual' },
+          },
+        }),
+      ) as any;
+      expect(result.updateEligibility.updateMode).toEqual({
+        value: 'manual',
+        source: 'group',
+        group: 'payments',
+      });
+    });
   });
 
   describe('malformed payload guard', () => {

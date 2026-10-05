@@ -25,12 +25,33 @@
       "providerBasic": "基本认证 '{name}'：{error}",
       "providerOidc": "OIDC 提供者 '{name}'：{error}",
       "providerNamed": "{type} '{name}'：{error}",
-      "providerGeneric": "{provider}：{error}"
+      "providerGeneric": "{provider}：{error}",
+      "challengeInvalid": "验证码不正确。请检查后重试。",
+      "challengeMalformed": "请输入有效的验证码。",
+      "challengeExpired": "验证已过期。请重新登录。",
+      "challengeLocked": "尝试次数过多。请在 {time}后重试。",
+      "challengeLockedLater": "尝试次数过多。请稍后重试。",
+      "challengeUnavailable": "当前无法验证。请稍后重试。"
     },
     "connectionLost": {
       "title": "连接丢失",
       "body": "服务器无法访问。正在等待其重新上线...",
       "reconnecting": "重新连接中"
+    },
+    "challenge": {
+      "heading": "两步验证",
+      "codeHint": "请输入验证器应用中的 6 位验证码。",
+      "codeLabel": "验证码",
+      "codePlaceholder": "6 位验证码",
+      "recoveryHint": "请输入一个已保存的恢复码。每个恢复码只能使用一次。",
+      "recoveryLabel": "恢复码",
+      "recoveryPlaceholder": "输入恢复码",
+      "expiresAt": "请在 {time} 前输入验证码。",
+      "verify": "验证",
+      "verifying": "验证中...",
+      "useRecovery": "使用恢复码",
+      "useCode": "使用验证码",
+      "cancel": "返回登录"
     }
   }
 }

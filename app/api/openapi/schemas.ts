@@ -34,6 +34,31 @@ const groupPolicyRequired = [
   'updatedBy',
 ] as const;
 
+const effectivePolicySources = ['default', 'env', 'group', 'label', 'override'] as const;
+
+/** One update-policy field of the effective-policy response: its value, owner and layers. */
+function effectivePolicyField(value: Record<string, unknown>, description: string) {
+  return {
+    type: 'object',
+    description,
+    properties: {
+      value,
+      source: { type: 'string', enum: effectivePolicySources },
+      layers: {
+        type: 'object',
+        description:
+          'The value each layer that sets this field holds, so a layer shadowed by a later one is still visible.',
+        properties: { env: value, group: value, label: value, override: value },
+        additionalProperties: false,
+      },
+    },
+    required: ['value', 'source', 'layers'],
+    additionalProperties: false,
+  } as const;
+}
+
+const effectivePolicyStrings = { type: 'array', items: { type: 'string' } } as const;
+
 export const openApiSchemas = {
   ...labelOverrideSchemas,
   ErrorResponse: {
@@ -732,7 +757,15 @@ export const openApiSchemas = {
   GroupPolicyActions: {
     type: 'object',
     description:
-      'Reserved for restrict-only action rules. Always empty today: no field is accepted or stored.',
+      'Restrict-only action rules. They lower what a member may do and never grant: `updateMode` can only be `manual` or `notify` and is composed with the global mode as the more restrictive of the two, and `exclude` is a hard stop that a member include or auto label cannot lift. Each `exclude` entry uses the `dd.action.exclude` grammar: a trigger id or name with an optional `:threshold`.',
+    properties: {
+      updateMode: { type: 'string', enum: ['manual', 'notify'] },
+      exclude: {
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
+        uniqueItems: true,
+      },
+    },
     additionalProperties: false,
   },
   ContainerGroupPolicySnapshot: {
@@ -804,6 +837,133 @@ export const openApiSchemas = {
     required: ['policy', 'applied', 'warnings'],
     additionalProperties: false,
   },
+  EffectiveContainerPolicy: {
+    type: 'object',
+    description:
+      'Where each update-policy field and action restriction on one container comes from, and what dispatch will do with it. Computed with the same resolvers dispatch uses, from the container as it stands now and the live group policy and global update mode.',
+    properties: {
+      group: {
+        type: ['object', 'null'],
+        description: 'The group the container belongs to, or null when no label names one.',
+        properties: {
+          name: { type: 'string', description: 'The exact group name. May be empty.' },
+          label: {
+            type: 'string',
+            enum: ['dd.group', 'com.docker.compose.project', 'com.docker.stack.namespace'],
+            description: 'The label that supplied the name.',
+          },
+          policyId: { type: ['string', 'null'] },
+          revision: { type: ['integer', 'null'] },
+        },
+        required: ['name', 'label', 'policyId', 'revision'],
+        additionalProperties: false,
+      },
+      updatePolicy: {
+        type: 'object',
+        properties: {
+          maturityMode: effectivePolicyField(
+            { type: 'string', enum: ['all', 'mature'] },
+            'Defaults to `all`.',
+          ),
+          maturityMinAgeDays: effectivePolicyField(
+            { type: 'integer', minimum: 1, maximum: 365 },
+            'Defaults to 7.',
+          ),
+          skipTags: effectivePolicyField(effectivePolicyStrings, 'Defaults to none.'),
+          skipDigests: effectivePolicyField(effectivePolicyStrings, 'Defaults to none.'),
+          snoozeUntil: {
+            type: 'object',
+            description: 'Snooze is per-container, so it is an override or nothing.',
+            properties: {
+              value: { type: ['string', 'null'] },
+              source: { type: 'string', enum: ['default', 'override'] },
+            },
+            required: ['value', 'source'],
+            additionalProperties: false,
+          },
+        },
+        required: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests', 'snoozeUntil'],
+        additionalProperties: false,
+      },
+      actions: {
+        type: 'object',
+        properties: {
+          updateMode: {
+            type: 'object',
+            description:
+              'The update mode that binds the container: the more restrictive of the global mode and the group rule.',
+            properties: {
+              value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+              source: {
+                type: 'string',
+                enum: ['global', 'group'],
+                description: '`group` only when the group is strictly more restrictive.',
+              },
+              global: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+              group: { type: 'string', enum: ['manual', 'notify'] },
+            },
+            required: ['value', 'source', 'global'],
+            additionalProperties: false,
+          },
+          exclude: {
+            type: 'object',
+            description:
+              'Trigger exclusions, kept apart by owner. Both are hard stops, and the container own one wins the attribution when both match.',
+            properties: {
+              label: {
+                type: 'string',
+                description: 'The container `dd.action.exclude`, from its label or an override.',
+              },
+              labelSource: { type: 'string', enum: ['label', 'override'] },
+              group: { ...effectivePolicyStrings, description: 'The group exclusion entries.' },
+            },
+            required: ['group'],
+            additionalProperties: false,
+          },
+          dispatch: {
+            type: 'object',
+            properties: {
+              automatic: {
+                type: 'boolean',
+                description: 'Whether the automatic paths will apply an update on their own.',
+              },
+              trigger: {
+                type: ['object', 'null'],
+                description:
+                  'The action trigger the resolver selects. Null when none is authorized.',
+                properties: {
+                  id: { type: 'string' },
+                  state: { type: 'string', enum: ['blocked', 'manual', 'auto'] },
+                  reason: { type: 'string', enum: ['excluded', 'not-included'] },
+                  excludedBy: { type: 'string', enum: ['label', 'group'] },
+                },
+                required: ['id', 'state'],
+                additionalProperties: false,
+              },
+              manualUpdate: {
+                type: 'object',
+                properties: {
+                  allowed: { type: 'boolean' },
+                  blockedBy: {
+                    type: 'string',
+                    enum: ['group-notify-only', 'global-notify', 'trigger-excluded', 'no-trigger'],
+                  },
+                },
+                required: ['allowed'],
+                additionalProperties: false,
+              },
+            },
+            required: ['automatic', 'trigger', 'manualUpdate'],
+            additionalProperties: false,
+          },
+        },
+        required: ['updateMode', 'exclude', 'dispatch'],
+        additionalProperties: false,
+      },
+    },
+    required: ['group', 'updatePolicy', 'actions'],
+    additionalProperties: false,
+  },
   UpdateBlocker: {
     type: 'object',
     properties: {
@@ -822,6 +982,7 @@ export const openApiSchemas = {
           'threshold-not-reached',
           'trigger-excluded',
           'trigger-not-included',
+          'group-notify-only',
           'agent-mismatch',
           'no-update-trigger-configured',
           'self-update-unavailable',
@@ -866,6 +1027,18 @@ export const openApiSchemas = {
     required: ['state'],
     additionalProperties: false,
   },
+  UpdateEligibilityUpdateMode: {
+    type: 'object',
+    description:
+      "The update mode that binds this container: the global mode, or its group policy's when that is strictly more restrictive. `source` is `group` only in that case, and `group` then names it.",
+    properties: {
+      value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      source: { type: 'string', enum: ['global', 'group'] },
+      group: { type: 'string' },
+    },
+    required: ['value', 'source'],
+    additionalProperties: false,
+  },
   UpdateEligibility: {
     type: 'object',
     properties: {
@@ -876,6 +1049,7 @@ export const openApiSchemas = {
       },
       evaluatedAt: { type: 'string', format: 'date-time' },
       actionPolicy: { $ref: '#/components/schemas/ActionPolicy' },
+      updateMode: { $ref: '#/components/schemas/UpdateEligibilityUpdateMode' },
     },
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,

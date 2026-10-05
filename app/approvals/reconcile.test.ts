@@ -21,6 +21,7 @@ import type { ActionPolicyTrigger } from '../model/action-policy.js';
 import type { Container } from '../model/container.js';
 import * as approvalStore from '../store/approval.js';
 import type { Database } from '../store/db/driver.js';
+import * as groupPolicyStore from '../store/group-policy.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as reconcile from './reconcile.js';
 
@@ -469,6 +470,47 @@ describe('update-mode flips', () => {
     expect(allRows()).toHaveLength(1);
     expect(row).toMatchObject({ decision: 'pending' });
     expect(row.resolution).toBeUndefined();
+  });
+});
+
+// Spec 7.3: a group policy saved after a report was built still applies to that report.
+describe('a group policy saved mid-scan', () => {
+  const memberLabels = { 'com.docker.compose.project': 'payments' };
+
+  beforeEach(() => {
+    groupPolicyStore.createCollections(db);
+    getUpdateModeMock.mockReturnValue('auto');
+    getStateMock.mockReturnValue({ trigger: createTrigger('all') });
+  });
+
+  afterEach(() => {
+    groupPolicyStore.clearCollectionForTesting();
+  });
+
+  test('queues a candidate the stale snapshot would have read as auto-dispatched', async () => {
+    const stale = createContainer({ labels: memberLabels });
+    await emitContainerReport({ container: stale, changed: true });
+    expect(allRows()).toHaveLength(0);
+
+    groupPolicyStore.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+    await emitContainerReport({ container: stale, changed: false });
+
+    expect(allRows()).toMatchObject([{ containerId: 'container-1', decision: 'pending' }]);
+  });
+
+  test('does not resolve an open row as auto-applied on the stale read', async () => {
+    getUpdateModeMock.mockReturnValue('manual');
+    const stale = createContainer({ labels: memberLabels });
+    await emitContainerReport({ container: stale, changed: true });
+    expect(approvalStore.countApprovals().pending).toBe(1);
+
+    groupPolicyStore.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+    getUpdateModeMock.mockReturnValue('auto');
+    await emitContainerReport({ container: stale, changed: false });
+
+    expect(allRows()).toHaveLength(1);
+    expect(allRows()[0].resolution).toBeUndefined();
+    expect(approvalStore.countApprovals().pending).toBe(1);
   });
 });
 

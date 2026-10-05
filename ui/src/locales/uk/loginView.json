@@ -25,12 +25,33 @@
       "providerBasic": "Basic auth '{name}': {error}",
       "providerOidc": "OIDC-постачальник '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Код не підійшов. Перевірте його й повторіть спробу.",
+      "challengeMalformed": "Введіть дійсний код.",
+      "challengeExpired": "Час перевірки минув. Увійдіть знову.",
+      "challengeLocked": "Забагато спроб. Повторіть через {time}.",
+      "challengeLockedLater": "Забагато спроб. Повторіть пізніше.",
+      "challengeUnavailable": "Перевірка зараз недоступна. Повторіть спробу трохи згодом."
     },
     "connectionLost": {
       "title": "З'єднання перервано",
       "body": "Сервер недоступний. Очікування відновлення зв'язку...",
       "reconnecting": "Підключення"
+    },
+    "challenge": {
+      "heading": "Двоетапна перевірка",
+      "codeHint": "Введіть 6-значний код із застосунку-автентифікатора.",
+      "codeLabel": "Код автентифікації",
+      "codePlaceholder": "6-значний код",
+      "recoveryHint": "Введіть один зі збережених кодів відновлення. Кожен код діє лише один раз.",
+      "recoveryLabel": "Код відновлення",
+      "recoveryPlaceholder": "Введіть код відновлення",
+      "expiresAt": "Введіть код до {time}.",
+      "verify": "Підтвердити",
+      "verifying": "Перевірка...",
+      "useRecovery": "Використати код відновлення",
+      "useCode": "Використати код автентифікатора",
+      "cancel": "Назад до входу"
     }
   }
 }

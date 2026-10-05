@@ -25,12 +25,33 @@
       "providerBasic": "Basic auth «{name}»: {error}",
       "providerOidc": "OIDC-провайдер «{name}»: {error}",
       "providerNamed": "{type} «{name}»: {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "Код не подошёл. Проверьте его и повторите попытку.",
+      "challengeMalformed": "Введите корректный код.",
+      "challengeExpired": "Время проверки истекло. Войдите снова.",
+      "challengeLocked": "Слишком много попыток. Повторите через {time}.",
+      "challengeLockedLater": "Слишком много попыток. Повторите позже.",
+      "challengeUnavailable": "Проверка сейчас недоступна. Повторите попытку чуть позже."
     },
     "connectionLost": {
       "title": "Соединение потеряно",
       "body": "Сервер недоступен. Ожидание восстановления соединения...",
       "reconnecting": "Переподключение"
+    },
+    "challenge": {
+      "heading": "Двухэтапная проверка",
+      "codeHint": "Введите 6-значный код из приложения-аутентификатора.",
+      "codeLabel": "Код аутентификации",
+      "codePlaceholder": "6-значный код",
+      "recoveryHint": "Введите один из сохранённых кодов восстановления. Каждый код действует только один раз.",
+      "recoveryLabel": "Код восстановления",
+      "recoveryPlaceholder": "Введите код восстановления",
+      "expiresAt": "Введите код до {time}.",
+      "verify": "Подтвердить",
+      "verifying": "Проверка...",
+      "useRecovery": "Использовать код восстановления",
+      "useCode": "Использовать код аутентификатора",
+      "cancel": "Назад ко входу"
     }
   }
 }

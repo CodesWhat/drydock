@@ -34,7 +34,22 @@ describe('groupPolicyPaths', () => {
     ].map((operation) => operation.requestBody.content['application/json'].schema);
     for (const body of bodies) {
       expect(body.additionalProperties).toBe(false);
-      expect(Object.keys(body.properties)).not.toContain('actions');
+    }
+  });
+
+  test('writes accept restrict-only actions, and an actions-only policy needs no updatePolicy', () => {
+    const operations = [
+      groupPolicyPaths['/api/v1/group-policies'].post,
+      groupPolicyPaths['/api/v1/group-policies/{id}'].put,
+    ];
+    for (const operation of operations) {
+      const body = operation.requestBody.content['application/json'].schema;
+      expect(body.properties.actions).toStrictEqual({
+        $ref: '#/components/schemas/GroupPolicyActions',
+      });
+      expect(body.required).not.toContain('updatePolicy');
+      expect(operation.description).toContain('actions');
+      expect(operation.description).not.toContain('Unknown fields, including `actions`');
     }
   });
 

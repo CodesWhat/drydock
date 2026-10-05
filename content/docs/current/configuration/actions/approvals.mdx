@@ -23,6 +23,8 @@ A row is created for a container when, on any watch cycle:
 | `manual` | Yes, for every eligible candidate |
 | `auto` | Only for candidates a configured action trigger will not auto-dispatch (no matching trigger, `AUTO=oninclude` without the include label, agent mismatch, and so on) |
 
+A [group policy](/docs/configuration/groups) with `actions.updateMode: manual` lowers the ceiling for its members the same way. Under global `auto`, a member of that group is never auto-dispatched, so its candidate queues here even when a trigger would otherwise have applied it, which makes a manual group a way to require approval for one group. A group `notify` is a hard blocker (`group-notify-only`), so nothing queues for its members. A member's `dd.action.auto` or `dd.action.include` label doesn't lift either ceiling.
+
 <Callout type="info">A **soft** blocker (`snoozed`, `maturity-not-reached`, `skip-tag`, `skip-digest`, `threshold-not-reached`, `maintenance-window-closed`) does not keep a candidate out of the queue — it becomes one of the row's **hold reasons**, shown inline next to the release notes. These are exactly the conditions the manual Update button already overrides with its "Update anyway" confirmation, so approving a row with hold reasons carries the same override, spelled out before you click. A **hard** blocker (`security-scan-blocked`, `trigger-excluded`, `active-operation`, and the rest) behaves the same as everywhere else in Drydock: the row is left alone if one already exists, but nothing new queues while it's locked.</Callout>
 
 ## The three actions

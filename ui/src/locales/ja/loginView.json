@@ -25,12 +25,33 @@
       "providerBasic": "Basic 認証「{name}」：{error}",
       "providerOidc": "OIDC プロバイダー「{name}」：{error}",
       "providerNamed": "{type}「{name}」：{error}",
-      "providerGeneric": "{provider}：{error}"
+      "providerGeneric": "{provider}：{error}",
+      "challengeInvalid": "コードが正しくありません。確認してもう一度お試しください。",
+      "challengeMalformed": "有効なコードを入力してください。",
+      "challengeExpired": "確認の有効期限が切れました。もう一度サインインしてください。",
+      "challengeLocked": "試行回数が多すぎます。{time}後にもう一度お試しください。",
+      "challengeLockedLater": "試行回数が多すぎます。しばらくしてからもう一度お試しください。",
+      "challengeUnavailable": "現在、確認を利用できません。しばらくしてからもう一度お試しください。"
     },
     "connectionLost": {
       "title": "接続が切断されました",
       "body": "サーバーに接続できません。オンラインに戻るまでお待ちください...",
       "reconnecting": "再接続中"
+    },
+    "challenge": {
+      "heading": "2段階認証",
+      "codeHint": "認証アプリの6桁のコードを入力してください。",
+      "codeLabel": "認証コード",
+      "codePlaceholder": "6桁のコード",
+      "recoveryHint": "保存してあるリカバリーコードを1つ入力してください。各コードは1回だけ使えます。",
+      "recoveryLabel": "リカバリーコード",
+      "recoveryPlaceholder": "リカバリーコードを入力",
+      "expiresAt": "{time}までにコードを入力してください。",
+      "verify": "確認",
+      "verifying": "確認中...",
+      "useRecovery": "リカバリーコードを使用",
+      "useCode": "認証コードを使用",
+      "cancel": "サインインに戻る"
     }
   }
 }
