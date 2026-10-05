@@ -216,7 +216,7 @@ A factor belongs to one Basic provider and one username: `DD_AUTH_BASIC_<NAME>_U
 
 Drydock doesn't quietly treat the renamed account as one that never enrolled. While any factor is orphaned:
 
-- A local account with **no factor of its own** can't sign in. A correct password gets `503`, and the log names the orphaned factor.
+- A local account with **no factor of its own** can't sign in. A correct password gets `503`, and the log names the orphaned factor. That covers `Authorization: Basic` requests too, such as a metrics scraper that uses that account.
 - A local account **with its own factor** signs in as usual, with its code.
 - OIDC sign-in, API keys and existing sessions aren't affected.
 

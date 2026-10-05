@@ -179,6 +179,10 @@ describe('bootstrap', () => {
       return 3;
     });
     const mainFactory = vi.fn(() => ({}));
+    const umask = vi.spyOn(process, 'umask').mockImplementation(() => {
+      calls.push('umask');
+      return 0o022;
+    });
     const originalArgv = process.argv;
     const originalExitCode = process.exitCode;
     process.argv = ['node', 'index.js', 'totp', 'remove', '--username', 'eve'];
@@ -193,7 +197,9 @@ describe('bootstrap', () => {
       await import('./index.js');
 
       expect(runTotpCommand).toHaveBeenCalledWith(['remove', '--username', 'eve']);
-      expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'totp']);
+      // Owner-only before the store is opened: SQLite creates its sidecar files under the umask.
+      expect(umask).toHaveBeenCalledWith(0o077);
+      expect(calls).toStrictEqual(['loadConfigFileIntoLayer', 'umask', 'totp']);
       expect(process.exitCode).toBe(3);
       expect(mainFactory).not.toHaveBeenCalled();
     } finally {
@@ -206,6 +212,7 @@ describe('bootstrap', () => {
     const loadConfigFileIntoLayer = vi.fn(async () => undefined);
     const mainFactory = vi.fn(() => ({}));
     const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    vi.spyOn(process, 'umask').mockReturnValue(0o022);
     const originalArgv = process.argv;
     const originalExitCode = process.exitCode;
     process.argv = ['node', 'index.js', 'totp', 'status'];

@@ -11,6 +11,9 @@ import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
  * fail a normal start. That is reported in one line rather than as a stack.
  */
 async function runTotpCommandFromBootstrap(argv: string[]): Promise<number> {
+  // SQLite creates the store's `-wal` and `-shm` sidecars under the process
+  // umask. Owner-only, as `store/index.ts` sets it before a normal start.
+  process.umask(0o077);
   let cli: typeof import('./api/totp-offline-cli.js');
   try {
     cli = await import('./api/totp-offline-cli.js');
