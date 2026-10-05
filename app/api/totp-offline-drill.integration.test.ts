@@ -11,7 +11,6 @@
  * command did.
  */
 import { argon2Sync, randomBytes } from 'node:crypto';
-import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
@@ -216,8 +215,9 @@ async function start(databasePath: string, accounts: readonly Account[]): Promis
   app.get('/protected', requireAuthentication, (_req: Request, res: ExpressResponse) => {
     res.status(200).json({ ok: true });
   });
-  app.use((_error: unknown, _req: Request, res: ExpressResponse, _next: unknown) => {
-    res.status(500).json({ error: 'Internal server error' });
+  // The same answer the app's own error handler gives: the status the fault names, or 500.
+  app.use((error: { status?: number }, _req: Request, res: ExpressResponse, _next: unknown) => {
+    res.status(error.status || 500).json({ error: 'Internal server error' });
   });
 
   const server = http.createServer(app);
@@ -492,6 +492,16 @@ describe('renamed account', () => {
     };
     const before = deletedRowBefore();
 
+    // Until someone decides, the rename fails closed: the renamed account is
+    // not let in on its password as though it had never enrolled, and neither
+    // is any other account without a factor, since nothing tells them apart.
+    // An account with its own factor is asked for it as always.
+    let h = await start(copy, accounts);
+    expect((await passwordLogin(h, EVELYN)).status).toBe(503);
+    expect((await passwordLogin(h, GUEST)).status).toBe(503);
+    expect((await passwordLogin(h, OPS)).status).toBe(202);
+    await stop();
+
     const status = command('status', '--db', copy);
     expect(status.out).toContain('Orphaned factors: 2');
 
@@ -524,7 +534,7 @@ describe('renamed account', () => {
     expect(rebound.code).toBe(0);
     expect(rebound.err).toBe('');
 
-    const h = await start(copy, accounts);
+    h = await start(copy, accounts);
     // The renamed account is asked for its factor, and the authenticator
     // enrolled under the old name is the one that satisfies it.
     const first = await passwordLogin(h, EVELYN);
@@ -555,7 +565,17 @@ describe('renamed account', () => {
         ),
       ),
     ]);
-    expectNoSecretIn(everythingSaid(status, ambiguous, rebound), [renamed, deleted, kept]);
-    expect(fs.existsSync(copy)).toBe(true);
+
+    // The deleted account's factor is still orphaned, so an account without a
+    // factor stays out until that one is dealt with too.
+    expect((await passwordLogin(h, GUEST)).status).toBe(503);
+    await stop();
+    const removed = command('remove', '--subject', deleted.subjectId, '--db', copy, '--confirm');
+    expect(removed.code).toBe(0);
+    h = await start(copy, accounts);
+    expect((await passwordLogin(h, GUEST)).status).toBe(200);
+    expect(breakGlassDetails()).toHaveLength(2);
+
+    expectNoSecretIn(everythingSaid(status, ambiguous, rebound, removed), [renamed, deleted, kept]);
   });
 });

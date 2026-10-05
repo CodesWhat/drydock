@@ -1216,8 +1216,34 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
 
     test('another subject, and an unenrolled one on the same username, stay on password access', async () => {
       const h = await boot();
+      const other = new Basic();
+      await other.register('authentication', 'basic', 'other', {
+        user: TEST_USER,
+        hash: createArgon2Hash('the-other-password'),
+      });
+      registerAuthenticator(other.getAuthenticator());
       enroll(deriveSubjectId('basic.other', TEST_USER));
 
+      expect(await status(h, '/protected', { Authorization: BASIC_AUTH_HEADER })).toBe(200);
+    });
+
+    test('a factor whose account is no longer configured closes password access until it is rebound or removed', async () => {
+      const h = await boot();
+      const orphanSubject = deriveSubjectId('basic.renamed-away', TEST_USER);
+      enroll(orphanSubject);
+
+      // The unenrolled account may be the renamed owner of that factor.
+      expect(await status(h, '/protected', { Authorization: BASIC_AUTH_HEADER })).toBe(503);
+      const login = await post(h, { Authorization: BASIC_AUTH_HEADER });
+      expect(login.status).toBe(503);
+      expect(login.headers.get('set-cookie')).toBeNull();
+      expect(storedUsers(h.db)).toEqual([]);
+      // A wrong password is still only a wrong password.
+      expect(
+        await status(h, '/protected', { Authorization: basicHeader(TEST_USER, 'wrong') }),
+      ).toBe(401);
+
+      totpStore.removeFactor({ subjectId: orphanSubject, expectedFactorVersion: 1 });
       expect(await status(h, '/protected', { Authorization: BASIC_AUTH_HEADER })).toBe(200);
     });
 

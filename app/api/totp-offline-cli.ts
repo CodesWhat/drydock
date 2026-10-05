@@ -313,7 +313,7 @@ function runStatus({ io, keyring, identities }: CommandContext): number {
   const orphaned = status.factors.filter((factor) => factor.orphaned).length;
   if (orphaned > 0) {
     io.out(
-      `Orphaned factors: ${orphaned}. Each one has to be moved with "rebind" or removed with "remove".`,
+      `Orphaned factors: ${orphaned}. Until each one is moved with "rebind" or removed with "remove", local accounts without a factor of their own cannot sign in.`,
     );
   }
   if (status.pendingOfflineOperations > 0) {
