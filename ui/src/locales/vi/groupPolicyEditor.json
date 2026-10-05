@@ -7,7 +7,7 @@
     "newPolicy": "Chính sách mới",
     "loading": "Đang tải chính sách nhóm…",
     "empty": "Chưa có nhóm hay chính sách nào. Nhóm lấy từ dd.group, dự án Compose và stack Swarm.",
-    "memberCount": "{count} container",
+    "memberCount": "{count} container | {count} container",
     "noMembers": "Chưa có thành viên hiện tại; áp dụng cho thành viên sau này",
     "hosts": "Máy chủ: {hosts}",
     "controller": "Bộ điều khiển",
@@ -63,8 +63,8 @@
       "message": "Xóa chính sách của nhóm {group}? Các thành viên quay về giá trị từ nhãn, watcher và toàn cục.",
       "accept": "Xóa"
     },
-    "saved": "Đã lưu chính sách. Đã cập nhật {members} container.",
-    "removed": "Đã xóa chính sách. Đã cập nhật {members} container.",
+    "saved": "Đã lưu chính sách. Đã cập nhật {members} container. | Đã lưu chính sách. Đã cập nhật {members} container.",
+    "removed": "Đã xóa chính sách. Đã cập nhật {members} container. | Đã xóa chính sách. Đã cập nhật {members} container.",
     "warningsTitle": "Cảnh báo",
     "errors": {
       "load": "Không tải được chính sách nhóm",

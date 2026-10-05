@@ -7,7 +7,7 @@
     "newPolicy": "Nuovo criterio",
     "loading": "Caricamento dei criteri di gruppo…",
     "empty": "Ancora nessun gruppo o criterio. I gruppi derivano da dd.group, progetti Compose e stack Swarm.",
-    "memberCount": "{count} container",
+    "memberCount": "{count} container | {count} container",
     "noMembers": "Nessun membro attuale; si applica ai membri futuri",
     "hosts": "Host: {hosts}",
     "controller": "Controller",
@@ -63,8 +63,8 @@
       "message": "Rimuovere il criterio del gruppo {group}? I membri tornano ai valori di etichetta, watcher e globali.",
       "accept": "Rimuovi"
     },
-    "saved": "Criterio salvato. {members} container aggiornati.",
-    "removed": "Criterio rimosso. {members} container aggiornati.",
+    "saved": "Criterio salvato. {members} container aggiornato. | Criterio salvato. {members} container aggiornati.",
+    "removed": "Criterio rimosso. {members} container aggiornato. | Criterio rimosso. {members} container aggiornati.",
     "warningsTitle": "Avvisi",
     "errors": {
       "load": "Impossibile caricare i criteri di gruppo",

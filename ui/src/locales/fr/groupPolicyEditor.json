@@ -7,7 +7,7 @@
     "newPolicy": "Nouvelle politique",
     "loading": "Chargement des politiques de groupe…",
     "empty": "Aucun groupe ni politique pour le moment. Les groupes viennent de dd.group, des projets Compose et des stacks Swarm.",
-    "memberCount": "{count} conteneurs",
+    "memberCount": "{count} conteneur | {count} conteneurs",
     "noMembers": "Aucun membre actuel ; s’applique aux futurs membres",
     "hosts": "Hôtes : {hosts}",
     "controller": "Contrôleur",
@@ -63,8 +63,8 @@
       "message": "Supprimer la politique du groupe {group} ? Les membres reviennent à leurs valeurs de label, de watcher et globales.",
       "accept": "Supprimer"
     },
-    "saved": "Politique enregistrée. {members} conteneurs mis à jour.",
-    "removed": "Politique supprimée. {members} conteneurs mis à jour.",
+    "saved": "Politique enregistrée. {members} conteneur mis à jour. | Politique enregistrée. {members} conteneurs mis à jour.",
+    "removed": "Politique supprimée. {members} conteneur mis à jour. | Politique supprimée. {members} conteneurs mis à jour.",
     "warningsTitle": "Avertissements",
     "errors": {
       "load": "Échec du chargement des politiques de groupe",

@@ -7,7 +7,7 @@
     "newPolicy": "Yeni ilke",
     "loading": "Grup ilkeleri yükleniyor…",
     "empty": "Henüz grup veya ilke yok. Gruplar dd.group, Compose projeleri ve Swarm yığınlarından gelir.",
-    "memberCount": "{count} konteyner",
+    "memberCount": "{count} konteyner | {count} konteyner",
     "noMembers": "Mevcut üye yok; gelecekteki üyelere uygulanır",
     "hosts": "Sunucular: {hosts}",
     "controller": "Denetleyici",
@@ -63,8 +63,8 @@
       "message": "{group} grubunun ilkesi kaldırılsın mı? Üyeler etiket, watcher ve genel değerlerine döner.",
       "accept": "Kaldır"
     },
-    "saved": "İlke kaydedildi. {members} konteyner güncellendi.",
-    "removed": "İlke kaldırıldı. {members} konteyner güncellendi.",
+    "saved": "İlke kaydedildi. {members} konteyner güncellendi. | İlke kaydedildi. {members} konteyner güncellendi.",
+    "removed": "İlke kaldırıldı. {members} konteyner güncellendi. | İlke kaldırıldı. {members} konteyner güncellendi.",
     "warningsTitle": "Uyarılar",
     "errors": {
       "load": "Grup ilkeleri yüklenemedi",

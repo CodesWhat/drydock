@@ -7,7 +7,7 @@
     "newPolicy": "Neue Richtlinie",
     "loading": "Gruppenrichtlinien werden geladen…",
     "empty": "Noch keine Gruppen oder Richtlinien. Gruppen stammen aus dd.group, Compose-Projekten und Swarm-Stacks.",
-    "memberCount": "{count} Container",
+    "memberCount": "{count} Container | {count} Container",
     "noMembers": "Keine aktuellen Mitglieder; gilt für künftige Mitglieder",
     "hosts": "Hosts: {hosts}",
     "controller": "Controller",
@@ -63,8 +63,8 @@
       "message": "Richtlinie für die Gruppe {group} entfernen? Die Mitglieder fallen auf ihre Label-, Watcher- und globalen Werte zurück.",
       "accept": "Entfernen"
     },
-    "saved": "Richtlinie gespeichert. {members} Container aktualisiert.",
-    "removed": "Richtlinie entfernt. {members} Container aktualisiert.",
+    "saved": "Richtlinie gespeichert. {members} Container aktualisiert. | Richtlinie gespeichert. {members} Container aktualisiert.",
+    "removed": "Richtlinie entfernt. {members} Container aktualisiert. | Richtlinie entfernt. {members} Container aktualisiert.",
     "warningsTitle": "Warnungen",
     "errors": {
       "load": "Gruppenrichtlinien konnten nicht geladen werden",

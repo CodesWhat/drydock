@@ -7,7 +7,7 @@
     "newPolicy": "Nova política",
     "loading": "Carregando políticas de grupo…",
     "empty": "Ainda não há grupos nem políticas. Os grupos vêm de dd.group, projetos do Compose e stacks do Swarm.",
-    "memberCount": "{count} contêineres",
+    "memberCount": "{count} contêiner | {count} contêineres",
     "noMembers": "Sem membros atuais; vale para membros futuros",
     "hosts": "Hosts: {hosts}",
     "controller": "Controlador",
@@ -63,8 +63,8 @@
       "message": "Remover a política do grupo {group}? Os membros voltam aos valores de rótulo, watcher e globais.",
       "accept": "Remover"
     },
-    "saved": "Política salva. {members} contêineres atualizados.",
-    "removed": "Política removida. {members} contêineres atualizados.",
+    "saved": "Política salva. {members} contêiner atualizado. | Política salva. {members} contêineres atualizados.",
+    "removed": "Política removida. {members} contêiner atualizado. | Política removida. {members} contêineres atualizados.",
     "warningsTitle": "Avisos",
     "errors": {
       "load": "Falha ao carregar as políticas de grupo",

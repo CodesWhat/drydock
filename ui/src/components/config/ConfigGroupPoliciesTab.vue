@@ -101,7 +101,11 @@ function finish(outcome: GroupPolicyOutcome, messageKey: 'saved' | 'removed') {
     failure.value = outcome.failure;
     return;
   }
-  status.value = t(`groupPolicyEditor.${messageKey}`, { members: outcome.members });
+  status.value = t(
+    `groupPolicyEditor.${messageKey}`,
+    { members: outcome.members },
+    outcome.members,
+  );
   warnings.value = outcome.warnings;
   closeEditor();
 }
@@ -266,7 +270,7 @@ void init();
             <div class="min-w-0 space-y-1">
               <code class="dd-text-value dd-text break-all whitespace-pre-wrap">{{ visibleGroupName(row.group) }}</code>
               <div class="dd-text-card-description">
-                {{ t('groupPolicyEditor.memberCount', { count: row.memberCount }) }}
+                {{ t('groupPolicyEditor.memberCount', { count: row.memberCount }, row.memberCount) }}
                 <template v-if="row.agents.length > 0"> · {{ t('groupPolicyEditor.hosts', { hosts: hosts(row) }) }}</template>
               </div>
               <div v-if="row.policy && row.memberCount === 0" class="dd-text-card-description">

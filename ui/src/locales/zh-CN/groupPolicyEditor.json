@@ -7,7 +7,7 @@
     "newPolicy": "新建策略",
     "loading": "正在加载分组策略…",
     "empty": "还没有分组或策略。分组来自 dd.group、Compose 项目和 Swarm 堆栈。",
-    "memberCount": "{count} 个容器",
+    "memberCount": "{count} 个容器 | {count} 个容器",
     "noMembers": "当前没有成员；适用于之后加入的成员",
     "hosts": "主机：{hosts}",
     "controller": "控制器",
@@ -63,8 +63,8 @@
       "message": "要删除分组 {group} 的策略吗？成员将回退到各自的标签、监视器和全局值。",
       "accept": "删除"
     },
-    "saved": "策略已保存。已更新 {members} 个容器。",
-    "removed": "策略已删除。已更新 {members} 个容器。",
+    "saved": "策略已保存。已更新 {members} 个容器。 | 策略已保存。已更新 {members} 个容器。",
+    "removed": "策略已删除。已更新 {members} 个容器。 | 策略已删除。已更新 {members} 个容器。",
     "warningsTitle": "警告",
     "errors": {
       "load": "无法加载分组策略",

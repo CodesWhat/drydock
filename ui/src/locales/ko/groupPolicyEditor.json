@@ -7,7 +7,7 @@
     "newPolicy": "새 정책",
     "loading": "그룹 정책을 불러오는 중…",
     "empty": "아직 그룹이나 정책이 없습니다. 그룹은 dd.group, Compose 프로젝트, Swarm 스택에서 가져옵니다.",
-    "memberCount": "컨테이너 {count}개",
+    "memberCount": "컨테이너 {count}개 | 컨테이너 {count}개",
     "noMembers": "현재 멤버가 없습니다. 앞으로 합류하는 멤버에 적용됩니다",
     "hosts": "호스트: {hosts}",
     "controller": "컨트롤러",
@@ -63,8 +63,8 @@
       "message": "그룹 {group}의 정책을 삭제할까요? 멤버는 레이블, 워처, 전역 값으로 돌아갑니다.",
       "accept": "삭제"
     },
-    "saved": "정책을 저장했습니다. 컨테이너 {members}개를 업데이트했습니다.",
-    "removed": "정책을 삭제했습니다. 컨테이너 {members}개를 업데이트했습니다.",
+    "saved": "정책을 저장했습니다. 컨테이너 {members}개를 업데이트했습니다. | 정책을 저장했습니다. 컨테이너 {members}개를 업데이트했습니다.",
+    "removed": "정책을 삭제했습니다. 컨테이너 {members}개를 업데이트했습니다. | 정책을 삭제했습니다. 컨테이너 {members}개를 업데이트했습니다.",
     "warningsTitle": "경고",
     "errors": {
       "load": "그룹 정책을 불러오지 못했습니다",

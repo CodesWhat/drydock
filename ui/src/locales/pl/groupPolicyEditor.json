@@ -7,7 +7,7 @@
     "newPolicy": "Nowa zasada",
     "loading": "Wczytywanie zasad grup…",
     "empty": "Nie ma jeszcze grup ani zasad. Grupy pochodzą z dd.group, projektów Compose i stosów Swarm.",
-    "memberCount": "Kontenery: {count}",
+    "memberCount": "Kontenery: {count} | Kontenery: {count}",
     "noMembers": "Brak obecnych członków; dotyczy przyszłych członków",
     "hosts": "Hosty: {hosts}",
     "controller": "Kontroler",
@@ -63,8 +63,8 @@
       "message": "Usunąć zasadę grupy {group}? Członkowie wracają do wartości z etykiet, watchera i globalnych.",
       "accept": "Usuń"
     },
-    "saved": "Zasada zapisana. Zaktualizowane kontenery: {members}.",
-    "removed": "Zasada usunięta. Zaktualizowane kontenery: {members}.",
+    "saved": "Zasada zapisana. Zaktualizowane kontenery: {members}. | Zasada zapisana. Zaktualizowane kontenery: {members}.",
+    "removed": "Zasada usunięta. Zaktualizowane kontenery: {members}. | Zasada usunięta. Zaktualizowane kontenery: {members}.",
     "warningsTitle": "Ostrzeżenia",
     "errors": {
       "load": "Nie udało się wczytać zasad grup",

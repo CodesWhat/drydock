@@ -7,7 +7,7 @@
     "newPolicy": "Nieuw beleid",
     "loading": "Groepsbeleid laden…",
     "empty": "Nog geen groepen of beleid. Groepen komen uit dd.group, Compose-projecten en Swarm-stacks.",
-    "memberCount": "{count} containers",
+    "memberCount": "{count} container | {count} containers",
     "noMembers": "Geen huidige leden; geldt voor toekomstige leden",
     "hosts": "Hosts: {hosts}",
     "controller": "Controller",
@@ -63,8 +63,8 @@
       "message": "Het beleid voor groep {group} verwijderen? Leden vallen terug op hun label-, watcher- en globale waarden.",
       "accept": "Verwijderen"
     },
-    "saved": "Beleid opgeslagen. {members} containers bijgewerkt.",
-    "removed": "Beleid verwijderd. {members} containers bijgewerkt.",
+    "saved": "Beleid opgeslagen. {members} container bijgewerkt. | Beleid opgeslagen. {members} containers bijgewerkt.",
+    "removed": "Beleid verwijderd. {members} container bijgewerkt. | Beleid verwijderd. {members} containers bijgewerkt.",
     "warningsTitle": "Waarschuwingen",
     "errors": {
       "load": "Groepsbeleid laden mislukt",

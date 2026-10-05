@@ -111,10 +111,22 @@ describe('ConfigGroupPoliciesTab list', () => {
     expect(rows[0].text()).toContain('Updates: Manual only');
     expect(rows[0].text()).toContain('Excluded triggers: 1');
     expect(rows[1].text()).toContain('web');
-    expect(rows[1].text()).toContain('1 containers');
+    expect(rows[1].text()).toContain('1 container');
     expect(rows[1].text()).toContain('No policy');
     expect(rows[1].text()).not.toContain('Hosts:');
     expect(wrapper.text()).toContain('Stored in Drydock, not in Docker labels.');
+  });
+
+  it.each([
+    [0, '0 containers'],
+    [1, '1 container'],
+    [2, '2 containers'],
+  ])('pluralizes the member count for %i', async (count, text) => {
+    vi.mocked(listGroupPolicies).mockResolvedValue([]);
+    vi.mocked(getContainerGroups).mockResolvedValue([group('web', count)]);
+    const wrapper = await mountTab();
+    expect(wrapper.find(tab('row')).text()).toContain(text);
+    expect(wrapper.find(tab('row')).text()).not.toContain(`${text}s`);
   });
 
   it('summarises every field kind', async () => {
@@ -257,6 +269,20 @@ describe('ConfigGroupPoliciesTab editing', () => {
     expect(listGroupPolicies).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    [0, 'Policy saved. 0 containers updated.'],
+    [1, 'Policy saved. 1 container updated.'],
+    [2, 'Policy saved. 2 containers updated.'],
+  ])('pluralizes the saved line for %i members', async (members, text) => {
+    vi.mocked(replaceGroupPolicy).mockResolvedValue(write(members) as never);
+    const wrapper = await mountTab();
+    await wrapper.findAll(tab('edit'))[0].trigger('click');
+    await wrapper.find(tid('min-age')).setValue('9');
+    await wrapper.find(tid('save')).trigger('click');
+    await flushPromises();
+    expect(wrapper.find(tab('status')).text()).toBe(text);
+  });
+
   it('replaces with the policy revision and never runs an update', async () => {
     const wrapper = await mountTab();
     await wrapper.findAll(tab('edit'))[0].trigger('click');
@@ -339,6 +365,19 @@ describe('ConfigGroupPoliciesTab remove', () => {
     expect(deleteGroupPolicy).toHaveBeenCalledWith('p1', 2);
     expect(wrapper.find(tid('save')).exists()).toBe(false);
     expect(wrapper.find(tab('status')).text()).toContain('Policy removed. 2 containers updated.');
+  });
+
+  it.each([
+    [0, 'Policy removed. 0 containers updated.'],
+    [1, 'Policy removed. 1 container updated.'],
+  ])('pluralizes the removed line for %i members', async (members, text) => {
+    vi.mocked(deleteGroupPolicy).mockResolvedValue(write(members) as never);
+    const wrapper = await mountTab();
+    await wrapper.findAll(tab('edit'))[0].trigger('click');
+    await wrapper.find(tid('remove')).trigger('click');
+    await useConfirmDialog().accept();
+    await flushPromises();
+    expect(wrapper.find(tab('status')).text()).toBe(text);
   });
 
   it('does not remove when the dialog is dismissed', async () => {

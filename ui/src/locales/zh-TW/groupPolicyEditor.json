@@ -7,7 +7,7 @@
     "newPolicy": "新增政策",
     "loading": "正在載入群組政策…",
     "empty": "還沒有群組或政策。群組來自 dd.group、Compose 專案和 Swarm 堆疊。",
-    "memberCount": "{count} 個容器",
+    "memberCount": "{count} 個容器 | {count} 個容器",
     "noMembers": "目前沒有成員；適用於之後加入的成員",
     "hosts": "主機：{hosts}",
     "controller": "控制器",
@@ -63,8 +63,8 @@
       "message": "要刪除群組 {group} 的政策嗎？成員將回到各自的標籤、監看器和全域值。",
       "accept": "刪除"
     },
-    "saved": "政策已儲存。已更新 {members} 個容器。",
-    "removed": "政策已刪除。已更新 {members} 個容器。",
+    "saved": "政策已儲存。已更新 {members} 個容器。 | 政策已儲存。已更新 {members} 個容器。",
+    "removed": "政策已刪除。已更新 {members} 個容器。 | 政策已刪除。已更新 {members} 個容器。",
     "warningsTitle": "警告",
     "errors": {
       "load": "無法載入群組政策",

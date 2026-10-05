@@ -7,7 +7,7 @@
     "newPolicy": "New policy",
     "loading": "Loading group policies…",
     "empty": "No groups or policies yet. Groups come from dd.group, Compose projects and Swarm stacks.",
-    "memberCount": "{count} containers",
+    "memberCount": "{count} container | {count} containers",
     "noMembers": "No current members; applies to future members",
     "hosts": "Hosts: {hosts}",
     "controller": "Controller",
@@ -63,8 +63,8 @@
       "message": "Remove the policy for group {group}? Members fall back to their label, watcher and global values.",
       "accept": "Remove"
     },
-    "saved": "Policy saved. {members} containers updated.",
-    "removed": "Policy removed. {members} containers updated.",
+    "saved": "Policy saved. {members} container updated. | Policy saved. {members} containers updated.",
+    "removed": "Policy removed. {members} container updated. | Policy removed. {members} containers updated.",
     "warningsTitle": "Warnings",
     "errors": {
       "load": "Failed to load group policies",
