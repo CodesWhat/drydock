@@ -329,6 +329,7 @@ describe('status', () => {
       'Still needed in the key ring until "rewrap" moves what they protect: k1',
     );
     expect(out).toContain('Not in the key ring, so what they protect cannot be read: k0');
+    expect(out).toContain('1 factor cannot be read with this key ring.');
     expect(out).not.toContain('can be removed');
   });
 
@@ -352,7 +353,15 @@ describe('status', () => {
     });
     configureKeyring({ k1: NEW_KEY }, 'k1');
 
-    expect(run('status').out).toContain('key k1: CANNOT BE DECRYPTED with the key of that id');
+    const { out } = run('status');
+
+    expect(out).toContain('key k1: CANNOT BE DECRYPTED with the key of that id');
+    expect(out).toContain('k1: 1 factor, 0 pending enrollments - active');
+    expect(out).toContain(
+      '1 factor cannot be read with this key ring. Do not remove any key until each one is readable again or has been removed with "remove".',
+    );
+    expect(out).not.toContain('Everything is under the active key');
+    expect(out).not.toContain('can be removed');
   });
 
   test('an unusable key ring is named by its error code and nothing is checked', () => {
@@ -491,12 +500,41 @@ describe('rewrap', () => {
 
     expect(result.code).toBe(1);
     expect(result.out).toContain('Re-encrypted 0 factors');
-    expect(result.err).toContain('2 factors could not be read and stay under their old key');
+    expect(result.err).toContain('2 factors could not be read and were left as they are');
     expect(result.err).toContain('basic.eve / "eve"');
     expect(result.err).toContain('key k1: NOT IN THE KEY RING');
-    expect(result.err).toContain('Restore the key, or remove these factors with "remove"');
+    expect(result.err).toContain('Restore the right key, or remove these factors with "remove"');
     expect(result.out).not.toContain('can be removed');
   });
+
+  test.each([
+    [
+      '--confirm',
+      ['rewrap', '--confirm'],
+      'Re-encrypted 0 factors under the active key "k1"; 0 already there.',
+    ],
+    [
+      'a preview',
+      ['rewrap'],
+      'Would re-encrypt 0 factors under the active key "k1"; 0 already there.',
+    ],
+  ])(
+    'with %s, a wrong key under the active id is a failure and never an all-clear',
+    (_label, argv, counted) => {
+      configureKeyring({ k1: NEW_KEY }, 'k1');
+      const before = inspect(() => totpStore.listFactors());
+
+      const result = run(...argv);
+
+      expect(result.code).toBe(1);
+      expect(result.out).toContain(counted);
+      expect(result.out).not.toContain('Everything is under the active key');
+      expect(result.out).not.toContain('can be removed');
+      expect(result.err).toContain('2 factors could not be read and were left as they are');
+      expect(result.err).toContain('key k1: CANNOT BE DECRYPTED with the key of that id');
+      expect(inspect(() => totpStore.listFactors())).toEqual(before);
+    },
+  );
 
   test.each([
     [{}, 'The key ring is not configured'],

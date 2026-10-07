@@ -42,7 +42,6 @@ import {
 } from '../store/totp.js';
 import {
   decryptTotpSeed,
-  type EncryptedTotpSeed,
   encryptTotpSeed,
   rewrapTotpSeed,
   type TotpKeyring,
@@ -215,16 +214,31 @@ function bindingOf(factor: TotpFactorRecord, subjectId: string = factor.subjectI
   return seedBindingFor(subjectId, factor.factorId, factor);
 }
 
+/**
+ * Why the key ring cannot read a factor's seed, or undefined when it can. The
+ * only proof is decrypting it: a key ring can hold different key material
+ * under the id a factor names, and then the id matching means nothing.
+ */
+function findUnreadableState(
+  factor: TotpFactorRecord,
+  keyring: TotpKeyring,
+): UnreadableKeyState | undefined {
+  try {
+    decryptTotpSeed(factor, bindingOf(factor), keyring).fill(0);
+    return undefined;
+  } catch (error: unknown) {
+    return unreadableKeyState(error);
+  }
+}
+
 function readKeyState(factor: TotpFactorRecord, keyring: KeyringState): FactorKeyState {
   if (keyring.status !== 'loaded') {
     return 'unchecked';
   }
-  try {
-    decryptTotpSeed(factor, bindingOf(factor), keyring.keyring).fill(0);
-  } catch (error: unknown) {
-    return unreadableKeyState(error);
-  }
-  return totpSeedNeedsRewrap(factor, keyring.keyring) ? 'needs-rewrap' : 'ok';
+  return (
+    findUnreadableState(factor, keyring.keyring) ??
+    (totpSeedNeedsRewrap(factor, keyring.keyring) ? 'needs-rewrap' : 'ok')
+  );
 }
 
 interface FactorStatus {
@@ -284,8 +298,9 @@ export function describeStore(
 export interface RewrapOutcome {
   /** Factors re-encrypted under the active key, or that would be. */
   rewrapped: number;
+  /** Factors already under the active key, which the key was checked to decrypt. */
   alreadyActive: number;
-  /** Factors left under their old key because the key ring cannot read them. */
+  /** Factors left as they are because the key ring cannot read them, whatever key id they name. */
   failed: { factor: TotpFactorRecord; keyState: UnreadableKeyState }[];
   /** Pending enrollments under a retired key, deleted so nothing keeps that key in use. */
   enrollmentsDiscarded: number;
@@ -293,10 +308,11 @@ export interface RewrapOutcome {
 
 /**
  * Re-encrypt every factor that is not under the active key. Idempotent: a
- * factor already there is left alone, so a second run changes nothing. A
- * factor whose key is missing or wrong is skipped and reported; the rest still
- * move. With `apply` false nothing is written and the numbers are what a real
- * run would do.
+ * factor already there is left alone, so a second run changes nothing. Every
+ * factor is decrypted first, the ones already under the active key id
+ * included, and one the key ring cannot read is skipped and reported as a
+ * failure; the rest still move. With `apply` false nothing is written and the
+ * numbers are what a real run would do.
  */
 export function rewrapFactors(
   keyring: TotpKeyring,
@@ -309,17 +325,16 @@ export function rewrapFactors(
     enrollmentsDiscarded: 0,
   };
   for (const factor of listFactors()) {
+    const unreadable = findUnreadableState(factor, keyring);
+    if (unreadable !== undefined) {
+      outcome.failed.push({ factor, keyState: unreadable });
+      continue;
+    }
     if (!totpSeedNeedsRewrap(factor, keyring)) {
       outcome.alreadyActive += 1;
       continue;
     }
-    let next: EncryptedTotpSeed;
-    try {
-      next = rewrapTotpSeed(factor, bindingOf(factor), keyring);
-    } catch (error: unknown) {
-      outcome.failed.push({ factor, keyState: unreadableKeyState(error) });
-      continue;
-    }
+    const next = rewrapTotpSeed(factor, bindingOf(factor), keyring);
     outcome.rewrapped += apply ? Number(rewrapFactorSecret(factor.factorId, factor, next, now)) : 1;
   }
   outcome.enrollmentsDiscarded = apply

@@ -407,6 +407,10 @@ describe('lost key ring', () => {
           ? 'key k1: not checked, no usable key ring'
           : 'key k1: CANNOT BE DECRYPTED',
       );
+      // Nothing about a lost key reads as "safe to tidy the key ring".
+      const rewrap = command('rewrap', '--db', copy, '--confirm');
+      expect(rewrap.code).toBe(1);
+      expect(`${status.out}\n${rewrap.out}`).not.toContain('can be removed from the key ring');
       const removed = command('remove', '--subject', eve.subjectId, '--db', copy, '--confirm');
       expect(removed.code).toBe(0);
 
@@ -415,7 +419,7 @@ describe('lost key ring', () => {
       expect(afterwards.status).toBe(200);
       expect(await protectedStatus(h, cookieOf(afterwards))).toBe(200);
       expect(breakGlassDetails()).toHaveLength(1);
-      expectNoSecretIn(everythingSaid(status, removed), [eve]);
+      expectNoSecretIn(everythingSaid(status, rewrap, removed), [eve]);
     },
   );
 });

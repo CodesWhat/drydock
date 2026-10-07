@@ -37,6 +37,7 @@ import {
   removeFactorOffline,
   rewrapFactors,
   runExclusively,
+  type StoreStatus,
 } from './totp-offline.js';
 
 // The defaults `store/index.ts` validates its configuration with. They are
@@ -261,12 +262,20 @@ function describeKeyRole(key: KeyStatus): string {
   ];
 }
 
-/** Which keys the key ring still has to hold: the answer to "can I remove the old key yet". */
-function printKeySummary(io: MigrateCliIo, keys: readonly KeyStatus[]): void {
-  const stillNeeded = keys.filter(
+/**
+ * Which keys the key ring still has to hold: the answer to "can I remove the
+ * old key yet". The all-clear is only given when every factor was actually
+ * decrypted. A factor the key ring cannot read, under whatever key id, means
+ * some key is missing or wrong, and removing another one could only add to it.
+ */
+function printKeySummary(io: MigrateCliIo, status: StoreStatus): void {
+  const stillNeeded = status.keys.filter(
     (key) => key.role === 'retired' && key.factors + key.enrollments > 0,
   );
-  const missing = keys.filter((key) => key.role === 'missing');
+  const missing = status.keys.filter((key) => key.role === 'missing');
+  const unreadable = status.factors.filter(
+    ({ keyState }) => keyState === 'key-missing' || keyState === 'undecryptable',
+  ).length;
   if (stillNeeded.length > 0) {
     io.out(
       `Still needed in the key ring until "rewrap" moves what they protect: ${stillNeeded.map((key) => key.keyId).join(', ')}`,
@@ -277,7 +286,12 @@ function printKeySummary(io: MigrateCliIo, keys: readonly KeyStatus[]): void {
       `Not in the key ring, so what they protect cannot be read: ${missing.map((key) => key.keyId).join(', ')}`,
     );
   }
-  if (stillNeeded.length === 0 && missing.length === 0) {
+  if (unreadable > 0) {
+    io.out(
+      `${plural(unreadable, 'factor')} cannot be read with this key ring. Do not remove any key until each one is readable again or has been removed with "remove".`,
+    );
+  }
+  if (stillNeeded.length === 0 && missing.length === 0 && unreadable === 0) {
     io.out('Everything is under the active key. Retired keys can be removed from the key ring.');
   }
 }
@@ -308,7 +322,7 @@ function runStatus({ io, keyring, identities }: CommandContext): number {
     }
   }
   if (keyring.status === 'loaded') {
-    printKeySummary(io, status.keys);
+    printKeySummary(io, status);
   }
   const orphaned = status.factors.filter((factor) => factor.orphaned).length;
   if (orphaned > 0) {
@@ -339,7 +353,7 @@ function runRewrap({ io, db, options, keyring, identities, now }: CommandContext
     io.out(
       `Discarded ${plural(outcome.enrollmentsDiscarded, 'pending enrollment')} under another key.`,
     );
-    printKeySummary(io, describeStore(keyring, identities).keys);
+    printKeySummary(io, describeStore(keyring, identities));
     return reportUnreadFactors(io, outcome.failed);
   }
   const outcome = sweep();
@@ -360,12 +374,12 @@ function reportUnreadFactors(
   if (failed.length === 0) {
     return 0;
   }
-  io.err(`${plural(failed.length, 'factor')} could not be read and stay under their old key:`);
+  io.err(`${plural(failed.length, 'factor')} could not be read and were left as they are:`);
   for (const { factor, keyState } of failed) {
     io.err(`  ${describeFactor(factor)} - ${describeKeyState(factor, keyState)}`);
   }
   io.err(
-    'Restore the key, or remove these factors with "remove", before taking the old key out of the key ring.',
+    'Restore the right key, or remove these factors with "remove", before taking any key out of the key ring.',
   );
   return 1;
 }

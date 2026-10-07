@@ -443,6 +443,23 @@ describe('rewrapping under the active key', () => {
     expect(totpStore.listKeyUsage()).toEqual([{ keyId: 'k2', factors: 0, enrollments: 1 }]);
   });
 
+  test('a factor under the active key id that the key ring cannot decrypt is a failure, not "already there"', () => {
+    // Same id, different key material: the id matching says nothing about the key.
+    const eve = enrollFactor('basic.eve', 'eve', oldRing);
+    const stored = totpStore.getFactor(eve.factorId);
+
+    for (const apply of [false, true]) {
+      expect(rewrapFactors(wrongRing, { apply, now: NOW })).toEqual({
+        rewrapped: 0,
+        alreadyActive: 0,
+        failed: [{ factor: stored, keyState: 'undecryptable' }],
+        enrollmentsDiscarded: 0,
+      });
+    }
+
+    expect(totpStore.getFactor(eve.factorId)).toEqual(stored);
+  });
+
   test('leaves a factor it cannot read where it is, and says why', () => {
     const lost = enrollFactor('basic.eve', 'eve', keyringOf({ k0: OLD_KEY }, 'k0'));
     const tampered = enrollFactor('basic.bob', 'bob', oldRing);
