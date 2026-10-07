@@ -43,7 +43,7 @@
     "fflate": "0.8.3",
     "js-yaml": "3.15.2",
     "fast-xml-parser": "5.11.1",
-    "joi": "18.2.8",
+    "joi": "18.2.9",
     "minimatch": "10.2.6",
     "picomatch": "4.0.7",
     "postcss": "8.5.28",
