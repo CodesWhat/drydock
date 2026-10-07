@@ -22,6 +22,8 @@ import type {
   ContainerSecurityDelta,
   ContainerSecuritySummary,
   ContainerUpdateOperation,
+  LabelOwnedField,
+  LabelOwnedSource,
   UpdateBlocker,
   UpdateBlockerReason,
   UpdateEligibility,
@@ -175,6 +177,7 @@ export interface ApiContainerInput {
   updateOperation?: ApiContainerUpdateOperation | null;
   updatePolicy?: ApiContainerUpdatePolicy | null;
   updateEligibility?: ApiContainerUpdateEligibility | null;
+  labelOwnedSources?: unknown;
   details?: ApiContainerDetails | null;
   tagFamily?: unknown;
   includeTags?: unknown;
@@ -234,6 +237,44 @@ function asNonNegativeInteger(value: unknown): number | undefined {
   const parsed = Number.parseInt(value, 10);
   // The \d+ match above already guarantees a non-negative parse.
   return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+const LABEL_OWNED_FIELDS: readonly LabelOwnedField[] = [
+  'displayName',
+  'displayIcon',
+  'dependsOn',
+  'dependsOnAction',
+  'notificationTriggerInclude',
+  'notificationTriggerExclude',
+  'actionTriggerInclude',
+  'actionTriggerExclude',
+  'actionTriggerAuto',
+];
+const LABEL_OWNED_SOURCES: readonly string[] = [
+  'override',
+  'label',
+  'compose',
+  'watcher',
+  'default',
+  'unset',
+];
+
+/** Keep only the known label-owned fields whose source is a value the server can send. */
+function deriveLabelOwnedSources(
+  value: unknown,
+): Partial<Record<LabelOwnedField, LabelOwnedSource>> | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  return Object.fromEntries(
+    LABEL_OWNED_FIELDS.flatMap((field) => {
+      const source = raw[field];
+      return typeof source === 'string' && LABEL_OWNED_SOURCES.includes(source)
+        ? [[field, source as LabelOwnedSource]]
+        : [];
+    }),
+  );
 }
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -955,6 +996,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturityTooltip: formatUpdateAge(updateAgeMs, !!apiContainer.updateAvailable, t),
     updateEligibility: deriveUpdateEligibility(apiContainer),
+    labelOwnedSources: deriveLabelOwnedSources(apiContainer.labelOwnedSources),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',
