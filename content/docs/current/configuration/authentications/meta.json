@@ -1,4 +1,4 @@
 {
   "title": "Authentication",
-  "pages": ["index", "basic", "oidc", "api-keys"]
+  "pages": ["index", "basic", "oidc", "api-keys", "two-factor"]
 }

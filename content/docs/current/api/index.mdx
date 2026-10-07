@@ -690,7 +690,7 @@ curl -X POST https://drydock.example.com/api/v1/auth/totp-enrollments \
 
 Enrollments expire after ten minutes. Confirming one ends every other session of the account and closes their open streams; the session that confirmed stays signed in. After that, `POST /auth/login` answers `202` with a challenge until a code completes it. Removing the factor also ends the other sessions, and password login works again.
 
-Enrollment needs an encryption key ring configured on the server. Without one these routes answer `503` and change nothing. API keys already minted from an account are independent of its sessions and are not revoked by any of this; review them after a recovery login.
+Enrollment needs an [encryption key ring](/docs/configuration/authentications/two-factor#the-key-ring) configured on the server. Without one these routes answer `503` and change nothing. A person who has lost both their device and their recovery codes can't use these routes at all: an operator removes the factor with the [offline command](/docs/configuration/authentications/two-factor#someone-lost-their-device). API keys already minted from an account are independent of its sessions and are not revoked by any of this; review them after a recovery login.
 
 #### What a recovery login can't do
 

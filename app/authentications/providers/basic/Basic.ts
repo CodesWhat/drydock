@@ -2,7 +2,12 @@ import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
-import { isSecondFactorRequired, resolveLocalIdentity } from '../../../api/totp-identity.js';
+import {
+  deriveSubjectId,
+  isSecondFactorRequired,
+  resolveLocalIdentity,
+} from '../../../api/totp-identity.js';
+import { assertNotShadowedByOrphanedFactor } from '../../../api/totp-orphans.js';
 import {
   observeAuthLoginDuration,
   recordAuthLogin,
@@ -330,9 +335,15 @@ class Basic extends Authentication<BasicConfiguration> {
    * stored session.
    */
   getAuthenticator(_app?: unknown): Authenticator {
+    const readLocalSubjectId = (): string => deriveSubjectId(this.getId(), this.configuration.user);
     return {
       id: this.getId(),
       persistsSession: false,
+      // Read on use, so it names the account as it is configured now. A factor
+      // enrolled under any other subject is orphaned (spec 11.1.2 decision 10).
+      get localSubjectId(): string {
+        return readLocalSubjectId();
+      },
       authenticate: (req: AuthRequest) => this.authenticateRequest(req),
       authenticateForLogin: (req: AuthRequest) => this.verifyRequestCredentials(req),
       getFailureStatus: (req: AuthRequest) =>
@@ -389,13 +400,15 @@ class Basic extends Authentication<BasicConfiguration> {
    * subject version cannot be read this throws rather than answering as a wrong
    * password: a store fault is the server's, so it must not count toward the
    * caller's lockout, and the session it would mint could not be checked later.
+   *
+   * It throws the same way while a factor is orphaned and this account has
+   * none of its own: the account may be the renamed owner of that factor, and
+   * signing it in on a password would drop a second factor nobody removed.
    */
   private toBasicPrincipal(username: string): AuthenticatedPrincipal & { kind: 'basic' } {
-    return {
-      kind: 'basic',
-      username,
-      identity: resolveLocalIdentity(this.getId(), username),
-    };
+    const identity = resolveLocalIdentity(this.getId(), username);
+    assertNotShadowedByOrphanedFactor(identity.subjectId);
+    return { kind: 'basic', username, identity };
   }
 
   /**
