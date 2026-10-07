@@ -77,7 +77,8 @@
       "fileHeading": "Drydock recovery codes",
       "filename": "drydock-recovery-codes.txt",
       "saved": "I saved these codes",
-      "done": "Done"
+      "done": "Done",
+      "downloadFailed": "Your browser wouldn't download the file. Copy them instead."
     },
     "remove": {
       "header": "Turn off two-factor authentication?",

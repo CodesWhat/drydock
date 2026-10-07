@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "2단계 인증",
+    "description": "로그인할 때마다 비밀번호와 함께 인증 앱의 코드를 요구합니다.",
+    "loading": "2단계 인증 상태를 불러오는 중",
+    "retry": "다시 시도",
+    "status": {
+      "off": "꺼짐",
+      "on": "켜짐",
+      "onSince": "{date}부터 켜짐",
+      "recoveryRemaining": "남은 복구 코드: {count}개",
+      "recoveryNone": "남은 복구 코드가 없습니다. 인증 앱에 접근할 수 없게 되기 전에 새 세트를 생성하세요.",
+      "recoveryLow": "복구 코드가 얼마 남지 않았습니다. 새 세트를 생성하세요.",
+      "pending": "설정을 시작했으며 코드를 기다리는 중입니다. {time}에 만료됩니다."
+    },
+    "unavailable": {
+      "notLocal": "2단계 인증은 비밀번호로 로그인한 로컬 계정에서만 사용할 수 있습니다. 해당 계정이라면 로그아웃한 뒤 다시 로그인하세요.",
+      "httpsRequired": "2단계 인증 설정에는 HTTPS가 필요합니다. HTTPS로 Drydock을 열거나, 네트워크를 신뢰할 수 있다면 관리자에게 DD_AUTH_TOTP_ALLOWHTTP=true 설정을 요청하세요.",
+      "noKeyRing": "이 서버에서는 2단계 인증 설정을 사용할 수 없습니다. 먼저 관리자가 암호화 키링을 구성해야 합니다.",
+      "recoverySession": "복구 코드로 로그인했으므로 이 작업은 허용되지 않습니다. 인증 앱의 코드로 로그인하세요."
+    },
+    "actions": {
+      "enable": "켜기",
+      "replace": "인증 앱 교체",
+      "regenerate": "새 복구 코드",
+      "remove": "끄기",
+      "cancelSetup": "설정 취소",
+      "cancel": "취소"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "본인임을 확인하세요",
+        "replace": "인증 앱을 교체하려면 본인임을 확인하세요",
+        "regenerate": "새 복구 코드를 받으려면 본인임을 확인하세요",
+        "remove": "2단계 인증을 끄려면 본인임을 확인하세요"
+      },
+      "hint": "비밀번호를 입력하세요. 이 단계 이후에는 아무것도 저장되지 않습니다.",
+      "hintWithCode": "비밀번호와 현재 코드를 입력하세요. 이 단계 이후에는 아무것도 저장되지 않습니다.",
+      "passwordLabel": "비밀번호",
+      "passwordPlaceholder": "비밀번호 입력",
+      "codeLabel": "인증 코드",
+      "codePlaceholder": "6자리 코드",
+      "recoveryLabel": "복구 코드",
+      "recoveryPlaceholder": "복구 코드 입력",
+      "useRecovery": "복구 코드 사용",
+      "useCode": "인증 코드 사용",
+      "submit": {
+        "enable": "계속",
+        "replace": "계속",
+        "regenerate": "새 코드 생성",
+        "remove": "2단계 인증 끄기",
+        "busy": "확인 중..."
+      }
+    },
+    "scan": {
+      "heading": "인증 앱으로 스캔하세요",
+      "instructions": "인증 앱을 열고 계정을 추가한 뒤 이 코드를 스캔하세요. 그런 다음 앱에 표시되는 6자리 코드를 입력하세요.",
+      "replaceNote": "새 인증 앱을 확인하기 전까지 현재 인증 앱은 계속 작동합니다.",
+      "qrLabel": "2단계 인증 설정용 QR 코드",
+      "qrFailed": "QR 코드를 그릴 수 없습니다. 대신 설정 키를 입력하세요.",
+      "secretLabel": "스캔할 수 없나요? 이 설정 키를 입력하세요",
+      "copySecret": "키 복사",
+      "copied": "복사됨",
+      "expiresAt": "이 설정은 {time}에 만료됩니다.",
+      "codeLabel": "인증 코드",
+      "codeHint": "인증 앱의 6자리 코드를 입력하세요.",
+      "codePlaceholder": "6자리 코드",
+      "confirm": "확인하고 켜기",
+      "confirming": "확인 중..."
+    },
+    "codes": {
+      "heading": "복구 코드를 저장하세요",
+      "description": "인증 앱을 잃어버렸을 때 각 코드는 한 번만 사용할 수 있습니다. 코드는 지금 한 번만 표시됩니다.",
+      "copy": "코드 복사",
+      "copied": "복사됨",
+      "download": "다운로드",
+      "fileHeading": "Drydock 복구 코드",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "이 코드를 저장했습니다",
+      "done": "완료",
+      "downloadFailed": "브라우저가 파일을 다운로드하지 않았습니다. 대신 코드를 복사하세요."
+    },
+    "remove": {
+      "header": "2단계 인증을 끌까요?",
+      "message": "로그인에 다시 비밀번호만 필요해지며, 다른 세션은 종료됩니다.",
+      "accept": "끄기"
+    },
+    "notice": {
+      "enabled": "2단계 인증이 켜져 있습니다.",
+      "replaced": "새 인증 앱이 활성화되었습니다.",
+      "regenerated": "새 복구 코드가 활성화되었습니다. 이전 코드는 더 이상 작동하지 않습니다.",
+      "removed": "2단계 인증이 꺼져 있습니다."
+    },
+    "errors": {
+      "load": "2단계 인증 상태를 불러올 수 없습니다.",
+      "network": "서버에 연결할 수 없습니다. 다시 시도하세요.",
+      "generic": "문제가 발생했습니다. 다시 시도하세요.",
+      "sessionEnded": "세션이 종료되었습니다. 다시 로그인하세요.",
+      "reauthFailed": "비밀번호 또는 코드가 일치하지 않습니다. 확인한 뒤 다시 시도하세요.",
+      "locked": "시도 횟수가 너무 많습니다. {time} 후에 다시 시도하세요.",
+      "lockedLater": "시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.",
+      "busy": "다른 확인이 아직 진행 중입니다. 잠시 후 다시 시도하세요.",
+      "invalidRequest": "비밀번호와 올바른 코드를 입력하세요.",
+      "codeFormat": "인증 앱의 6자리 숫자를 입력하세요.",
+      "codeWrong": "코드가 작동하지 않았습니다. 확인한 뒤 다시 시도하세요.",
+      "enrollmentExpired": "이 설정이 만료되었습니다. 처음부터 다시 시작하세요.",
+      "enrollmentGone": "잘못된 코드가 너무 많아 이 설정이 닫혔습니다. 처음부터 다시 시작하세요.",
+      "stateChanged": "2단계 인증 설정이 다른 곳에서 변경되었습니다. 확인한 뒤 다시 시도하세요.",
+      "notActive": "2단계 인증이 켜져 있지 않습니다."
+    }
+  }
+}
