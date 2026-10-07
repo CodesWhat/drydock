@@ -392,6 +392,9 @@ describe('status', () => {
     expect(out).toContain(
       'basic.gone / "eve" - ORPHANED: no configured account has this provider and username',
     );
+    // The other factor is shown as attached to a configured account, so a
+    // refusal Drydock logs about it is a provider that failed to register.
+    expect(out).toContain('basic.eve / "eve" - account configured');
     expect(out).toContain('Orphaned factors: 1');
     expect(out.match(/ORPHANED/g)).toHaveLength(1);
   });
@@ -782,7 +785,7 @@ describe('rebind', () => {
   test.each([
     [
       ['--username', 'bob', '--to-provider', 'basic.evelyn'],
-      'basic.bob / "bob" is still a configured account',
+      'basic.bob / "bob" is still a configured account. Only a factor whose account is gone can be moved. If Drydock refuses sign-in over this factor anyway, its Basic provider failed to register at startup: fix its configuration and leave the factor where it is.',
     ],
     [
       ['--username', 'eve', '--to-provider', 'basic.bob'],

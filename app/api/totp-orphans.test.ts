@@ -22,7 +22,11 @@ import {
 } from './authenticator-chain.js';
 import { deriveSubjectId } from './totp-identity.js';
 import { enrollFactor, keyringOf, OLD_KEY } from './totp-offline.test.helpers.js';
-import { assertNotShadowedByOrphanedFactor, listOrphanedFactors } from './totp-orphans.js';
+import {
+  assertNotShadowedByOrphanedFactor,
+  listOrphanedFactors,
+  resetOrphanedFactorNoticeForTests,
+} from './totp-orphans.js';
 
 const keyring = keyringOf({ k1: OLD_KEY }, 'k1');
 
@@ -45,6 +49,7 @@ beforeEach(() => {
   db = createMigratedMemoryDatabase();
   totpStore.createCollections(db);
   clearAuthenticators();
+  resetOrphanedFactorNoticeForTests();
   // The session authenticator: registered, and no local account of its own.
   registerAuthenticator({
     id: 'session',
@@ -54,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   clearAuthenticators();
   db.close();
 });
@@ -138,9 +144,67 @@ describe('signing in beside an orphaned factor', () => {
     const guest = registerAccount('basic.guest', 'guest');
 
     expect(() => assertNotShadowedByOrphanedFactor(guest)).toThrow(
-      'Local sign-in is refused: 2 two-factor factor(s) belong to accounts that are no longer configured',
+      'Local sign-in is refused: 2 two-factor factor(s) have no Basic provider that can sign in',
     );
     expect(JSON.stringify(mockLog.error.mock.calls)).not.toContain('private-name');
+    expect(JSON.stringify(mockLog.debug.mock.calls)).not.toContain('private-name');
+  });
+
+  test('the explanation names a provider that failed to register first, before rebind or remove', () => {
+    enrollFactor('basic.eve', 'eve', keyring);
+    const guest = registerAccount('basic.guest', 'guest');
+
+    expect(() => assertNotShadowedByOrphanedFactor(guest)).toThrow();
+
+    const [explanation] = mockLog.error.mock.calls[0] as [string];
+    expect(explanation).toContain('its Basic provider failed to register');
+    expect(explanation).toContain('fix its configuration');
+    expect(explanation.indexOf('failed to register')).toBeLessThan(
+      explanation.indexOf('totp rebind'),
+    );
+    expect(explanation.indexOf('fix its configuration')).toBeLessThan(
+      explanation.indexOf('totp remove'),
+    );
+  });
+
+  test('explains itself once and then stays at debug, however often it refuses', () => {
+    enrollFactor('basic.eve', 'eve', keyring);
+    const guest = registerAccount('basic.guest', 'guest');
+
+    // A metrics scraper on Basic auth runs into the guard on every request.
+    for (let request = 0; request < 25; request += 1) {
+      expect(() => assertNotShadowedByOrphanedFactor(guest)).toThrow();
+    }
+
+    expect(mockLog.error).toHaveBeenCalledTimes(1);
+    expect(mockLog.warn).not.toHaveBeenCalled();
+    expect(mockLog.debug).toHaveBeenCalledTimes(25);
+  });
+
+  test('explains itself again once an hour has passed', () => {
+    vi.useFakeTimers({ now: new Date('2026-10-07T08:00:00.000Z'), toFake: ['Date'] });
+    enrollFactor('basic.eve', 'eve', keyring);
+    const guest = registerAccount('basic.guest', 'guest');
+    const refuse = () => expect(() => assertNotShadowedByOrphanedFactor(guest)).toThrow();
+
+    refuse();
+    vi.setSystemTime(new Date('2026-10-07T08:59:59.000Z'));
+    refuse();
+    expect(mockLog.error).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-10-07T09:00:00.000Z'));
+    refuse();
+    refuse();
+    expect(mockLog.error).toHaveBeenCalledTimes(2);
+  });
+
+  test('marks its error as already explained, so nothing downstream repeats it at error level', () => {
+    enrollFactor('basic.eve', 'eve', keyring);
+    const guest = registerAccount('basic.guest', 'guest');
+
+    expect(() => assertNotShadowedByOrphanedFactor(guest)).toThrow(
+      expect.objectContaining({ alreadyLogged: true, status: 503 }),
+    );
   });
 
   test('a store that cannot answer is a fault, not a pass', () => {

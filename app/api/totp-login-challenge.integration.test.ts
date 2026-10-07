@@ -99,6 +99,7 @@ import {
   totpCounterAt,
 } from './totp-crypto.js';
 import { deriveSubjectId } from './totp-identity.js';
+import { resetOrphanedFactorNoticeForTests } from './totp-orphans.js';
 import { applySessionMiddleware, isAuthenticatedSession } from './ws-upgrade-utils.js';
 
 const TEST_USER = 'wud-card';
@@ -1229,6 +1230,7 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
 
     test('a factor whose account is no longer configured closes password access until it is rebound or removed', async () => {
       const h = await boot();
+      resetOrphanedFactorNoticeForTests();
       const orphanSubject = deriveSubjectId('basic.renamed-away', TEST_USER);
       enroll(orphanSubject);
 
@@ -1242,6 +1244,19 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       expect(
         await status(h, '/protected', { Authorization: basicHeader(TEST_USER, 'wrong') }),
       ).toBe(401);
+
+      // A client that keeps knocking, as a metrics scraper would, is refused
+      // every time and explained once: what to fix, with a provider that
+      // failed to register named before rebind or remove.
+      for (let request = 0; request < 5; request += 1) {
+        expect(await status(h, '/protected', { Authorization: BASIC_AUTH_HEADER })).toBe(503);
+      }
+      const explanations = logLines
+        .map((args) => String(args[0]))
+        .filter((line) => line.includes('failed to register at startup'));
+      expect(explanations).toHaveLength(1);
+      expect(explanations[0]).toContain(`subject=${orphanSubject}`);
+      expect(explanations[0]).toContain('fix its configuration first');
 
       totpStore.removeFactor({ subjectId: orphanSubject, expectedFactorVersion: 1 });
       expect(await status(h, '/protected', { Authorization: BASIC_AUTH_HEADER })).toBe(200);

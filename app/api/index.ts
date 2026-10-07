@@ -280,7 +280,14 @@ function registerRoutes(app) {
 function registerErrorHandler(app) {
   // Global JSON error handler — ensures unhandled exceptions return JSON instead of HTML
   app.use((err, _req, res, _next) => {
-    log.error(`Unhandled error: ${getErrorMessage(err)}`);
+    // An error whose source has already explained it in the log is only
+    // repeated at debug, so a refusal every request runs into (the orphaned
+    // two-factor guard, for one) does not write an error line per request.
+    if (err.alreadyLogged === true) {
+      log.debug(`Refused request: ${getErrorMessage(err)}`);
+    } else {
+      log.error(`Unhandled error: ${getErrorMessage(err)}`);
+    }
     sendErrorResponse(res, err.status || 500, 'Internal server error');
   });
 }

@@ -305,8 +305,12 @@ function runStatus({ io, keyring, identities }: CommandContext): number {
   );
   io.out(`Factors: ${status.factors.length}`);
   for (const { factor, keyState, orphaned, recoveryCodesRemaining } of status.factors) {
+    // "Configured" is what the configuration says, which is all this command
+    // can see. Drydock goes by what registered, so a factor shown as
+    // configured here that Drydock logs as having no provider belongs to a
+    // Basic provider that failed to register.
     io.out(
-      `  ${describeAccount(factor)}${orphaned ? ' - ORPHANED: no configured account has this provider and username' : ''}`,
+      `  ${describeAccount(factor)} - ${orphaned ? 'ORPHANED: no configured account has this provider and username' : 'account configured'}`,
     );
     io.out(`    subject ${factor.subjectId}`);
     io.out(
@@ -442,7 +446,7 @@ function describeRebindRefusal(
 ): string {
   switch (refusal) {
     case 'source-configured':
-      return `${describeAccount(factor)} is still a configured account. Only a factor whose account is gone can be moved.`;
+      return `${describeAccount(factor)} is still a configured account. Only a factor whose account is gone can be moved. If Drydock refuses sign-in over this factor anyway, its Basic provider failed to register at startup: fix its configuration and leave the factor where it is.`;
     case 'target-has-factor':
       return `${describeAccount(target)} already has a factor of its own. Remove that one first if this one should take its place.`;
     case 'keyring-unavailable':
