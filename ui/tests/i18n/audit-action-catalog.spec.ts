@@ -56,4 +56,11 @@ describe('audit action catalog contract', () => {
       }
     },
   );
+
+  it.each(i18n.global.availableLocales)('has a Group target label in %s', (locale) => {
+    expect(i18n.global.te('auditView.target.group', locale)).toBe(true);
+    if (locale !== 'en') {
+      expect(i18n.global.t('auditView.target.group', {}, { locale })).not.toBe('Group');
+    }
+  });
 });

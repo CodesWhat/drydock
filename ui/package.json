@@ -78,6 +78,8 @@
     "yaml": "2.9.0",
     "@babel/core": "7.29.7",
     "undici": "7.29.1",
-    "nanoid": "6.0.1"
+    "nanoid": "6.0.1",
+    "smol-toml": "1.9.0",
+    "source-map-js": "1.2.2"
   }
 }

@@ -548,7 +548,9 @@ jobs:
   test:
     name: "Quality: Test & Coverage"
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The app and UI coverage shards plus the Codecov upload reached 19 to 20
+    # minutes on dev/v1.8 and the job was cancelled mid-upload twice (#1324).
+    timeout-minutes: 30
     permissions:
       contents: read
 
