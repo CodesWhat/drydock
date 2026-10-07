@@ -54,10 +54,11 @@
     "postcss": "8.5.28",
     "esbuild": "0.28.2",
     "js-yaml": "5.4.1",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "nanoid": "6.0.1",
-    "dompurify": "3.4.16"
+    "dompurify": "3.4.16",
+    "source-map-js": "1.2.2"
   }
 }
