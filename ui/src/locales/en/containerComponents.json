@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · unlocks {date}",
       "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
       "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "groupManualOnly": "Group policy '{group}' allows manual updates only. Drydock won't apply this one automatically.",
       "updateButton": "Update now",
       "blockedButton": "Update blocked",
       "notificationsOnlyButton": "Notifications only",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "No update trigger configured",
         "self-update-unavailable": "Self-update unavailable",
         "maintenance-window-closed": "Maintenance window closed",
+        "group-notify-only": "Group allows notifications only",
+        "group-manual-only": "Group requires manual updates",
         "dry-run-trigger": "Dry-run trigger configuration"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Configure update triggers",
         "configureThreshold": "Configure trigger threshold",
         "configureSelfUpdate": "Configure self-update",
-        "configureMaintenance": "Configure maintenance window"
+        "configureMaintenance": "Configure maintenance window",
+        "editGroupPolicy": "Edit group policy"
       }
     },
     "maturityBadge": {

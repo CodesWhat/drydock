@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · розблокується {date}",
       "maturityClockPublished": "Кандидата опубліковано {date} — залишився {count} день до мінімуму {minDays} дн. | Кандидата опубліковано {date} — залишилося {count} днів до мінімуму {minDays} дн.",
       "maturityClockDetected": "Кандидата виявлено {date} — залишився {count} день до мінімуму {minDays} дн. | Кандидата виявлено {date} — залишилося {count} днів до мінімуму {minDays} дн.",
+      "groupManualOnly": "Політика групи '{group}' дозволяє лише ручні оновлення. Drydock не застосовуватиме це оновлення автоматично.",
       "updateButton": "Оновити зараз",
       "blockedButton": "Оновлення заблоковано",
       "notificationsOnlyButton": "Лише сповіщення",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Не налаштовано тригер оновлення",
         "self-update-unavailable": "Самооновлення недоступне",
         "maintenance-window-closed": "Вікно обслуговування закрито",
+        "group-notify-only": "Група дозволяє лише сповіщення",
+        "group-manual-only": "Група вимагає ручних оновлень",
         "dry-run-trigger": "Конфігурація тригера в режимі dry-run"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Налаштувати тригери оновлення",
         "configureThreshold": "Налаштувати поріг тригера",
         "configureSelfUpdate": "Налаштувати самооновлення",
-        "configureMaintenance": "Налаштувати вікно обслуговування"
+        "configureMaintenance": "Налаштувати вікно обслуговування",
+        "editGroupPolicy": "Редагувати політику групи"
       }
     },
     "maturityBadge": {

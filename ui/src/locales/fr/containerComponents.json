@@ -462,6 +462,7 @@
       "liftCountdown": "{countdown} · débloqué le {date}",
       "maturityClockPublished": "Candidat publié le {date} — encore {count} jour avant le minimum de {minDays} jours | Candidat publié le {date} — encore {count} jours avant le minimum de {minDays} jours",
       "maturityClockDetected": "Candidat détecté le {date} — encore {count} jour avant le minimum de {minDays} jours | Candidat détecté le {date} — encore {count} jours avant le minimum de {minDays} jours",
+      "groupManualOnly": "La politique du groupe '{group}' n'autorise que les mises à jour manuelles. Drydock n'appliquera pas celle-ci automatiquement.",
       "updateButton": "Mettre à jour maintenant",
       "blockedButton": "Mise à jour bloquée",
       "notificationsOnlyButton": "Notifications uniquement",
@@ -504,6 +505,8 @@
         "no-update-trigger-configured": "Aucun trigger de mise à jour configuré",
         "self-update-unavailable": "Mise à jour automatique de l'application indisponible",
         "maintenance-window-closed": "Fenêtre de maintenance fermée",
+        "group-notify-only": "Le groupe n'autorise que les notifications",
+        "group-manual-only": "Le groupe exige des mises à jour manuelles",
         "dry-run-trigger": "Configuration du trigger en mode dry-run"
       },
       "actions": {
@@ -516,7 +519,8 @@
         "configureTriggers": "Configurer les triggers de mise à jour",
         "configureThreshold": "Configurer le seuil du trigger",
         "configureSelfUpdate": "Configurer la mise à jour automatique de l'application",
-        "configureMaintenance": "Configurer la fenêtre de maintenance"
+        "configureMaintenance": "Configurer la fenêtre de maintenance",
+        "editGroupPolicy": "Modifier la politique de groupe"
       }
     },
     "maturityBadge": {

@@ -32,8 +32,11 @@ export type UpdateStatusAction =
     }
   | { kind: 'external'; label: string; href: string };
 
+/** Server-reported blocker reasons plus the non-blocker row for a group manual ceiling. */
+type UpdateStatusConditionReason = UpdateBlockerReason | 'group-manual-only';
+
 interface UpdateStatusCondition {
-  reason: UpdateBlockerReason;
+  reason: UpdateStatusConditionReason;
   severity: UpdateBlockerSeverity;
   tone: 'danger' | 'warning' | 'info';
   icon: string;
@@ -98,6 +101,15 @@ const POLICY_REASONS = new Set<UpdateBlockerReason>([
 export const ELIGIBILITY_DOCS =
   'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference';
 
+function groupEditorAction(group: unknown, t: Translate): UpdateStatusAction | undefined {
+  if (typeof group !== 'string') return undefined;
+  return {
+    kind: 'route',
+    label: t('containerComponents.updateStatus.actions.editGroupPolicy'),
+    to: { path: '/config', query: { tab: 'groupPolicies', group } },
+  };
+}
+
 function conditionAction(
   blocker: UpdateBlocker,
   container: UpdateStatusContainer,
@@ -110,6 +122,13 @@ function conditionAction(
       tab: 'actions',
       section: 'update-policy',
     };
+  }
+  if (blocker.reason === 'group-notify-only') {
+    return groupEditorAction(blocker.details?.group, t);
+  }
+  if (blocker.reason === 'trigger-excluded' && blocker.details?.excludedBy === 'group') {
+    const action = groupEditorAction(blocker.details.group, t);
+    if (action) return action;
   }
   if (blocker.reason === 'trigger-excluded' || blocker.reason === 'trigger-not-included') {
     return {
@@ -183,7 +202,9 @@ function conditionAction(
   return undefined;
 }
 
-const CONDITION_ICONS: Record<UpdateBlockerReason, string> = {
+const CONDITION_ICONS: Record<UpdateStatusConditionReason, string> = {
+  'group-notify-only': 'notifications',
+  'group-manual-only': 'containers',
   'security-scan-blocked': 'security',
   'last-update-rolled-back': 'restart',
   'rollback-container': 'restart',
@@ -202,7 +223,7 @@ const CONDITION_ICONS: Record<UpdateBlockerReason, string> = {
   'no-update-available': 'up-to-date',
 };
 
-function conditionHeading(reason: UpdateBlockerReason, t: Translate): string {
+function conditionHeading(reason: UpdateStatusConditionReason, t: Translate): string {
   return t(`containerComponents.updateStatus.conditions.${reason}`);
 }
 
@@ -275,6 +296,28 @@ export function formatLiftCountdown(liftableAt: string, nowMs: number): string |
   return `${minutes}m`;
 }
 
+/**
+ * The group name when the server reports that its group caps updates at manual. Reads the
+ * server-resolved `updateMode`; the ceiling is never recomputed from the policy here.
+ */
+function groupManualCeiling(eligibility: UpdateEligibility | undefined): string | undefined {
+  const updateMode = eligibility?.updateMode;
+  if (updateMode?.source !== 'group' || updateMode.value !== 'manual') return undefined;
+  return updateMode.group;
+}
+
+function groupManualCondition(group: string, t: Translate): UpdateStatusCondition {
+  return {
+    reason: 'group-manual-only',
+    severity: 'soft',
+    tone: 'info',
+    icon: CONDITION_ICONS['group-manual-only'],
+    heading: conditionHeading('group-manual-only', t),
+    body: t('containerComponents.updateStatus.groupManualOnly', { group }),
+    action: groupEditorAction(group, t),
+  };
+}
+
 function actionPolicyBadgeFor(
   actionPolicy: UpdateEligibility['actionPolicy'],
   t: Translate,
@@ -290,7 +333,11 @@ function actionPolicyBadgeFor(
 }
 
 export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewModel {
-  const { container, mode, t } = input;
+  const { container, t } = input;
+  const groupManual = groupManualCeiling(container.updateEligibility);
+  // A group manual ceiling means automatic dispatch isn't in play for this container.
+  const mode: UpdateMode =
+    groupManual !== undefined && input.mode === 'auto' ? 'manual' : input.mode;
   const allBlockers = container.updateEligibility?.blockers ?? [];
   const activeOperation =
     Boolean(input.hasActiveOperationBadge) ||
@@ -301,6 +348,9 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
     .filter((blocker) => !(input.hasActiveOperationBadge && blocker.reason === 'active-operation'))
     .sort(sortConditions);
   const conditions = visibleBlockers.map((blocker) => toCondition(blocker, container, t));
+  if (groupManual !== undefined && hasUpdate) {
+    conditions.push(groupManualCondition(groupManual, t));
+  }
   const hardBlocked = allBlockers.some(
     (blocker) => blocker.reason !== 'active-operation' && severityOf(blocker) === 'hard',
   );
@@ -376,7 +426,10 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
     hasUpdate,
     manualUpdateDisabled: !hasUpdate || mode === 'notify' || hardBlocked || activeOperation,
     insightNote,
-    actionPolicyBadge: actionPolicyBadgeFor(container.updateEligibility?.actionPolicy, t),
+    actionPolicyBadge:
+      groupManual === undefined
+        ? actionPolicyBadgeFor(container.updateEligibility?.actionPolicy, t)
+        : undefined,
   };
 }
 
