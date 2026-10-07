@@ -32,8 +32,10 @@ import {
   runExclusively,
 } from './totp-offline.js';
 import {
+  createForeignDatabase,
   createStoreFile,
   enrollFactor,
+  fingerprintDirectory,
   keyringOf,
   NEW_KEY,
   OLD_KEY,
@@ -91,48 +93,147 @@ describe('opening a store offline', () => {
     const enrolled = enrollFactor('basic.eve', 'eve', oldRing);
     db.close();
 
-    db = openOfflineStore(storePath());
+    db = openOfflineStore(storePath(), { writable: true });
 
     expect(totpStore.getFactor(enrolled.factorId)?.username).toBe('eve');
+    totpStore.revokeSessionsIssuedBefore(enrolled.subjectId, 'eve', 5);
+    expect(totpStore.getSessionsNotBefore(enrolled.subjectId)).toBe(5);
+  });
+
+  test('read-only, it reads the store and leaves the file and its directory exactly as they were', () => {
+    const enrolled = enrollFactor('basic.eve', 'eve', oldRing);
+    db.close();
+    const before = fingerprintDirectory(directory);
+
+    db = openOfflineStore(storePath(), { writable: false });
+    expect(totpStore.getFactor(enrolled.factorId)?.username).toBe('eve');
+    expect(describeStore(loaded(oldRing), []).factors).toHaveLength(1);
+    db.close();
+
+    expect(fingerprintDirectory(directory)).toEqual(before);
+  });
+
+  test('read-only, it cannot write', () => {
+    db.close();
+
+    db = openOfflineStore(storePath(), { writable: false });
+
+    expect(() => totpStore.revokeSessionsIssuedBefore('subject', 'eve', 5)).toThrow();
+  });
+
+  test('read-only, it sees what a running Drydock has written but not yet checkpointed', () => {
+    // `db` stays open, as a running Drydock would: the new rows are still in its log.
+    const enrolled = enrollFactor('basic.eve', 'eve', oldRing);
+    expect(fs.existsSync(`${storePath()}-wal`)).toBe(true);
+
+    const reader = openOfflineStore(storePath(), { writable: false });
+    try {
+      expect(findFactors({ username: 'eve' }).map((factor) => factor.factorId)).toEqual([
+        enrolled.factorId,
+      ]);
+    } finally {
+      reader.close();
+      totpStore.createCollections(db);
+    }
+  });
+
+  test('read-only, it reads a store kept in a rollback journal without creating anything beside it', () => {
+    const enrolled = enrollFactor('basic.eve', 'eve', oldRing);
+    db.pragma('journal_mode', 'DELETE');
+    db.close();
+    const before = fingerprintDirectory(directory);
+    expect(Object.keys(before)).toEqual(['dd.sqlite']);
+
+    db = openOfflineStore(storePath(), { writable: false });
+    expect(totpStore.getFactor(enrolled.factorId)).toBeDefined();
+    db.close();
+
+    expect(fingerprintDirectory(directory)).toEqual(before);
   });
 
   test('refuses a path with no file, and creates none', () => {
     const missing = path.join(directory, 'nope.sqlite');
 
-    expectStoreError(() => openOfflineStore(missing), 'NOT_FOUND');
+    for (const writable of [false, true]) {
+      expectStoreError(() => openOfflineStore(missing, { writable }), 'NOT_FOUND');
+    }
 
     expect(fs.existsSync(missing)).toBe(false);
   });
 
-  test('refuses a file that is not a SQLite database', () => {
-    const garbage = path.join(directory, 'garbage.sqlite');
-    fs.writeFileSync(
-      garbage,
-      'this is not a database, however much it would like to be '.repeat(40),
-    );
+  describe('a file that is not a Drydock store is refused without a byte of it changing', () => {
+    const cases: [string, string, (file: string) => void][] = [
+      ['an empty file', 'SCHEMA_MISMATCH', (file) => fs.writeFileSync(file, '')],
+      [
+        'another SQLite database',
+        'SCHEMA_MISMATCH',
+        (file) => createForeignDatabase(file, 'delete'),
+      ],
+      [
+        'another SQLite database in write-ahead-log mode',
+        'SCHEMA_MISMATCH',
+        (file) => createForeignDatabase(file, 'wal'),
+      ],
+      [
+        'a file that is not a database',
+        'UNREADABLE',
+        (file) => fs.writeFileSync(file, 'this is not a database, whatever its name '.repeat(40)),
+      ],
+      ['a directory', 'UNREADABLE', (file) => fs.mkdirSync(file)],
+      [
+        'a store whose schema bookkeeping is damaged on disk',
+        'UNREADABLE',
+        (file) => {
+          const store = openDatabase(file);
+          migrate(store);
+          const pageSize = Number(store.pragma('page_size'));
+          const rootPage = Number(
+            store
+              .prepare("SELECT rootpage FROM sqlite_schema WHERE name = 'schema_migrations'")
+              .get()?.rootpage,
+          );
+          store.close();
+          const descriptor = fs.openSync(file, 'r+');
+          fs.writeSync(
+            descriptor,
+            Buffer.alloc(pageSize, 0xff),
+            0,
+            pageSize,
+            (rootPage - 1) * pageSize,
+          );
+          fs.closeSync(descriptor);
+        },
+      ],
+      [
+        'a store whose schema is behind this version',
+        'SCHEMA_MISMATCH',
+        (file) => {
+          const behind = openDatabase(file);
+          migrate(behind, MIGRATIONS.slice(0, -1));
+          behind.close();
+        },
+      ],
+    ];
 
-    expectStoreError(() => openOfflineStore(garbage), 'UNREADABLE');
-  });
+    test.each(
+      cases.flatMap(([label, code, create]) =>
+        [false, true].map((writable) => [label, writable, code, create] as const),
+      ),
+    )('%s (writable: %s)', (_label, writable, code, create) => {
+      db.close();
+      fs.rmSync(storePath());
+      const file = path.join(directory, 'candidate.sqlite');
+      create(file);
+      const isDirectory = fs.statSync(file).isDirectory();
+      const before = isDirectory ? fs.readdirSync(directory) : fingerprintDirectory(directory);
 
-  test('refuses a database that is not a Drydock store', () => {
-    const empty = path.join(directory, 'empty.sqlite');
-    openDatabase(empty).close();
+      expectStoreError(() => openOfflineStore(file, { writable }), code);
 
-    expectStoreError(() => openOfflineStore(empty), 'SCHEMA_MISMATCH');
-  });
-
-  test('refuses a store whose schema is behind this version rather than migrating it', () => {
-    const behindPath = path.join(directory, 'behind.sqlite');
-    const behind = openDatabase(behindPath);
-    migrate(behind, MIGRATIONS.slice(0, -1));
-    behind.close();
-
-    expectStoreError(() => openOfflineStore(behindPath), 'SCHEMA_MISMATCH');
-
-    const reopened = openDatabase(behindPath);
-    const versions = reopened.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-    reopened.close();
-    expect(versions?.n).toBe(MIGRATIONS.length - 1);
+      expect(isDirectory ? fs.readdirSync(directory) : fingerprintDirectory(directory)).toEqual(
+        before,
+      );
+      db = createStoreFile(directory);
+    });
   });
 });
 

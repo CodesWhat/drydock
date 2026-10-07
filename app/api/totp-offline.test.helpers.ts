@@ -3,8 +3,10 @@
  * SQLite store, and factors enrolled in it through the store the way the
  * management API enrolls them.
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { type Database, openDatabase } from '../store/db/driver.js';
 import { migrate } from '../store/db/migrations.js';
 import * as totpStore from '../store/totp.js';
@@ -37,6 +39,36 @@ export function createStoreFile(directory: string, name = 'dd.sqlite'): Database
   migrate(db);
   totpStore.createCollections(db);
   return db;
+}
+
+/**
+ * Every file in a directory with the hash of its bytes. Two equal fingerprints
+ * mean nothing was created, removed or changed in between, sidecar files
+ * included.
+ */
+export function fingerprintDirectory(directory: string): Record<string, string> {
+  return Object.fromEntries(
+    fs
+      .readdirSync(directory)
+      .sort()
+      .map((name) => [
+        name,
+        createHash('sha256')
+          .update(fs.readFileSync(path.join(directory, name)))
+          .digest('hex'),
+      ]),
+  );
+}
+
+/**
+ * A SQLite database that is not a Drydock store, made with the engine directly
+ * so nothing of the store's own setup (its journal mode, its schema) touches it.
+ */
+export function createForeignDatabase(file: string, journalMode: 'delete' | 'wal'): void {
+  const foreign = new DatabaseSync(file);
+  foreign.exec(`PRAGMA journal_mode = ${journalMode}`);
+  foreign.exec('CREATE TABLE someone_elses (a INTEGER); INSERT INTO someone_elses VALUES (1)');
+  foreign.close();
 }
 
 /** Copy a closed store the way an operator would before a drill. */

@@ -19,9 +19,11 @@ vi.mock('../log/index.js', () => {
 
 import { deriveSubjectId } from './totp-identity.js';
 import {
+  createForeignDatabase,
   createStoreFile,
   type EnrolledFactor,
   enrollFactor,
+  fingerprintDirectory,
   keyringJson,
   keyringOf,
   NEW_KEY,
@@ -215,6 +217,60 @@ describe('finding the store', () => {
     expect(result.code).toBe(1);
     expect(result.err).toContain('is not a Drydock store at the schema this version uses');
     expect(result.err).toContain('Start Drydock once on this version');
+  });
+});
+
+describe('what only reads never writes', () => {
+  beforeEach(() => {
+    seed(() => {
+      enrollFactor('basic.eve', 'eve', oldRing);
+      enrollFactor('basic.bob', 'bob', oldRing);
+      startPendingEnrollment('basic.lee', 'lee', oldRing);
+    });
+    configureKeyring({ k1: OLD_KEY, k2: NEW_KEY }, 'k2');
+    configureAccount('evelyn', 'evelyn');
+    configureAccount('bob', 'bob');
+  });
+
+  test.each([
+    ['status', ['status']],
+    ['a rewrap preview', ['rewrap']],
+    ['a remove preview', ['remove', '--username', 'bob']],
+    ['a rebind preview', ['rebind', '--username', 'eve', '--to-provider', 'basic.evelyn']],
+    ['a refused selector', ['remove', '--username', 'nobody', '--confirm']],
+  ])('%s leaves the store file and its directory byte for byte as they were', (_label, argv) => {
+    const before = fingerprintDirectory(directory);
+
+    const result = run(...argv);
+
+    expect(result.err === '' ? result.code : 1).toBe(argv.includes('nobody') ? 1 : 0);
+    expect(fingerprintDirectory(directory)).toEqual(before);
+  });
+
+  test.each([
+    ['an empty file', (file: string) => fs.writeFileSync(file, '')],
+    ['another SQLite database', (file: string) => createForeignDatabase(file, 'delete')],
+    [
+      'another SQLite database in write-ahead-log mode',
+      (file: string) => createForeignDatabase(file, 'wal'),
+    ],
+  ])('--db pointed at %s is refused and the file is left as it was', (_label, create) => {
+    const other = path.join(directory, 'other.sqlite');
+    create(other);
+    const before = fingerprintDirectory(directory);
+
+    for (const argv of [
+      ['status'],
+      ['rewrap'],
+      ['rewrap', '--confirm'],
+      ['remove', '--username', 'bob', '--confirm'],
+    ]) {
+      const result = run(...argv, '--db', other);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('is not a Drydock store at the schema this version uses');
+    }
+
+    expect(fingerprintDirectory(directory)).toEqual(before);
   });
 });
 

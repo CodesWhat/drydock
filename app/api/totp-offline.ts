@@ -20,6 +20,7 @@
  */
 
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { type Database, openDatabase, StoreError } from '../store/db/driver.js';
 import { MIGRATIONS } from '../store/db/migrations.js';
 import {
@@ -71,38 +72,94 @@ export class OfflineStoreError extends Error {
 const EXPECTED_SCHEMA_VERSION = Math.max(...MIGRATIONS.map((migration) => migration.version));
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 
+const SQLITE_HEADER_BYTES = 20;
+/** Bytes 18 and 19 of the header are the file format versions; 2 means write-ahead log. */
+const WAL_FILE_FORMAT = 2;
+
+function isWalFormat(databasePath: string): boolean {
+  const header = Buffer.alloc(SQLITE_HEADER_BYTES);
+  const descriptor = fs.openSync(databasePath, 'r');
+  try {
+    fs.readSync(descriptor, header, 0, SQLITE_HEADER_BYTES, 0);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return header[18] === WAL_FILE_FORMAT || header[19] === WAL_FILE_FORMAT;
+}
+
+/**
+ * A connection that cannot write, and that leaves nothing beside the file.
+ *
+ * SQLite reads a write-ahead-log database through its `-wal` and `-shm`
+ * files, and creates them when they are missing, even for a reader. So when
+ * the file says it is in that mode and no log exists, the file is complete on
+ * its own and is opened as immutable, which creates nothing. When a log does
+ * exist, something has (or had) the store open and its newest rows may live
+ * only there, so it is read the ordinary way, through files that are already
+ * present. A rollback-journal database never gets side files from a reader.
+ */
+function openReadOnly(databasePath: string, busyTimeoutMs: number): Database {
+  const selfContained = isWalFormat(databasePath) && !fs.existsSync(`${databasePath}-wal`);
+  return openDatabase(
+    selfContained ? `${pathToFileURL(databasePath).href}?immutable=1` : databasePath,
+    { readOnly: true, busyTimeoutMs },
+  );
+}
+
+/** The schema version, or undefined for a database that has no `schema_migrations`: not a store. */
 function readSchemaVersion(db: Database): number | undefined {
   try {
     const row = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get();
     return Number(row?.version);
-  } catch {
-    return undefined;
+  } catch (error: unknown) {
+    if (error instanceof StoreError && error.code === 'SQLITE_ERROR') {
+      return undefined;
+    }
+    throw error;
   }
 }
 
 /**
- * Open an existing store and bind the two-factor store module to it. A missing
- * file is never created, and a schema this version did not write is refused
- * rather than migrated: bringing a store up to date is what starting Drydock
- * does, with the import and repair steps that go with it.
+ * Open an existing store and bind the two-factor store module to it.
+ *
+ * The file is first identified through a read-only connection, before any
+ * pragma or write can reach it: a missing file is never created, a file that
+ * is not a SQLite database or not a Drydock store is refused exactly as it
+ * was found, and a schema this version did not write is refused rather than
+ * migrated (bringing a store up to date is what starting Drydock does, with
+ * the import and repair steps that go with it). Only then, and only when
+ * `writable` is asked for, is it opened for writing the way the store itself
+ * opens it. Everything that only reads keeps the read-only connection.
  */
 export function openOfflineStore(
   databasePath: string,
-  busyTimeoutMs: number = DEFAULT_BUSY_TIMEOUT_MS,
+  {
+    writable,
+    busyTimeoutMs = DEFAULT_BUSY_TIMEOUT_MS,
+  }: { writable: boolean; busyTimeoutMs?: number },
 ): Database {
   if (!fs.existsSync(databasePath)) {
     throw new OfflineStoreError('NOT_FOUND');
   }
-  let db: Database;
+  let reader: Database | undefined;
+  let schemaVersion: number | undefined;
   try {
-    db = openDatabase(databasePath, { busyTimeoutMs });
+    reader = openReadOnly(databasePath, busyTimeoutMs);
+    schemaVersion = readSchemaVersion(reader);
   } catch {
+    reader?.close();
     throw new OfflineStoreError('UNREADABLE');
   }
-  if (readSchemaVersion(db) !== EXPECTED_SCHEMA_VERSION) {
-    db.close();
+  if (schemaVersion !== EXPECTED_SCHEMA_VERSION) {
+    reader.close();
     throw new OfflineStoreError('SCHEMA_MISMATCH');
   }
+  if (!writable) {
+    createCollections(reader);
+    return reader;
+  }
+  reader.close();
+  const db = openDatabase(databasePath, { busyTimeoutMs });
   createCollections(db);
   return db;
 }

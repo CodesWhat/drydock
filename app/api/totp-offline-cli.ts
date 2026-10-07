@@ -545,7 +545,12 @@ export function runTotpCommand(
 
   let db: Database | undefined;
   try {
-    db = openOfflineStore(databasePath, options.busyTimeoutMs);
+    // Only a confirmed change gets a connection that can write: `status` and
+    // every preview read the store through one that cannot.
+    db = openOfflineStore(databasePath, {
+      writable: parsed.options.confirm,
+      busyTimeoutMs: options.busyTimeoutMs,
+    });
     io.out(`Store: ${databasePath}`);
     return COMMAND_HANDLERS[parsed.command]({
       io,
