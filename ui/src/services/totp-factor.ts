@@ -208,7 +208,7 @@ async function removeTotpFactor(reauth: TotpReauth): Promise<void> {
   await send('/totp-factor', 'DELETE', reauth);
 }
 
-export type { PendingEnrollment, RecoveryCodeSet, TotpEnrollment, TotpFactorStatus, TotpReauth };
+export type { TotpEnrollment, TotpFactorStatus, TotpReauth };
 export {
   cancelTotpEnrollment,
   confirmTotpEnrollment,
