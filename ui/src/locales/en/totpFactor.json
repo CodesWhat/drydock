@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Two-factor authentication",
+    "description": "Ask for a code from your authenticator app, as well as your password, every time you sign in.",
+    "loading": "Loading two-factor status",
+    "retry": "Try again",
+    "status": {
+      "off": "Off",
+      "on": "On",
+      "onSince": "On since {date}",
+      "recoveryRemaining": "{count} recovery code left | {count} recovery codes left",
+      "recoveryNone": "No recovery codes left. Generate a new set before you lose access to your authenticator app.",
+      "recoveryLow": "You're running low on recovery codes. Generate a new set.",
+      "pending": "Setup started and waiting for a code. It expires at {time}."
+    },
+    "unavailable": {
+      "notLocal": "Two-factor authentication is only available for local accounts signed in with a password. If this is one, sign out and sign in again.",
+      "httpsRequired": "Two-factor setup needs HTTPS. Open Drydock over HTTPS, or ask an administrator to set DD_AUTH_TOTP_ALLOWHTTP=true if the network is trusted.",
+      "noKeyRing": "Two-factor setup isn't available on this server. An administrator needs to configure an encryption key ring first.",
+      "recoverySession": "You signed in with a recovery code, so this action isn't allowed. Sign in with a code from your authenticator app."
+    },
+    "actions": {
+      "enable": "Turn on",
+      "replace": "Replace authenticator",
+      "regenerate": "New recovery codes",
+      "remove": "Turn off",
+      "cancelSetup": "Cancel setup",
+      "cancel": "Cancel"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Confirm it's you",
+        "replace": "Confirm it's you to replace your authenticator",
+        "regenerate": "Confirm it's you to get new recovery codes",
+        "remove": "Confirm it's you to turn off two-factor"
+      },
+      "hint": "Enter your password. Nothing is kept after this step.",
+      "hintWithCode": "Enter your password and a current code. Nothing is kept after this step.",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "codeLabel": "Authentication code",
+      "codePlaceholder": "6-digit code",
+      "recoveryLabel": "Recovery code",
+      "recoveryPlaceholder": "Enter a recovery code",
+      "useRecovery": "Use a recovery code",
+      "useCode": "Use an authenticator code",
+      "submit": {
+        "enable": "Continue",
+        "replace": "Continue",
+        "regenerate": "Generate new codes",
+        "remove": "Turn off two-factor",
+        "busy": "Checking..."
+      }
+    },
+    "scan": {
+      "heading": "Scan with your authenticator app",
+      "instructions": "Open your authenticator app, add an account and scan this code. Then enter the 6-digit code it shows.",
+      "replaceNote": "Your current authenticator keeps working until you confirm the new one.",
+      "qrLabel": "QR code for setting up two-step verification",
+      "qrFailed": "The QR code couldn't be drawn. Enter the setup key instead.",
+      "secretLabel": "Can't scan? Enter this setup key",
+      "copySecret": "Copy key",
+      "copied": "Copied",
+      "expiresAt": "This setup expires at {time}.",
+      "codeLabel": "Authentication code",
+      "codeHint": "Enter the 6-digit code from your authenticator app.",
+      "codePlaceholder": "6-digit code",
+      "confirm": "Confirm and turn on",
+      "confirming": "Confirming..."
+    },
+    "codes": {
+      "heading": "Save your recovery codes",
+      "description": "Each code works once if you lose your authenticator app. This is the only time they are shown.",
+      "copy": "Copy codes",
+      "copied": "Copied",
+      "download": "Download",
+      "fileHeading": "Drydock recovery codes",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "I saved these codes",
+      "done": "Done",
+      "downloadFailed": "Your browser wouldn't download the file. Copy them instead."
+    },
+    "remove": {
+      "header": "Turn off two-factor authentication?",
+      "message": "Sign-in will need only your password again, and your other sessions will end.",
+      "accept": "Turn off"
+    },
+    "notice": {
+      "enabled": "Two-factor authentication is on.",
+      "replaced": "Your new authenticator is active.",
+      "regenerated": "Your new recovery codes are active. The old ones no longer work.",
+      "removed": "Two-factor authentication is off."
+    },
+    "errors": {
+      "load": "Couldn't load two-factor status.",
+      "network": "Couldn't reach the server. Try again.",
+      "generic": "Something went wrong. Try again.",
+      "sessionEnded": "Your session ended. Sign in again.",
+      "reauthFailed": "That password or code didn't match. Check them and try again.",
+      "locked": "Too many attempts. Try again in {time}.",
+      "lockedLater": "Too many attempts. Try again later.",
+      "busy": "Another check is still running. Try again in a moment.",
+      "invalidRequest": "Enter your password and a valid code.",
+      "codeFormat": "Enter the 6 digits from your authenticator app.",
+      "codeWrong": "That code didn't work. Check it and try again.",
+      "enrollmentExpired": "This setup expired. Start again.",
+      "enrollmentGone": "This setup was closed after too many wrong codes. Start again.",
+      "stateChanged": "Two-factor settings changed somewhere else. Review them and try again.",
+      "notActive": "Two-factor authentication isn't on."
+    }
+  }
+}

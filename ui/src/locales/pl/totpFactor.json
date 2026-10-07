@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Uwierzytelnianie dwuskładnikowe",
+    "description": "Wymagaj kodu z aplikacji uwierzytelniającej, oprócz hasła, przy każdym logowaniu.",
+    "loading": "Wczytywanie stanu uwierzytelniania dwuskładnikowego",
+    "retry": "Spróbuj ponownie",
+    "status": {
+      "off": "Wyłączone",
+      "on": "Włączone",
+      "onSince": "Włączone od {date}",
+      "recoveryRemaining": "Pozostał {count} kod odzyskiwania | Pozostało kodów odzyskiwania: {count}",
+      "recoveryNone": "Nie zostały żadne kody odzyskiwania. Wygeneruj nowy zestaw, zanim stracisz dostęp do aplikacji uwierzytelniającej.",
+      "recoveryLow": "Kończą ci się kody odzyskiwania. Wygeneruj nowy zestaw.",
+      "pending": "Konfiguracja rozpoczęta, czeka na kod. Wygasa o {time}."
+    },
+    "unavailable": {
+      "notLocal": "Uwierzytelnianie dwuskładnikowe jest dostępne tylko dla kont lokalnych zalogowanych hasłem. Jeśli to twoje konto, wyloguj się i zaloguj ponownie.",
+      "httpsRequired": "Konfiguracja dwuskładnikowa wymaga HTTPS. Otwórz Drydock przez HTTPS albo poproś administratora o ustawienie DD_AUTH_TOTP_ALLOWHTTP=true, jeśli sieć jest zaufana.",
+      "noKeyRing": "Konfiguracja dwuskładnikowa nie jest dostępna na tym serwerze. Administrator musi najpierw skonfigurować pęk kluczy szyfrowania.",
+      "recoverySession": "Zalogowano kodem odzyskiwania, więc ta czynność jest niedozwolona. Zaloguj się kodem z aplikacji uwierzytelniającej."
+    },
+    "actions": {
+      "enable": "Włącz",
+      "replace": "Zastąp aplikację uwierzytelniającą",
+      "regenerate": "Nowe kody odzyskiwania",
+      "remove": "Wyłącz",
+      "cancelSetup": "Anuluj konfigurację",
+      "cancel": "Anuluj"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Potwierdź, że to ty",
+        "replace": "Potwierdź, że to ty, aby zastąpić aplikację uwierzytelniającą",
+        "regenerate": "Potwierdź, że to ty, aby uzyskać nowe kody odzyskiwania",
+        "remove": "Potwierdź, że to ty, aby wyłączyć uwierzytelnianie dwuskładnikowe"
+      },
+      "hint": "Wpisz hasło. Po tym kroku nic nie jest przechowywane.",
+      "hintWithCode": "Wpisz hasło i aktualny kod. Po tym kroku nic nie jest przechowywane.",
+      "passwordLabel": "Hasło",
+      "passwordPlaceholder": "Wpisz hasło",
+      "codeLabel": "Kod uwierzytelniający",
+      "codePlaceholder": "6-cyfrowy kod",
+      "recoveryLabel": "Kod odzyskiwania",
+      "recoveryPlaceholder": "Wpisz kod odzyskiwania",
+      "useRecovery": "Użyj kodu odzyskiwania",
+      "useCode": "Użyj kodu uwierzytelniającego",
+      "submit": {
+        "enable": "Dalej",
+        "replace": "Dalej",
+        "regenerate": "Wygeneruj nowe kody",
+        "remove": "Wyłącz uwierzytelnianie dwuskładnikowe",
+        "busy": "Sprawdzanie..."
+      }
+    },
+    "scan": {
+      "heading": "Zeskanuj w aplikacji uwierzytelniającej",
+      "instructions": "Otwórz aplikację uwierzytelniającą, dodaj konto i zeskanuj ten kod. Następnie wpisz 6-cyfrowy kod, który pokaże aplikacja.",
+      "replaceNote": "Obecna aplikacja uwierzytelniająca działa, dopóki nie potwierdzisz nowej.",
+      "qrLabel": "Kod QR do konfiguracji weryfikacji dwuetapowej",
+      "qrFailed": "Nie udało się narysować kodu QR. Wpisz zamiast niego klucz konfiguracyjny.",
+      "secretLabel": "Nie możesz zeskanować? Wpisz ten klucz konfiguracyjny",
+      "copySecret": "Kopiuj klucz",
+      "copied": "Skopiowano",
+      "expiresAt": "Ta konfiguracja wygasa o {time}.",
+      "codeLabel": "Kod uwierzytelniający",
+      "codeHint": "Wpisz 6-cyfrowy kod z aplikacji uwierzytelniającej.",
+      "codePlaceholder": "6-cyfrowy kod",
+      "confirm": "Potwierdź i włącz",
+      "confirming": "Potwierdzanie..."
+    },
+    "codes": {
+      "heading": "Zapisz kody odzyskiwania",
+      "description": "Każdy kod działa raz, jeśli stracisz aplikację uwierzytelniającą. To jedyny moment, w którym są pokazane.",
+      "copy": "Kopiuj kody",
+      "copied": "Skopiowano",
+      "download": "Pobierz",
+      "fileHeading": "Kody odzyskiwania Drydock",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Zapisałem te kody",
+      "done": "Gotowe",
+      "downloadFailed": "Przeglądarka nie pobrała pliku. Skopiuj kody zamiast tego."
+    },
+    "remove": {
+      "header": "Wyłączyć uwierzytelnianie dwuskładnikowe?",
+      "message": "Do logowania znów wystarczy samo hasło, a pozostałe sesje zostaną zakończone.",
+      "accept": "Wyłącz"
+    },
+    "notice": {
+      "enabled": "Uwierzytelnianie dwuskładnikowe jest włączone.",
+      "replaced": "Nowa aplikacja uwierzytelniająca jest aktywna.",
+      "regenerated": "Nowe kody odzyskiwania są aktywne. Stare już nie działają.",
+      "removed": "Uwierzytelnianie dwuskładnikowe jest wyłączone."
+    },
+    "errors": {
+      "load": "Nie udało się wczytać stanu uwierzytelniania dwuskładnikowego.",
+      "network": "Nie można połączyć się z serwerem. Spróbuj ponownie.",
+      "generic": "Coś poszło nie tak. Spróbuj ponownie.",
+      "sessionEnded": "Twoja sesja się zakończyła. Zaloguj się ponownie.",
+      "reauthFailed": "Hasło lub kod się nie zgadza. Sprawdź je i spróbuj ponownie.",
+      "locked": "Zbyt wiele prób. Spróbuj ponownie za {time}.",
+      "lockedLater": "Zbyt wiele prób. Spróbuj ponownie później.",
+      "busy": "Trwa jeszcze inne sprawdzanie. Spróbuj ponownie za chwilę.",
+      "invalidRequest": "Wpisz hasło i prawidłowy kod.",
+      "codeFormat": "Wpisz 6 cyfr z aplikacji uwierzytelniającej.",
+      "codeWrong": "Ten kod nie zadziałał. Sprawdź go i spróbuj ponownie.",
+      "enrollmentExpired": "Ta konfiguracja wygasła. Zacznij od nowa.",
+      "enrollmentGone": "Ta konfiguracja została zamknięta po zbyt wielu błędnych kodach. Zacznij od nowa.",
+      "stateChanged": "Ustawienia dwuskładnikowe zmieniły się gdzie indziej. Sprawdź je i spróbuj ponownie.",
+      "notActive": "Uwierzytelnianie dwuskładnikowe nie jest włączone."
+    }
+  }
+}
