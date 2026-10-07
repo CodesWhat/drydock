@@ -54,7 +54,7 @@ A few things follow from the key living outside the store:
 
 - **Back the key ring up, and not next to the store.** Drydock never writes the file and never generates a key. A backup that holds both `dd.sqlite` and the key ring protects nothing, and a lost key ring can't be rebuilt.
 - **Without a key ring nobody can enroll.** Starting an enrollment answers `503`. Everything else works as before.
-- **Both settings are read at startup.** Changing the file or the active id needs a restart.
+- **Both settings are read at startup.** A change to the key ring file needs a restart. A change to an environment variable needs the container recreated, which `docker compose up -d drydock` does. `docker compose start` and `docker compose restart` bring back the existing container with the environment it was created with, so a new `DD_AUTH_TOTP_ACTIVE_KEY_ID` would be ignored.
 - **A key ring that can't be used locks nothing open.** If the file doesn't parse, or a key an account needs isn't in it, that account's codes can't be checked and its sign-in stops at the code step with `503`. See [a lost key ring](#the-key-ring-is-lost).
 
 ## The offline command
@@ -84,14 +84,19 @@ The other three need Drydock stopped. `docker compose run` starts a one-off cont
 docker compose stop drydock
 docker compose run --rm drydock node dist/index.js totp remove --provider basic.eve --username eve
 docker compose run --rm drydock node dist/index.js totp remove --provider basic.eve --username eve --confirm
-docker compose start drydock
+docker compose up -d drydock
 ```
+
+Bring Drydock back with `docker compose up -d`, not `docker compose start`. `up -d` starts the stopped container if nothing changed and recreates it if the service's configuration did. `start` reuses the old container whatever you've edited since.
+
+That matters here because the two ways of running the command read different things. `docker compose run` uses the compose file as it is now. `docker compose exec` uses the running container, with the environment it was created with. If they disagree, the command and Drydock disagree about the active key and about which accounts exist. After any change to the compose file, recreate the container with `docker compose up -d drydock` before trusting what `exec` shows.
 
 With plain `docker run`, use the same image, volumes and environment and put `node dist/index.js totp ...` after the image name.
 
 What the command will and won't do:
 
 - **Nothing changes without `--confirm`.** Without it, `rewrap`, `remove` and `rebind` print what they'd do and stop.
+- **Reading doesn't change the store.** `status`, and the other three without `--confirm`, open the database read-only. A path that isn't a Drydock store, such as a wrong `--db`, is refused and left exactly as it was, and a path that doesn't exist isn't created.
 - **It refuses a store that's in use.** If another process has the database open, a change stops with `is in use by another process`. A running Drydock holds things the command can't reach: the open streams of the sessions it ends, and the key ring it loaded at start.
 - **It refuses to guess.** If the options match more than one factor, it lists them and changes nothing.
 - **It prints ids, usernames, counts and times.** Never a TOTP secret, a recovery code or a key.
@@ -136,29 +141,36 @@ Rotation re-encrypts every stored TOTP secret under a new key. Nobody re-enrolls
    ```
 
 2. Set `DD_AUTH_TOTP_ACTIVE_KEY_ID` to the new id.
-3. Stop Drydock and rewrap:
+3. Stop Drydock, rewrap, and recreate the container:
 
    ```bash
    docker compose stop drydock
    docker compose run --rm drydock node dist/index.js totp rewrap
    docker compose run --rm drydock node dist/index.js totp rewrap --confirm
-   docker compose start drydock
+   docker compose up -d drydock
    ```
 
-4. Check that nothing still needs the old key:
+   The last line has to be `up -d`. The active key id is an environment change, and only a recreated container picks it up. `docker compose start` would bring back the old container, still set to the old id, while the stored secrets are already under the new one.
+
+4. Check that nothing still needs the old key, from inside the running container:
 
    ```bash
    docker compose exec drydock node dist/index.js totp status
    ```
 
-   When it says `Everything is under the active key. Retired keys can be removed from the key ring.`, take the old key out of the file. It takes effect at the next restart.
+   The `Key ring:` line has to name the new id as the active key. If it names the old one, the container wasn't recreated: go back to `docker compose up -d drydock` and don't touch the key ring.
+
+   When `status` also says `Everything is under the active key. Retired keys can be removed from the key ring.`, take the old key out of the file and restart Drydock with `docker compose restart drydock` so it loads the shorter key ring.
+
+If the two settings live in `drydock.yml` and not in the environment, nothing about the container changes, and a restart is enough at each step.
 
 Details worth knowing:
 
-- **Don't remove the old key before `status` says so.** A factor still under it can't be verified once it's gone, and that account's sign-in stops with `503`.
+- **Don't remove the old key before `status` says so**, and only go by `status` run in the container Drydock is running in. A factor still under the old key can't be verified once it's gone, and that account's sign-in stops with `503`. Removing the key a container still has as its active id is worse: from its next restart the whole key ring is invalid, and every enrolled account gets `503` at the code step.
+- **The all-clear means every factor was decrypted.** A matching key id isn't enough. If the key ring holds the wrong key under an id, `status` and `rewrap` say so, `rewrap` exits `1`, and neither tells you a key can be removed.
 - **`rewrap` is safe to run twice.** A factor already under the active key is left alone.
 - **Pending enrollments under the old key are discarded.** Anyone who was part-way through setting up starts again. Enrollments expire after ten minutes anyway.
-- **A factor the key ring can't read is skipped and reported**, and the command exits `1`. The rest still move. Restore that factor's key, or `remove` the factor, before retiring anything.
+- **A factor the key ring can't read is skipped and reported**, and the command exits `1`. The rest still move. Restore that factor's key, or `remove` the factor, before taking any key out of the key ring.
 - **Rotation isn't in the audit log.** It changes nobody's access.
 
 ## Someone lost their device
@@ -170,7 +182,7 @@ If the device and the recovery codes are both gone, remove the factor offline:
 ```bash
 docker compose stop drydock
 docker compose run --rm drydock node dist/index.js totp remove --provider basic.eve --username eve --confirm
-docker compose start drydock
+docker compose up -d drydock
 ```
 
 After that:
@@ -200,15 +212,15 @@ A missing or wrong key doesn't open anything. It closes the code step:
 | `CANNOT BE DECRYPTED with the key of that id` | The key ring has a key with that id, and it's the wrong key |
 | `not checked, no usable key ring` | No key ring is configured, or it doesn't parse |
 
-If you have a backup of the key ring, restore it and restart. That's the whole fix.
+If you have a backup of the key ring, put it back at the same path and restart Drydock. That's the whole fix.
 
 If you don't, the TOTP secrets under that key are gone for good. Clear the factors, then start over with a new key ring:
 
 1. For each affected account, either the person signs in with a recovery code and removes the factor (the removal takes a second recovery code), or you run `totp remove` for it.
-2. Create a new key ring, set the two settings, restart.
+2. Create a new key ring, set `DD_AUTH_TOTP_KEYRING__FILE` and `DD_AUTH_TOTP_ACTIVE_KEY_ID` for it, and recreate the container with `docker compose up -d drydock`. A restart isn't enough: it keeps the environment the container was created with, old key id included.
 3. People enroll again.
 
-<Callout type="info">If the key ring file itself is missing, so `DD_AUTH_TOTP_KEYRING__FILE` points at nothing, Drydock won't start at all, and neither will the command: a secret file that can't be read is a startup error. Point the setting at a new key ring, or unset both settings, then carry on from step 1.</Callout>
+<Callout type="info">If the key ring file itself is missing, so `DD_AUTH_TOTP_KEYRING__FILE` points at nothing, Drydock won't start at all, and neither will the command: a secret file that can't be read is a startup error. Point the setting at a new key ring, or unset both settings, then carry on from step 1. `docker compose run` picks the change up straight away. The long-lived container only does once it's recreated with `docker compose up -d drydock`.</Callout>
 
 ## Renamed or removed accounts
 
@@ -222,13 +234,27 @@ Drydock doesn't quietly treat the renamed account as one that never enrolled. Wh
 
 Every account without a factor is held back, not only the renamed one, because nothing in the store says which account an orphan belonged to.
 
+Existing sessions include those of the renamed or removed account itself. Taking an account out of the configuration doesn't end a session it already has: it keeps working until it expires, or until you run `rebind` or `remove`, which both end it.
+
+Drydock logs the reason as an error the first time it refuses someone, and at most once an hour after that. The refusals in between are logged at debug.
+
+### When the account is still configured
+
+A Basic provider that fails to register at startup has the same effect as one you removed. The usual cause is a hash that isn't valid argon2id, and the startup log says `Some authentications failed to register`. Drydock goes by what registered, so the account's factor has nobody who can sign in with it, and every account without a factor is refused.
+
+The offline command can't see that. It reads the configuration, so `status` shows the factor as `account configured`, not `ORPHANED`, and `rebind` refuses to move it. That combination is the sign: Drydock's log says a factor has no Basic provider that can sign in, and `status` says its account is configured. Fix the provider's configuration first and recreate the container with `docker compose up -d drydock`. Don't reach for `remove`: the account still wants its factor, and removing it would leave the account on its password alone.
+
+### Clearing an orphaned factor
+
 `status` flags orphaned factors. Clear each one offline, with Drydock stopped.
 
 If the account was renamed, move the factor to it:
 
 ```bash
+docker compose stop drydock
 docker compose run --rm drydock node dist/index.js totp rebind \
   --provider basic.eve --username eve --to-provider basic.evelyn --confirm
+docker compose up -d drydock
 ```
 
 The same authenticator app and recovery codes then work for the renamed account. Sessions of both the old and the new name end.
@@ -236,9 +262,13 @@ The same authenticator app and recovery codes then work for the renamed account.
 If the account is gone for good, remove the factor:
 
 ```bash
+docker compose stop drydock
 docker compose run --rm drydock node dist/index.js totp remove \
   --provider basic.eve --username eve --confirm
+docker compose up -d drydock
 ```
+
+That also ends any session the deleted account still had.
 
 `rebind` holds to a few rules:
 
@@ -260,4 +290,4 @@ docker compose run --rm -v "$PWD/drill:/drill" drydock \
   node dist/index.js totp remove --username eve --db /drill/dd.sqlite --confirm
 ```
 
-Changes land in the copy only, and the copy has to be readable and writable by the user the container runs as. Delete it when you're done: it holds the same sessions and encrypted secrets as the original.
+Changes land in the copy only. `status` and a run without `--confirm` only read the copy. A run with `--confirm` needs the copy and its directory writable by the user the container runs as. Delete the copy when you're done: it holds the same sessions and encrypted secrets as the original.
