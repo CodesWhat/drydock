@@ -79,6 +79,7 @@
       "totp-replaced": "Double authentification remplacée",
       "totp-disabled": "Double authentification désactivée",
       "totp-recovery-codes-replaced": "Codes de récupération remplacés",
+      "totp-break-glass": "Récupération hors ligne de la double authentification",
       "authenticated": "Authentifié",
       "authfail": "Échec d'authentification",
       "hook-configured": "Hook configuré",

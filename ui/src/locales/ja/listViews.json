@@ -79,6 +79,7 @@
       "totp-replaced": "2要素認証を置き換え",
       "totp-disabled": "2要素認証を無効化",
       "totp-recovery-codes-replaced": "リカバリーコードを再発行",
+      "totp-break-glass": "2要素認証のオフライン復旧",
       "authenticated": "認証済み",
       "authfail": "認証失敗",
       "hook-configured": "フック設定済み",

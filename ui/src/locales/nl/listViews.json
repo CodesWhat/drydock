@@ -79,6 +79,7 @@
       "totp-replaced": "Tweestapsverificatie vervangen",
       "totp-disabled": "Tweestapsverificatie uitgeschakeld",
       "totp-recovery-codes-replaced": "Herstelcodes vervangen",
+      "totp-break-glass": "Offline herstel van tweestapsverificatie",
       "authenticated": "Geverifieerd",
       "authfail": "Authenticatie mislukt",
       "hook-configured": "Hook geconfigureerd",

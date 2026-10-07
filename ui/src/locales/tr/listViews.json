@@ -79,6 +79,7 @@
       "totp-replaced": "İki aşamalı doğrulama değiştirildi",
       "totp-disabled": "İki aşamalı doğrulama devre dışı bırakıldı",
       "totp-recovery-codes-replaced": "Kurtarma kodları değiştirildi",
+      "totp-break-glass": "İki aşamalı doğrulama çevrimdışı kurtarıldı",
       "authenticated": "Kimliği doğrulandı",
       "authfail": "Kimlik doğrulama başarısız",
       "hook-configured": "Hook yapılandırıldı",

@@ -69,6 +69,7 @@ const actionTypes = [
   'totp-replaced',
   'totp-disabled',
   'totp-recovery-codes-replaced',
+  'totp-break-glass',
   'env-reveal',
   'debug-dump',
   'config-read',

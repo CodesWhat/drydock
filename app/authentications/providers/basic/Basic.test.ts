@@ -32,14 +32,22 @@ vi.mock('node:crypto', async () => {
   };
 });
 
-var { mockResolveLocalIdentity, mockIsSecondFactorRequired } = vi.hoisted(() => ({
-  mockResolveLocalIdentity: vi.fn(),
-  mockIsSecondFactorRequired: vi.fn(),
-}));
+var { mockResolveLocalIdentity, mockIsSecondFactorRequired, mockAssertNotShadowed } = vi.hoisted(
+  () => ({
+    mockResolveLocalIdentity: vi.fn(),
+    mockIsSecondFactorRequired: vi.fn(),
+    mockAssertNotShadowed: vi.fn(),
+  }),
+);
 
 vi.mock('../../../api/totp-identity.js', () => ({
   resolveLocalIdentity: mockResolveLocalIdentity,
   isSecondFactorRequired: mockIsSecondFactorRequired,
+  deriveSubjectId: (providerId: string, username: string) => `${providerId}|${username}`,
+}));
+
+vi.mock('../../../api/totp-orphans.js', () => ({
+  assertNotShadowedByOrphanedFactor: mockAssertNotShadowed,
 }));
 
 vi.mock('../../../prometheus/auth.js', () => ({
@@ -135,6 +143,7 @@ describe('Basic Authentication', () => {
     mockRecordAuthUsernameMismatch.mockClear();
     mockResolveLocalIdentity.mockReset();
     mockIsSecondFactorRequired.mockReset();
+    mockAssertNotShadowed.mockReset();
     mockIsSecondFactorRequired.mockReturnValue(false);
     mockResolveLocalIdentity.mockImplementation((providerId: string) => ({
       subjectId: 's'.repeat(64),
@@ -705,6 +714,46 @@ describe('Basic Authentication', () => {
         kind: 'basic',
         username: 'testuser',
       });
+    });
+
+    test('names the local subject it signs in, following the configured username', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(authenticator.localSubjectId).toBe('basic.default|testuser');
+      basic.configuration.user = 'renamed';
+      expect(authenticator.localSubjectId).toBe('basic.default|renamed');
+    });
+
+    test('checks a verified password against orphaned factors, on every route and at login', async () => {
+      const authenticator = basic.getAuthenticator();
+      const req = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+
+      await authenticator.authenticate(req);
+      await authenticator.authenticateForLogin?.(req);
+
+      expect(mockAssertNotShadowed).toHaveBeenCalledTimes(2);
+      expect(mockAssertNotShadowed).toHaveBeenCalledWith('s'.repeat(64));
+    });
+
+    test('refuses a verified password that an orphaned factor may belong to, as a fault', async () => {
+      mockAssertNotShadowed.mockImplementation(() => {
+        throw Object.assign(new Error('Local sign-in is refused'), { status: 503 });
+      });
+      const authenticator = basic.getAuthenticator();
+      const req = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+
+      await expect(authenticator.authenticate(req)).rejects.toMatchObject({ status: 503 });
+      await expect(authenticator.authenticateForLogin?.(req)).rejects.toMatchObject({
+        status: 503,
+      });
+    });
+
+    test('does not consult orphaned factors for a wrong password', async () => {
+      await basic.authenticateRequest({
+        headers: { authorization: encodeBasic('testuser:wrong') },
+      } as never);
+
+      expect(mockAssertNotShadowed).not.toHaveBeenCalled();
     });
 
     test('lets a store failure propagate instead of answering as a wrong password', async () => {
