@@ -18,6 +18,7 @@
   "overrides": {
     "vite": "8.3.1",
     "postcss": "8.5.28",
-    "nanoid": "6.0.1"
+    "nanoid": "6.0.1",
+    "source-map-js": "1.2.2"
   }
 }
