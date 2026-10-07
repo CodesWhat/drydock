@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "تجاوزات التسميات",
+    "boundary": "يخزّن Drydock هذه القيم ويطبّقها فوق تسميات Docker. لا يعدّل ملفات Compose ولا يعيد إنشاء الحاوية أبدًا.",
+    "scope": {
+      "container": "ينطبق على الحاوية {name}، المراقب {watcher}.",
+      "containerAgent": "ينطبق على الحاوية {name} على الوكيل {agent}، المراقب {watcher}.",
+      "composeService": "ينطبق على خدمة Compose ‏{name}، عدد الحاويات: {count}، المراقب {watcher}. | ينطبق على خدمة Compose ‏{name}، عدد الحاويات: {count}، المراقب {watcher}.",
+      "composeServiceAgent": "ينطبق على خدمة Compose ‏{name}، عدد الحاويات: {count}، الوكيل {agent}، المراقب {watcher}. | ينطبق على خدمة Compose ‏{name}، عدد الحاويات: {count}، الوكيل {agent}، المراقب {watcher}."
+    },
+    "loading": "جارٍ تحميل تجاوزات التسميات…",
+    "noOverrides": "لا توجد تجاوزات. تأتي كل قيمة من تسمية أو Compose أو المراقب أو قيمة افتراضية.",
+    "unavailable": "تجاوزات التسميات غير متاحة لهذه الحاوية.",
+    "readOnly": {
+      "rollback": "هذه حاوية تراجع مؤقتة. لا يمكن تغيير تجاوزات التسميات الخاصة بها.",
+      "forbidden": "يلزم الوصول كمسؤول لتغيير تجاوزات التسميات. هذا العرض للقراءة فقط."
+    },
+    "groups": {
+      "display": "العرض",
+      "dependencies": "التبعيات",
+      "notification": "توجيه الإشعارات",
+      "action": "توجيه الإجراءات"
+    },
+    "fields": {
+      "displayName": "اسم العرض",
+      "displayIcon": "أيقونة العرض",
+      "dependsOn": "يعتمد على",
+      "dependsOnAction": "إجراء التبعية",
+      "notificationTriggerInclude": "تضمين الإشعارات",
+      "notificationTriggerExclude": "استبعاد الإشعارات",
+      "actionTriggerInclude": "تضمين الإجراءات",
+      "actionTriggerExclude": "استبعاد الإجراءات",
+      "actionTriggerAuto": "إجراء تلقائي"
+    },
+    "sources": {
+      "override": "تجاوز",
+      "label": "التسمية",
+      "compose": "Compose",
+      "watcher": "إعدادات المراقب",
+      "default": "افتراضي",
+      "unset": "غير محدد"
+    },
+    "values": {
+      "none": "لا شيء",
+      "notSet": "غير محدد",
+      "labelValue": "قيمة التسمية: {value}",
+      "noLabel": "لا توجد تسمية"
+    },
+    "actions": {
+      "edit": "تعديل",
+      "editField": "تعديل {field}",
+      "resetField": "إعادة الضبط إلى التسمية",
+      "resetFieldAria": "إعادة ضبط {field} إلى التسمية",
+      "resetHint": "سيعود إلى: {value}",
+      "resetAll": "إعادة ضبط الكل"
+    },
+    "editor": {
+      "displayName": "اسم العرض",
+      "displayNameHelp": "من 1 إلى 128 حرفًا. يظهر بدلًا من اسم الحاوية.",
+      "iconProvider": "مصدر الأيقونة",
+      "iconName": "اسم الأيقونة",
+      "iconNameHelp": "أحرف وأرقام ونقطة وشرطة وشرطة سفلية. استخدم اسمًا من مصدر الأيقونات، وليس عنوان URL.",
+      "iconPreview": "معاينة الأيقونة",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "يؤدي الحفظ إلى تغيير القيمة لكل ما يقع ضمن النطاق الموضح أعلاه."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "أدخل اسم عرض.",
+        "tooLong": "استخدم 128 حرفًا أو أقل.",
+        "invalidCharacters": "أزل أحرف التحكم وعلامات الاتجاه و< و>."
+      },
+      "iconName": "استخدم أحرفًا أو أرقامًا أو نقطة أو شرطة أو شرطة سفلية، على أن تبدأ بحرف أو رقم."
+    },
+    "conflict": {
+      "message": "تم تغيير هذه التجاوزات في مكان آخر. أعد التحميل لرؤية القيم الحالية. تم الاحتفاظ بمسودتك.",
+      "unknown": "تعذّر على Drydock التأكد مما إذا كان التغيير قد حُفظ. أعد التحميل لرؤية القيم الحالية.",
+      "notFound": "هذه الحاوية لم تعد موجودة. أعد التحميل لرؤية القائمة الحالية.",
+      "reload": "إعادة التحميل"
+    },
+    "status": {
+      "saved": "تم حفظ {field}.",
+      "reset": "تمت إعادة ضبط {field} إلى قيمة التسمية.",
+      "resetAll": "عدد التجاوزات التي أُعيد ضبطها إلى قيم التسميات: {count}. | عدد التجاوزات التي أُعيد ضبطها إلى قيم التسميات: {count}.",
+      "nothingToReset": "لم يكن هناك شيء متجاوَز."
+    },
+    "resetAllConfirm": {
+      "header": "إعادة ضبط كل التجاوزات",
+      "message": "هل تريد إزالة كل تجاوزات Drydock الخاصة بـ {scope} والعودة إلى قيم التسميات؟ لا تتأثر ملفات Compose ولا الحاويات.",
+      "accept": "إعادة ضبط الكل"
+    },
+    "warnings": {
+      "title": "تحذيرات",
+      "unresolved-dependency": "{field}: {reference} ليست حاوية يعرفها Drydock بعد.",
+      "cross-host-dependency": "{field}: {reference} موجودة على مضيف آخر فقط.",
+      "trigger-agent-mismatch": "{field}: {reference} تطابق مشغّلات على وكيل آخر فقط.",
+      "auto-inert": "{field}: {reference} لا تطابق أي مشغّل يعمل تلقائيًا.",
+      "stale-trigger-reference": "{field}: {reference} لم تعد تطابق أي مشغّل مسجّل.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "تعذّرت قراءة بعض التجاوزات المخزّنة وتم تجاهلها: {fields}",
+    "errors": {
+      "requestFailed": "فشل طلب تجاوز التسمية (HTTP {status})",
+      "load": "فشل تحميل تجاوزات التسميات",
+      "unknown": "تعذّر حفظ تجاوز التسمية",
+      "invalid": "رفض الخادم هذا التغيير.",
+      "codes": {
+        "display-name-empty": "أدخل اسم عرض.",
+        "display-name-too-long": "استخدم 128 حرفًا أو أقل.",
+        "display-name-invalid-characters": "أزل أحرف التحكم وعلامات الاتجاه و< و>.",
+        "invalid-icon": "استخدم مصدر أيقونة واسمًا، وليس عنوان URL.",
+        "invalid-type": "رفض الخادم هذه القيمة.",
+        "invalid-value": "رفض الخادم هذه القيمة."
+      }
+    }
+  }
+}

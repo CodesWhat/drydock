@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Label-Overrides",
+    "boundary": "Drydock speichert diese Werte und wendet sie zusätzlich zu den Docker-Labels an. Compose-Dateien werden nie bearbeitet und der Container wird nie neu erstellt.",
+    "scope": {
+      "container": "Gilt für Container {name}, Watcher {watcher}.",
+      "containerAgent": "Gilt für Container {name} auf Agent {agent}, Watcher {watcher}.",
+      "composeService": "Gilt für Compose-Dienst {name}, {count} Container, Watcher {watcher}. | Gilt für Compose-Dienst {name}, {count} Container, Watcher {watcher}.",
+      "composeServiceAgent": "Gilt für Compose-Dienst {name}, {count} Container, Agent {agent}, Watcher {watcher}. | Gilt für Compose-Dienst {name}, {count} Container, Agent {agent}, Watcher {watcher}."
+    },
+    "loading": "Label-Overrides werden geladen…",
+    "noOverrides": "Keine Overrides. Jeder Wert stammt aus einem Label, Compose, dem Watcher oder einem Standardwert.",
+    "unavailable": "Label-Overrides sind für diesen Container nicht verfügbar.",
+    "readOnly": {
+      "rollback": "Dies ist ein temporärer Rollback-Container. Seine Label-Overrides können nicht geändert werden.",
+      "forbidden": "Zum Ändern von Label-Overrides sind Administratorrechte erforderlich. Diese Ansicht ist schreibgeschützt."
+    },
+    "groups": {
+      "display": "Anzeige",
+      "dependencies": "Abhängigkeiten",
+      "notification": "Benachrichtigungsrouting",
+      "action": "Aktionsrouting"
+    },
+    "fields": {
+      "displayName": "Anzeigename",
+      "displayIcon": "Anzeigesymbol",
+      "dependsOn": "Abhängig von",
+      "dependsOnAction": "Abhängigkeitsaktion",
+      "notificationTriggerInclude": "Benachrichtigungen einschließen",
+      "notificationTriggerExclude": "Benachrichtigungen ausschließen",
+      "actionTriggerInclude": "Aktionen einschließen",
+      "actionTriggerExclude": "Aktionen ausschließen",
+      "actionTriggerAuto": "Aktion automatisch"
+    },
+    "sources": {
+      "override": "Override",
+      "label": "Label",
+      "compose": "Compose",
+      "watcher": "Watcher-Konfiguration",
+      "default": "Standard",
+      "unset": "Nicht festgelegt"
+    },
+    "values": {
+      "none": "Keine",
+      "notSet": "Nicht festgelegt",
+      "labelValue": "Label-Wert: {value}",
+      "noLabel": "Kein Label"
+    },
+    "actions": {
+      "edit": "Bearbeiten",
+      "editField": "{field} bearbeiten",
+      "resetField": "Auf Label zurücksetzen",
+      "resetFieldAria": "{field} auf Label zurücksetzen",
+      "resetHint": "Wird zurückgesetzt auf: {value}",
+      "resetAll": "Alle zurücksetzen"
+    },
+    "editor": {
+      "displayName": "Anzeigename",
+      "displayNameHelp": "1 bis 128 Zeichen. Wird anstelle des Containernamens angezeigt.",
+      "iconProvider": "Symbolquelle",
+      "iconName": "Symbolname",
+      "iconNameHelp": "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. Verwende einen Namen aus der Symbolquelle, keine URL.",
+      "iconPreview": "Symbolvorschau",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Das Speichern ändert den Wert für alles im oben angezeigten Geltungsbereich."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Gib einen Anzeigenamen ein.",
+        "tooLong": "Verwende höchstens 128 Zeichen.",
+        "invalidCharacters": "Entferne Steuerzeichen, Richtungszeichen, < und >."
+      },
+      "iconName": "Verwende Buchstaben, Ziffern, Punkt, Bindestrich oder Unterstrich, beginnend mit einem Buchstaben oder einer Ziffer."
+    },
+    "conflict": {
+      "message": "Diese Overrides wurden anderswo geändert. Lade neu, um die aktuellen Werte zu sehen. Dein Entwurf bleibt erhalten.",
+      "unknown": "Drydock konnte nicht bestätigen, ob die Änderung gespeichert wurde. Lade neu, um die aktuellen Werte zu sehen.",
+      "notFound": "Dieser Container existiert nicht mehr. Lade neu, um die aktuelle Liste zu sehen.",
+      "reload": "Neu laden"
+    },
+    "status": {
+      "saved": "{field} gespeichert.",
+      "reset": "{field} auf den Label-Wert zurückgesetzt.",
+      "resetAll": "{count} Override auf den Label-Wert zurückgesetzt. | {count} Overrides auf die Label-Werte zurückgesetzt.",
+      "nothingToReset": "Es war nichts überschrieben."
+    },
+    "resetAllConfirm": {
+      "header": "Alle Overrides zurücksetzen",
+      "message": "Alle Drydock-Overrides für {scope} entfernen und zu den Label-Werten zurückkehren? Compose-Dateien und Container bleiben unberührt.",
+      "accept": "Alle zurücksetzen"
+    },
+    "warnings": {
+      "title": "Warnungen",
+      "unresolved-dependency": "{field}: {reference} ist noch kein Container, den Drydock kennt.",
+      "cross-host-dependency": "{field}: {reference} existiert nur auf einem anderen Host.",
+      "trigger-agent-mismatch": "{field}: {reference} passt nur zu Triggern auf einem anderen Agent.",
+      "auto-inert": "{field}: {reference} passt zu keinem Trigger, der automatisch läuft.",
+      "stale-trigger-reference": "{field}: {reference} passt zu keinem registrierten Trigger mehr.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Einige gespeicherte Overrides konnten nicht gelesen werden und werden ignoriert: {fields}",
+    "errors": {
+      "requestFailed": "Label-Override-Anfrage fehlgeschlagen (HTTP {status})",
+      "load": "Label-Overrides konnten nicht geladen werden",
+      "unknown": "Label-Override konnte nicht gespeichert werden",
+      "invalid": "Der Server hat diese Änderung abgelehnt.",
+      "codes": {
+        "display-name-empty": "Gib einen Anzeigenamen ein.",
+        "display-name-too-long": "Verwende höchstens 128 Zeichen.",
+        "display-name-invalid-characters": "Entferne Steuerzeichen, Richtungszeichen, < und >.",
+        "invalid-icon": "Verwende eine Symbolquelle und einen Namen, keine URL.",
+        "invalid-type": "Der Server hat diesen Wert abgelehnt.",
+        "invalid-value": "Der Server hat diesen Wert abgelehnt."
+      }
+    }
+  }
+}

@@ -282,6 +282,10 @@ function mountComponent() {
           template:
             '<div data-test="container-stats-stub" :data-id="containerId" :data-compact="compact === undefined ? `false` : `true`"></div>',
         },
+        LabelOverridesPanel: {
+          props: ['containerId'],
+          template: '<div data-test="label-overrides-panel-stub" :data-id="containerId" />',
+        },
         UpdateStatusPanel: {
           props: ['container', 'mode'],
           emits: ['update', 'open-tab'],
@@ -997,6 +1001,19 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     expect(wrapper.text()).toContain('Labels');
     expect(wrapper.text()).toContain('com.example.role=web');
+  });
+
+  it('mounts the label override panel for the selected container on the labels tab', () => {
+    activeDetailTab.value = 'labels';
+    selectedContainer.value = createSelectedContainer();
+
+    const wrapper = mountComponent();
+
+    const panel = wrapper.find('[data-test="label-overrides-panel-stub"]');
+    expect(panel.exists()).toBe(true);
+    expect(panel.attributes('data-id')).toBe(selectedContainer.value.id);
+    activeDetailTab.value = 'overview';
+    expect(mountComponent().find('[data-test="label-overrides-panel-stub"]').exists()).toBe(false);
   });
 
   it('fires action, skip, snooze, reset, and rollback latest handlers', async () => {

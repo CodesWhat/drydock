@@ -426,6 +426,10 @@ function mountComponent() {
           template: '<span class="app-icon-stub" />',
           props: ['name', 'size'],
         },
+        LabelOverridesPanel: {
+          props: ['containerId'],
+          template: '<div data-test="label-overrides-panel-stub" :data-id="containerId" />',
+        },
         UpdateStatusPanel: {
           props: ['container', 'mode'],
           emits: ['update', 'open-tab'],
@@ -1407,6 +1411,16 @@ describe('ContainerFullPageTabContent', () => {
 
     expect(wrapper.text()).toContain('\u2022\u2022\u2022\u2022\u2022');
     expect(mockRevealContainerEnv).toHaveBeenCalledTimes(1);
+  });
+
+  it('mounts the label override panel for the selected container on the labels tab', () => {
+    activeDetailTab.value = 'labels';
+    selectedContainer.value = makeContainer();
+
+    const panel = mountComponent().find('[data-test="label-overrides-panel-stub"]');
+
+    expect(panel.exists()).toBe(true);
+    expect(panel.attributes('data-id')).toBe(selectedContainer.value.id);
   });
 
   it('renders labels tab present and empty branches', async () => {

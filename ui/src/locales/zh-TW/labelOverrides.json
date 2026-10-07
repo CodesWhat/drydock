@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "標籤覆寫",
+    "boundary": "Drydock 會儲存這些值，並將其套用在 Docker 標籤之上。它不會修改 Compose 檔案，也不會重新建立容器。",
+    "scope": {
+      "container": "適用於容器 {name}，監視器 {watcher}。",
+      "containerAgent": "適用於代理 {agent} 上的容器 {name}，監視器 {watcher}。",
+      "composeService": "適用於 Compose 服務 {name}，容器數：{count}，監視器 {watcher}。 | 適用於 Compose 服務 {name}，容器數：{count}，監視器 {watcher}。",
+      "composeServiceAgent": "適用於 Compose 服務 {name}，容器數：{count}，代理 {agent}，監視器 {watcher}。 | 適用於 Compose 服務 {name}，容器數：{count}，代理 {agent}，監視器 {watcher}。"
+    },
+    "loading": "正在載入標籤覆寫…",
+    "noOverrides": "沒有覆寫。每個值都來自標籤、Compose、監視器或預設值。",
+    "unavailable": "此容器不支援標籤覆寫。",
+    "readOnly": {
+      "rollback": "這是暫時的回復容器，無法變更其標籤覆寫。",
+      "forbidden": "變更標籤覆寫需要管理員權限。此檢視為唯讀。"
+    },
+    "groups": {
+      "display": "顯示",
+      "dependencies": "相依性",
+      "notification": "通知路由",
+      "action": "操作路由"
+    },
+    "fields": {
+      "displayName": "顯示名稱",
+      "displayIcon": "顯示圖示",
+      "dependsOn": "依賴於",
+      "dependsOnAction": "相依性操作",
+      "notificationTriggerInclude": "包含通知",
+      "notificationTriggerExclude": "排除通知",
+      "actionTriggerInclude": "包含操作",
+      "actionTriggerExclude": "排除操作",
+      "actionTriggerAuto": "自動操作"
+    },
+    "sources": {
+      "override": "覆寫",
+      "label": "標籤",
+      "compose": "Compose",
+      "watcher": "監視器設定",
+      "default": "預設",
+      "unset": "未設定"
+    },
+    "values": {
+      "none": "無",
+      "notSet": "未設定",
+      "labelValue": "標籤值：{value}",
+      "noLabel": "無標籤"
+    },
+    "actions": {
+      "edit": "編輯",
+      "editField": "編輯 {field}",
+      "resetField": "重設為標籤值",
+      "resetFieldAria": "將 {field} 重設為標籤值",
+      "resetHint": "將還原為：{value}",
+      "resetAll": "全部重設"
+    },
+    "editor": {
+      "displayName": "顯示名稱",
+      "displayNameHelp": "1 到 128 個字元。顯示時取代容器名稱。",
+      "iconProvider": "圖示來源",
+      "iconName": "圖示名稱",
+      "iconNameHelp": "字母、數字、句點、連字號和底線。請使用圖示來源中的名稱，而不是 URL。",
+      "iconPreview": "圖示預覽",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "儲存會變更上方所示範圍內所有項目的值。"
+    },
+    "validation": {
+      "displayName": {
+        "empty": "請輸入顯示名稱。",
+        "tooLong": "最多使用 128 個字元。",
+        "invalidCharacters": "請移除控制字元、方向標記、< 和 >。"
+      },
+      "iconName": "請使用字母、數字、句點、連字號或底線，並以字母或數字開頭。"
+    },
+    "conflict": {
+      "message": "這些覆寫已在其他地方被變更。請重新載入以查看目前的值。你的草稿會保留。",
+      "unknown": "Drydock 無法確認變更是否已儲存。請重新載入以查看目前的值。",
+      "notFound": "此容器已不存在。請重新載入以查看目前的清單。",
+      "reload": "重新載入"
+    },
+    "status": {
+      "saved": "已儲存 {field}。",
+      "reset": "已將 {field} 重設為標籤值。",
+      "resetAll": "已重設為標籤值的覆寫數：{count}。 | 已重設為標籤值的覆寫數：{count}。",
+      "nothingToReset": "沒有任何被覆寫的項目。"
+    },
+    "resetAllConfirm": {
+      "header": "重設所有覆寫",
+      "message": "要移除 {scope} 的所有 Drydock 覆寫並還原為標籤值嗎？Compose 檔案和容器不會被變動。",
+      "accept": "全部重設"
+    },
+    "warnings": {
+      "title": "警告",
+      "unresolved-dependency": "{field}：{reference} 還不是 Drydock 已知的容器。",
+      "cross-host-dependency": "{field}：{reference} 只存在於另一台主機上。",
+      "trigger-agent-mismatch": "{field}：{reference} 只符合另一個代理上的觸發器。",
+      "auto-inert": "{field}：{reference} 不符合任何自動執行的觸發器。",
+      "stale-trigger-reference": "{field}：{reference} 不再符合任何已註冊的觸發器。",
+      "other": "{field}：{code}"
+    },
+    "invalidStored": "部分已儲存的覆寫無法讀取，已被忽略：{fields}",
+    "errors": {
+      "requestFailed": "標籤覆寫請求失敗（HTTP {status}）",
+      "load": "無法載入標籤覆寫",
+      "unknown": "無法儲存標籤覆寫",
+      "invalid": "伺服器拒絕了此變更。",
+      "codes": {
+        "display-name-empty": "請輸入顯示名稱。",
+        "display-name-too-long": "最多使用 128 個字元。",
+        "display-name-invalid-characters": "請移除控制字元、方向標記、< 和 >。",
+        "invalid-icon": "請使用圖示來源和名稱，而不是 URL。",
+        "invalid-type": "伺服器拒絕了此值。",
+        "invalid-value": "伺服器拒絕了此值。"
+      }
+    }
+  }
+}
