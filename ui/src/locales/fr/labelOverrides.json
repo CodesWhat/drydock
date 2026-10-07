@@ -44,7 +44,8 @@
       "none": "Aucun",
       "notSet": "Non défini",
       "labelValue": "Valeur du label : {value}",
-      "noLabel": "Aucun label"
+      "noLabel": "Aucun label",
+      "explicitNone": "Aucun (remplacement)"
     },
     "actions": {
       "edit": "Modifier",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "L'enregistrement modifie la valeur pour tout le périmètre indiqué ci-dessus."
+      "scopeReminder": "L'enregistrement modifie la valeur pour tout le périmètre indiqué ci-dessus.",
+      "dependsOnInput": "Ajouter un conteneur",
+      "dependsOnHelp": "Choisis un conteneur du même hôte ou saisis un nom qui n'est pas encore en cours d'exécution. Les noms que Drydock ne connaît pas sont enregistrés avec un avertissement.",
+      "notificationInput": "Ajouter un trigger de notification",
+      "actionInput": "Ajouter un trigger d'action",
+      "routingHelp": "ID ou nom du trigger, suivi éventuellement d'un seuil comme minor.",
+      "threshold": "Seuil",
+      "thresholdDefault": "Aucun seuil",
+      "addEntry": "Ajouter",
+      "removeEntry": "Retirer {entry}",
+      "locked": "depuis le label",
+      "noneHint": "La liste est vide. L'enregistrement met ce champ sur aucun et ignore toute valeur du label. Utilise Revenir au label pour supprimer le remplacement.",
+      "autoWarning": "Cela permet aux triggers listés de mettre à jour ce conteneur automatiquement quand ils tournent en mode onauto.",
+      "dependencyAction": "Action de dépendance",
+      "dependencyActionHelp": "Ce que Drydock fait des conteneurs dont celui-ci dépend lors de sa mise à jour.",
+      "dependencyActions": {
+        "update": "Mettre à jour",
+        "restart": "Redémarrer"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Retirez les caractères de contrôle, les marques de direction, < et >.",
         "invalid-icon": "Utilisez une source d'icônes et un nom, pas une URL.",
         "invalid-type": "Le serveur a refusé cette valeur.",
-        "invalid-value": "Le serveur a refusé cette valeur."
-      }
+        "invalid-value": "Le serveur a refusé cette valeur.",
+        "invalid-name": "Nom de conteneur invalide : {entries}.",
+        "duplicate-entry": "Listé plusieurs fois : {entries}.",
+        "too-many-entries": "Utilise 32 entrées ou moins.",
+        "depends-on-self": "Un conteneur ne peut pas dépendre de lui-même : {entries}.",
+        "invalid-reference": "Référence de trigger invalide : {entries}.",
+        "invalid-threshold": "Seuil non pris en charge : {entries}.",
+        "unknown-trigger-reference": "Aucun trigger enregistré ne correspond à : {entries}.",
+        "wrong-trigger-category": "Mauvais type de trigger pour ce champ : {entries}.",
+        "agent-enforced-widening": "L'agent refuserait cela, car cela élargit ce que ses labels autorisent : {entries}.",
+        "invalid-action": "Choisis mettre à jour ou redémarrer."
+      },
+      "cycle": "Ces dépendances créeraient un cycle passant par : {containers}."
+    },
+    "agent": {
+      "note": "Ce conteneur tourne sur l'agent {agent}, qui applique ses propres labels. Drydock ne peut ici que restreindre l'accès aux actions.",
+      "excludeHint": "Les exclusions des labels restent. Tu peux seulement en ajouter.",
+      "narrowHint": "Tu peux seulement retirer des entrées ou utiliser un seuil plus strict que celui du label.",
+      "nothingToNarrow": "Les labels n'autorisent rien ici, il n'y a donc rien à restreindre."
     }
   }
 }

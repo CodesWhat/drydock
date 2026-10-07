@@ -44,7 +44,8 @@
       "none": "Geen",
       "notSet": "Niet ingesteld",
       "labelValue": "Labelwaarde: {value}",
-      "noLabel": "Geen label"
+      "noLabel": "Geen label",
+      "explicitNone": "Geen (override)"
     },
     "actions": {
       "edit": "Bewerken",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Opslaan wijzigt de waarde voor alles in het hierboven getoonde bereik."
+      "scopeReminder": "Opslaan wijzigt de waarde voor alles in het hierboven getoonde bereik.",
+      "dependsOnInput": "Container toevoegen",
+      "dependsOnHelp": "Kies een container op dezelfde host of typ een naam die nog niet draait. Namen die Drydock niet kent worden met een waarschuwing opgeslagen.",
+      "notificationInput": "Meldingstrigger toevoegen",
+      "actionInput": "Actietrigger toevoegen",
+      "routingHelp": "Trigger-id of -naam, eventueel gevolgd door een drempel zoals minor.",
+      "threshold": "Drempel",
+      "thresholdDefault": "Geen drempel",
+      "addEntry": "Toevoegen",
+      "removeEntry": "{entry} verwijderen",
+      "locked": "uit label",
+      "noneHint": "De lijst is leeg. Bij opslaan wordt dit veld op geen gezet en wordt elke labelwaarde genegeerd. Gebruik Terug naar label om de override te verwijderen.",
+      "autoWarning": "Hiermee kunnen de genoemde triggers deze container automatisch bijwerken als ze in onauto-modus draaien.",
+      "dependencyAction": "Afhankelijkheidsactie",
+      "dependencyActionHelp": "Wat Drydock doet met de containers waarvan deze afhangt wanneer hij wordt bijgewerkt.",
+      "dependencyActions": {
+        "update": "Bijwerken",
+        "restart": "Herstarten"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Verwijder stuurtekens, richtingtekens, < en >.",
         "invalid-icon": "Gebruik een pictogrambron en een naam, geen URL.",
         "invalid-type": "De server heeft deze waarde geweigerd.",
-        "invalid-value": "De server heeft deze waarde geweigerd."
-      }
+        "invalid-value": "De server heeft deze waarde geweigerd.",
+        "invalid-name": "Geen geldige containernaam: {entries}.",
+        "duplicate-entry": "Meerdere keren vermeld: {entries}.",
+        "too-many-entries": "Gebruik maximaal 32 items.",
+        "depends-on-self": "Een container kan niet van zichzelf afhangen: {entries}.",
+        "invalid-reference": "Geen geldige triggerverwijzing: {entries}.",
+        "invalid-threshold": "Niet-ondersteunde drempel: {entries}.",
+        "unknown-trigger-reference": "Geen geregistreerde trigger komt overeen met: {entries}.",
+        "wrong-trigger-category": "Verkeerd soort trigger voor dit veld: {entries}.",
+        "agent-enforced-widening": "De agent zou dit weigeren, want het verruimt wat zijn labels toestaan: {entries}.",
+        "invalid-action": "Kies bijwerken of herstarten."
+      },
+      "cycle": "Deze afhankelijkheden zouden een cyclus vormen via: {containers}."
+    },
+    "agent": {
+      "note": "Deze container draait op agent {agent}, die zijn eigen labels afdwingt. Drydock kan de toegang tot acties hier alleen beperken.",
+      "excludeHint": "De uitsluitingen uit de labels blijven staan. Je kunt er alleen meer aan toevoegen.",
+      "narrowHint": "Je kunt alleen items verwijderen of een strengere drempel gebruiken dan het label.",
+      "nothingToNarrow": "De labels staan hier niets toe, dus er valt niets te beperken."
     }
   }
 }

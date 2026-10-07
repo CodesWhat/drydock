@@ -44,7 +44,8 @@
       "none": "Không có",
       "notSet": "Chưa đặt",
       "labelValue": "Giá trị nhãn: {value}",
-      "noLabel": "Không có nhãn"
+      "noLabel": "Không có nhãn",
+      "explicitNone": "Không có (ghi đè)"
     },
     "actions": {
       "edit": "Sửa",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Lưu sẽ thay đổi giá trị cho mọi thứ trong phạm vi hiển thị ở trên."
+      "scopeReminder": "Lưu sẽ thay đổi giá trị cho mọi thứ trong phạm vi hiển thị ở trên.",
+      "dependsOnInput": "Thêm container",
+      "dependsOnHelp": "Chọn một container trên cùng máy chủ hoặc nhập tên chưa chạy. Tên mà Drydock chưa biết sẽ được lưu kèm cảnh báo.",
+      "notificationInput": "Thêm trigger thông báo",
+      "actionInput": "Thêm trigger thao tác",
+      "routingHelp": "ID hoặc tên trigger, có thể kèm ngưỡng như minor.",
+      "threshold": "Ngưỡng",
+      "thresholdDefault": "Không có ngưỡng",
+      "addEntry": "Thêm",
+      "removeEntry": "Xóa {entry}",
+      "locked": "từ nhãn",
+      "noneHint": "Danh sách đang trống. Khi lưu, trường này được đặt thành không có và mọi giá trị nhãn bị bỏ qua. Hãy dùng Đặt lại về nhãn để gỡ phần ghi đè.",
+      "autoWarning": "Điều này cho phép các trigger trong danh sách tự động cập nhật container này khi chúng chạy ở chế độ onauto.",
+      "dependencyAction": "Thao tác phụ thuộc",
+      "dependencyActionHelp": "Việc Drydock làm với các container mà container này phụ thuộc vào khi nó được cập nhật.",
+      "dependencyActions": {
+        "update": "Cập nhật",
+        "restart": "Khởi động lại"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Xóa ký tự điều khiển, dấu hướng văn bản, < và >.",
         "invalid-icon": "Dùng một nguồn biểu tượng và một tên, không dùng URL.",
         "invalid-type": "Máy chủ đã từ chối giá trị này.",
-        "invalid-value": "Máy chủ đã từ chối giá trị này."
-      }
+        "invalid-value": "Máy chủ đã từ chối giá trị này.",
+        "invalid-name": "Không phải tên container hợp lệ: {entries}.",
+        "duplicate-entry": "Được liệt kê nhiều hơn một lần: {entries}.",
+        "too-many-entries": "Dùng tối đa 32 mục.",
+        "depends-on-self": "Một container không thể phụ thuộc vào chính nó: {entries}.",
+        "invalid-reference": "Không phải tham chiếu trigger hợp lệ: {entries}.",
+        "invalid-threshold": "Ngưỡng không được hỗ trợ: {entries}.",
+        "unknown-trigger-reference": "Không có trigger đã đăng ký nào khớp với: {entries}.",
+        "wrong-trigger-category": "Sai loại trigger cho trường này: {entries}.",
+        "agent-enforced-widening": "Agent sẽ từ chối việc này vì nó mở rộng những gì nhãn của agent cho phép: {entries}.",
+        "invalid-action": "Chọn cập nhật hoặc khởi động lại."
+      },
+      "cycle": "Các phụ thuộc này sẽ tạo thành một vòng lặp qua: {containers}."
+    },
+    "agent": {
+      "note": "Container này chạy trên agent {agent}, agent này áp dụng nhãn riêng của nó. Ở đây Drydock chỉ có thể thu hẹp quyền truy cập thao tác.",
+      "excludeHint": "Các loại trừ từ nhãn được giữ nguyên. Bạn chỉ có thể thêm nữa.",
+      "narrowHint": "Bạn chỉ có thể xóa mục hoặc dùng ngưỡng hẹp hơn nhãn.",
+      "nothingToNarrow": "Nhãn ở đây không cho phép gì, nên không có gì để thu hẹp."
     }
   }
 }

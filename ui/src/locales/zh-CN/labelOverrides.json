@@ -44,7 +44,8 @@
       "none": "无",
       "notSet": "未设置",
       "labelValue": "标签值：{value}",
-      "noLabel": "无标签"
+      "noLabel": "无标签",
+      "explicitNone": "无（覆盖）"
     },
     "actions": {
       "edit": "编辑",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "保存会更改上方所示范围内所有内容的值。"
+      "scopeReminder": "保存会更改上方所示范围内所有内容的值。",
+      "dependsOnInput": "添加容器",
+      "dependsOnHelp": "选择同一主机上的容器，或输入尚未运行的名称。Drydock 不认识的名称会带警告保存。",
+      "notificationInput": "添加通知触发器",
+      "actionInput": "添加操作触发器",
+      "routingHelp": "触发器 ID 或名称，后面可选地加上 minor 之类的阈值。",
+      "threshold": "阈值",
+      "thresholdDefault": "无阈值",
+      "addEntry": "添加",
+      "removeEntry": "移除 {entry}",
+      "locked": "来自标签",
+      "noneHint": "列表为空。保存后此字段会设为无，并忽略标签的值。要移除覆盖，请改用“恢复为标签值”。",
+      "autoWarning": "这样列出的触发器在 onauto 模式下运行时，可以自动更新此容器。",
+      "dependencyAction": "依赖操作",
+      "dependencyActionHelp": "此容器更新时，Drydock 对它所依赖的容器执行的操作。",
+      "dependencyActions": {
+        "update": "更新",
+        "restart": "重启"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "请删除控制字符、方向标记、< 和 >。",
         "invalid-icon": "请使用图标来源和名称，而不是 URL。",
         "invalid-type": "服务器拒绝了此值。",
-        "invalid-value": "服务器拒绝了此值。"
-      }
+        "invalid-value": "服务器拒绝了此值。",
+        "invalid-name": "不是有效的容器名称：{entries}。",
+        "duplicate-entry": "重复列出：{entries}。",
+        "too-many-entries": "最多使用 32 个条目。",
+        "depends-on-self": "容器不能依赖自身：{entries}。",
+        "invalid-reference": "不是有效的触发器引用：{entries}。",
+        "invalid-threshold": "不支持的阈值：{entries}。",
+        "unknown-trigger-reference": "没有已注册的触发器匹配：{entries}。",
+        "wrong-trigger-category": "此字段的触发器类型不对：{entries}。",
+        "agent-enforced-widening": "代理会拒绝此项，因为它扩大了其标签允许的范围：{entries}。",
+        "invalid-action": "请选择更新或重启。"
+      },
+      "cycle": "这些依赖会形成一个经过以下容器的循环：{containers}。"
+    },
+    "agent": {
+      "note": "此容器运行在代理 {agent} 上，该代理会强制执行自己的标签。在这里 Drydock 只能收窄操作访问范围。",
+      "excludeHint": "标签中的排除项会保留。你只能再添加更多。",
+      "narrowHint": "你只能移除条目，或使用比标签更窄的阈值。",
+      "nothingToNarrow": "标签在这里不允许任何内容，所以没有可收窄的。"
     }
   }
 }

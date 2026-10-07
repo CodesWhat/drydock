@@ -44,7 +44,8 @@
       "none": "None",
       "notSet": "Not set",
       "labelValue": "Label value: {value}",
-      "noLabel": "No label"
+      "noLabel": "No label",
+      "explicitNone": "None (override)"
     },
     "actions": {
       "edit": "Edit",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Saving changes the value for everything in the scope shown above."
+      "scopeReminder": "Saving changes the value for everything in the scope shown above.",
+      "dependsOnInput": "Add a container",
+      "dependsOnHelp": "Pick a container on the same host, or type a name that isn't running yet. Names Drydock doesn't know are saved with a warning.",
+      "notificationInput": "Add a notification trigger",
+      "actionInput": "Add an action trigger",
+      "routingHelp": "Trigger id or name, optionally followed by a threshold such as minor.",
+      "threshold": "Threshold",
+      "thresholdDefault": "No threshold",
+      "addEntry": "Add",
+      "removeEntry": "Remove {entry}",
+      "locked": "from label",
+      "noneHint": "The list is empty. Saving sets this field to none and ignores any label value. Use Reset to label to remove the override instead.",
+      "autoWarning": "This lets the listed triggers update this container automatically when they run in onauto mode.",
+      "dependencyAction": "Dependency action",
+      "dependencyActionHelp": "What Drydock does to the containers this one depends on when it updates.",
+      "dependencyActions": {
+        "update": "Update",
+        "restart": "Restart"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Remove control characters, direction marks, < and >.",
         "invalid-icon": "Use an icon source and a name, not a URL.",
         "invalid-type": "The server rejected this value.",
-        "invalid-value": "The server rejected this value."
-      }
+        "invalid-value": "The server rejected this value.",
+        "invalid-name": "Not a valid container name: {entries}.",
+        "duplicate-entry": "Listed more than once: {entries}.",
+        "too-many-entries": "Use 32 entries or fewer.",
+        "depends-on-self": "A container can't depend on itself: {entries}.",
+        "invalid-reference": "Not a valid trigger reference: {entries}.",
+        "invalid-threshold": "Unsupported threshold: {entries}.",
+        "unknown-trigger-reference": "No registered trigger matches: {entries}.",
+        "wrong-trigger-category": "Wrong kind of trigger for this field: {entries}.",
+        "agent-enforced-widening": "The agent would refuse this, it widens what its labels allow: {entries}.",
+        "invalid-action": "Choose update or restart."
+      },
+      "cycle": "These dependencies would create a cycle through: {containers}."
+    },
+    "agent": {
+      "note": "This container runs on agent {agent}, which enforces its own labels. Drydock can only narrow action access here.",
+      "excludeHint": "The exclusions from the labels stay. You can only add more.",
+      "narrowHint": "You can only remove entries or use a narrower threshold than the label.",
+      "nothingToNarrow": "The labels allow nothing here, so there is nothing to narrow."
     }
   }
 }
