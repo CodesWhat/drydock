@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Anulaciones de etiquetas",
+    "boundary": "Drydock guarda estos valores y los aplica sobre las etiquetas de Docker. Nunca edita archivos de Compose ni recrea el contenedor.",
+    "scope": {
+      "container": "Se aplica al contenedor {name}, watcher {watcher}.",
+      "containerAgent": "Se aplica al contenedor {name} en el agente {agent}, watcher {watcher}.",
+      "composeService": "Se aplica al servicio de Compose {name}, {count} contenedor, watcher {watcher}. | Se aplica al servicio de Compose {name}, {count} contenedores, watcher {watcher}.",
+      "composeServiceAgent": "Se aplica al servicio de Compose {name}, {count} contenedor, agente {agent}, watcher {watcher}. | Se aplica al servicio de Compose {name}, {count} contenedores, agente {agent}, watcher {watcher}."
+    },
+    "loading": "Cargando anulaciones de etiquetas…",
+    "noOverrides": "Sin anulaciones. Cada valor procede de una etiqueta, Compose, el watcher o un valor predeterminado.",
+    "unavailable": "Las anulaciones de etiquetas no están disponibles para este contenedor.",
+    "readOnly": {
+      "rollback": "Este es un contenedor de reversión temporal. No se pueden cambiar sus anulaciones de etiquetas.",
+      "forbidden": "Se necesita acceso de administrador para cambiar las anulaciones de etiquetas. Esta vista es de solo lectura."
+    },
+    "groups": {
+      "display": "Visualización",
+      "dependencies": "Dependencias",
+      "notification": "Enrutamiento de notificaciones",
+      "action": "Enrutamiento de acciones"
+    },
+    "fields": {
+      "displayName": "Nombre para mostrar",
+      "displayIcon": "Icono para mostrar",
+      "dependsOn": "Depende de",
+      "dependsOnAction": "Acción de dependencia",
+      "notificationTriggerInclude": "Incluir notificaciones",
+      "notificationTriggerExclude": "Excluir notificaciones",
+      "actionTriggerInclude": "Incluir acciones",
+      "actionTriggerExclude": "Excluir acciones",
+      "actionTriggerAuto": "Acción automática"
+    },
+    "sources": {
+      "override": "Anulación",
+      "label": "Etiqueta",
+      "compose": "Compose",
+      "watcher": "Configuración del watcher",
+      "default": "Predeterminado",
+      "unset": "Sin definir"
+    },
+    "values": {
+      "none": "Ninguno",
+      "notSet": "Sin definir",
+      "labelValue": "Valor de la etiqueta: {value}",
+      "noLabel": "Sin etiqueta"
+    },
+    "actions": {
+      "edit": "Editar",
+      "editField": "Editar {field}",
+      "resetField": "Restablecer a la etiqueta",
+      "resetFieldAria": "Restablecer {field} a la etiqueta",
+      "resetHint": "Vuelve a: {value}",
+      "resetAll": "Restablecer todo"
+    },
+    "editor": {
+      "displayName": "Nombre para mostrar",
+      "displayNameHelp": "De 1 a 128 caracteres. Se muestra en lugar del nombre del contenedor.",
+      "iconProvider": "Origen del icono",
+      "iconName": "Nombre del icono",
+      "iconNameHelp": "Letras, números, punto, guion y guion bajo. Usa un nombre del origen del icono, no una URL.",
+      "iconPreview": "Vista previa del icono",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Al guardar se cambia el valor de todo lo que está en el ámbito indicado arriba."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Escribe un nombre para mostrar.",
+        "tooLong": "Usa 128 caracteres o menos.",
+        "invalidCharacters": "Quita los caracteres de control, las marcas de dirección, < y >."
+      },
+      "iconName": "Usa letras, números, punto, guion o guion bajo, empezando por una letra o un número."
+    },
+    "conflict": {
+      "message": "Estas anulaciones se cambiaron en otro lugar. Recarga para ver los valores actuales. Tu borrador se conserva.",
+      "unknown": "Drydock no pudo confirmar si se guardó el cambio. Recarga para ver los valores actuales.",
+      "notFound": "Este contenedor ya no existe. Recarga para ver la lista actual.",
+      "reload": "Recargar"
+    },
+    "status": {
+      "saved": "{field} guardado.",
+      "reset": "{field} restablecido al valor de la etiqueta.",
+      "resetAll": "Se restableció {count} anulación al valor de su etiqueta. | Se restablecieron {count} anulaciones a los valores de sus etiquetas.",
+      "nothingToReset": "No había nada anulado."
+    },
+    "resetAllConfirm": {
+      "header": "Restablecer todas las anulaciones",
+      "message": "¿Quitar todas las anulaciones de Drydock de {scope} y volver a los valores de las etiquetas? Los archivos de Compose y los contenedores no se tocan.",
+      "accept": "Restablecer todo"
+    },
+    "warnings": {
+      "title": "Advertencias",
+      "unresolved-dependency": "{field}: {reference} todavía no es un contenedor que Drydock conozca.",
+      "cross-host-dependency": "{field}: {reference} solo existe en otro host.",
+      "trigger-agent-mismatch": "{field}: {reference} solo coincide con activadores de otro agente.",
+      "auto-inert": "{field}: {reference} no coincide con ningún activador que se ejecute automáticamente.",
+      "stale-trigger-reference": "{field}: {reference} ya no coincide con ningún activador registrado.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Algunas anulaciones guardadas no se pudieron leer y se ignoran: {fields}",
+    "errors": {
+      "requestFailed": "Falló la solicitud de anulación de etiqueta (HTTP {status})",
+      "load": "No se pudieron cargar las anulaciones de etiquetas",
+      "unknown": "No se pudo guardar la anulación de etiqueta",
+      "invalid": "El servidor rechazó este cambio.",
+      "codes": {
+        "display-name-empty": "Escribe un nombre para mostrar.",
+        "display-name-too-long": "Usa 128 caracteres o menos.",
+        "display-name-invalid-characters": "Quita los caracteres de control, las marcas de dirección, < y >.",
+        "invalid-icon": "Usa un origen de icono y un nombre, no una URL.",
+        "invalid-type": "El servidor rechazó este valor.",
+        "invalid-value": "El servidor rechazó este valor."
+      }
+    }
+  }
+}

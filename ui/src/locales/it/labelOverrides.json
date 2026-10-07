@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Override delle etichette",
+    "boundary": "Drydock memorizza questi valori e li applica sopra le etichette Docker. Non modifica mai i file Compose e non ricrea mai il container.",
+    "scope": {
+      "container": "Si applica al container {name}, watcher {watcher}.",
+      "containerAgent": "Si applica al container {name} sull'agente {agent}, watcher {watcher}.",
+      "composeService": "Si applica al servizio Compose {name}, {count} container, watcher {watcher}. | Si applica al servizio Compose {name}, {count} container, watcher {watcher}.",
+      "composeServiceAgent": "Si applica al servizio Compose {name}, {count} container, agente {agent}, watcher {watcher}. | Si applica al servizio Compose {name}, {count} container, agente {agent}, watcher {watcher}."
+    },
+    "loading": "Caricamento degli override delle etichette…",
+    "noOverrides": "Nessun override. Ogni valore proviene da un'etichetta, da Compose, dal watcher o da un valore predefinito.",
+    "unavailable": "Gli override delle etichette non sono disponibili per questo container.",
+    "readOnly": {
+      "rollback": "Questo è un container di rollback temporaneo. I suoi override delle etichette non possono essere modificati.",
+      "forbidden": "Per modificare gli override delle etichette serve l'accesso di amministratore. Questa vista è di sola lettura."
+    },
+    "groups": {
+      "display": "Visualizzazione",
+      "dependencies": "Dipendenze",
+      "notification": "Instradamento delle notifiche",
+      "action": "Instradamento delle azioni"
+    },
+    "fields": {
+      "displayName": "Nome visualizzato",
+      "displayIcon": "Icona visualizzata",
+      "dependsOn": "Dipende da",
+      "dependsOnAction": "Azione di dipendenza",
+      "notificationTriggerInclude": "Notifiche incluse",
+      "notificationTriggerExclude": "Notifiche escluse",
+      "actionTriggerInclude": "Azioni incluse",
+      "actionTriggerExclude": "Azioni escluse",
+      "actionTriggerAuto": "Azione automatica"
+    },
+    "sources": {
+      "override": "Override",
+      "label": "Etichetta",
+      "compose": "Compose",
+      "watcher": "Configurazione del watcher",
+      "default": "Predefinito",
+      "unset": "Non impostato"
+    },
+    "values": {
+      "none": "Nessuno",
+      "notSet": "Non impostato",
+      "labelValue": "Valore dell'etichetta: {value}",
+      "noLabel": "Nessuna etichetta"
+    },
+    "actions": {
+      "edit": "Modifica",
+      "editField": "Modifica {field}",
+      "resetField": "Ripristina l'etichetta",
+      "resetFieldAria": "Ripristina l'etichetta per {field}",
+      "resetHint": "Torna a: {value}",
+      "resetAll": "Reimposta tutto"
+    },
+    "editor": {
+      "displayName": "Nome visualizzato",
+      "displayNameHelp": "Da 1 a 128 caratteri. Mostrato al posto del nome del container.",
+      "iconProvider": "Origine dell'icona",
+      "iconName": "Nome dell'icona",
+      "iconNameHelp": "Lettere, numeri, punto, trattino e trattino basso. Usa un nome dell'origine dell'icona, non un URL.",
+      "iconPreview": "Anteprima dell'icona",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Il salvataggio cambia il valore per tutto l'ambito mostrato sopra."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Inserisci un nome visualizzato.",
+        "tooLong": "Usa al massimo 128 caratteri.",
+        "invalidCharacters": "Rimuovi i caratteri di controllo, i segni di direzione, < e >."
+      },
+      "iconName": "Usa lettere, numeri, punto, trattino o trattino basso, iniziando con una lettera o un numero."
+    },
+    "conflict": {
+      "message": "Questi override sono stati modificati altrove. Ricarica per vedere i valori attuali. La tua bozza viene mantenuta.",
+      "unknown": "Drydock non ha potuto confermare se la modifica è stata salvata. Ricarica per vedere i valori attuali.",
+      "notFound": "Questo container non esiste più. Ricarica per vedere l'elenco attuale.",
+      "reload": "Ricarica"
+    },
+    "status": {
+      "saved": "{field} salvato.",
+      "reset": "{field} ripristinato al valore dell'etichetta.",
+      "resetAll": "{count} override ripristinato al valore della sua etichetta. | {count} override ripristinati ai valori delle loro etichette.",
+      "nothingToReset": "Non c'era nulla di sovrascritto."
+    },
+    "resetAllConfirm": {
+      "header": "Reimposta tutti gli override",
+      "message": "Rimuovere tutti gli override di Drydock per {scope} e tornare ai valori delle etichette? I file Compose e i container non vengono toccati.",
+      "accept": "Reimposta tutto"
+    },
+    "warnings": {
+      "title": "Avvisi",
+      "unresolved-dependency": "{field}: {reference} non è ancora un container noto a Drydock.",
+      "cross-host-dependency": "{field}: {reference} esiste solo su un altro host.",
+      "trigger-agent-mismatch": "{field}: {reference} corrisponde solo a trigger di un altro agente.",
+      "auto-inert": "{field}: {reference} non corrisponde ad alcun trigger eseguito automaticamente.",
+      "stale-trigger-reference": "{field}: {reference} non corrisponde più a nessun trigger registrato.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Alcuni override salvati non sono stati letti e vengono ignorati: {fields}",
+    "errors": {
+      "requestFailed": "Richiesta di override dell'etichetta non riuscita (HTTP {status})",
+      "load": "Impossibile caricare gli override delle etichette",
+      "unknown": "Impossibile salvare l'override dell'etichetta",
+      "invalid": "Il server ha rifiutato questa modifica.",
+      "codes": {
+        "display-name-empty": "Inserisci un nome visualizzato.",
+        "display-name-too-long": "Usa al massimo 128 caratteri.",
+        "display-name-invalid-characters": "Rimuovi i caratteri di controllo, i segni di direzione, < e >.",
+        "invalid-icon": "Usa un'origine dell'icona e un nome, non un URL.",
+        "invalid-type": "Il server ha rifiutato questo valore.",
+        "invalid-value": "Il server ha rifiutato questo valore."
+      }
+    }
+  }
+}

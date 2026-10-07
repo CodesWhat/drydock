@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "레이블 재정의",
+    "boundary": "Drydock은 이 값들을 저장하고 Docker 레이블 위에 적용합니다. Compose 파일을 수정하거나 컨테이너를 다시 만들지 않습니다.",
+    "scope": {
+      "container": "컨테이너 {name}에 적용됩니다(워처 {watcher}).",
+      "containerAgent": "에이전트 {agent}의 컨테이너 {name}에 적용됩니다(워처 {watcher}).",
+      "composeService": "Compose 서비스 {name}에 적용됩니다(컨테이너 수: {count}, 워처 {watcher}). | Compose 서비스 {name}에 적용됩니다(컨테이너 수: {count}, 워처 {watcher}).",
+      "composeServiceAgent": "Compose 서비스 {name}에 적용됩니다(컨테이너 수: {count}, 에이전트 {agent}, 워처 {watcher}). | Compose 서비스 {name}에 적용됩니다(컨테이너 수: {count}, 에이전트 {agent}, 워처 {watcher})."
+    },
+    "loading": "레이블 재정의를 불러오는 중…",
+    "noOverrides": "재정의가 없습니다. 모든 값은 레이블, Compose, 워처 또는 기본값에서 가져옵니다.",
+    "unavailable": "이 컨테이너에서는 레이블 재정의를 사용할 수 없습니다.",
+    "readOnly": {
+      "rollback": "임시 롤백 컨테이너입니다. 레이블 재정의를 변경할 수 없습니다.",
+      "forbidden": "레이블 재정의를 변경하려면 관리자 권한이 필요합니다. 이 화면은 읽기 전용입니다."
+    },
+    "groups": {
+      "display": "표시",
+      "dependencies": "의존성",
+      "notification": "알림 라우팅",
+      "action": "작업 라우팅"
+    },
+    "fields": {
+      "displayName": "표시 이름",
+      "displayIcon": "표시 아이콘",
+      "dependsOn": "의존 대상",
+      "dependsOnAction": "의존성 작업",
+      "notificationTriggerInclude": "알림 포함",
+      "notificationTriggerExclude": "알림 제외",
+      "actionTriggerInclude": "작업 포함",
+      "actionTriggerExclude": "작업 제외",
+      "actionTriggerAuto": "작업 자동 실행"
+    },
+    "sources": {
+      "override": "재정의",
+      "label": "레이블",
+      "compose": "Compose",
+      "watcher": "워처 설정",
+      "default": "기본값",
+      "unset": "설정 안 됨"
+    },
+    "values": {
+      "none": "없음",
+      "notSet": "설정 안 됨",
+      "labelValue": "레이블 값: {value}",
+      "noLabel": "레이블 없음"
+    },
+    "actions": {
+      "edit": "편집",
+      "editField": "{field} 편집",
+      "resetField": "레이블로 되돌리기",
+      "resetFieldAria": "{field}을(를) 레이블로 되돌리기",
+      "resetHint": "되돌아갈 값: {value}",
+      "resetAll": "모두 초기화"
+    },
+    "editor": {
+      "displayName": "표시 이름",
+      "displayNameHelp": "1~128자. 컨테이너 이름 대신 표시됩니다.",
+      "iconProvider": "아이콘 소스",
+      "iconName": "아이콘 이름",
+      "iconNameHelp": "영문자, 숫자, 마침표, 하이픈, 밑줄. URL이 아니라 아이콘 소스에 있는 이름을 사용하세요.",
+      "iconPreview": "아이콘 미리보기",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "저장하면 위에 표시된 적용 범위의 모든 항목에서 값이 바뀝니다."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "표시 이름을 입력하세요.",
+        "tooLong": "128자 이하로 입력하세요.",
+        "invalidCharacters": "제어 문자, 방향 문자, < 및 >를 제거하세요."
+      },
+      "iconName": "영문자, 숫자, 마침표, 하이픈 또는 밑줄을 사용하고 영문자나 숫자로 시작하세요."
+    },
+    "conflict": {
+      "message": "이 재정의가 다른 곳에서 변경되었습니다. 현재 값을 보려면 다시 불러오세요. 작성 중인 내용은 유지됩니다.",
+      "unknown": "Drydock이 변경 사항이 저장되었는지 확인하지 못했습니다. 현재 값을 보려면 다시 불러오세요.",
+      "notFound": "이 컨테이너는 더 이상 존재하지 않습니다. 현재 목록을 보려면 다시 불러오세요.",
+      "reload": "다시 불러오기"
+    },
+    "status": {
+      "saved": "{field}을(를) 저장했습니다.",
+      "reset": "{field}을(를) 레이블 값으로 초기화했습니다.",
+      "resetAll": "레이블 값으로 초기화한 재정의 수: {count}. | 레이블 값으로 초기화한 재정의 수: {count}.",
+      "nothingToReset": "재정의된 항목이 없었습니다."
+    },
+    "resetAllConfirm": {
+      "header": "모든 재정의 초기화",
+      "message": "{scope}의 Drydock 재정의를 모두 제거하고 레이블 값으로 되돌릴까요? Compose 파일과 컨테이너는 변경되지 않습니다.",
+      "accept": "모두 초기화"
+    },
+    "warnings": {
+      "title": "경고",
+      "unresolved-dependency": "{field}: {reference}은(는) 아직 Drydock이 아는 컨테이너가 아닙니다.",
+      "cross-host-dependency": "{field}: {reference}은(는) 다른 호스트에만 있습니다.",
+      "trigger-agent-mismatch": "{field}: {reference}은(는) 다른 에이전트의 트리거와만 일치합니다.",
+      "auto-inert": "{field}: {reference}은(는) 자동으로 실행되는 트리거와 일치하지 않습니다.",
+      "stale-trigger-reference": "{field}: {reference}은(는) 더 이상 등록된 트리거와 일치하지 않습니다.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "저장된 재정의 일부를 읽을 수 없어 무시됩니다: {fields}",
+    "errors": {
+      "requestFailed": "레이블 재정의 요청에 실패했습니다(HTTP {status})",
+      "load": "레이블 재정의를 불러오지 못했습니다",
+      "unknown": "레이블 재정의를 저장하지 못했습니다",
+      "invalid": "서버가 이 변경을 거부했습니다.",
+      "codes": {
+        "display-name-empty": "표시 이름을 입력하세요.",
+        "display-name-too-long": "128자 이하로 입력하세요.",
+        "display-name-invalid-characters": "제어 문자, 방향 문자, < 및 >를 제거하세요.",
+        "invalid-icon": "URL이 아니라 아이콘 소스와 이름을 사용하세요.",
+        "invalid-type": "서버가 이 값을 거부했습니다.",
+        "invalid-value": "서버가 이 값을 거부했습니다."
+      }
+    }
+  }
+}
