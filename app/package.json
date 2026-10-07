@@ -31,7 +31,7 @@
     "axios": "1.20.0",
     "capitalize": "2.0.4",
     "change-case": "5.4.4",
-    "compression": "1.8.1",
+    "compression": "1.8.2",
     "cors": "2.8.6",
     "cron-parser": "5.10.0",
     "dockerode": "5.0.1",
@@ -42,7 +42,7 @@
     "flat": "6.0.1",
     "gotify-client": "0.4.2",
     "helmet": "8.3.0",
-    "joi": "18.2.8",
+    "joi": "18.2.9",
     "joi-cron-expression": "1.0.1",
     "just-debounce": "1.1.0",
     "kafkajs": "2.2.4",
@@ -84,7 +84,11 @@
     "undici": "8.10.2",
     "nanoid": "6.0.1",
     "@grpc/grpc-js": "1.14.5",
-    "moment": "2.31.0"
+    "moment": "2.31.0",
+    "proxy-addr": "2.0.8",
+    "fast-copy": "4.1.0",
+    "smol-toml": "1.9.0",
+    "source-map-js": "1.2.2"
   },
   "devDependencies": {
     "@fast-check/vitest": "0.4.1",

@@ -111,7 +111,8 @@
     },
     "target": {
       "container": "Container",
-      "agent": "Agent"
+      "agent": "Agent",
+      "group": "Gruppe"
     }
   },
   "notificationsView": {

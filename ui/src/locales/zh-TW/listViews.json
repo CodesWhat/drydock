@@ -111,7 +111,8 @@
     },
     "target": {
       "container": "容器",
-      "agent": "代理"
+      "agent": "代理",
+      "group": "群組"
     }
   },
   "notificationsView": {
