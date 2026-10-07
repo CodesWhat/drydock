@@ -192,7 +192,10 @@ const writeConfigurationSectionResponseSchema = {
   type: 'object',
   properties: {
     applied: { type: 'boolean' },
-    section: { type: 'string' },
+    section: {
+      type: 'string',
+      description: 'The section that was written: the path parameter, trimmed and lowercased.',
+    },
     changedKeys: { type: 'array', items: { type: 'string' } },
     restartRequired: {
       type: 'boolean',
@@ -557,15 +560,16 @@ export const configPaths = {
       tags: ['System'],
       summary: 'Write a configuration section through the file',
       description:
-        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched. A browser session that signed in with a two-factor recovery code cannot write the authentication section, under "auth" or any name that flattens into it such as "auth_basic_eve": it is refused with 403 and `details.reason` of `recovery-assurance`, because a new account or a relaxed transport rule outlives a factor reset. Every other section stays writable from such a session.',
+        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). The section is one top-level key of the file: letters and digits only, matched case-insensitively. Any other name is a 400 and nothing is written, including a name with an underscore in it such as "auth_basic_eve", which would flatten into the "auth" section; write the parent section with the value nested inside it instead. Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched. A browser session that signed in with a two-factor recovery code cannot write the authentication section, under "auth" or any name that flattens into it such as "auth_basic_eve": it is refused with 403 and `details.reason` of `recovery-assurance`, because a new account or a relaxed transport rule outlives a factor reset. Every other section stays writable from such a session.',
       operationId: 'writeConfigurationSection',
       parameters: [configSectionPathParam],
       requestBody: writeConfigurationSectionRequestBody,
       responses: {
         200: jsonResponse('Write result', { ...writeConfigurationSectionResponseSchema }),
-        400: jsonResponse('Invalid candidate section', {
-          ...writeConfigurationInvalidResponseSchema,
-        }),
+        400: jsonResponse(
+          'Invalid candidate section, or a section name that is not one top-level key of the file',
+          { ...writeConfigurationInvalidResponseSchema },
+        ),
         401: errorResponse('Authentication required'),
         403: errorResponse(
           'API key is missing the required scope, or the calling session signed in with a recovery code and the section is the authentication configuration',

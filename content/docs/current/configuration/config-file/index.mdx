@@ -209,6 +209,8 @@ The editors are new in unreleased v1.8 builds. They edit existing, local file-ow
 - **The section is owned by the database, not the file** (settings, notification rules, API keys, approvals, containers) — the response points at `PATCH /api/v1/settings`.
 - **No configuration file exists to write to.** This endpoint never creates `drydock.yml`; mount one first.
 
+`:section` is one top-level key of the file, such as `server`, `watcher` or `notification`: letters and digits only, matched case-insensitively. Any other name gets a `400` and nothing is written. That includes a name with an underscore in it, such as `auth_basic_eve` or `server_webhook`. An underscore is the same as one more level of nesting, so that name would land inside `auth` or `server` without being checked as part of it. Write the parent section instead, with the value nested inside it. The response's `section` field and the audit entry carry the name in lowercase.
+
 An invalid candidate body is a `400` with the same `path`/`envKey`/`message` shape `/validate` uses, and the file on disk is left byte-identical. A successful write reports `restartRequired` when the section it wrote needs a restart to take effect.
 
 A session that signed in with a two-factor recovery code can't write the `auth` section. The request gets `403` with `details.reason` set to `recovery-assurance`, under `auth` or any section name that flattens into it, such as `auth_basic_eve`. Every other section stays writable from that session. See [what a recovery login can't do](/docs/api#what-a-recovery-login-cant-do).
