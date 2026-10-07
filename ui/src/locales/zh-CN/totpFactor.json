@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "两步验证",
+    "description": "每次登录时，除密码外还要求输入验证器应用中的验证码。",
+    "loading": "正在加载两步验证状态",
+    "retry": "重试",
+    "status": {
+      "off": "已关闭",
+      "on": "已开启",
+      "onSince": "自 {date} 起开启",
+      "recoveryRemaining": "剩余 {count} 个恢复码",
+      "recoveryNone": "没有剩余的恢复码。请在无法使用验证器应用之前生成一组新的恢复码。",
+      "recoveryLow": "恢复码所剩不多。请生成一组新的恢复码。",
+      "pending": "设置已开始，正在等待验证码。将于 {time} 过期。"
+    },
+    "unavailable": {
+      "notLocal": "两步验证仅适用于使用密码登录的本地账户。如果这是你的账户，请退出后重新登录。",
+      "httpsRequired": "设置两步验证需要 HTTPS。请通过 HTTPS 打开 Drydock；如果网络可信，也可以请管理员设置 DD_AUTH_TOTP_ALLOWHTTP=true。",
+      "noKeyRing": "此服务器不支持设置两步验证。需要管理员先配置加密密钥环。",
+      "recoverySession": "你使用恢复码登录，因此不允许执行此操作。请使用验证器应用中的验证码登录。"
+    },
+    "actions": {
+      "enable": "开启",
+      "replace": "更换验证器",
+      "regenerate": "新的恢复码",
+      "remove": "关闭",
+      "cancelSetup": "取消设置",
+      "cancel": "取消"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "请确认是你本人",
+        "replace": "请确认是你本人，以更换验证器",
+        "regenerate": "请确认是你本人，以获取新的恢复码",
+        "remove": "请确认是你本人，以关闭两步验证"
+      },
+      "hint": "请输入密码。此步骤之后不会保留任何内容。",
+      "hintWithCode": "请输入密码和当前验证码。此步骤之后不会保留任何内容。",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "输入密码",
+      "codeLabel": "验证码",
+      "codePlaceholder": "6 位验证码",
+      "recoveryLabel": "恢复码",
+      "recoveryPlaceholder": "输入恢复码",
+      "useRecovery": "使用恢复码",
+      "useCode": "使用验证码",
+      "submit": {
+        "enable": "继续",
+        "replace": "继续",
+        "regenerate": "生成新的恢复码",
+        "remove": "关闭两步验证",
+        "busy": "正在检查..."
+      }
+    },
+    "scan": {
+      "heading": "使用验证器应用扫描",
+      "instructions": "打开验证器应用，添加账户并扫描此二维码，然后输入应用显示的 6 位验证码。",
+      "replaceNote": "在你确认新的验证器之前，当前的验证器仍然有效。",
+      "qrLabel": "用于设置两步验证的二维码",
+      "qrFailed": "无法绘制二维码。请改为输入设置密钥。",
+      "secretLabel": "无法扫描？请输入此设置密钥",
+      "copySecret": "复制密钥",
+      "copied": "已复制",
+      "expiresAt": "此设置将于 {time} 过期。",
+      "codeLabel": "验证码",
+      "codeHint": "请输入验证器应用中的 6 位验证码。",
+      "codePlaceholder": "6 位验证码",
+      "confirm": "确认并开启",
+      "confirming": "正在确认..."
+    },
+    "codes": {
+      "heading": "保存你的恢复码",
+      "description": "如果你无法使用验证器应用，每个恢复码只能使用一次。这是它们唯一一次显示。",
+      "copy": "复制恢复码",
+      "copied": "已复制",
+      "download": "下载",
+      "fileHeading": "Drydock 恢复码",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "我已保存这些恢复码",
+      "done": "完成",
+      "downloadFailed": "浏览器没有下载该文件。请改为复制恢复码。"
+    },
+    "remove": {
+      "header": "要关闭两步验证吗？",
+      "message": "之后登录将再次只需要密码，并且你的其他会话将被结束。",
+      "accept": "关闭"
+    },
+    "notice": {
+      "enabled": "两步验证已开启。",
+      "replaced": "你的新验证器已生效。",
+      "regenerated": "你的新恢复码已生效，旧恢复码不再有效。",
+      "removed": "两步验证已关闭。"
+    },
+    "errors": {
+      "load": "无法加载两步验证状态。",
+      "network": "无法连接到服务器。请重试。",
+      "generic": "出了点问题。请重试。",
+      "sessionEnded": "你的会话已结束。请重新登录。",
+      "reauthFailed": "密码或验证码不匹配。请检查后重试。",
+      "locked": "尝试次数过多。请在 {time}后重试。",
+      "lockedLater": "尝试次数过多。请稍后重试。",
+      "busy": "另一项检查仍在进行。请稍后重试。",
+      "invalidRequest": "请输入密码和有效的验证码。",
+      "codeFormat": "请输入验证器应用中的 6 位数字。",
+      "codeWrong": "该验证码无效。请检查后重试。",
+      "enrollmentExpired": "此设置已过期。请重新开始。",
+      "enrollmentGone": "由于错误验证码过多，此设置已关闭。请重新开始。",
+      "stateChanged": "两步验证设置已在别处更改。请查看后重试。",
+      "notActive": "两步验证尚未开启。"
+    }
+  }
+}

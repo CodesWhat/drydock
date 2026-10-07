@@ -1017,6 +1017,7 @@ describe('Config Router', () => {
     ) {
       return {
         kind: 'written' as const,
+        section: 'notification',
         changedKeys: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
         restartRequired: false,
         reload: defaultReloadResult(),
@@ -1120,7 +1121,10 @@ describe('Config Router', () => {
     });
 
     test('a no-file outcome refuses with 409 and records an error audit entry, never a value', async () => {
-      mockWriteConfigurationSection.mockResolvedValue({ kind: 'no-file' });
+      mockWriteConfigurationSection.mockResolvedValue({
+        kind: 'no-file',
+        section: 'notification',
+      });
       configRouter.init();
       const handler = getPutHandler('/:section');
       const res = createResponse();
@@ -1141,6 +1145,7 @@ describe('Config Router', () => {
     test('an invalid outcome refuses with 400 and the Joi-shaped errors, file untouched', async () => {
       mockWriteConfigurationSection.mockResolvedValue({
         kind: 'invalid',
+        section: 'security',
         errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
       });
       configRouter.init();
@@ -1164,6 +1169,7 @@ describe('Config Router', () => {
     test('an env-sourced outcome refuses with 409 naming the offending keys, never their values', async () => {
       mockWriteConfigurationSection.mockResolvedValue({
         kind: 'env-sourced',
+        section: 'notification',
         keys: ['DD_NOTIFICATION_DISCORD_MYHOOK_URL'],
       });
       configRouter.init();
@@ -1184,6 +1190,92 @@ describe('Config Router', () => {
       expect(payload.error).not.toContain('https://new.example/hook');
       const auditCall = mockRecordAuditEvent.mock.calls[0][0];
       expect(auditCall.details).not.toContain('https://new.example/hook');
+    });
+
+    // The engine resolves the name (trimmed, lowercased) and runs every check
+    // against that. The response and the audit entry name what it resolved, not
+    // the spelling in the URL.
+    describe('with the section spelled " AUTH " in the URL', () => {
+      async function put(outcome: ConfigWriteOutcome) {
+        mockWriteConfigurationSection.mockResolvedValue(outcome);
+        configRouter.init();
+        const res = createResponse();
+        await getPutHandler('/:section')({ params: { section: ' AUTH ' }, body: {} }, res);
+        return res;
+      }
+
+      test('a write names the section the engine wrote in the response and the audit entry', async () => {
+        const res = await put(
+          writtenOutcome({
+            section: 'auth',
+            changedKeys: ['DD_AUTH_BASIC_EVE_HASH', 'DD_AUTH_BASIC_EVE_USER'],
+            restartRequired: true,
+          }),
+        );
+
+        expect(mockWriteConfigurationSection).toHaveBeenCalledWith(' AUTH ', {});
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect((res.json as any).mock.calls[0][0]).toMatchObject({
+          section: 'auth',
+          changedKeys: ['DD_AUTH_BASIC_EVE_HASH', 'DD_AUTH_BASIC_EVE_USER'],
+          restartRequired: true,
+        });
+        expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+          action: 'config-written',
+          containerName: 'diagnostics',
+          status: 'info',
+          details: 'Wrote configuration section "auth": 2 key(s) changed (restart required)',
+        });
+      });
+
+      test.each([
+        [
+          { kind: 'no-file', section: 'auth' },
+          409,
+          'Wrote configuration section "auth": refused (no configuration file exists)',
+          undefined,
+        ],
+        [
+          {
+            kind: 'invalid',
+            section: 'auth',
+            errors: [{ path: 'auth.basic', envKey: 'DD_AUTH_BASIC', message: 'bad' }],
+          },
+          400,
+          'Wrote configuration section "auth": refused (1 error(s))',
+          undefined,
+        ],
+        [
+          { kind: 'env-sourced', section: 'auth', keys: ['DD_AUTH_BASIC_EVE_HASH'] },
+          409,
+          'Wrote configuration section "auth": refused (env-sourced keys: DD_AUTH_BASIC_EVE_HASH)',
+          'Cannot write section "auth": the following keys are set by the environment and would not take effect: DD_AUTH_BASIC_EVE_HASH',
+        ],
+        [
+          { kind: 'db-owned', section: 'settings' },
+          409,
+          'Wrote configuration section "settings": refused (DB-owned section)',
+          'Section "settings" is managed through PATCH /api/v1/settings, not the configuration file.',
+        ],
+      ] as Array<[ConfigWriteOutcome, number, string, string | undefined]>)(
+        'a refusal names the section the engine resolved: %j',
+        async (outcome, status, details, error) => {
+          const res = await put(outcome);
+
+          expect(res.status).toHaveBeenCalledWith(status);
+          expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+            action: 'config-written',
+            containerName: 'diagnostics',
+            status: 'error',
+            details,
+          });
+          const payload = (res.json as any).mock.calls[0][0];
+          expect(JSON.stringify(payload)).not.toContain(' AUTH ');
+          if (error) {
+            expect(payload).toStrictEqual({ error });
+          }
+        },
+      );
     });
 
     describe('from a session that signed in with a recovery code', () => {
@@ -1323,6 +1415,7 @@ describe('Config Router', () => {
     test('an invalid response satisfies the OpenAPI contract', async () => {
       mockWriteConfigurationSection.mockResolvedValue({
         kind: 'invalid',
+        section: 'security',
         errors: [{ path: 'security.scanner', envKey: 'DD_SECURITY_SCANNER', message: 'bad' }],
       });
       configRouter.init();

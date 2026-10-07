@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "兩步驟驗證",
+    "description": "每次登入時，除了密碼之外，還要求輸入驗證器應用程式中的驗證碼。",
+    "loading": "正在載入兩步驟驗證狀態",
+    "retry": "重試",
+    "status": {
+      "off": "已關閉",
+      "on": "已開啟",
+      "onSince": "自 {date} 起開啟",
+      "recoveryRemaining": "剩餘 {count} 個復原碼",
+      "recoveryNone": "沒有剩餘的復原碼。請在無法使用驗證器應用程式之前產生一組新的復原碼。",
+      "recoveryLow": "復原碼所剩不多。請產生一組新的復原碼。",
+      "pending": "設定已開始，正在等待驗證碼。將於 {time} 過期。"
+    },
+    "unavailable": {
+      "notLocal": "兩步驟驗證僅適用於以密碼登入的本機帳號。如果這是你的帳號，請登出後重新登入。",
+      "httpsRequired": "設定兩步驟驗證需要 HTTPS。請透過 HTTPS 開啟 Drydock；如果網路可信，也可以請管理員設定 DD_AUTH_TOTP_ALLOWHTTP=true。",
+      "noKeyRing": "此伺服器無法設定兩步驟驗證。需要管理員先設定加密金鑰環。",
+      "recoverySession": "你使用復原碼登入，因此不允許執行此操作。請使用驗證器應用程式中的驗證碼登入。"
+    },
+    "actions": {
+      "enable": "開啟",
+      "replace": "更換驗證器",
+      "regenerate": "新的復原碼",
+      "remove": "關閉",
+      "cancelSetup": "取消設定",
+      "cancel": "取消"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "請確認是你本人",
+        "replace": "請確認是你本人，以更換驗證器",
+        "regenerate": "請確認是你本人，以取得新的復原碼",
+        "remove": "請確認是你本人，以關閉兩步驟驗證"
+      },
+      "hint": "請輸入密碼。此步驟之後不會保留任何內容。",
+      "hintWithCode": "請輸入密碼和目前的驗證碼。此步驟之後不會保留任何內容。",
+      "passwordLabel": "密碼",
+      "passwordPlaceholder": "輸入密碼",
+      "codeLabel": "驗證碼",
+      "codePlaceholder": "6 位數驗證碼",
+      "recoveryLabel": "復原碼",
+      "recoveryPlaceholder": "輸入復原碼",
+      "useRecovery": "使用復原碼",
+      "useCode": "使用驗證碼",
+      "submit": {
+        "enable": "繼續",
+        "replace": "繼續",
+        "regenerate": "產生新的復原碼",
+        "remove": "關閉兩步驟驗證",
+        "busy": "正在檢查..."
+      }
+    },
+    "scan": {
+      "heading": "使用驗證器應用程式掃描",
+      "instructions": "開啟驗證器應用程式，新增帳號並掃描此 QR 碼，然後輸入應用程式顯示的 6 位數驗證碼。",
+      "replaceNote": "在你確認新的驗證器之前，目前的驗證器仍然有效。",
+      "qrLabel": "用於設定兩步驟驗證的 QR 碼",
+      "qrFailed": "無法繪製 QR 碼。請改為輸入設定金鑰。",
+      "secretLabel": "無法掃描？請輸入此設定金鑰",
+      "copySecret": "複製金鑰",
+      "copied": "已複製",
+      "expiresAt": "此設定將於 {time} 過期。",
+      "codeLabel": "驗證碼",
+      "codeHint": "請輸入驗證器應用程式中的 6 位數驗證碼。",
+      "codePlaceholder": "6 位數驗證碼",
+      "confirm": "確認並開啟",
+      "confirming": "正在確認..."
+    },
+    "codes": {
+      "heading": "儲存你的復原碼",
+      "description": "如果你無法使用驗證器應用程式，每個復原碼只能使用一次。這是它們唯一一次顯示。",
+      "copy": "複製復原碼",
+      "copied": "已複製",
+      "download": "下載",
+      "fileHeading": "Drydock 復原碼",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "我已儲存這些復原碼",
+      "done": "完成",
+      "downloadFailed": "瀏覽器沒有下載該檔案。請改為複製復原碼。"
+    },
+    "remove": {
+      "header": "要關閉兩步驟驗證嗎？",
+      "message": "之後登入將再次只需要密碼，而且你的其他工作階段將被結束。",
+      "accept": "關閉"
+    },
+    "notice": {
+      "enabled": "兩步驟驗證已開啟。",
+      "replaced": "你的新驗證器已生效。",
+      "regenerated": "你的新復原碼已生效，舊的復原碼不再有效。",
+      "removed": "兩步驟驗證已關閉。"
+    },
+    "errors": {
+      "load": "無法載入兩步驟驗證狀態。",
+      "network": "無法連線到伺服器。請重試。",
+      "generic": "發生錯誤。請重試。",
+      "sessionEnded": "你的工作階段已結束。請重新登入。",
+      "reauthFailed": "密碼或驗證碼不相符。請檢查後重試。",
+      "locked": "嘗試次數過多。請在 {time}後重試。",
+      "lockedLater": "嘗試次數過多。請稍後重試。",
+      "busy": "另一項檢查仍在進行。請稍後重試。",
+      "invalidRequest": "請輸入密碼和有效的驗證碼。",
+      "codeFormat": "請輸入驗證器應用程式中的 6 位數字。",
+      "codeWrong": "該驗證碼無效。請檢查後重試。",
+      "enrollmentExpired": "此設定已過期。請重新開始。",
+      "enrollmentGone": "由於錯誤驗證碼過多，此設定已關閉。請重新開始。",
+      "stateChanged": "兩步驟驗證設定已在其他地方變更。請檢視後重試。",
+      "notActive": "兩步驟驗證尚未開啟。"
+    }
+  }
+}

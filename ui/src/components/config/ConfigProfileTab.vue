@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import ConfigTotpFactor from './ConfigTotpFactor.vue';
 
 const { t } = useI18n();
 
@@ -91,5 +92,7 @@ const props = defineProps<{
         </template>
       </div>
     </div>
+
+    <ConfigTotpFactor />
   </div>
 </template>

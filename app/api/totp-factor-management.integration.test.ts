@@ -30,7 +30,7 @@ const { auditEvents, logLines, sectionWrites } = vi.hoisted(() => ({
 vi.mock('../configuration/file/write.js', () => ({
   writeConfigurationSection: async (section: string) => {
     sectionWrites.push(section);
-    return { kind: 'no-file' };
+    return { kind: 'no-file', section };
   },
 }));
 
