@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Playwright suite no longer fails now and then with `route.fetch: socket hang up` in the stabilization countdown test. The server closes an idle keep-alive connection six seconds after its last response, Playwright's request client never expires its pooled ones, and a fetch that reused one right at that moment died. Intercepted fetches now retry a connection reset, the way a browser already does.
+
 ## [1.7.0-rc.20] — 2026-10-08
 
 ### Security
