@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Nadpisania etykiet",
+    "boundary": "Drydock zapisuje te wartości i stosuje je na etykietach Dockera. Nigdy nie edytuje plików Compose ani nie odtwarza kontenera.",
+    "scope": {
+      "container": "Dotyczy kontenera {name}, obserwator {watcher}.",
+      "containerAgent": "Dotyczy kontenera {name} na agencie {agent}, obserwator {watcher}.",
+      "composeService": "Dotyczy usługi Compose {name}, liczba kontenerów: {count}, obserwator {watcher}. | Dotyczy usługi Compose {name}, liczba kontenerów: {count}, obserwator {watcher}.",
+      "composeServiceAgent": "Dotyczy usługi Compose {name}, liczba kontenerów: {count}, agent {agent}, obserwator {watcher}. | Dotyczy usługi Compose {name}, liczba kontenerów: {count}, agent {agent}, obserwator {watcher}."
+    },
+    "loading": "Wczytywanie nadpisań etykiet…",
+    "noOverrides": "Brak nadpisań. Każda wartość pochodzi z etykiety, Compose, obserwatora lub wartości domyślnej.",
+    "unavailable": "Nadpisania etykiet nie są dostępne dla tego kontenera.",
+    "readOnly": {
+      "rollback": "To tymczasowy kontener wycofania. Jego nadpisań etykiet nie można zmieniać.",
+      "forbidden": "Do zmiany nadpisań etykiet potrzebny jest dostęp administratora. Ten widok jest tylko do odczytu."
+    },
+    "groups": {
+      "display": "Wyświetlanie",
+      "dependencies": "Zależności",
+      "notification": "Kierowanie powiadomień",
+      "action": "Kierowanie akcji"
+    },
+    "fields": {
+      "displayName": "Nazwa wyświetlana",
+      "displayIcon": "Ikona wyświetlana",
+      "dependsOn": "Zależy od",
+      "dependsOnAction": "Akcja zależności",
+      "notificationTriggerInclude": "Uwzględnione powiadomienia",
+      "notificationTriggerExclude": "Wykluczone powiadomienia",
+      "actionTriggerInclude": "Uwzględnione akcje",
+      "actionTriggerExclude": "Wykluczone akcje",
+      "actionTriggerAuto": "Akcja automatyczna"
+    },
+    "sources": {
+      "override": "Nadpisanie",
+      "label": "Etykieta",
+      "compose": "Compose",
+      "watcher": "Konfiguracja obserwatora",
+      "default": "Domyślne",
+      "unset": "Nie ustawiono"
+    },
+    "values": {
+      "none": "Żadne",
+      "notSet": "Nie ustawiono",
+      "labelValue": "Wartość etykiety: {value}",
+      "noLabel": "Brak etykiety"
+    },
+    "actions": {
+      "edit": "Edytuj",
+      "editField": "Edytuj: {field}",
+      "resetField": "Przywróć etykietę",
+      "resetFieldAria": "Przywróć etykietę dla: {field}",
+      "resetHint": "Wróci do: {value}",
+      "resetAll": "Resetuj wszystko"
+    },
+    "editor": {
+      "displayName": "Nazwa wyświetlana",
+      "displayNameHelp": "Od 1 do 128 znaków. Wyświetlana zamiast nazwy kontenera.",
+      "iconProvider": "Źródło ikony",
+      "iconName": "Nazwa ikony",
+      "iconNameHelp": "Litery, cyfry, kropka, myślnik i podkreślenie. Użyj nazwy ze źródła ikon, a nie adresu URL.",
+      "iconPreview": "Podgląd ikony",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Zapis zmienia wartość dla wszystkiego w zakresie pokazanym powyżej."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Wpisz nazwę wyświetlaną.",
+        "tooLong": "Użyj najwyżej 128 znaków.",
+        "invalidCharacters": "Usuń znaki sterujące, znaczniki kierunku, < i >."
+      },
+      "iconName": "Użyj liter, cyfr, kropki, myślnika lub podkreślenia, zaczynając od litery lub cyfry."
+    },
+    "conflict": {
+      "message": "Te nadpisania zostały zmienione gdzie indziej. Wczytaj ponownie, aby zobaczyć aktualne wartości. Twój szkic zostaje zachowany.",
+      "unknown": "Drydock nie mógł potwierdzić, czy zmiana została zapisana. Wczytaj ponownie, aby zobaczyć aktualne wartości.",
+      "notFound": "Ten kontener już nie istnieje. Wczytaj ponownie, aby zobaczyć aktualną listę.",
+      "reload": "Wczytaj ponownie"
+    },
+    "status": {
+      "saved": "Zapisano: {field}.",
+      "reset": "Zresetowano {field} do wartości etykiety.",
+      "resetAll": "Zresetowane nadpisania do wartości etykiet: {count}. | Zresetowane nadpisania do wartości etykiet: {count}.",
+      "nothingToReset": "Nic nie było nadpisane."
+    },
+    "resetAllConfirm": {
+      "header": "Resetuj wszystkie nadpisania",
+      "message": "Usunąć wszystkie nadpisania Drydock dla {scope} i wrócić do wartości etykiet? Pliki Compose i kontenery nie są zmieniane.",
+      "accept": "Resetuj wszystko"
+    },
+    "warnings": {
+      "title": "Ostrzeżenia",
+      "unresolved-dependency": "{field}: {reference} nie jest jeszcze kontenerem znanym Drydock.",
+      "cross-host-dependency": "{field}: {reference} istnieje tylko na innym hoście.",
+      "trigger-agent-mismatch": "{field}: {reference} pasuje tylko do wyzwalaczy na innym agencie.",
+      "auto-inert": "{field}: {reference} nie pasuje do żadnego wyzwalacza uruchamianego automatycznie.",
+      "stale-trigger-reference": "{field}: {reference} nie pasuje już do żadnego zarejestrowanego wyzwalacza.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Nie udało się odczytać niektórych zapisanych nadpisań, są ignorowane: {fields}",
+    "errors": {
+      "requestFailed": "Żądanie nadpisania etykiety nie powiodło się (HTTP {status})",
+      "load": "Nie udało się wczytać nadpisań etykiet",
+      "unknown": "Nie udało się zapisać nadpisania etykiety",
+      "invalid": "Serwer odrzucił tę zmianę.",
+      "codes": {
+        "display-name-empty": "Wpisz nazwę wyświetlaną.",
+        "display-name-too-long": "Użyj najwyżej 128 znaków.",
+        "display-name-invalid-characters": "Usuń znaki sterujące, znaczniki kierunku, < i >.",
+        "invalid-icon": "Użyj źródła ikon i nazwy, a nie adresu URL.",
+        "invalid-type": "Serwer odrzucił tę wartość.",
+        "invalid-value": "Serwer odrzucił tę wartość."
+      }
+    }
+  }
+}

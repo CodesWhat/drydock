@@ -80,6 +80,21 @@ export interface UpdateEligibility {
 /** Where an effective update-policy field came from, as resolved by the server. */
 export type ContainerUpdatePolicySource = 'env' | 'group' | 'label' | 'override';
 
+/** The nine container fields whose value a Docker label can set and a Drydock override can replace. */
+export type LabelOwnedField =
+  | 'displayName'
+  | 'displayIcon'
+  | 'dependsOn'
+  | 'dependsOnAction'
+  | 'notificationTriggerInclude'
+  | 'notificationTriggerExclude'
+  | 'actionTriggerInclude'
+  | 'actionTriggerExclude'
+  | 'actionTriggerAuto';
+
+/** Where a label-owned field's effective value comes from, as resolved by the server. */
+export type LabelOwnedSource = 'override' | 'label' | 'compose' | 'watcher' | 'default' | 'unset';
+
 /** The declarative (non-snooze) update-policy fields a group policy can set. */
 export interface ContainerDeclarativeUpdatePolicy {
   maturityMode?: 'all' | 'mature';
@@ -228,6 +243,8 @@ export interface Container {
   triggerInclude?: string;
   triggerExclude?: string;
   updateEligibility?: UpdateEligibility;
+  /** Where each label-owned field's effective value comes from; absent when the server sends none. */
+  labelOwnedSources?: Partial<Record<LabelOwnedField, LabelOwnedSource>>;
   /** Cheap dependency-ordering badge counts (#219); full graph detail comes from getContainerDependencies(). */
   dependencyCount?: number;
   dependentCount?: number;
@@ -246,7 +263,7 @@ export interface DependencyGraphEdge {
   from: string;
   to: string;
   action: 'update' | 'restart';
-  source: 'label' | 'compose';
+  source: 'label' | 'compose' | 'override';
 }
 
 export interface DependencyGraphUnresolvedEdge {

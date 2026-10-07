@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Label overrides",
+    "boundary": "Drydock stores these values and applies them on top of Docker labels. It never edits Compose files or recreates the container.",
+    "scope": {
+      "container": "Applies to container {name}, watcher {watcher}.",
+      "containerAgent": "Applies to container {name} on agent {agent}, watcher {watcher}.",
+      "composeService": "Applies to Compose service {name}, {count} container, watcher {watcher}. | Applies to Compose service {name}, {count} containers, watcher {watcher}.",
+      "composeServiceAgent": "Applies to Compose service {name}, {count} container, agent {agent}, watcher {watcher}. | Applies to Compose service {name}, {count} containers, agent {agent}, watcher {watcher}."
+    },
+    "loading": "Loading label overrides…",
+    "noOverrides": "No overrides. Every value comes from a label, Compose, the watcher or a default.",
+    "unavailable": "Label overrides are not available for this container.",
+    "readOnly": {
+      "rollback": "This is a temporary rollback container. Its label overrides can't be changed.",
+      "forbidden": "Admin access is required to change label overrides. This view is read-only."
+    },
+    "groups": {
+      "display": "Display",
+      "dependencies": "Dependencies",
+      "notification": "Notification routing",
+      "action": "Action routing"
+    },
+    "fields": {
+      "displayName": "Display name",
+      "displayIcon": "Display icon",
+      "dependsOn": "Depends on",
+      "dependsOnAction": "Dependency action",
+      "notificationTriggerInclude": "Notification include",
+      "notificationTriggerExclude": "Notification exclude",
+      "actionTriggerInclude": "Action include",
+      "actionTriggerExclude": "Action exclude",
+      "actionTriggerAuto": "Action auto"
+    },
+    "sources": {
+      "override": "Override",
+      "label": "Label",
+      "compose": "Compose",
+      "watcher": "Watcher config",
+      "default": "Default",
+      "unset": "Not set"
+    },
+    "values": {
+      "none": "None",
+      "notSet": "Not set",
+      "labelValue": "Label value: {value}",
+      "noLabel": "No label"
+    },
+    "actions": {
+      "edit": "Edit",
+      "editField": "Edit {field}",
+      "resetField": "Reset to label",
+      "resetFieldAria": "Reset {field} to label",
+      "resetHint": "Reverts to: {value}",
+      "resetAll": "Reset all"
+    },
+    "editor": {
+      "displayName": "Display name",
+      "displayNameHelp": "1 to 128 characters. Shown instead of the container name.",
+      "iconProvider": "Icon source",
+      "iconName": "Icon name",
+      "iconNameHelp": "Letters, numbers, dot, dash and underscore. Use a name from the icon source, not a URL.",
+      "iconPreview": "Icon preview",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Saving changes the value for everything in the scope shown above."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Enter a display name.",
+        "tooLong": "Use 128 characters or fewer.",
+        "invalidCharacters": "Remove control characters, direction marks, < and >."
+      },
+      "iconName": "Use letters, numbers, dot, dash or underscore, starting with a letter or number."
+    },
+    "conflict": {
+      "message": "These overrides were changed somewhere else. Reload to see the current values. Your draft is kept.",
+      "unknown": "Drydock could not confirm whether the change was saved. Reload to see the current values.",
+      "notFound": "This container no longer exists. Reload to see the current list.",
+      "reload": "Reload"
+    },
+    "status": {
+      "saved": "Saved {field}.",
+      "reset": "Reset {field} to its label value.",
+      "resetAll": "Reset {count} override to its label value. | Reset {count} overrides to their label values.",
+      "nothingToReset": "Nothing was overridden."
+    },
+    "resetAllConfirm": {
+      "header": "Reset all overrides",
+      "message": "Remove every Drydock override for {scope} and go back to the label values? Compose files and containers are not touched.",
+      "accept": "Reset all"
+    },
+    "warnings": {
+      "title": "Warnings",
+      "unresolved-dependency": "{field}: {reference} is not a container Drydock knows yet.",
+      "cross-host-dependency": "{field}: {reference} only exists on another host.",
+      "trigger-agent-mismatch": "{field}: {reference} only matches triggers on another agent.",
+      "auto-inert": "{field}: {reference} matches no trigger that runs automatically.",
+      "stale-trigger-reference": "{field}: {reference} no longer matches a registered trigger.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Some stored overrides could not be read and are ignored: {fields}",
+    "errors": {
+      "requestFailed": "Label override request failed (HTTP {status})",
+      "load": "Failed to load label overrides",
+      "unknown": "Could not save the label override",
+      "invalid": "The server rejected this change.",
+      "codes": {
+        "display-name-empty": "Enter a display name.",
+        "display-name-too-long": "Use 128 characters or fewer.",
+        "display-name-invalid-characters": "Remove control characters, direction marks, < and >.",
+        "invalid-icon": "Use an icon source and a name, not a URL.",
+        "invalid-type": "The server rejected this value.",
+        "invalid-value": "The server rejected this value."
+      }
+    }
+  }
+}

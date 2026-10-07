@@ -1338,6 +1338,45 @@ describe('container-mapper', () => {
       expect(c.tagPinGated).toBeUndefined();
     });
 
+    it('maps the label-owned field sources and drops unknown fields and values', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          labelOwnedSources: {
+            displayName: 'override',
+            displayIcon: 'label',
+            dependsOn: 'compose',
+            dependsOnAction: 'default',
+            notificationTriggerInclude: 'watcher',
+            notificationTriggerExclude: 'unset',
+            actionTriggerInclude: 'nonsense',
+            actionTriggerExclude: 7,
+            mystery: 'label',
+          },
+        }),
+      );
+      expect(c.labelOwnedSources).toEqual({
+        displayName: 'override',
+        displayIcon: 'label',
+        dependsOn: 'compose',
+        dependsOnAction: 'default',
+        notificationTriggerInclude: 'watcher',
+        notificationTriggerExclude: 'unset',
+      });
+    });
+
+    it('leaves labelOwnedSources undefined when absent or not an object', () => {
+      expect(mapApiContainer(makeApiContainer()).labelOwnedSources).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ labelOwnedSources: 'label' })).labelOwnedSources,
+      ).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ labelOwnedSources: ['label'] })).labelOwnedSources,
+      ).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ labelOwnedSources: null })).labelOwnedSources,
+      ).toBeUndefined();
+    });
+
     it('maps dependencyCount and dependentCount when present in API response', () => {
       const c = mapApiContainer(
         makeApiContainer({
