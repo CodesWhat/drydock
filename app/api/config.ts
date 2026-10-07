@@ -270,7 +270,8 @@ async function reloadEffectiveConfiguration(_req: Request, res: Response): Promi
  * only, never a value — even for the refusal branches, none of which
  * include anything a caller supplied.
  */
-function describeWrite(section: string, outcome: ConfigWriteOutcome): string {
+function describeWrite(outcome: ConfigWriteOutcome): string {
+  const { section } = outcome;
   switch (outcome.kind) {
     case 'written':
       return (
@@ -326,14 +327,14 @@ async function writeConfigurationSection(
       action: 'config-written',
       containerName: 'diagnostics',
       status: outcome.kind === 'written' ? 'info' : 'error',
-      details: describeWrite(section, outcome),
+      details: describeWrite(outcome),
     });
 
     switch (outcome.kind) {
       case 'written':
         res.status(200).json({
           applied: true,
-          section,
+          section: outcome.section,
           changedKeys: outcome.changedKeys,
           restartRequired: outcome.restartRequired,
           reload: {
@@ -359,7 +360,7 @@ async function writeConfigurationSection(
         sendErrorResponse(
           res,
           409,
-          `Cannot write section "${section}": the following keys are set by the environment ` +
+          `Cannot write section "${outcome.section}": the following keys are set by the environment ` +
             `and would not take effect: ${outcome.keys.join(', ')}`,
         );
         return;
@@ -367,7 +368,7 @@ async function writeConfigurationSection(
         sendErrorResponse(
           res,
           409,
-          `Section "${section}" is managed through PATCH /api/v1/settings, not the configuration file.`,
+          `Section "${outcome.section}" is managed through PATCH /api/v1/settings, not the configuration file.`,
         );
         return;
     }

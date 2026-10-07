@@ -28,7 +28,9 @@ import { type ConfigurationValidationResult, validateConfiguration } from './val
  * creates `drydock.yml` — an operator who wants one has to mount it first.
  * An invalid candidate is reported the same way `/validate` and `/reload`
  * already report one: a `path`/`envKey`/`message` triple per Joi rejection,
- * never a generic parse failure with no detail.
+ * never a generic parse failure with no detail. A name that is not a section
+ * (`SECTION_NAME_PATTERN` below) is reported the same way, before anything is
+ * read.
  */
 
 // Mirrors CONFIG_FILE_MAX_ALIAS_COUNT in ./loader.ts and CANDIDATE_MAX_ALIAS_COUNT
@@ -43,7 +45,9 @@ const CONFIG_FILE_MAX_ALIAS_COUNT = 100;
 // unlike a real DD_* section name, there's no canonical spelling to lower
 // against. None of these collide with an actual DD_<SECTION>_* prefix today;
 // this is a denylist against someone trying to write DB-owned state through
-// the file endpoint, not a defense against an accidental name clash.
+// the file endpoint, not a defense against an accidental name clash. Checked
+// before SECTION_NAME_PATTERN, so the underscore spellings keep this pointer
+// instead of the generic "not a section name" refusal.
 const DB_OWNED_SECTIONS = new Set([
   'settings',
   'ui_preferences',
@@ -55,6 +59,23 @@ const DB_OWNED_SECTIONS = new Set([
   'approvals',
   'containers',
 ]);
+
+// A section is one top-level key of the file: the first underscore-delimited
+// segment of every DD_* key under it, which is what `ddEnvKeyToSection`
+// classifies a key by and what every check in `performWrite` compares the
+// name against. Flattening joins segments with `_`, so a name with an
+// underscore in it is written under a top-level key of its own and lands in
+// another section: `auth_basic_eve` becomes DD_AUTH_BASIC_EVE_*, the `auth`
+// section. Those checks would then look for keys in a section called
+// `auth_basic_eve`, find none, and pass: no env-sourced refusal, no changed
+// keys in the audit entry, the wrong restart answer. Refusing the name keeps
+// the name and the classifier in agreement by construction. Matched before
+// lowercasing, so a character that only lowercases into the range (the Kelvin
+// sign, to `k`) is refused too.
+const SECTION_NAME_PATTERN = /^[A-Za-z0-9]+$/;
+// A name that is otherwise a legal key and starts with a section: the capture
+// is the section it would have flattened into, for the refusal to point at.
+const FLATTENS_INTO_SECTION_PATTERN = /^([A-Za-z0-9]+)_[A-Za-z0-9_]*$/;
 
 interface ConfigWriteWritten {
   kind: 'written';
@@ -84,15 +105,20 @@ interface ConfigWriteEnvSourced {
 
 interface ConfigWriteDbOwned {
   kind: 'db-owned';
-  section: string;
 }
 
-export type ConfigWriteOutcome =
+export type ConfigWriteOutcome = (
   | ConfigWriteWritten
   | ConfigWriteNoFile
   | ConfigWriteInvalid
   | ConfigWriteEnvSourced
-  | ConfigWriteDbOwned;
+  | ConfigWriteDbOwned
+) & {
+  /** The request's section name, trimmed and lowercased: the name every check
+   * ran against and, for `written`, the section that was replaced. Callers
+   * name the section with this, never with what the request spelled. */
+  section: string;
+};
 
 function singleDocumentError(message: string): ConfigurationValidationResult['errors'] {
   // Mirrors config-validate.ts's own fallback: no single YAML path or DD_*
@@ -100,6 +126,18 @@ function singleDocumentError(message: string): ConfigurationValidationResult['er
   // flatten cleanly), so DD_CONFIG_FILE is the closest DD_* key to "the
   // document itself" that exists.
   return [{ path: 'document', envKey: 'DD_CONFIG_FILE', message }];
+}
+
+function sectionNameError(sectionName: string): ConfigurationValidationResult['errors'] {
+  const parent = FLATTENS_INTO_SECTION_PATTERN.exec(sectionName)?.[1].toLowerCase();
+  return singleDocumentError(
+    `"${sectionName}" is not a configuration section name. A section is one top-level key ` +
+      'of the file, letters and digits only' +
+      (parent
+        ? `; this name would flatten into the "${parent}" section, so write "${parent}" ` +
+          'with the value nested inside it.'
+        : '.'),
+  );
 }
 
 /**
@@ -155,15 +193,20 @@ export async function writeFileAtomically(targetPath: string, content: string): 
 }
 
 async function performWrite(section: string, sectionBody: unknown): Promise<ConfigWriteOutcome> {
-  const sectionNormalized = section.trim().toLowerCase();
+  const sectionName = section.trim();
+  const sectionNormalized = sectionName.toLowerCase();
 
   if (DB_OWNED_SECTIONS.has(sectionNormalized)) {
     return { kind: 'db-owned', section: sectionNormalized };
   }
 
+  if (!SECTION_NAME_PATTERN.test(sectionName)) {
+    return { kind: 'invalid', section: sectionNormalized, errors: sectionNameError(sectionName) };
+  }
+
   const fileInfo = getConfigFileInfo();
   if (!fileInfo) {
-    return { kind: 'no-file' };
+    return { kind: 'no-file', section: sectionNormalized };
   }
 
   const raw = await readFile(fileInfo.path, 'utf-8');
@@ -193,7 +236,11 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
     candidateFileLayer = flattenConfigTree(interpolated.tree);
     interpolatedKeys = interpolated.interpolatedKeys;
   } catch (error) {
-    return { kind: 'invalid', errors: singleDocumentError((error as Error).message) };
+    return {
+      kind: 'invalid',
+      section: sectionNormalized,
+      errors: singleDocumentError((error as Error).message),
+    };
   }
 
   const { candidateEnv, diff } = await resolveCandidateEnvAndDiff(
@@ -202,7 +249,7 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
   );
   const validationResult = await validateConfiguration(candidateEnv);
   if (validationResult.errors.length > 0) {
-    return { kind: 'invalid', errors: validationResult.errors };
+    return { kind: 'invalid', section: sectionNormalized, errors: validationResult.errors };
   }
 
   const sectionEnvKeys = Object.keys(candidateFileLayer).filter(
@@ -210,7 +257,7 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
   );
   const envSourcedKeys = sectionEnvKeys.filter((key) => configFileSources[key] === 'env').sort();
   if (envSourcedKeys.length > 0) {
-    return { kind: 'env-sourced', keys: envSourcedKeys };
+    return { kind: 'env-sourced', section: sectionNormalized, keys: envSourcedKeys };
   }
 
   doc.set(sectionKey, sectionBody);
@@ -223,6 +270,7 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
 
   return {
     kind: 'written',
+    section: sectionNormalized,
     changedKeys,
     restartRequired: !RELOADABLE_SECTIONS.has(sectionNormalized),
     reload,
