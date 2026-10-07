@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.19] — 2026-10-07
+
+### Security
+
+- Update compression to 1.8.2 and Joi to 18.2.9, and override proxy-addr to 2.0.8, fast-copy to 4.1.0, smol-toml to 1.9.0 and source-map-js to 1.2.2 for the newly published dependency advisories. The sprintf-js advisory (GHSA-hp3w-g68c-fv3c) has no fixed release and only reaches the e2e load-testing tooling, so it is triaged rather than patched.
+- Update Alpine tzdata to 2026e-r0 after 2026d-r0 left the package index and the pinned install stopped resolving.
+
 ## [1.7.0-rc.18] — 2026-10-04
 
 ### Security
@@ -2798,7 +2805,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.18...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.19...HEAD
+[1.7.0-rc.19]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.18...v1.7.0-rc.19
 [1.7.0-rc.18]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.17...v1.7.0-rc.18
 [1.7.0-rc.17]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.16...v1.7.0-rc.17
 [1.7.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.15...v1.7.0-rc.16
