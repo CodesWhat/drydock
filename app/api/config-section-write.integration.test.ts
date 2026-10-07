@@ -162,6 +162,13 @@ describe('PUT /api/v1/config/:section, from the URL to the file', () => {
     configFileSources[key] = 'env';
   }
 
+  /** The hook as a `_file` node, pointing at a secret file that holds `NEW_URL`. */
+  function secretFileHook() {
+    const secretPath = path.join(directory, 'hook-secret');
+    fs.writeFileSync(secretPath, `${NEW_URL}\n`, { mode: 0o600 });
+    return { discord: { myhook: { url: { _file: secretPath } } } };
+  }
+
   test.each([
     ['auth', NEW_ACCOUNT, 'auth', ACCOUNT_KEYS, true],
     ['AUTH', NEW_ACCOUNT, 'auth', ACCOUNT_KEYS, true],
@@ -289,6 +296,70 @@ describe('PUT /api/v1/config/:section, from the URL to the file', () => {
       expect(response.status).toBe(400);
       expectFileUntouched();
     });
+
+    test('refuses a _file body for the same key with the same 409', async () => {
+      const response = await put('notification', secretFileHook());
+
+      expect(response.status).toBe(409);
+      expect(response.body).toStrictEqual({
+        error:
+          'Cannot write section "notification": the following keys are set by the environment ' +
+          `and would not take effect: ${HOOK_KEY}`,
+      });
+      expectContract('409', response.body);
+      expectAudit(
+        'error',
+        `Wrote configuration section "notification": refused (env-sourced keys: ${HOOK_KEY})`,
+      );
+      expectFileUntouched();
+    });
+  });
+
+  describe('with the key set by the environment as a secret file', () => {
+    beforeEach(() => {
+      const envSecretPath = path.join(directory, 'env-secret');
+      fs.writeFileSync(envSecretPath, 'https://env-secret.example/hook\n', { mode: 0o600 });
+      vi.stubEnv(`${HOOK_KEY}__FILE`, envSecretPath);
+      ddEnvVars[HOOK_KEY] = 'https://env-secret.example/hook';
+      configFileSources[`${HOOK_KEY}__FILE`] = 'env';
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    test.each([
+      ['a literal', () => NEW_HOOK],
+      ['a _file', secretFileHook],
+    ])('refuses %s body with 409, naming the key', async (_, body) => {
+      const response = await put('notification', body());
+
+      expect(response.status).toBe(409);
+      expect(response.body).toStrictEqual({
+        error:
+          'Cannot write section "notification": the following keys are set by the environment ' +
+          `and would not take effect: ${HOOK_KEY}`,
+      });
+      expectContract('409', response.body);
+      expectFileUntouched();
+    });
+  });
+
+  test('writes a _file body for a key the environment does not set and reports the key', async () => {
+    const response = await put('notification', secretFileHook());
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      applied: true,
+      section: 'notification',
+      changedKeys: [HOOK_KEY],
+      restartRequired: false,
+    });
+    expectContract('200', response.body);
+    expectAudit('info', 'Wrote configuration section "notification": 1 key(s) changed');
+    expect(yaml.parse(fs.readFileSync(configPath, 'utf8')).notification).toStrictEqual(
+      secretFileHook(),
+    );
   });
 
   describe('from a session that signed in with a recovery code', () => {

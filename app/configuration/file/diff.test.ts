@@ -78,6 +78,52 @@ describe('buildCandidateEnvAndDiff', () => {
     expect(diff.changed).not.toContain('DD_WATCHER_LOCAL_SOCKET');
   });
 
+  // DD_X and DD_X__FILE are one setting: whichever form the environment used,
+  // a candidate entry for it in either form changes nothing.
+  describe('a key the environment sets, against a candidate in the other form', () => {
+    const KEY = 'DD_NOTIFICATION_DISCORD_MYHOOK_URL';
+    const FILE_KEY = `${KEY}__FILE`;
+
+    test('a candidate secret-file entry never overrides a value the environment sets directly', () => {
+      ddEnvVars[KEY] = 'https://env.example/hook';
+      configFileSources[KEY] = 'env';
+
+      const { candidateEnv, candidateSources, diff } = buildCandidateEnvAndDiff({
+        [FILE_KEY]: '/run/secrets/hook',
+      });
+
+      expect(candidateEnv).toStrictEqual({ [KEY]: 'https://env.example/hook' });
+      expect(candidateSources).toStrictEqual({ [KEY]: 'env' });
+      expect(diff).toStrictEqual(emptyDiff());
+    });
+
+    test('a candidate value never overrides a secret file the environment names', () => {
+      ddEnvVars[KEY] = 'https://env-secret.example/hook';
+      configFileSources[FILE_KEY] = 'env';
+
+      const { candidateEnv, diff } = buildCandidateEnvAndDiff({
+        [KEY]: 'https://file.example/hook',
+      });
+
+      expect(candidateEnv).toStrictEqual({ [KEY]: 'https://env-secret.example/hook' });
+      expect(diff).toStrictEqual(emptyDiff());
+    });
+
+    test('a secret-file entry that is only env-attributed because its path is interpolated can still change', () => {
+      ddEnvVars[KEY] = 'https://file-secret.example/hook';
+      configFileSources[FILE_KEY] = 'env';
+      configFileInterpolatedKeys.add(FILE_KEY);
+
+      const { candidateEnv, diff } = buildCandidateEnvAndDiff({
+        [KEY]: 'https://file.example/hook',
+      });
+
+      expect(candidateEnv).toStrictEqual({ [KEY]: 'https://file.example/hook' });
+      expect(diff.changed).toEqual([KEY]);
+      expect(diff.reload).toEqual(['notification']);
+    });
+  });
+
   test('reports no change when the candidate file layer matches the current file-sourced value', () => {
     ddEnvVars.DD_REGISTRY_HUB_PUBLIC_AUTH = 'anonymous';
     configFileSources.DD_REGISTRY_HUB_PUBLIC_AUTH = 'file';
