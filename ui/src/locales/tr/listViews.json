@@ -110,7 +110,8 @@
     },
     "target": {
       "container": "Kapsayıcı",
-      "agent": "Ajan"
+      "agent": "Ajan",
+      "group": "Grup"
     }
   },
   "notificationsView": {
