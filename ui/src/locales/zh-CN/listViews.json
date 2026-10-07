@@ -79,6 +79,7 @@
       "totp-replaced": "已更换两步验证",
       "totp-disabled": "已停用两步验证",
       "totp-recovery-codes-replaced": "已更换恢复码",
+      "totp-break-glass": "两步验证离线恢复",
       "authenticated": "已认证",
       "authfail": "认证失败",
       "hook-configured": "钩子已配置",

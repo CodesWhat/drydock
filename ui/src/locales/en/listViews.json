@@ -79,6 +79,7 @@
       "totp-replaced": "Two-Factor Replaced",
       "totp-disabled": "Two-Factor Disabled",
       "totp-recovery-codes-replaced": "Recovery Codes Replaced",
+      "totp-break-glass": "Two-Factor Offline Recovery",
       "authenticated": "Authenticated",
       "authfail": "Authentication Failed",
       "hook-configured": "Hook Configured",

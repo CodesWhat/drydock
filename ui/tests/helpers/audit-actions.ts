@@ -41,6 +41,7 @@ const backendAuditActions = {
   'totp-replaced': true,
   'totp-disabled': true,
   'totp-recovery-codes-replaced': true,
+  'totp-break-glass': true,
   'env-reveal': true,
   'debug-dump': true,
   'config-read': true,
