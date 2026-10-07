@@ -7,6 +7,7 @@ import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
+import LabelOverridesPanel from '../LabelOverridesPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
@@ -714,6 +715,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
 
           <!-- Labels tab -->
           <div v-if="activeDetailTab === 'labels'">
+            <LabelOverridesPanel :container-id="selectedContainer.id" />
             <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageLabels.labels') }}</div>
             <div v-if="selectedContainer.details.labels.length > 0" class="flex flex-wrap gap-1.5">
               <AppBadge v-for="label in selectedContainer.details.labels" :key="label" tone="neutral" size="sm">

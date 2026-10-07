@@ -16,6 +16,7 @@
  */
 import crypto from 'node:crypto';
 import type { Database, Row } from './db/driver.js';
+import { writeStoreMetadata } from './db/import.js';
 
 export type TotpStoreErrorCode =
   | 'NOT_INITIALIZED'
@@ -26,6 +27,7 @@ export type TotpStoreErrorCode =
   | 'VERSION_CONFLICT'
   | 'BINDING_MISMATCH'
   | 'FACTOR_NOT_FOUND'
+  | 'SUBJECT_HAS_FACTOR'
   | 'GENERATION_CONFLICT';
 
 const MESSAGES: Record<TotpStoreErrorCode, string> = {
@@ -37,6 +39,7 @@ const MESSAGES: Record<TotpStoreErrorCode, string> = {
   VERSION_CONFLICT: 'TOTP factor version changed',
   BINDING_MISMATCH: 'TOTP factor does not match its enrollment',
   FACTOR_NOT_FOUND: 'TOTP factor not found',
+  SUBJECT_HAS_FACTOR: 'The subject already has a TOTP factor',
   GENERATION_CONFLICT: 'TOTP recovery code generation changed',
 };
 
@@ -470,6 +473,136 @@ export function removeFactor(input: { subjectId: string; expectedFactorVersion: 
   return outcome;
 }
 
+/**
+ * Move a factor whose account was renamed onto the subject the account has
+ * now (spec 11.1.2 decision 10). The seed's authenticated data names its
+ * subject, so the caller supplies it encrypted again for the new one, and
+ * `from` is the ciphertext it read, as in {@link rewrapFactorSecret}. The
+ * recovery codes, the replay counter and the failure count follow the factor.
+ * Both subjects move to a version above anything either has issued, so no
+ * session minted before the move survives it, and the pending enrollments of
+ * both are dropped. A target that already has a factor is refused.
+ * @returns the factor as stored after the move
+ */
+export function rebindFactor(input: {
+  factorId: string;
+  from: Pick<SecretFields, 'encryptionKeyId' | 'secretNonce'>;
+  subjectId: string;
+  providerId: string;
+  username: string;
+  secret: SecretFields;
+  now?: Date;
+}): TotpFactorRecord {
+  const database = requireDb();
+  const nowIso = (input.now ?? new Date()).toISOString();
+  const outcome = database.transaction((): TotpFactorRecord | TotpStoreErrorCode => {
+    const row = database
+      .prepare('SELECT * FROM totp_factors WHERE factor_id = ?')
+      .get(input.factorId);
+    if (!row) {
+      return 'FACTOR_NOT_FOUND';
+    }
+    const factor = toFactor(row);
+    if (factor.subjectId === input.subjectId) {
+      return 'INVALID_ARGUMENT';
+    }
+    if (readFactorBySubject(database, input.subjectId)) {
+      return 'SUBJECT_HAS_FACTOR';
+    }
+    const sourceVersion = Math.max(
+      readSubjectVersion(database, factor.subjectId),
+      factor.factorVersion,
+    );
+    const version = Math.max(sourceVersion, readSubjectVersion(database, input.subjectId)) + 1;
+    // The compare-and-set is the first write, so a refusal leaves nothing behind.
+    const moved = database
+      .prepare(
+        `UPDATE totp_factors
+            SET subject_id = ?, provider_id = ?, username = ?, factor_version = ?,
+                encryption_key_id = ?, secret_nonce = ?, secret_ciphertext = ?, secret_auth_tag = ?,
+                updated_at = ?
+          WHERE factor_id = ? AND encryption_key_id = ? AND secret_nonce = ?`,
+      )
+      .run(
+        input.subjectId,
+        input.providerId,
+        input.username,
+        version,
+        input.secret.encryptionKeyId,
+        input.secret.secretNonce,
+        input.secret.secretCiphertext,
+        input.secret.secretAuthTag,
+        nowIso,
+        factor.factorId,
+        input.from.encryptionKeyId,
+        input.from.secretNonce,
+      );
+    if (moved.changes !== 1) {
+      return 'VERSION_CONFLICT';
+    }
+    database
+      .prepare('UPDATE totp_recovery_codes SET subject_id = ? WHERE factor_id = ?')
+      .run(input.subjectId, factor.factorId);
+    database
+      .prepare('DELETE FROM totp_enrollments WHERE subject_id IN (?, ?)')
+      .run(factor.subjectId, input.subjectId);
+    const failureState = getFactorFailureState(factor.subjectId);
+    database
+      .prepare(
+        `INSERT INTO totp_subject_versions
+           (subject_id, factor_version, username, factor_failures, factor_locked_until)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(subject_id) DO UPDATE SET
+           factor_version = excluded.factor_version,
+           username = excluded.username,
+           factor_failures = excluded.factor_failures,
+           factor_locked_until = excluded.factor_locked_until`,
+      )
+      .run(
+        input.subjectId,
+        version,
+        input.username,
+        failureState.failures,
+        failureState.lockedUntil,
+      );
+    writeSubjectVersion(database, factor.subjectId, factor.username, sourceVersion + 1);
+    return readFactorBySubject(database, input.subjectId) as TotpFactorRecord;
+  });
+  if (typeof outcome === 'string') {
+    throw new TotpStoreError(outcome);
+  }
+  return outcome;
+}
+
+export interface TotpKeyUsage {
+  keyId: string;
+  factors: number;
+  enrollments: number;
+}
+
+/**
+ * How many factors and pending enrollments are encrypted under each key id. A
+ * key that no longer appears here protects nothing and can leave the key ring.
+ */
+export function listKeyUsage(): TotpKeyUsage[] {
+  return requireDb()
+    .prepare(
+      `SELECT key_id, SUM(factors) AS factors, SUM(enrollments) AS enrollments FROM (
+         SELECT encryption_key_id AS key_id, COUNT(*) AS factors, 0 AS enrollments
+           FROM totp_factors GROUP BY encryption_key_id
+         UNION ALL
+         SELECT encryption_key_id AS key_id, 0 AS factors, COUNT(*) AS enrollments
+           FROM totp_enrollments GROUP BY encryption_key_id
+       ) GROUP BY key_id ORDER BY key_id`,
+    )
+    .all()
+    .map((row) => ({
+      keyId: String(row.key_id),
+      factors: Number(row.factors),
+      enrollments: Number(row.enrollments),
+    }));
+}
+
 /* ------------------------------------------------------------------ */
 /* Enrollments                                                         */
 /* ------------------------------------------------------------------ */
@@ -617,6 +750,16 @@ export function sweepExpiredEnrollments(now: Date = new Date()): number {
   return requireDb()
     .prepare('DELETE FROM totp_enrollments WHERE expires_at <= ?')
     .run(now.toISOString()).changes;
+}
+
+/**
+ * Delete the pending enrollments encrypted under any key but `keyId`. A key
+ * rotation runs with nobody signed in, so whoever was part-way through setting
+ * up starts again rather than keeping a retired key in use. Returns how many.
+ */
+export function deleteEnrollmentsNotUnderKey(keyId: string): number {
+  return requireDb().prepare('DELETE FROM totp_enrollments WHERE encryption_key_id <> ?').run(keyId)
+    .changes;
 }
 
 /**
@@ -851,4 +994,105 @@ export function replaceRecoveryCodes(input: {
     throw new TotpStoreError(outcome);
   }
   return outcome;
+}
+
+/* ------------------------------------------------------------------ */
+/* Offline operation markers                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What the offline command did to a subject while Drydock was stopped. It
+ * writes one of these beside the change, and the next start turns each into an
+ * audit entry (spec 11.1.2 decision 5). Ids and a time only.
+ */
+export interface TotpOfflineOperation {
+  operation: 'remove' | 'rebind';
+  /** The subject the factor was removed from, or moved away from. */
+  subjectId: string;
+  factorId: string;
+  /** A rebind only: the subject the factor belongs to now. */
+  targetSubjectId?: string;
+  /** ISO-8601 time the command ran. */
+  at: string;
+}
+
+// Rows of the generic `store_metadata` table, as the one-shot markers of
+// `mqtt-hass.ts` are. Every key sits between these two bounds, ':' and ';'
+// being neighbours, so the range is exactly the prefix.
+const OFFLINE_OPERATION_KEY_PREFIX = 'totp-offline-operation:';
+const OFFLINE_OPERATION_KEY_END = 'totp-offline-operation;';
+
+function parseOfflineOperation(value: string): TotpOfflineOperation | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    return undefined;
+  }
+  const { operation, subjectId, factorId, targetSubjectId, at } = parsed as Record<string, unknown>;
+  if (
+    (operation !== 'remove' && operation !== 'rebind') ||
+    typeof subjectId !== 'string' ||
+    typeof factorId !== 'string' ||
+    typeof at !== 'string' ||
+    (targetSubjectId !== undefined && typeof targetSubjectId !== 'string')
+  ) {
+    return undefined;
+  }
+  return {
+    operation,
+    subjectId,
+    factorId,
+    ...(typeof targetSubjectId === 'string' ? { targetSubjectId } : {}),
+    at,
+  };
+}
+
+/** Leave a marker for the next start to record. Call it in the transaction that makes the change. */
+export function recordOfflineOperation(operation: TotpOfflineOperation): void {
+  writeStoreMetadata(
+    requireDb(),
+    `${OFFLINE_OPERATION_KEY_PREFIX}${randomId()}`,
+    JSON.stringify(operation),
+  );
+}
+
+export function countPendingOfflineOperations(): number {
+  const row = requireDb()
+    .prepare('SELECT COUNT(*) AS n FROM store_metadata WHERE key >= ? AND key < ?')
+    .get(OFFLINE_OPERATION_KEY_PREFIX, OFFLINE_OPERATION_KEY_END);
+  return Number(row?.n);
+}
+
+/**
+ * Hand every pending marker to `record` and delete it, in one transaction: a
+ * marker is only gone once `record` returned for it, and a throw keeps them
+ * all for the next start. A marker that cannot be read is deleted and counted
+ * rather than handed on.
+ */
+export function consumeOfflineOperations(record: (operation: TotpOfflineOperation) => void): {
+  recorded: number;
+  discarded: number;
+} {
+  const database = requireDb();
+  return database.transaction(() => {
+    const rows = database
+      .prepare(
+        'SELECT key, value FROM store_metadata WHERE key >= ? AND key < ? ORDER BY updated_at, key',
+      )
+      .all(OFFLINE_OPERATION_KEY_PREFIX, OFFLINE_OPERATION_KEY_END);
+    let recorded = 0;
+    for (const row of rows) {
+      const operation = parseOfflineOperation(String(row.value));
+      if (operation !== undefined) {
+        record(operation);
+        recorded += 1;
+      }
+      database.prepare('DELETE FROM store_metadata WHERE key = ?').run(row.key);
+    }
+    return { recorded, discarded: rows.length - recorded };
+  });
 }

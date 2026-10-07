@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Label-overrides",
+    "boundary": "Drydock slaat deze waarden op en past ze toe bovenop de Docker-labels. Het bewerkt nooit Compose-bestanden en maakt de container nooit opnieuw aan.",
+    "scope": {
+      "container": "Geldt voor container {name}, watcher {watcher}.",
+      "containerAgent": "Geldt voor container {name} op agent {agent}, watcher {watcher}.",
+      "composeService": "Geldt voor Compose-service {name}, {count} container, watcher {watcher}. | Geldt voor Compose-service {name}, {count} containers, watcher {watcher}.",
+      "composeServiceAgent": "Geldt voor Compose-service {name}, {count} container, agent {agent}, watcher {watcher}. | Geldt voor Compose-service {name}, {count} containers, agent {agent}, watcher {watcher}."
+    },
+    "loading": "Label-overrides laden…",
+    "noOverrides": "Geen overrides. Elke waarde komt uit een label, Compose, de watcher of een standaardwaarde.",
+    "unavailable": "Label-overrides zijn niet beschikbaar voor deze container.",
+    "readOnly": {
+      "rollback": "Dit is een tijdelijke rollbackcontainer. De label-overrides ervan kunnen niet worden gewijzigd.",
+      "forbidden": "Beheerderstoegang is vereist om label-overrides te wijzigen. Deze weergave is alleen-lezen."
+    },
+    "groups": {
+      "display": "Weergave",
+      "dependencies": "Afhankelijkheden",
+      "notification": "Meldingsrouting",
+      "action": "Actierouting"
+    },
+    "fields": {
+      "displayName": "Weergavenaam",
+      "displayIcon": "Weergavepictogram",
+      "dependsOn": "Afhankelijk van",
+      "dependsOnAction": "Afhankelijkheidsactie",
+      "notificationTriggerInclude": "Meldingen opnemen",
+      "notificationTriggerExclude": "Meldingen uitsluiten",
+      "actionTriggerInclude": "Acties opnemen",
+      "actionTriggerExclude": "Acties uitsluiten",
+      "actionTriggerAuto": "Actie automatisch"
+    },
+    "sources": {
+      "override": "Override",
+      "label": "Label",
+      "compose": "Compose",
+      "watcher": "Watcher-configuratie",
+      "default": "Standaard",
+      "unset": "Niet ingesteld"
+    },
+    "values": {
+      "none": "Geen",
+      "notSet": "Niet ingesteld",
+      "labelValue": "Labelwaarde: {value}",
+      "noLabel": "Geen label"
+    },
+    "actions": {
+      "edit": "Bewerken",
+      "editField": "{field} bewerken",
+      "resetField": "Terug naar label",
+      "resetFieldAria": "{field} terugzetten naar label",
+      "resetHint": "Wordt teruggezet naar: {value}",
+      "resetAll": "Alles opnieuw instellen"
+    },
+    "editor": {
+      "displayName": "Weergavenaam",
+      "displayNameHelp": "1 tot 128 tekens. Wordt getoond in plaats van de containernaam.",
+      "iconProvider": "Pictogrambron",
+      "iconName": "Pictogramnaam",
+      "iconNameHelp": "Letters, cijfers, punt, streepje en underscore. Gebruik een naam uit de pictogrambron, geen URL.",
+      "iconPreview": "Pictogramvoorbeeld",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Opslaan wijzigt de waarde voor alles in het hierboven getoonde bereik."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Voer een weergavenaam in.",
+        "tooLong": "Gebruik maximaal 128 tekens.",
+        "invalidCharacters": "Verwijder stuurtekens, richtingtekens, < en >."
+      },
+      "iconName": "Gebruik letters, cijfers, punt, streepje of underscore, beginnend met een letter of cijfer."
+    },
+    "conflict": {
+      "message": "Deze overrides zijn elders gewijzigd. Laad opnieuw om de huidige waarden te zien. Je concept blijft bewaard.",
+      "unknown": "Drydock kon niet bevestigen of de wijziging is opgeslagen. Laad opnieuw om de huidige waarden te zien.",
+      "notFound": "Deze container bestaat niet meer. Laad opnieuw om de huidige lijst te zien.",
+      "reload": "Opnieuw laden"
+    },
+    "status": {
+      "saved": "{field} opgeslagen.",
+      "reset": "{field} teruggezet naar de labelwaarde.",
+      "resetAll": "{count} override teruggezet naar de labelwaarde. | {count} overrides teruggezet naar de labelwaarden.",
+      "nothingToReset": "Er was niets overschreven."
+    },
+    "resetAllConfirm": {
+      "header": "Alle overrides opnieuw instellen",
+      "message": "Alle Drydock-overrides voor {scope} verwijderen en terugkeren naar de labelwaarden? Compose-bestanden en containers blijven ongemoeid.",
+      "accept": "Alles opnieuw instellen"
+    },
+    "warnings": {
+      "title": "Waarschuwingen",
+      "unresolved-dependency": "{field}: {reference} is nog geen container die Drydock kent.",
+      "cross-host-dependency": "{field}: {reference} bestaat alleen op een andere host.",
+      "trigger-agent-mismatch": "{field}: {reference} komt alleen overeen met triggers op een andere agent.",
+      "auto-inert": "{field}: {reference} komt niet overeen met een trigger die automatisch draait.",
+      "stale-trigger-reference": "{field}: {reference} komt niet meer overeen met een geregistreerde trigger.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Sommige opgeslagen overrides konden niet worden gelezen en worden genegeerd: {fields}",
+    "errors": {
+      "requestFailed": "Label-overrideverzoek mislukt (HTTP {status})",
+      "load": "Label-overrides laden mislukt",
+      "unknown": "Label-override kon niet worden opgeslagen",
+      "invalid": "De server heeft deze wijziging geweigerd.",
+      "codes": {
+        "display-name-empty": "Voer een weergavenaam in.",
+        "display-name-too-long": "Gebruik maximaal 128 tekens.",
+        "display-name-invalid-characters": "Verwijder stuurtekens, richtingtekens, < en >.",
+        "invalid-icon": "Gebruik een pictogrambron en een naam, geen URL.",
+        "invalid-type": "De server heeft deze waarde geweigerd.",
+        "invalid-value": "De server heeft deze waarde geweigerd."
+      }
+    }
+  }
+}

@@ -2081,6 +2081,41 @@ describe('API Index', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
   });
 
+  test('global error handler logs an unexplained error, and only repeats an already explained one at debug', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    await import('./index.js').then((m) => m.init());
+
+    const errorHandler = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].length === 4,
+    )?.[0];
+    mockLog.error.mockClear();
+    mockLog.debug.mockClear();
+
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    errorHandler(
+      { status: 503, message: 'Local sign-in is refused', alreadyLogged: true },
+      {},
+      res,
+      vi.fn(),
+    );
+
+    expect(mockLog.error).not.toHaveBeenCalled();
+    expect(mockLog.debug).toHaveBeenCalledWith('Refused request: Local sign-in is refused');
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+
+    errorHandler({ status: 503, message: 'something nobody explained' }, {}, res, vi.fn());
+
+    expect(mockLog.error).toHaveBeenCalledWith('Unhandled error: something nobody explained');
+  });
+
   test('importing the API router module does not start stats polling before router init', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

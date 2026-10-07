@@ -34,11 +34,15 @@ Local Basic accounts can add a TOTP second factor through the [two-factor manage
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
+| `DD_AUTH_TOTP_KEYRING__FILE` | ⚪ | Path to the key ring file that encrypts the stored TOTP secrets. Nobody can enroll without it | Path to a readable file | none |
+| `DD_AUTH_TOTP_ACTIVE_KEY_ID` | ⚪ | Id of the key ring key new secrets are encrypted under. Set it whenever the key ring is set | A key id from the key ring | none |
 | `DD_AUTH_TOTP_ALLOWHTTP` | ⚪ | Allow two-factor enrollment and management over plain HTTP from any address | `true`, `false` | `false` |
 
 <Callout type="warn">With `DD_AUTH_TOTP_ALLOWHTTP=true`, the TOTP secret, the recovery codes and the password sent with each management call cross the network unencrypted. Anyone who can read that traffic can copy the second factor as it's being set up, which leaves the account with no second factor in practice. Drydock logs a warning at startup while it's on. Prefer HTTPS, or `DD_SERVER_TRUSTPROXY` behind a TLS-terminating proxy, and leave this unset.</Callout>
 
-The setting is read at startup. Any value other than `true` or `false` is a configuration error and Drydock won't start. In `drydock.yml` it's `auth.totp.allowhttp`.
+`DD_AUTH_TOTP_ALLOWHTTP` is read at startup. Any value other than `true` or `false` is a configuration error and Drydock won't start. In `drydock.yml` it's `auth.totp.allowhttp`.
+
+The key ring format, key rotation, recovering an account that lost its device or its recovery codes, what a lost key ring means, and what happens when an enrolled account is renamed are on the [two-factor key ring and recovery](/docs/configuration/authentications/two-factor) page.
 
 Currently, the following strategies are supported:
 

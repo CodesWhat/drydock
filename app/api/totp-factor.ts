@@ -66,6 +66,7 @@ import {
   refundReauthentication,
   UNAVAILABLE_MESSAGE,
 } from './totp-management.js';
+import { recordOfflineTotpOperations } from './totp-offline-audit.js';
 import { requireTotpKeyring, seedBindingFor } from './totp-proof.js';
 import { base32Encode, buildOtpauthUri } from './totp-provisioning.js';
 import { replaceSessionAfterFactorChange } from './totp-session.js';
@@ -511,6 +512,9 @@ const PLAIN_HTTP_WARNING =
 export function init(): express.Router {
   const router = express.Router();
   startEnrollmentSweep();
+  // The router is built once, at start: the moment an offline `totp` command
+  // that ran while Drydock was stopped gets its audit entry.
+  recordOfflineTotpOperations();
 
   // Read once, here: the router is built once at startup, so this is also
   // where the operator is told, once, what the opt-in costs. An invalid value

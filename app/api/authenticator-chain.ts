@@ -93,6 +93,13 @@ export interface Authenticator {
   authenticateForLogin?(req: AuthRequest): Promise<AuthenticationOutcome>;
 
   /**
+   * The one local subject this authenticator signs in: a Basic provider's
+   * account. Absent for everything else. A TOTP factor whose subject no
+   * registered authenticator names is orphaned (see `totp-orphans.ts`).
+   */
+  readonly localSubjectId?: string;
+
+  /**
    * Whether this authenticator's presence means a caller can actually get in.
    *
    * Absent means yes. It is declared false by the two authenticators that can

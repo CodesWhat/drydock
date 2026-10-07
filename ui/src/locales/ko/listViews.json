@@ -79,6 +79,7 @@
       "totp-replaced": "2단계 인증 교체",
       "totp-disabled": "2단계 인증 비활성화",
       "totp-recovery-codes-replaced": "복구 코드 교체",
+      "totp-break-glass": "2단계 인증 오프라인 복구",
       "authenticated": "인증됨",
       "authfail": "인증 실패",
       "hook-configured": "훅 구성됨",

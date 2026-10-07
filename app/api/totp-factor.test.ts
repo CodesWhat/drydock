@@ -1,4 +1,8 @@
-const { mockSweep, mockWarn } = vi.hoisted(() => ({ mockSweep: vi.fn(), mockWarn: vi.fn() }));
+const { mockSweep, mockWarn, mockRecordOffline } = vi.hoisted(() => ({
+  mockSweep: vi.fn(),
+  mockWarn: vi.fn(),
+  mockRecordOffline: vi.fn(),
+}));
 
 vi.mock('../log/index.js', () => ({ default: { warn: mockWarn, child: vi.fn() } }));
 vi.mock('../store/totp.js', async (importOriginal) => ({
@@ -6,7 +10,21 @@ vi.mock('../store/totp.js', async (importOriginal) => ({
   sweepExpiredEnrollments: mockSweep,
 }));
 
+vi.mock('./totp-offline-audit.js', () => ({ recordOfflineTotpOperations: mockRecordOffline }));
+
 import { init } from './totp-factor.js';
+
+describe('start-up', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('records what an offline command did while Drydock was stopped', () => {
+    init();
+
+    expect(mockRecordOffline).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('the hourly enrollment sweep', () => {
   beforeEach(() => {

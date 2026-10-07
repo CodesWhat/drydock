@@ -79,6 +79,7 @@
       "totp-replaced": "Đã thay thế xác thực hai yếu tố",
       "totp-disabled": "Đã tắt xác thực hai yếu tố",
       "totp-recovery-codes-replaced": "Đã thay thế mã khôi phục",
+      "totp-break-glass": "Khôi phục ngoại tuyến xác thực hai yếu tố",
       "authenticated": "Đã xác thực",
       "authfail": "Xác thực thất bại",
       "hook-configured": "Hook đã được cấu hình",

@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Etiket geçersiz kılmaları",
+    "boundary": "Drydock bu değerleri saklar ve Docker etiketlerinin üzerine uygular. Compose dosyalarını asla düzenlemez ve kapsayıcıyı yeniden oluşturmaz.",
+    "scope": {
+      "container": "{name} kapsayıcısına uygulanır, gözlemci {watcher}.",
+      "containerAgent": "{agent} ajanındaki {name} kapsayıcısına uygulanır, gözlemci {watcher}.",
+      "composeService": "{name} Compose hizmetine uygulanır, kapsayıcı sayısı: {count}, gözlemci {watcher}. | {name} Compose hizmetine uygulanır, kapsayıcı sayısı: {count}, gözlemci {watcher}.",
+      "composeServiceAgent": "{name} Compose hizmetine uygulanır, kapsayıcı sayısı: {count}, ajan {agent}, gözlemci {watcher}. | {name} Compose hizmetine uygulanır, kapsayıcı sayısı: {count}, ajan {agent}, gözlemci {watcher}."
+    },
+    "loading": "Etiket geçersiz kılmaları yükleniyor…",
+    "noOverrides": "Geçersiz kılma yok. Her değer bir etiketten, Compose'dan, gözlemciden ya da varsayılandan gelir.",
+    "unavailable": "Bu kapsayıcı için etiket geçersiz kılmaları kullanılamıyor.",
+    "readOnly": {
+      "rollback": "Bu geçici bir geri alma kapsayıcısıdır. Etiket geçersiz kılmaları değiştirilemez.",
+      "forbidden": "Etiket geçersiz kılmalarını değiştirmek için yönetici erişimi gerekir. Bu görünüm salt okunurdur."
+    },
+    "groups": {
+      "display": "Görünüm",
+      "dependencies": "Bağımlılıklar",
+      "notification": "Bildirim yönlendirme",
+      "action": "Eylem yönlendirme"
+    },
+    "fields": {
+      "displayName": "Görünen ad",
+      "displayIcon": "Görünen simge",
+      "dependsOn": "Şuna bağlı",
+      "dependsOnAction": "Bağımlılık eylemi",
+      "notificationTriggerInclude": "Bildirimleri dahil et",
+      "notificationTriggerExclude": "Bildirimleri hariç tut",
+      "actionTriggerInclude": "Eylemleri dahil et",
+      "actionTriggerExclude": "Eylemleri hariç tut",
+      "actionTriggerAuto": "Otomatik eylem"
+    },
+    "sources": {
+      "override": "Geçersiz kılma",
+      "label": "Etiket",
+      "compose": "Compose",
+      "watcher": "Gözlemci yapılandırması",
+      "default": "Varsayılan",
+      "unset": "Ayarlanmadı"
+    },
+    "values": {
+      "none": "Yok",
+      "notSet": "Ayarlanmadı",
+      "labelValue": "Etiket değeri: {value}",
+      "noLabel": "Etiket yok"
+    },
+    "actions": {
+      "edit": "Düzenle",
+      "editField": "{field} alanını düzenle",
+      "resetField": "Etikete sıfırla",
+      "resetFieldAria": "{field} alanını etikete sıfırla",
+      "resetHint": "Şuna döner: {value}",
+      "resetAll": "Tümünü sıfırla"
+    },
+    "editor": {
+      "displayName": "Görünen ad",
+      "displayNameHelp": "1 ile 128 karakter arası. Kapsayıcı adı yerine gösterilir.",
+      "iconProvider": "Simge kaynağı",
+      "iconName": "Simge adı",
+      "iconNameHelp": "Harf, rakam, nokta, tire ve alt çizgi. URL değil, simge kaynağındaki bir adı kullanın.",
+      "iconPreview": "Simge önizlemesi",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Kaydetmek, yukarıda gösterilen kapsamdaki her şey için değeri değiştirir."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Bir görünen ad girin.",
+        "tooLong": "En fazla 128 karakter kullanın.",
+        "invalidCharacters": "Denetim karakterlerini, yön işaretlerini, < ve > karakterlerini kaldırın."
+      },
+      "iconName": "Harf, rakam, nokta, tire veya alt çizgi kullanın; harf ya da rakamla başlayın."
+    },
+    "conflict": {
+      "message": "Bu geçersiz kılmalar başka bir yerde değiştirildi. Güncel değerleri görmek için yeniden yükleyin. Taslağınız korunuyor.",
+      "unknown": "Drydock değişikliğin kaydedilip kaydedilmediğini doğrulayamadı. Güncel değerleri görmek için yeniden yükleyin.",
+      "notFound": "Bu kapsayıcı artık yok. Güncel listeyi görmek için yeniden yükleyin.",
+      "reload": "Yeniden yükle"
+    },
+    "status": {
+      "saved": "{field} kaydedildi.",
+      "reset": "{field} etiket değerine sıfırlandı.",
+      "resetAll": "Etiket değerlerine sıfırlanan geçersiz kılma sayısı: {count}. | Etiket değerlerine sıfırlanan geçersiz kılma sayısı: {count}.",
+      "nothingToReset": "Hiçbir şey geçersiz kılınmamıştı."
+    },
+    "resetAllConfirm": {
+      "header": "Tüm geçersiz kılmaları sıfırla",
+      "message": "{scope} için tüm Drydock geçersiz kılmaları kaldırılsın ve etiket değerlerine dönülsün mü? Compose dosyalarına ve kapsayıcılara dokunulmaz.",
+      "accept": "Tümünü sıfırla"
+    },
+    "warnings": {
+      "title": "Uyarılar",
+      "unresolved-dependency": "{field}: {reference} henüz Drydock'un tanıdığı bir kapsayıcı değil.",
+      "cross-host-dependency": "{field}: {reference} yalnızca başka bir ana makinede var.",
+      "trigger-agent-mismatch": "{field}: {reference} yalnızca başka bir ajandaki tetikleyicilerle eşleşiyor.",
+      "auto-inert": "{field}: {reference} otomatik çalışan hiçbir tetikleyiciyle eşleşmiyor.",
+      "stale-trigger-reference": "{field}: {reference} artık kayıtlı hiçbir tetikleyiciyle eşleşmiyor.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Kayıtlı bazı geçersiz kılmalar okunamadı ve yok sayılıyor: {fields}",
+    "errors": {
+      "requestFailed": "Etiket geçersiz kılma isteği başarısız oldu (HTTP {status})",
+      "load": "Etiket geçersiz kılmaları yüklenemedi",
+      "unknown": "Etiket geçersiz kılma kaydedilemedi",
+      "invalid": "Sunucu bu değişikliği reddetti.",
+      "codes": {
+        "display-name-empty": "Bir görünen ad girin.",
+        "display-name-too-long": "En fazla 128 karakter kullanın.",
+        "display-name-invalid-characters": "Denetim karakterlerini, yön işaretlerini, < ve > karakterlerini kaldırın.",
+        "invalid-icon": "Bir simge kaynağı ve ad kullanın, URL değil.",
+        "invalid-type": "Sunucu bu değeri reddetti.",
+        "invalid-value": "Sunucu bu değeri reddetti."
+      }
+    }
+  }
+}

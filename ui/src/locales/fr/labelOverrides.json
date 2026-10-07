@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Substitutions de labels",
+    "boundary": "Drydock enregistre ces valeurs et les applique par-dessus les labels Docker. Il ne modifie jamais les fichiers Compose et ne recrée jamais le conteneur.",
+    "scope": {
+      "container": "S'applique au conteneur {name}, watcher {watcher}.",
+      "containerAgent": "S'applique au conteneur {name} sur l'agent {agent}, watcher {watcher}.",
+      "composeService": "S'applique au service Compose {name}, {count} conteneur, watcher {watcher}. | S'applique au service Compose {name}, {count} conteneurs, watcher {watcher}.",
+      "composeServiceAgent": "S'applique au service Compose {name}, {count} conteneur, agent {agent}, watcher {watcher}. | S'applique au service Compose {name}, {count} conteneurs, agent {agent}, watcher {watcher}."
+    },
+    "loading": "Chargement des substitutions de labels…",
+    "noOverrides": "Aucune substitution. Chaque valeur provient d'un label, de Compose, du watcher ou d'une valeur par défaut.",
+    "unavailable": "Les substitutions de labels ne sont pas disponibles pour ce conteneur.",
+    "readOnly": {
+      "rollback": "Il s'agit d'un conteneur de restauration temporaire. Ses substitutions de labels ne peuvent pas être modifiées.",
+      "forbidden": "L'accès administrateur est requis pour modifier les substitutions de labels. Cette vue est en lecture seule."
+    },
+    "groups": {
+      "display": "Affichage",
+      "dependencies": "Dépendances",
+      "notification": "Routage des notifications",
+      "action": "Routage des actions"
+    },
+    "fields": {
+      "displayName": "Nom affiché",
+      "displayIcon": "Icône affichée",
+      "dependsOn": "Dépend de",
+      "dependsOnAction": "Action de dépendance",
+      "notificationTriggerInclude": "Notifications incluses",
+      "notificationTriggerExclude": "Notifications exclues",
+      "actionTriggerInclude": "Actions incluses",
+      "actionTriggerExclude": "Actions exclues",
+      "actionTriggerAuto": "Action automatique"
+    },
+    "sources": {
+      "override": "Substitution",
+      "label": "Label",
+      "compose": "Compose",
+      "watcher": "Config du watcher",
+      "default": "Par défaut",
+      "unset": "Non défini"
+    },
+    "values": {
+      "none": "Aucun",
+      "notSet": "Non défini",
+      "labelValue": "Valeur du label : {value}",
+      "noLabel": "Aucun label"
+    },
+    "actions": {
+      "edit": "Modifier",
+      "editField": "Modifier {field}",
+      "resetField": "Revenir au label",
+      "resetFieldAria": "Revenir au label pour {field}",
+      "resetHint": "Revient à : {value}",
+      "resetAll": "Tout réinitialiser"
+    },
+    "editor": {
+      "displayName": "Nom affiché",
+      "displayNameHelp": "De 1 à 128 caractères. Affiché à la place du nom du conteneur.",
+      "iconProvider": "Source de l'icône",
+      "iconName": "Nom de l'icône",
+      "iconNameHelp": "Lettres, chiffres, point, tiret et tiret bas. Utilisez un nom de la source d'icônes, pas une URL.",
+      "iconPreview": "Aperçu de l'icône",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "L'enregistrement modifie la valeur pour tout le périmètre indiqué ci-dessus."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Saisissez un nom affiché.",
+        "tooLong": "Utilisez 128 caractères maximum.",
+        "invalidCharacters": "Retirez les caractères de contrôle, les marques de direction, < et >."
+      },
+      "iconName": "Utilisez des lettres, des chiffres, un point, un tiret ou un tiret bas, en commençant par une lettre ou un chiffre."
+    },
+    "conflict": {
+      "message": "Ces substitutions ont été modifiées ailleurs. Rechargez pour voir les valeurs actuelles. Votre brouillon est conservé.",
+      "unknown": "Drydock n'a pas pu confirmer l'enregistrement de la modification. Rechargez pour voir les valeurs actuelles.",
+      "notFound": "Ce conteneur n'existe plus. Rechargez pour voir la liste actuelle.",
+      "reload": "Recharger"
+    },
+    "status": {
+      "saved": "{field} enregistré.",
+      "reset": "{field} remis à la valeur du label.",
+      "resetAll": "{count} substitution remise à la valeur de son label. | {count} substitutions remises aux valeurs de leurs labels.",
+      "nothingToReset": "Rien n'était substitué."
+    },
+    "resetAllConfirm": {
+      "header": "Réinitialiser toutes les substitutions",
+      "message": "Supprimer toutes les substitutions Drydock pour {scope} et revenir aux valeurs des labels ? Les fichiers Compose et les conteneurs ne sont pas modifiés.",
+      "accept": "Tout réinitialiser"
+    },
+    "warnings": {
+      "title": "Avertissements",
+      "unresolved-dependency": "{field} : {reference} n'est pas encore un conteneur connu de Drydock.",
+      "cross-host-dependency": "{field} : {reference} n'existe que sur un autre hôte.",
+      "trigger-agent-mismatch": "{field} : {reference} ne correspond qu'à des triggers d'un autre agent.",
+      "auto-inert": "{field} : {reference} ne correspond à aucun trigger exécuté automatiquement.",
+      "stale-trigger-reference": "{field} : {reference} ne correspond plus à aucun trigger enregistré.",
+      "other": "{field} : {code}"
+    },
+    "invalidStored": "Certaines substitutions enregistrées n'ont pas pu être lues et sont ignorées : {fields}",
+    "errors": {
+      "requestFailed": "Échec de la requête de substitution de label (HTTP {status})",
+      "load": "Échec du chargement des substitutions de labels",
+      "unknown": "Impossible d'enregistrer la substitution de label",
+      "invalid": "Le serveur a refusé cette modification.",
+      "codes": {
+        "display-name-empty": "Saisissez un nom affiché.",
+        "display-name-too-long": "Utilisez 128 caractères maximum.",
+        "display-name-invalid-characters": "Retirez les caractères de contrôle, les marques de direction, < et >.",
+        "invalid-icon": "Utilisez une source d'icônes et un nom, pas une URL.",
+        "invalid-type": "Le serveur a refusé cette valeur.",
+        "invalid-value": "Le serveur a refusé cette valeur."
+      }
+    }
+  }
+}

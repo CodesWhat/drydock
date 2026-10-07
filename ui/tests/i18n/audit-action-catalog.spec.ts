@@ -25,6 +25,7 @@ const newActionLabels = [
   'totp-replaced',
   'totp-disabled',
   'totp-recovery-codes-replaced',
+  'totp-break-glass',
   'update-approved',
   'update-rejected',
   'update-deferred',

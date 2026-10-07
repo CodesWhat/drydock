@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "ラベルの上書き",
+    "boundary": "Drydock はこれらの値を保存し、Docker ラベルの上に適用します。Compose ファイルを編集したり、コンテナを再作成したりすることはありません。",
+    "scope": {
+      "container": "コンテナ {name} に適用されます（ウォッチャー {watcher}）。",
+      "containerAgent": "エージェント {agent} 上のコンテナ {name} に適用されます（ウォッチャー {watcher}）。",
+      "composeService": "Compose サービス {name} に適用されます（コンテナ数: {count}、ウォッチャー {watcher}）。 | Compose サービス {name} に適用されます（コンテナ数: {count}、ウォッチャー {watcher}）。",
+      "composeServiceAgent": "Compose サービス {name} に適用されます（コンテナ数: {count}、エージェント {agent}、ウォッチャー {watcher}）。 | Compose サービス {name} に適用されます（コンテナ数: {count}、エージェント {agent}、ウォッチャー {watcher}）。"
+    },
+    "loading": "ラベルの上書きを読み込み中…",
+    "noOverrides": "上書きはありません。各値はラベル、Compose、ウォッチャー、またはデフォルトから取得されます。",
+    "unavailable": "このコンテナではラベルの上書きを利用できません。",
+    "readOnly": {
+      "rollback": "これは一時的なロールバック用コンテナです。ラベルの上書きは変更できません。",
+      "forbidden": "ラベルの上書きを変更するには管理者権限が必要です。この表示は読み取り専用です。"
+    },
+    "groups": {
+      "display": "表示",
+      "dependencies": "依存関係",
+      "notification": "通知ルーティング",
+      "action": "アクションルーティング"
+    },
+    "fields": {
+      "displayName": "表示名",
+      "displayIcon": "表示アイコン",
+      "dependsOn": "依存先",
+      "dependsOnAction": "依存アクション",
+      "notificationTriggerInclude": "通知を含める",
+      "notificationTriggerExclude": "通知を除外",
+      "actionTriggerInclude": "アクションを含める",
+      "actionTriggerExclude": "アクションを除外",
+      "actionTriggerAuto": "アクションの自動実行"
+    },
+    "sources": {
+      "override": "上書き",
+      "label": "ラベル",
+      "compose": "Compose",
+      "watcher": "ウォッチャー設定",
+      "default": "デフォルト",
+      "unset": "未設定"
+    },
+    "values": {
+      "none": "なし",
+      "notSet": "未設定",
+      "labelValue": "ラベルの値: {value}",
+      "noLabel": "ラベルなし"
+    },
+    "actions": {
+      "edit": "編集",
+      "editField": "{field} を編集",
+      "resetField": "ラベルに戻す",
+      "resetFieldAria": "{field} をラベルに戻す",
+      "resetHint": "戻り先: {value}",
+      "resetAll": "すべてリセット"
+    },
+    "editor": {
+      "displayName": "表示名",
+      "displayNameHelp": "1 から 128 文字。コンテナ名の代わりに表示されます。",
+      "iconProvider": "アイコンの取得元",
+      "iconName": "アイコン名",
+      "iconNameHelp": "英字、数字、ピリオド、ハイフン、アンダースコア。URL ではなく、アイコンの取得元にある名前を指定してください。",
+      "iconPreview": "アイコンのプレビュー",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "保存すると、上に示した適用範囲のすべてで値が変わります。"
+    },
+    "validation": {
+      "displayName": {
+        "empty": "表示名を入力してください。",
+        "tooLong": "128 文字以内にしてください。",
+        "invalidCharacters": "制御文字、方向指定文字、< と > を削除してください。"
+      },
+      "iconName": "英字、数字、ピリオド、ハイフン、アンダースコアを使い、先頭は英字か数字にしてください。"
+    },
+    "conflict": {
+      "message": "これらの上書きは別の場所で変更されました。再読み込みして最新の値を確認してください。下書きは保持されます。",
+      "unknown": "変更が保存されたかどうかを Drydock で確認できませんでした。再読み込みして最新の値を確認してください。",
+      "notFound": "このコンテナは存在しなくなりました。再読み込みして最新の一覧を確認してください。",
+      "reload": "再読み込み"
+    },
+    "status": {
+      "saved": "{field} を保存しました。",
+      "reset": "{field} をラベルの値にリセットしました。",
+      "resetAll": "ラベルの値にリセットした上書きの数: {count}。 | ラベルの値にリセットした上書きの数: {count}。",
+      "nothingToReset": "上書きされているものはありませんでした。"
+    },
+    "resetAllConfirm": {
+      "header": "すべての上書きをリセット",
+      "message": "{scope} の Drydock の上書きをすべて削除し、ラベルの値に戻しますか？Compose ファイルとコンテナには触れません。",
+      "accept": "すべてリセット"
+    },
+    "warnings": {
+      "title": "警告",
+      "unresolved-dependency": "{field}: {reference} は Drydock がまだ認識していないコンテナです。",
+      "cross-host-dependency": "{field}: {reference} は別のホストにのみ存在します。",
+      "trigger-agent-mismatch": "{field}: {reference} は別のエージェント上のトリガーにのみ一致します。",
+      "auto-inert": "{field}: {reference} は自動実行されるトリガーに一致しません。",
+      "stale-trigger-reference": "{field}: {reference} は登録済みのトリガーに一致しなくなりました。",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "保存済みの上書きの一部を読み取れず、無視されています: {fields}",
+    "errors": {
+      "requestFailed": "ラベル上書きのリクエストに失敗しました（HTTP {status}）",
+      "load": "ラベルの上書きを読み込めませんでした",
+      "unknown": "ラベルの上書きを保存できませんでした",
+      "invalid": "サーバーがこの変更を拒否しました。",
+      "codes": {
+        "display-name-empty": "表示名を入力してください。",
+        "display-name-too-long": "128 文字以内にしてください。",
+        "display-name-invalid-characters": "制御文字、方向指定文字、< と > を削除してください。",
+        "invalid-icon": "URL ではなく、アイコンの取得元と名前を指定してください。",
+        "invalid-type": "サーバーがこの値を拒否しました。",
+        "invalid-value": "サーバーがこの値を拒否しました。"
+      }
+    }
+  }
+}
