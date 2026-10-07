@@ -167,6 +167,17 @@ set.ignored = true
 match.rules = ["osv-scanner:CVE-2026-93748"]
 set.ignored = true
 
+# sprintf-js@1.0.3 (CVE-2026-97058 / GHSA-hp3w-g68c-fv3c). The advisory lists
+# everything through 1.1.3 as affected and no fixed version exists as of 2026-10-07.
+# It arrives through argparse@1.x under the js-yaml 3.15.2 override in e2e/ (artillery
+# load-testing only) and never ships in the image. Only artillery's own trusted,
+# in-repo YAML configs reach it, so the vulnerable path is not reachable from
+# drydock. Recheck on 2026-11-07 or as soon as sprintf-js publishes a fix, and drop
+# this entry then.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-97058"]
+set.ignored = true
+
 # checkov CKV_GHA_7 asserts "workflow_dispatch inputs MUST be empty" and fires on
 # the mere presence of any input — confirmed against a controlled probe, where all
 # four of required/optional x with/without-default trip it identically. Its premise

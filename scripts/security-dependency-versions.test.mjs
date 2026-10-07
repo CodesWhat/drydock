@@ -205,8 +205,8 @@ test('sharp is pinned to a patched release in the website', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  assert.ok(compareSemver(manifest.overrides?.sharp, '0.35.4') >= 0);
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.4') >= 0);
+  assert.ok(compareSemver(manifest.overrides?.sharp, '0.35.5') >= 0);
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.5') >= 0);
 });
 
 test('Next.js is pinned past the Windows server execution advisory', () => {
