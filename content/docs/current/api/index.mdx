@@ -699,7 +699,7 @@ Signing in with a recovery code gives a normal session with three limits. Each o
 | Call | What's refused |
 | --- | --- |
 | `POST /api/v1/api-keys` | Creating an API key. |
-| `PUT /api/v1/config/:section` | Writing the authentication section of the configuration file, which is where accounts and `auth.totp.allowhttp` live. That means `auth` and any section name that flattens into it, such as `auth_basic_eve`. Other sections stay writable. |
+| `PUT /api/v1/config/:section` and the three `PATCH /api/v1/config/editor/*` routes | Every write to the configuration file: any section, and a save from the watcher, notification or action editor. It isn't only `auth` that holds something long-lived. `server` has the webhook and metrics credentials, `registry` and `agent` have theirs, and a command action runs what it's given. One rule covers all of them and doesn't need updating as sections gain secrets. Reading the configuration still works. |
 | `POST /api/v1/portwing/keys` | Registering an agent key. |
 
 Everything else still works from that session, including listing and revoking API keys and agent keys, replacing the recovery codes, and replacing or removing the factor with a second recovery code. Sign in with a code from the authenticator app to do any of the three.

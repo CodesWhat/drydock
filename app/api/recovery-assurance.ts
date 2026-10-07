@@ -5,9 +5,10 @@
  * A recovery code is a bearer secret that proves less than the authenticator it
  * stands in for. Whoever holds one can sign in and reset the factor, but must
  * not be able to leave something behind that still works after the owner has
- * taken the account back: an API key, a new account or a relaxed transport rule
- * in the authentication configuration, an agent key. Every such route asks here
- * first, so the status, the reason and the wording cannot drift between them.
+ * taken the account back: an API key, anything written to the configuration file
+ * (an account, a webhook credential, a command action), an agent key. Every such
+ * route asks here first, so the status, the reason and the wording cannot drift
+ * between them.
  */
 import type { Response } from 'express';
 import { sendErrorResponse } from './error-response.js';
