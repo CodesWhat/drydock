@@ -14,6 +14,7 @@ import { argon2Sync, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
+import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 
 const { logLines } = vi.hoisted(() => {
@@ -208,6 +209,15 @@ async function start(databasePath: string, accounts: readonly Account[]): Promis
     }),
   );
   app.use(restoreSessionPrincipal);
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 10_000,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    }),
+  );
   const authRouter = express.Router();
   authRouter.use(express.json({ limit: '64kb' }));
   registerLoginRoutes(authRouter);
