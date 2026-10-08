@@ -9,7 +9,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
-import type { TotpFactorRecord } from '../store/totp.js';
+import { getSubjectVersion, type TotpFactorRecord } from '../store/totp.js';
 import { getErrorMessage } from '../util/error.js';
 import {
   clearLoginLockoutsAfterSuccess,
@@ -21,6 +21,7 @@ import type { AuthRequest } from './auth-types.js';
 import { sendErrorResponse } from './error-response.js';
 import { getPrincipal } from './principal.js';
 import { enforceApiKeyScope, SESSION_ONLY } from './route-scopes.js';
+import { isSecondFactorRequired } from './totp-identity.js';
 import { releaseRecoveryProof, verifyRecoveryProof, verifyTotpProof } from './totp-proof.js';
 
 export const INVALID_BODY_MESSAGE = 'Invalid request body';
@@ -310,6 +311,17 @@ export async function reauthenticate(
       return undefined;
     }
     if (factor === undefined || body.proof === undefined) {
+      // The factor state was read before the password was hashed. A factor
+      // confirmed meanwhile bumps the subject version, and the password alone
+      // must not forgive anything for an account that now holds one, so the
+      // answer is the one a factor-holding account gets without a proof.
+      if (
+        isSecondFactorRequired(context.subjectId) ||
+        getSubjectVersion(context.subjectId) !== context.factorVersion
+      ) {
+        sendErrorResponse(res, 400, INVALID_BODY_MESSAGE);
+        return undefined;
+      }
       clearLoginLockoutsAfterSuccess(authRequest, context.username);
       return {};
     }

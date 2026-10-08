@@ -1288,6 +1288,46 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
     });
 
+    test.each([
+      [
+        'a factor confirmed',
+        () => {
+          enroll();
+        },
+      ],
+      [
+        'the subject version bumped',
+        () => {
+          enroll();
+          totpStore.removeFactor({
+            subjectId: SUBJECT_ID,
+            expectedFactorVersion: totpStore.getSubjectVersion(SUBJECT_ID),
+          });
+        },
+      ],
+    ])(
+      'with %s while the password was being checked, the password alone clears no budget and the call is refused as a missing proof',
+      async (_name, change) => {
+        const h = await boot();
+        const cookie = await sessionCookie(h);
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await loginPassword(h, TEST_USER, 'nope');
+        }
+        const held = holdNextPasswordCheck();
+
+        const pending = startEnrollment(h, cookie);
+        await held.arrived;
+        change();
+        held.release();
+
+        expect((await pending).status).toBe(400);
+        expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+        // Four failures stand: had the password cleared them, one more would not lock.
+        await loginPassword(h, TEST_USER, 'nope');
+        expect((await loginPassword(h, TEST_USER, 'nope')).status).toBe(423);
+      },
+    );
+
     test('a second factor locked while the password was being checked is refused before the proof is looked at', async () => {
       const h = await boot();
       const enrolled = enroll();
