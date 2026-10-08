@@ -895,19 +895,48 @@ describe('HookExecutor', () => {
       ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
     });
 
-    test('falls back to the configured image reference when the spec has no image id', async () => {
+    test('fails closed and never inspects by tag when the spec has no image id', async () => {
       const { executor, inspectImageConfig, context } = createProvenanceHarness({});
 
-      await executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: { Config: { Image: 'acme/web:1' } },
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('proceeds without inspecting when the spec has no image id and no hook labels exist', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({});
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.timeout': '5000' } }),
+        {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: { Config: { Image: 'acme/web:1' } },
+        },
+      );
+      const noLabels = await executor.resolveHookConfig(createContainer({ labels: {} }), {
         dockerApi: context.dockerApi,
-        currentContainerSpec: { Config: { Image: 'acme/web:1' } },
+        currentContainerSpec: { Image: '' },
       });
 
-      expect(inspectImageConfig).toHaveBeenCalledWith(
-        context.dockerApi,
-        'acme/web:1',
-        expect.anything(),
-      );
+      expect(config.hookPre).toBeUndefined();
+      expect(noLabels.hookPre).toBeUndefined();
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('treats an empty image id like a missing one', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({});
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.post': 'echo post' } }), {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: { Image: '', Config: { Image: 'acme/web:1' } },
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+      expect(inspectImageConfig).not.toHaveBeenCalled();
     });
 
     test('fails closed when the spec names no image', async () => {
@@ -929,6 +958,14 @@ describe('HookExecutor', () => {
         executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
           currentContainerSpec: { Image: 'sha256:image-id' },
         }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+
+    test('defaults fail closed when no container spec is available', async () => {
+      const executor = createExecutor();
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } })),
       ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
     });
 

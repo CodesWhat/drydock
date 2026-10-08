@@ -56,6 +56,8 @@ This permits `jq ...` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/o
 
 Docker copies an image's `LABEL` instructions into every container created from it, so a `dd.hook.*` label on a container can come from the image rather than from you. Drydock only runs hook labels you set on the container (Compose `labels:`, `docker run --label`). Before building the hook config it reads the labels of the image the container was created from, and ignores any `dd.hook.*` label whose key and value match the image's. A label you set on the container with a different value than the image's still runs. Each ignored label is logged as a warning naming the container and label key.
 
+A label you set on the container with exactly the same value the image carries can't be told apart from the image's, so it is ignored too, with a warning in the log. Change the value, or set `DD_HOOKS_ALLOW_IMAGE_LABELS=true`.
+
 If drydock can't read the image labels and the container has a `dd.hook.pre` or `dd.hook.post` label, the update fails with an error saying hook provenance could not be established, and no hook runs. Containers without hook labels are not affected, and no extra image lookup happens while `DD_HOOKS_ENABLED` is off.
 
 If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the previous behavior. Only do that for images you control.
