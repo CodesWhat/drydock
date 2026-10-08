@@ -2,9 +2,8 @@ import { ref } from 'vue';
 import {
   buildIconValue,
   failureFromError,
-  fieldErrorCodes,
+  fieldErrors,
   ICON_PROVIDERS,
-  isEditableField,
   isValidIconSlug,
   LABEL_OVERRIDE_GROUPS,
   parseIconValue,
@@ -105,10 +104,6 @@ describe('draft validation', () => {
       'action',
     ]);
     expect(LABEL_OVERRIDE_GROUPS.flatMap((group) => group.fields)).toHaveLength(9);
-    expect(isEditableField('displayName')).toBe(true);
-    expect(isEditableField('displayIcon')).toBe(true);
-    expect(isEditableField('dependsOn')).toBe(false);
-    expect(isEditableField('actionTriggerAuto')).toBe(false);
   });
 });
 
@@ -148,19 +143,23 @@ describe('failureFromError', () => {
     expect(failureFromError(undefined).message).toBe('Could not save the label override');
   });
 
-  it('lists the server error codes for one field', () => {
+  it('lists the server errors for one field, with their entries', () => {
     const failure = failureFromError(
       http(400, {
         errors: [
           { field: 'displayIcon', code: 'invalid-icon' },
+          { field: 'actionTriggerInclude', code: 'unknown-trigger-reference', entries: ['x.y'] },
           { field: 'displayName', code: 'display-name-empty' },
         ],
       }),
     );
-    expect(fieldErrorCodes(failure, 'displayIcon')).toEqual(['invalid-icon']);
-    expect(fieldErrorCodes(failure, 'dependsOn')).toEqual([]);
-    expect(fieldErrorCodes(null, 'displayIcon')).toEqual([]);
-    expect(fieldErrorCodes(failureFromError(http(500)), 'displayIcon')).toEqual([]);
+    expect(fieldErrors(failure, 'displayIcon')).toEqual([{ code: 'invalid-icon', entries: [] }]);
+    expect(fieldErrors(failure, 'actionTriggerInclude')).toEqual([
+      { code: 'unknown-trigger-reference', entries: ['x.y'] },
+    ]);
+    expect(fieldErrors(failure, 'dependsOn')).toEqual([]);
+    expect(fieldErrors(null, 'displayIcon')).toEqual([]);
+    expect(fieldErrors(failureFromError(http(500)), 'displayIcon')).toEqual([]);
   });
 });
 

@@ -261,7 +261,7 @@ describe('LabelOverridesPanel rows', () => {
     expect(wrapper.find(tid('source-dependsOn')).text()).toBe(text);
   });
 
-  it('shows read-only values for dependency and routing fields without editors', async () => {
+  it('shows the values of the dependency and routing fields', async () => {
     vi.mocked(getLabelOverrides).mockResolvedValue(
       snapshot({
         dependsOn: { effective: { value: ['db', 'cache'], source: 'label' } },
@@ -277,11 +277,9 @@ describe('LabelOverridesPanel rows', () => {
     expect(wrapper.find(row('notificationTriggerInclude')).text()).toContain('None');
     expect(wrapper.find(row('actionTriggerAuto')).text()).toContain('docker.local:minor');
     expect(wrapper.find(row('notificationTriggerExclude')).text()).toContain('Not set');
-    for (const field of FIELDS.slice(2)) {
-      expect(wrapper.find(tid(`edit-${field}`)).exists()).toBe(false);
+    for (const field of FIELDS) {
+      expect(wrapper.find(tid(`edit-${field}`)).exists()).toBe(true);
     }
-    expect(wrapper.find(tid('edit-displayName')).exists()).toBe(true);
-    expect(wrapper.find(tid('edit-displayIcon')).exists()).toBe(true);
   });
 
   it('shows the label value and a reset with a hint on an overridden row', async () => {

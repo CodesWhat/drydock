@@ -4,13 +4,28 @@ import { useI18n } from 'vue-i18n';
 import AppBadge from './AppBadge.vue';
 import AppButton from './AppButton.vue';
 import ContainerIcon from './ContainerIcon.vue';
+import LabelOverrideListEditor from './LabelOverrideListEditor.vue';
+import {
+  agentRestrictionProblems,
+  DEPENDS_ON_ACTIONS,
+  type DraftProblem,
+  declaredRoutingEntries,
+  fieldKind,
+  isEntryPermittedByDeclared,
+  normalizeRoutingEntry,
+  permittedThresholds,
+  splitRoutingEntry,
+  triggerCategoryOf,
+  validateNameListDraft,
+  validateRoutingDraft,
+} from '../composables/labelOverrideLists';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { useLabelOverrideCandidates } from '../composables/useLabelOverrideCandidates';
 import {
   buildIconValue,
-  fieldErrorCodes,
+  fieldErrors,
   ICON_PROVIDERS,
   type IconProvider,
-  isEditableField,
   isValidIconSlug,
   LABEL_OVERRIDE_GROUPS,
   type LabelOverrideFailure,
@@ -52,8 +67,11 @@ const SOURCE_TONES: Record<LabelOwnedSource, 'primary' | 'info' | 'alt' | 'cauti
   unset: 'neutral',
 };
 
+const candidates = useLabelOverrideCandidates();
 const editing = ref<LabelOwnedField | null>(null);
 const nameDraft = ref('');
+const listDraft = ref<string[]>([]);
+const actionDraft = ref<(typeof DEPENDS_ON_ACTIONS)[number]>('update');
 const iconProvider = ref<IconProvider>('sh');
 const iconSlug = ref('');
 const failure = ref<LabelOverrideFailure | null>(null);
@@ -70,7 +88,7 @@ watch(
   },
   { immediate: true },
 );
-watch([nameDraft, iconProvider, iconSlug], () => {
+watch([nameDraft, iconProvider, iconSlug, listDraft, actionDraft], () => {
   failureVisible.value = false;
 });
 watch(readOnly, (value) => {
@@ -131,17 +149,60 @@ const invalidStoredText = computed(() =>
   (snapshot.value?.invalidStoredOverride ?? []).map((entry) => entry.field).join(', '),
 );
 
+const AGENT_ACTION_FIELDS: ReadonlySet<LabelOwnedField> = new Set([
+  'actionTriggerInclude',
+  'actionTriggerExclude',
+  'actionTriggerAuto',
+]);
+
+/** Action routing on a traditional agent, where the server only accepts narrowing. */
+function isRestricted(field: LabelOwnedField): boolean {
+  return snapshot.value?.agentEnforcedActionRouting === true && AGENT_ACTION_FIELDS.has(field);
+}
+
+function declaredEntries(field: LabelOwnedField): string[] {
+  return declaredRoutingEntries(snapshot.value?.fields[field].declared.value);
+}
+
+/** Include and auto can only be narrowed, and the labels declare nothing to narrow. */
+function nothingToNarrow(field: LabelOwnedField): boolean {
+  return (
+    isRestricted(field) && field !== 'actionTriggerExclude' && declaredEntries(field).length === 0
+  );
+}
+
+function isEditable(field: LabelOwnedField): boolean {
+  return !readOnly.value && !nothingToNarrow(field);
+}
+
+/** The declared exclusions come first and stay; whatever else the effective value adds follows. */
+function restrictedExcludeDraft(field: LabelOwnedField, effective: string[]): string[] {
+  const declared = declaredEntries(field);
+  const keys = new Set(declared.map(normalizeRoutingEntry));
+  return [...declared, ...effective.filter((entry) => !keys.has(normalizeRoutingEntry(entry)))];
+}
+
 function startEdit(field: LabelOwnedField) {
   const effective = snapshot.value?.fields[field].effective.value ?? null;
   failure.value = null;
   status.value = '';
   failureVisible.value = true;
-  if (field === 'displayName') {
+  const kind = fieldKind(field);
+  if (kind === 'text') {
     nameDraft.value = typeof effective === 'string' ? effective : '';
-  } else {
+  } else if (kind === 'icon') {
     const parsed = parseIconValue(effective);
     iconProvider.value = parsed?.provider ?? 'sh';
     iconSlug.value = parsed?.slug ?? '';
+  } else if (kind === 'action') {
+    actionDraft.value = DEPENDS_ON_ACTIONS.find((value) => value === effective) ?? 'update';
+  } else {
+    const current = declaredRoutingEntries(effective);
+    listDraft.value =
+      field === 'actionTriggerExclude' && isRestricted(field)
+        ? restrictedExcludeDraft(field, current)
+        : current;
+    void candidates.load();
   }
   editing.value = field;
   failureVisible.value = true;
@@ -166,23 +227,128 @@ const iconPreview = computed(() =>
   slugValid.value ? `${iconProvider.value}-${iconSlug.value}` : '',
 );
 
-const canSave = computed(
-  () =>
-    !saving.value &&
-    !needsReload.value &&
-    !readOnly.value &&
-    (editing.value === 'displayName' ? nameProblem.value === null : slugValid.value),
+const editingKind = computed(() => (editing.value === null ? null : fieldKind(editing.value)));
+const scopeNames = computed(
+  () => snapshot.value?.scope.appliesTo.map((member) => member.name) ?? [],
 );
+
+const listProblems = computed<DraftProblem[]>(() => {
+  const field = editing.value;
+  if (field === null) return [];
+  if (editingKind.value === 'name-list') {
+    return validateNameListDraft(listDraft.value, scopeNames.value);
+  }
+  const category = triggerCategoryOf(field);
+  if (editingKind.value !== 'trigger-list' || category === null) return [];
+  return [
+    ...validateRoutingDraft(listDraft.value, category, candidates.triggers.value),
+    ...(isRestricted(field)
+      ? agentRestrictionProblems(field, listDraft.value, declaredEntries(field))
+      : []),
+  ];
+});
+
+function problemText(problem: DraftProblem): string {
+  const key = `labelOverrides.errors.codes.${problem.code}`;
+  return te(key)
+    ? t(key, { entries: problem.entries.join(', ') })
+    : t('labelOverrides.errors.invalid');
+}
+const listClientErrors = computed(() => listProblems.value.map(problemText));
+
+const canSave = computed(() => {
+  if (saving.value || needsReload.value || readOnly.value) return false;
+  switch (editingKind.value) {
+    case 'text':
+      return nameProblem.value === null;
+    case 'icon':
+      return slugValid.value;
+    case 'action':
+      return true;
+    default:
+      return listProblems.value.length === 0;
+  }
+});
+
+const noneHintVisible = computed(
+  () =>
+    (editingKind.value === 'name-list' || editingKind.value === 'trigger-list') &&
+    listDraft.value.length === 0 &&
+    listProblems.value.length === 0,
+);
+
+/** Entries in the draft that the current effective value doesn't have yet. */
+const autoGrants = computed(() => {
+  if (editing.value !== 'actionTriggerAuto') return false;
+  const current = new Set(
+    declaredRoutingEntries(snapshot.value?.fields.actionTriggerAuto.effective.value).map(
+      normalizeRoutingEntry,
+    ),
+  );
+  return listDraft.value.some((entry) => !current.has(normalizeRoutingEntry(entry)));
+});
+
+const listSuggestions = computed<string[]>(() => {
+  const field = editing.value;
+  if (field === null) return [];
+  if (editingKind.value === 'name-list') {
+    return snapshot.value ? candidates.containerNames(snapshot.value.scope) : [];
+  }
+  if (isRestricted(field) && field !== 'actionTriggerExclude') {
+    return [...new Set(declaredEntries(field).map((entry) => splitRoutingEntry(entry).reference))];
+  }
+  const category = triggerCategoryOf(field);
+  return category === null ? [] : (candidates.triggers.value?.[category] ?? []);
+});
+const listRestrictedToDeclared = computed(
+  () =>
+    editing.value !== null &&
+    isRestricted(editing.value) &&
+    editing.value !== 'actionTriggerExclude',
+);
+const listThresholdChoices = computed(() => {
+  const field = editing.value;
+  if (!listRestrictedToDeclared.value || field === null) return undefined;
+  const declared = declaredEntries(field);
+  return (reference: string) => permittedThresholds(reference, declared);
+});
+const listLockedCount = computed(() =>
+  editing.value !== null && isRestricted(editing.value) && editing.value === 'actionTriggerExclude'
+    ? declaredEntries(editing.value).length
+    : 0,
+);
+const listInputLabel = computed(() => {
+  if (editingKind.value === 'name-list') return t('labelOverrides.editor.dependsOnInput');
+  return t(
+    triggerCategoryOf(editing.value as LabelOwnedField) === 'notification'
+      ? 'labelOverrides.editor.notificationInput'
+      : 'labelOverrides.editor.actionInput',
+  );
+});
 
 function serverMessages(field: LabelOwnedField): string[] {
   if (!failureVisible.value) return [];
-  return fieldErrorCodes(failure.value, field).map((code) => {
+  return fieldErrors(failure.value, field).map(({ code, entries }) => {
     const key = `labelOverrides.errors.codes.${code}`;
-    return te(key) ? t(key) : t('labelOverrides.errors.invalid');
+    return te(key) ? t(key, { entries: entries.join(', ') }) : t('labelOverrides.errors.invalid');
   });
 }
 const nameServerErrors = computed(() => serverMessages('displayName'));
 const iconServerErrors = computed(() => serverMessages('displayIcon'));
+const listServerErrors = computed(() =>
+  editing.value === null ? [] : serverMessages(editing.value),
+);
+const listErrors = computed(() => [
+  ...new Set([...listClientErrors.value, ...listServerErrors.value]),
+]);
+const cycleText = computed(() =>
+  failureVisible.value &&
+  editing.value === 'dependsOn' &&
+  failure.value?.kind === 'cycle' &&
+  failure.value.cycle?.length
+    ? t('labelOverrides.errors.cycle', { containers: failure.value.cycle.join(', ') })
+    : '',
+);
 
 const reloadMessage = computed(() => {
   switch (failure.value?.kind) {
@@ -200,10 +366,11 @@ const generalFailure = computed(() => {
   const current = failure.value;
   if (!current || reloadMessage.value) return '';
   if (['forbidden', 'readOnly', 'notOverridable'].includes(current.kind)) return '';
+  if (current.kind === 'cycle' && current.cycle?.length && editing.value === 'dependsOn') return '';
   if (
     current.kind === 'validation' &&
     editing.value !== null &&
-    fieldErrorCodes(current, editing.value).length > 0
+    fieldErrors(current, editing.value).length > 0
   ) {
     return '';
   }
@@ -222,13 +389,23 @@ function finish(outcome: LabelOverrideOutcome | undefined, message: string) {
   status.value = message;
 }
 
+function draftValue(field: LabelOwnedField): string | string[] {
+  switch (fieldKind(field)) {
+    case 'text':
+      return nameDraft.value.trim();
+    case 'icon':
+      return buildIconValue(iconProvider.value, iconSlug.value);
+    case 'action':
+      return actionDraft.value;
+    default:
+      return listDraft.value.map((entry) => entry.trim());
+  }
+}
+
 async function submit() {
   const field = editing.value;
   if (field === null || !canSave.value) return;
-  const value =
-    field === 'displayName'
-      ? nameDraft.value.trim()
-      : buildIconValue(iconProvider.value, iconSlug.value);
+  const value = draftValue(field);
   failure.value = null;
   status.value = '';
   finish(
@@ -373,6 +550,13 @@ async function reload() {
 
       <div v-for="group in LABEL_OVERRIDE_GROUPS" :key="group.id" class="space-y-2">
         <div class="dd-text-label dd-text-muted">{{ t(`labelOverrides.groups.${group.id}`) }}</div>
+        <p
+          v-if="group.id === 'action' && snapshot.agentEnforcedActionRouting"
+          class="dd-text-card-description"
+          data-testid="label-overrides-agent-note"
+        >
+          {{ t('labelOverrides.agent.note', { agent: snapshot.scope.agent ?? '' }) }}
+        </p>
         <div
           v-for="field in group.fields"
           :key="field"
@@ -402,8 +586,16 @@ async function reload() {
               <ContainerIcon :icon="effectiveIcon" :size="16" />
             </span>
             <template v-if="Array.isArray(snapshot.fields[field].effective.value)">
-              <span v-if="snapshot.fields[field].effective.value.length === 0" class="dd-text-body dd-text-muted">
-                {{ t('labelOverrides.values.none') }}
+              <span
+                v-if="snapshot.fields[field].effective.value.length === 0"
+                class="dd-text-body dd-text-muted"
+                :data-testid="`label-overrides-none-${field}`"
+              >
+                {{
+                  snapshot.fields[field].effective.source === 'override'
+                    ? t('labelOverrides.values.explicitNone')
+                    : t('labelOverrides.values.none')
+                }}
               </span>
               <AppBadge
                 v-for="entry in snapshot.fields[field].effective.value"
@@ -422,7 +614,7 @@ async function reload() {
             <span v-else class="dd-text-value dd-text break-all">{{ snapshot.fields[field].effective.value }}</span>
             <span class="ml-auto flex items-center gap-1">
               <AppButton
-                v-if="isEditableField(field) && !readOnly"
+                v-if="isEditable(field)"
                 variant="outlined"
                 size="xs"
                 :disabled="editing !== null || saving"
@@ -448,6 +640,14 @@ async function reload() {
           </div>
 
           <p
+            v-if="nothingToNarrow(field)"
+            class="dd-text-card-description"
+            :data-testid="`label-overrides-nothing-to-narrow-${field}`"
+          >
+            {{ t('labelOverrides.agent.nothingToNarrow') }}
+          </p>
+
+          <p
             v-if="snapshot.fields[field].override !== null"
             class="dd-text-card-description break-all"
             :data-testid="`label-overrides-label-value-${field}`"
@@ -460,7 +660,7 @@ async function reload() {
           </p>
 
           <div v-if="editing === field" class="space-y-2 pt-1">
-            <label v-if="field === 'displayName'" class="block space-y-1">
+            <label v-if="editingKind === 'text'" class="block space-y-1">
               <span class="dd-text-label dd-text-muted">{{ t('labelOverrides.editor.displayName') }}</span>
               <input
                 v-model="nameDraft"
@@ -481,7 +681,7 @@ async function reload() {
               >{{ message }}</span>
             </label>
 
-            <div v-else class="space-y-2">
+            <div v-else-if="editingKind === 'icon'" class="space-y-2">
               <label class="block space-y-1">
                 <span class="dd-text-label dd-text-muted">{{ t('labelOverrides.editor.iconProvider') }}</span>
                 <select
@@ -519,6 +719,65 @@ async function reload() {
                 <span class="dd-text-label dd-text-muted">{{ t('labelOverrides.editor.iconPreview') }}</span>
                 <ContainerIcon :icon="iconPreview" :size="24" />
               </div>
+            </div>
+
+            <label v-else-if="editingKind === 'action'" class="block space-y-1">
+              <span class="dd-text-label dd-text-muted">{{ t('labelOverrides.editor.dependencyAction') }}</span>
+              <select
+                v-model="actionDraft"
+                class="w-full px-3 py-2 dd-rounded dd-text-value"
+                :style="inputStyle"
+                data-testid="label-overrides-action-select"
+              >
+                <option v-for="value in DEPENDS_ON_ACTIONS" :key="value" :value="value">
+                  {{ t(`labelOverrides.editor.dependencyActions.${value}`) }}
+                </option>
+              </select>
+              <span class="block dd-text-card-description">{{ t('labelOverrides.editor.dependencyActionHelp') }}</span>
+              <span
+                v-for="message in listServerErrors"
+                :key="message"
+                class="block dd-text-body dd-text-danger"
+                data-testid="label-overrides-error-dependsOnAction"
+              >{{ message }}</span>
+            </label>
+
+            <div v-else class="space-y-2">
+              <p class="dd-text-card-description">
+                {{ editingKind === 'name-list' ? t('labelOverrides.editor.dependsOnHelp') : t('labelOverrides.editor.routingHelp') }}
+              </p>
+              <p
+                v-if="editing !== null && isRestricted(editing)"
+                class="dd-text-card-description"
+                :data-testid="`label-overrides-agent-hint-${editing}`"
+              >
+                {{ editing === 'actionTriggerExclude' ? t('labelOverrides.agent.excludeHint') : t('labelOverrides.agent.narrowHint') }}
+              </p>
+              <LabelOverrideListEditor
+                v-model="listDraft"
+                :suggestions="listSuggestions"
+                :free-entry="!listRestrictedToDeclared"
+                :thresholds="editingKind === 'trigger-list'"
+                :threshold-choices="listThresholdChoices"
+                :locked-count="listLockedCount"
+                :input-label="listInputLabel"
+                :disabled="saving"
+              />
+              <p v-if="noneHintVisible" class="dd-text-card-description" data-testid="label-overrides-none-hint">
+                {{ t('labelOverrides.editor.noneHint') }}
+              </p>
+              <p v-if="autoGrants" class="dd-text-body dd-text-warning" data-testid="label-overrides-auto-warning">
+                {{ t('labelOverrides.editor.autoWarning') }}
+              </p>
+              <span
+                v-for="message in listErrors"
+                :key="message"
+                class="block dd-text-body dd-text-danger"
+                :data-testid="`label-overrides-error-${editing}`"
+              >{{ message }}</span>
+              <p v-if="cycleText" role="alert" class="dd-text-body dd-text-danger" data-testid="label-overrides-cycle">
+                {{ cycleText }}
+              </p>
             </div>
 
             <p class="dd-text-card-description">{{ t('labelOverrides.editor.scopeReminder') }}</p>
