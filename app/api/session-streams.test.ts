@@ -11,7 +11,7 @@ vi.mock('./totp-identity.js', () => ({ checkSessionIdentity: mockCheckSessionIde
 type SessionStreams = typeof import('./session-streams.js');
 
 let closeStreamsForRevokedSessions: SessionStreams['closeStreamsForRevokedSessions'];
-let closeStreamsOfEndedSessions: SessionStreams['closeStreamsOfEndedSessions'];
+let createSessionStreamRecheck: SessionStreams['createSessionStreamRecheck'];
 let registerSessionStreamCloser: SessionStreams['registerSessionStreamCloser'];
 let trackSessionSocket: SessionStreams['trackSessionSocket'];
 let trackSessionStream: SessionStreams['trackSessionStream'];
@@ -23,7 +23,7 @@ beforeEach(async () => {
   mockWarn.mockClear();
   ({
     closeStreamsForRevokedSessions,
-    closeStreamsOfEndedSessions,
+    createSessionStreamRecheck,
     registerSessionStreamCloser,
     trackSessionSocket,
     trackSessionStream,
@@ -259,38 +259,174 @@ describe('the sessions that hold a stream are asked about again', () => {
     expect(mockCheckSessionIdentity).not.toHaveBeenCalled();
   });
 
-  test.each([['stale'], ['unavailable']])(
-    'a session the validator reads as %s is closed, and no other',
-    (status) => {
-      const gone = vi.fn();
-      const kept = vi.fn();
-      trackSessionStream('gone', gone);
-      const forgetKept = trackSessionStream('kept', kept);
-      mockGetSession.mockImplementation((sid: string) => storedSession(sid, { username: sid }));
-      mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
-        user.username === 'gone' ? status : 'valid',
-      );
-
-      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
-
-      expect(gone).toHaveBeenCalledTimes(1);
-      expect(kept).not.toHaveBeenCalled();
-      forgetKept();
-    },
-  );
-
-  test('a row that cannot be read closes the stream, and the session id stays out of the log', () => {
-    const close = vi.fn();
-    trackSessionStream('unreadable-session', close);
-    mockGetSession.mockImplementation(() => {
-      throw new Error('database is locked');
-    });
+  test('a session the validator reads as stale is closed at the next re-check, and no other', () => {
+    const gone = vi.fn();
+    const kept = vi.fn();
+    trackSessionStream('gone', gone);
+    const forgetKept = trackSessionStream('kept', kept);
+    mockGetSession.mockImplementation((sid: string) => storedSession(sid, { username: sid }));
+    mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+      user.username === 'gone' ? 'stale' : 'valid',
+    );
 
     vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
 
-    expect(close).toHaveBeenCalledTimes(1);
-    expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('database is locked'));
-    expect(JSON.stringify(mockWarn.mock.calls)).not.toContain('unreadable-session');
+    expect(gone).toHaveBeenCalledTimes(1);
+    expect(kept).not.toHaveBeenCalled();
+    forgetKept();
+  });
+
+  describe('when the store cannot answer', () => {
+    /** The two ways a re-check goes unanswered: the validator's store read fails, or the row's does. */
+    const faults: Array<[string, () => void, () => void]> = [
+      [
+        'the validator cannot read the factor store',
+        () => mockCheckSessionIdentity.mockReturnValue('unavailable'),
+        () => mockCheckSessionIdentity.mockReturnValue('valid'),
+      ],
+      [
+        'the session row cannot be read',
+        () =>
+          mockGetSession.mockImplementation(() => {
+            throw new Error('database is locked');
+          }),
+        () => mockGetSession.mockImplementation((sid: string) => storedSession(sid)),
+      ],
+    ];
+
+    test.each(faults)(
+      'a fault that passes leaves the stream open (%s)',
+      (_name, breakStore, mendStore) => {
+        const close = vi.fn();
+        const forget = trackSessionStream('waited-for', close);
+
+        breakStore();
+        vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+        expect(close).not.toHaveBeenCalled();
+
+        mendStore();
+        vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+        expect(close).not.toHaveBeenCalled();
+
+        // The wait starts over: three more unanswered re-checks are waited out again.
+        breakStore();
+        vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+        expect(close).not.toHaveBeenCalled();
+        mendStore();
+        forget();
+      },
+    );
+
+    test.each(faults)(
+      'a fault that lasts closes the stream on the fourth unanswered re-check (%s)',
+      (_name, breakStore) => {
+        const close = vi.fn();
+        trackSessionStream('given-up-on', close);
+        breakStore();
+
+        vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+        expect(close).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    test('a row that cannot be read is logged without the session id', () => {
+      trackSessionStream('unreadable-session', vi.fn());
+      mockGetSession.mockImplementation(() => {
+        throw new Error('database is locked');
+      });
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 4);
+
+      expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('database is locked'));
+      expect(JSON.stringify(mockWarn.mock.calls)).not.toContain('unreadable-session');
+    });
+
+    test('a session that is known to have ended is not waited for', () => {
+      const close = vi.fn();
+      trackSessionStream('ended-meanwhile', close);
+      mockCheckSessionIdentity.mockReturnValue('unavailable');
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 2);
+      expect(close).not.toHaveBeenCalled();
+
+      // The store answers again, and the answer is that the row is gone.
+      mockGetSession.mockReturnValue(undefined);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    test('each session waits on its own count', () => {
+      const early = vi.fn();
+      const late = vi.fn();
+      const answered = vi.fn();
+      trackSessionStream('early', early);
+      const forgetAnswered = trackSessionStream('answered', answered);
+      mockGetSession.mockImplementation((sid: string) => storedSession(sid, { username: sid }));
+      mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+        user.username === 'answered' ? 'valid' : 'unavailable',
+      );
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 2);
+      trackSessionStream('late', late);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 2);
+
+      expect(early).toHaveBeenCalledTimes(1);
+      expect(late).not.toHaveBeenCalled();
+      expect(answered).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 2);
+      expect(late).toHaveBeenCalledTimes(1);
+      expect(answered).not.toHaveBeenCalled();
+      forgetAnswered();
+    });
+
+    test('a count does not outlive the timer that kept it', () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      mockCheckSessionIdentity.mockReturnValue('unavailable');
+      const forgetFirst = trackSessionStream('came-back-later', first);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+      // The last stream goes, and the asking stops with it.
+      forgetFirst();
+      expect(vi.getTimerCount()).toBe(0);
+
+      trackSessionStream('came-back-later', second);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+      expect(second).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+    });
+
+    test('a session that stopped being asked about is not remembered when it holds a stream again', () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const other = vi.fn();
+      // Another session keeps the re-check running throughout.
+      const forgetOther = trackSessionStream('other', other);
+      mockGetSession.mockImplementation((sid: string) => storedSession(sid, { username: sid }));
+      mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+        user.username === 'other' ? 'valid' : 'unavailable',
+      );
+      const forgetFirst = trackSessionStream('came-back', first);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+      forgetFirst();
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+      trackSessionStream('came-back', second);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+      expect(second).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+      forgetOther();
+    });
   });
 
   test('nothing is asked once the last stream has gone, and asking starts again with the next', () => {
@@ -327,7 +463,7 @@ describe('the sessions that hold a stream are asked about again', () => {
       sid === 'registry-gone' ? undefined : storedSession(sid),
     );
 
-    closeStreamsOfEndedSessions(['registry-kept', 'registry-gone', 'registry-gone']);
+    createSessionStreamRecheck()(['registry-kept', 'registry-gone', 'registry-gone']);
 
     expect(mockGetSession).toHaveBeenCalledTimes(2);
     expect(closer).toHaveBeenCalledTimes(1);
@@ -338,8 +474,27 @@ describe('the sessions that hold a stream are asked about again', () => {
     const closer = vi.fn(() => 1);
     registerSessionStreamCloser(closer);
 
-    closeStreamsOfEndedSessions(['registry-kept']);
+    createSessionStreamRecheck()(['registry-kept']);
 
     expect(closer).not.toHaveBeenCalled();
+  });
+
+  test('a registry’s re-check waits out an unanswering store on its own count, then closes', () => {
+    const closer = vi.fn(() => 1);
+    registerSessionStreamCloser(closer);
+    mockCheckSessionIdentity.mockReturnValue('unavailable');
+    const recheck = createSessionStreamRecheck();
+    const elsewhere = createSessionStreamRecheck();
+
+    recheck(['registry-unanswered']);
+    recheck(['registry-unanswered']);
+    recheck(['registry-unanswered']);
+    // Another asker's count is not this one's.
+    elsewhere(['registry-unanswered']);
+    expect(closer).not.toHaveBeenCalled();
+
+    recheck(['registry-unanswered']);
+    expect(closer).toHaveBeenCalledTimes(1);
+    expect(closer).toHaveBeenCalledWith(new Set(['registry-unanswered']));
   });
 });

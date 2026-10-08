@@ -32,7 +32,7 @@ import {
   writeSessionPrincipal,
 } from './session-principal.js';
 import { SessionStore } from './session-store.js';
-import { closeStreamsOfEndedSessions, registerSessionStreamCloser } from './session-streams.js';
+import { createSessionStreamRecheck, registerSessionStreamCloser } from './session-streams.js';
 import {
   encryptTotpSeed,
   generateTotpSeed,
@@ -97,8 +97,16 @@ registerSessionStreamCloser((revoked) => {
  * of the id it replaces through the same closer.
  */
 function recheckStreamsOf(...cookies: string[]): string[] {
+  return recheckStreamsWith(createSessionStreamRecheck(), ...cookies);
+}
+
+/** The same, for a re-check that has asked before and remembers what went unanswered. */
+function recheckStreamsWith(
+  recheck: ReturnType<typeof createSessionStreamRecheck>,
+  ...cookies: string[]
+): string[] {
   closedStreams.length = 0;
-  closeStreamsOfEndedSessions(cookies.map(sidOf));
+  recheck(cookies.map(sidOf));
   return [...closedStreams];
 }
 
@@ -580,5 +588,44 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
 
     h.db.exec('ALTER TABLE totp_subject_versions_away RENAME TO totp_subject_versions');
     expect(await protectedStatus(h, cookie)).toBe(200);
+  });
+
+  describe('a store that cannot answer and the streams of a session it would still accept', () => {
+    const breakStore = (h: Harness) =>
+      h.db.exec('ALTER TABLE totp_subject_versions RENAME TO totp_subject_versions_away');
+    const mendStore = (h: Harness) =>
+      h.db.exec('ALTER TABLE totp_subject_versions_away RENAME TO totp_subject_versions');
+
+    test('a fault that passes closes nothing, and the session works again afterwards', async () => {
+      const h = await boot();
+      const cookie = await login(h);
+      const recheck = createSessionStreamRecheck();
+
+      breakStore(h);
+      expect(await protectedStatus(h, cookie)).toBe(401);
+      for (let unanswered = 1; unanswered <= 3; unanswered += 1) {
+        expect(recheckStreamsWith(recheck, cookie)).toEqual([]);
+      }
+
+      mendStore(h);
+      expect(recheckStreamsWith(recheck, cookie)).toEqual([]);
+      expect(await protectedStatus(h, cookie)).toBe(200);
+    });
+
+    test('a fault that lasts closes the streams on the fourth unanswered re-check, and keeps the session', async () => {
+      const h = await boot();
+      const cookie = await login(h);
+      const recheck = createSessionStreamRecheck();
+      breakStore(h);
+
+      for (let unanswered = 1; unanswered <= 3; unanswered += 1) {
+        expect(recheckStreamsWith(recheck, cookie)).toEqual([]);
+      }
+      expect(recheckStreamsWith(recheck, cookie)).toEqual([sidOf(cookie)]);
+
+      // Only the streams went: the row is intact, so the session is good once the store is.
+      mendStore(h);
+      expect(await protectedStatus(h, cookie)).toBe(200);
+    });
   });
 });

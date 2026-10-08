@@ -2704,32 +2704,105 @@ describe('SSE Router', () => {
         expect(local.res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
       });
 
-      test.each([['stale'], ['unavailable']])(
-        'a stream whose session reads as %s is closed instead of sent a heartbeat, and no other',
-        (status) => {
+      test('a stream whose session reads as stale is closed instead of sent a heartbeat, and no other', () => {
+        const handler = getHandler();
+        const gone = connectSseClient(handler, '10.2.0.1', {
+          kind: 'session',
+          username: 'scott',
+        });
+        const kept = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        const anonymous = connectSseClient(handler, '10.2.0.3');
+        storeSessionsOf({ 'session-10.2.0.1': 'scott', 'session-10.2.0.2': 'jo' });
+        mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+          user.username === 'scott' ? 'stale' : 'valid',
+        );
+        gone.res.write.mockClear();
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(gone.res.destroy).toHaveBeenCalled();
+        expect(gone.res.write).not.toHaveBeenCalled();
+        expect(sseRouter._clients.has(gone.res)).toBe(false);
+        expect(kept.res.destroy).not.toHaveBeenCalled();
+        expect(anonymous.res.destroy).not.toHaveBeenCalled();
+        expect(mockCheckSessionIdentity).toHaveBeenCalledTimes(2);
+      });
+
+      describe('when the store cannot answer', () => {
+        const HEARTBEAT = 'event: dd:heartbeat\ndata: {}\n\n';
+
+        test('a fault that passes leaves the stream open and its heartbeats flowing', () => {
           const handler = getHandler();
-          const gone = connectSseClient(handler, '10.2.0.1', {
+          const { res } = connectSseClient(handler, '10.2.1.1', {
             kind: 'session',
             username: 'scott',
           });
-          const kept = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
-          const anonymous = connectSseClient(handler, '10.2.0.3');
-          storeSessionsOf({ 'session-10.2.0.1': 'scott', 'session-10.2.0.2': 'jo' });
-          mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
-            user.username === 'scott' ? status : 'valid',
-          );
-          gone.res.write.mockClear();
+          res.write.mockClear();
+
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          mockCheckSessionIdentity.mockReturnValue('valid');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+          expect(res.destroy).not.toHaveBeenCalled();
+          expect(res.write.mock.calls).toEqual([
+            [HEARTBEAT],
+            [HEARTBEAT],
+            [HEARTBEAT],
+            [HEARTBEAT],
+          ]);
+
+          // The wait starts over, so three more unanswered heartbeats are waited out again.
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          expect(res.destroy).not.toHaveBeenCalled();
+        });
+
+        test('a fault that lasts closes the stream on the fourth unanswered heartbeat', () => {
+          const handler = getHandler();
+          const { res } = connectSseClient(handler, '10.2.1.2', {
+            kind: 'session',
+            username: 'scott',
+          });
+          const keyed = connectSseClient(handler, '10.2.1.3', KEY_PRINCIPAL);
+          res.write.mockClear();
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          expect(res.destroy).not.toHaveBeenCalled();
 
           vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
 
-          expect(gone.res.destroy).toHaveBeenCalled();
-          expect(gone.res.write).not.toHaveBeenCalled();
-          expect(sseRouter._clients.has(gone.res)).toBe(false);
-          expect(kept.res.destroy).not.toHaveBeenCalled();
-          expect(anonymous.res.destroy).not.toHaveBeenCalled();
-          expect(mockCheckSessionIdentity).toHaveBeenCalledTimes(2);
-        },
-      );
+          expect(res.destroy).toHaveBeenCalled();
+          expect(sseRouter._clients.has(res)).toBe(false);
+          // Closed instead of sent a fourth heartbeat.
+          expect(res.write.mock.calls).toEqual([[HEARTBEAT], [HEARTBEAT], [HEARTBEAT]]);
+          expect(keyed.res.destroy).not.toHaveBeenCalled();
+        });
+
+        test('a count does not outlive the heartbeat that kept it', () => {
+          const handler = getHandler();
+          const first = connectSseClient(handler, '10.2.1.4', {
+            kind: 'session',
+            username: 'scott',
+          });
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          // The last client goes, and the heartbeat stops with it.
+          first.req._listeners.close();
+          expect(vi.getTimerCount()).toBe(1);
+
+          const second = connectSseClient(handler, '10.2.1.4', {
+            kind: 'session',
+            username: 'scott',
+          });
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          expect(second.res.destroy).not.toHaveBeenCalled();
+
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+          expect(second.res.destroy).toHaveBeenCalled();
+        });
+      });
 
       test('a stream whose session row is gone is closed, though its identity would still pass', () => {
         const handler = getHandler();

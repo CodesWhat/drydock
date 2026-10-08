@@ -30,6 +30,25 @@ interface TrackedStream {
 /** The pace of the event stream's heartbeat, so every kind of stream has the same floor. */
 const SESSION_RECHECK_INTERVAL_MS = 15_000;
 
+/**
+ * How many re-checks in a row the store may fail to answer for a session
+ * before its streams are closed anyway; the next one closes them. At the
+ * re-check's pace that is a store unreadable for 45 to 60 seconds.
+ *
+ * A store that cannot answer says nothing about the session, and closing at
+ * once turned every fault longer than a reconnect into a sign-out: the browser
+ * reconnects within two seconds, is refused while the store is still down, and
+ * reloads to the login page with its session intact. One unanswered re-check
+ * has to be survivable, since a single locked read already waited out the
+ * driver's five second busy timeout, and three cover a stall several times
+ * that long. It stays this short because waiting is the one place the floor
+ * fails open: a session that ended without its streams being told keeps them
+ * for that long, on top of the one interval it always could. No request of
+ * that session is let in meanwhile, ending a session needs the same store, and
+ * past a minute the store is not having a blip.
+ */
+const MAX_UNANSWERED_RECHECKS = 3;
+
 const closers = new Set<SessionStreamCloser>();
 const streamsBySession = new Map<string, Set<TrackedStream>>();
 let recheckTimer: ReturnType<typeof setInterval> | undefined;
@@ -38,10 +57,10 @@ function startRecheckingIfNeeded(): void {
   if (recheckTimer !== undefined) {
     return;
   }
-  recheckTimer = setInterval(
-    () => closeStreamsOfEndedSessions(streamsBySession.keys()),
-    SESSION_RECHECK_INTERVAL_MS,
-  );
+  // Made with the timer: nothing was asked while it was stopped, so no count
+  // of unanswered re-checks is carried into its next run.
+  const recheck = createSessionStreamRecheck();
+  recheckTimer = setInterval(() => recheck(streamsBySession.keys()), SESSION_RECHECK_INTERVAL_MS);
   // The streams keep the process alive; asking about them must not.
   recheckTimer.unref();
 }
@@ -155,39 +174,74 @@ function readStoredUser(data: string): unknown {
   }
 }
 
+type SessionStanding = 'live' | 'ended' | 'unanswered';
+
 /**
  * Would a request carrying this session id still be let in? Asked of the store
  * and not of what the stream saw at connect: the row has to be there, unexpired,
  * and holding a user the validator HTTP restoration and the WebSocket upgrade
- * use still accepts. Anything short of that is no, a store that cannot answer
- * included: that request would be refused too.
+ * use still accepts. `unanswered` is the store failing to say, which is not the
+ * same as the session having ended.
  */
-function isSessionLive(sessionId: string, now: number): boolean {
+function readSessionStanding(sessionId: string, now: number): SessionStanding {
   try {
     const row = getSession(sessionId);
-    return (
-      row !== undefined &&
-      row.expiresAt > now &&
-      validateSessionUser(readStoredUser(row.data)).status === 'valid'
-    );
+    if (row === undefined || row.expiresAt <= now) {
+      return 'ended';
+    }
+    const { status } = validateSessionUser(readStoredUser(row.data));
+    if (status === 'valid') {
+      return 'live';
+    }
+    return status === 'unavailable' ? 'unanswered' : 'ended';
   } catch (error: unknown) {
     // The session id is a credential, so the warning names the failure and not the session.
     logger
       .child({ component: 'api.session-streams' })
       .warn(`Unable to read a session to re-check its streams (${getErrorMessage(error)})`);
-    return false;
+    return 'unanswered';
   }
 }
 
 /**
- * Close the streams of every one of these sessions that has ended since they
- * were opened. This is the floor under `closeStreamsForRevokedSessions`: it
- * runs on a timer for the tracked streams, and a stream that keeps a registry
- * of its own calls it with the sessions it holds.
+ * Build the re-check one asker runs on its clock: handed the sessions that
+ * hold its streams, it closes the streams of every one that has ended since.
+ * This is the floor under `closeStreamsForRevokedSessions`. The tracked
+ * streams have one, run from the timer here; a stream that keeps a registry of
+ * its own makes one and calls it with the sessions it holds.
+ *
+ * A session the store cannot answer for is waited for, up to
+ * `MAX_UNANSWERED_RECHECKS` in a row, and closed on the next. The count is
+ * the asker's own, which is why this is built per asker and once per run of
+ * its clock: a session two askers hold must not run out of patience twice as
+ * fast, and a count must not outlive the clock that kept it.
  */
-export function closeStreamsOfEndedSessions(sessionIds: Iterable<string>): void {
-  const now = Date.now();
-  // Copied first: closing removes entries from the map the ids may be read from.
-  const ended = [...new Set(sessionIds)].filter((sessionId) => !isSessionLive(sessionId, now));
-  closeStreamsForRevokedSessions(ended);
+export function createSessionStreamRecheck(): (sessionIds: Iterable<string>) => void {
+  const unansweredRechecks = new Map<string, number>();
+  return (sessionIds) => {
+    const now = Date.now();
+    // Copied first: closing removes entries from the map the ids may be read from.
+    const asked = new Set(sessionIds);
+    // In a row means asked every time: a session that left is not remembered.
+    for (const sessionId of [...unansweredRechecks.keys()]) {
+      if (!asked.has(sessionId)) {
+        unansweredRechecks.delete(sessionId);
+      }
+    }
+    const ended: string[] = [];
+    for (const sessionId of asked) {
+      const standing = readSessionStanding(sessionId, now);
+      const unanswered =
+        standing === 'unanswered' ? (unansweredRechecks.get(sessionId) ?? 0) + 1 : 0;
+      if (unanswered > 0 && unanswered <= MAX_UNANSWERED_RECHECKS) {
+        unansweredRechecks.set(sessionId, unanswered);
+        continue;
+      }
+      unansweredRechecks.delete(sessionId);
+      if (standing !== 'live') {
+        ended.push(sessionId);
+      }
+    }
+    closeStreamsForRevokedSessions(ended);
+  };
 }

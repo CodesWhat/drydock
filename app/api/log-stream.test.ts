@@ -30,7 +30,7 @@ import {
   parseSystemLogStreamQuery,
 } from './log-stream.js';
 import * as rateLimitKey from './rate-limit-key.js';
-import { closeStreamsForRevokedSessions, closeStreamsOfEndedSessions } from './session-streams.js';
+import { closeStreamsForRevokedSessions, createSessionStreamRecheck } from './session-streams.js';
 import { createIdentityAwareUpgradeRateLimitKeyResolver } from './ws-upgrade-utils.js';
 
 function createUpgradeSocket() {
@@ -167,11 +167,11 @@ describe('api/log-stream', () => {
     test('is closed by the session re-check once its session row is gone', async () => {
       const { ws } = await connect(authenticatingSessionMiddleware);
 
-      closeStreamsOfEndedSessions(['session-1']);
+      createSessionStreamRecheck()(['session-1']);
       expect(ws.close).not.toHaveBeenCalled();
 
       mockGetSession.mockReturnValueOnce(undefined as never);
-      closeStreamsOfEndedSessions(['session-1']);
+      createSessionStreamRecheck()(['session-1']);
 
       expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
     });

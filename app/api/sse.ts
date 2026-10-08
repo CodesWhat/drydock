@@ -36,7 +36,7 @@ import { stripContainerDetailOnlySecurityFields } from './container/container-pr
 import { projectLabelOwnedForApi } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
-import { closeStreamsOfEndedSessions, registerSessionStreamCloser } from './session-streams.js';
+import { createSessionStreamRecheck, registerSessionStreamCloser } from './session-streams.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -474,27 +474,33 @@ function disconnectClientsWithInvalidApiKeys(now: Date): void {
  * nothing saying so, and a stream never makes the next read that would notice.
  * The question is the shared one every session-backed stream is asked, and the
  * verdict goes through the shared hook, so the session's log sockets and stats
- * streams close with its event streams.
+ * streams close with its event streams. A store that cannot answer is waited
+ * out for a few heartbeats there before the stream is closed anyway.
  */
-function closeStreamsOfInvalidSessions(): void {
+function closeStreamsOfInvalidSessions(
+  recheckSessions: ReturnType<typeof createSessionStreamRecheck>,
+): void {
   const sessionIds: string[] = [];
   for (const { sessionId } of sseClientRegistry.listClients()) {
     if (sessionId !== undefined) {
       sessionIds.push(sessionId);
     }
   }
-  closeStreamsOfEndedSessions(sessionIds);
+  recheckSessions(sessionIds);
 }
 
 function startSharedHeartbeatIntervalIfNeeded(): void {
   if (sharedHeartbeatIntervalHandle || clients.size === 0) {
     return;
   }
+  // Made with the interval: nothing was asked while it was stopped, so no
+  // count of unanswered re-checks is carried into its next run.
+  const recheckSessions = createSessionStreamRecheck();
   sharedHeartbeatIntervalHandle = globalThis.setInterval(() => {
     // Before the writes, so a stream whose key or session just died gets
     // closed rather than sent one more heartbeat.
     disconnectClientsWithInvalidApiKeys(new Date());
-    closeStreamsOfInvalidSessions();
+    closeStreamsOfInvalidSessions(recheckSessions);
     for (const client of clients) {
       writeHeartbeat(client);
     }

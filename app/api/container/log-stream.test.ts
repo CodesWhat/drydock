@@ -25,7 +25,7 @@ import { WebSocketServer } from 'ws';
 import * as configuration from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
-import { closeStreamsForRevokedSessions, closeStreamsOfEndedSessions } from '../session-streams.js';
+import { closeStreamsForRevokedSessions, createSessionStreamRecheck } from '../session-streams.js';
 import { createIdentityAwareUpgradeRateLimitKeyResolver } from '../ws-upgrade-utils.js';
 import {
   attachContainerLogStreamWebSocketServer,
@@ -1907,11 +1907,11 @@ describe('api/container/log-stream', () => {
     test('is closed by the session re-check once its session row is gone', async () => {
       const { ws } = await connect(sessionMiddlewareFor('container-log-row-gone'));
 
-      closeStreamsOfEndedSessions(['container-log-row-gone']);
+      createSessionStreamRecheck()(['container-log-row-gone']);
       expect(ws.close).not.toHaveBeenCalled();
 
       mockGetSession.mockReturnValueOnce(undefined as never);
-      closeStreamsOfEndedSessions(['container-log-row-gone']);
+      createSessionStreamRecheck()(['container-log-row-gone']);
 
       expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
     });
