@@ -550,6 +550,31 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.pruneOldBackups).toHaveBeenCalledWith(container, 5);
   });
 
+  test('builds the hook config with the trigger context and fails the update before any hook runs when provenance is unverified', async () => {
+    const context = createContext();
+    const failure = new Error('hook provenance could not be established');
+    const buildHookConfig = vi.fn().mockRejectedValue(failure);
+    const harness = createHarness({
+      createTriggerContext: vi.fn().mockResolvedValue(context),
+      buildHookConfig,
+    });
+    const container = createContainer();
+
+    await expect(harness.executor.run(container, { runtime: true })).rejects.toThrow(
+      'hook provenance could not be established',
+    );
+
+    expect(buildHookConfig).toHaveBeenCalledWith(container, context);
+    expect(harness.runPreUpdateHook).not.toHaveBeenCalled();
+    expect(harness.performContainerUpdate).not.toHaveBeenCalled();
+    expect(harness.runPostUpdateHook).not.toHaveBeenCalled();
+    expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
+      containerName: 'docker.local_web',
+      error: 'hook provenance could not be established',
+      container: expect.objectContaining({ name: 'web' }),
+    });
+  });
+
   test('does not directly emit update-applied telemetry when operation id owns the commit', async () => {
     const harness = createHarness({
       performContainerUpdate: vi.fn().mockResolvedValue(true),

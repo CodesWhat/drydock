@@ -3704,7 +3704,7 @@ describe('drydock.yml loading', () => {
   });
 });
 
-// The file layer only reaches ddEnvVars/get() consumers. These 21 files read
+// The file layer only reaches ddEnvVars/get() consumers. These 22 files read
 // process.env.DD_* directly and are not covered by drydock.yml in v1.8.
 // Shared between the enumeration test below and the UNSUPPORTED_FILE_KEYS
 // recompute test after it, so the two can't drift into disagreement about
@@ -3725,6 +3725,7 @@ const DIRECT_ENV_READER_FILES = [
   'store/container.ts',
   'store/update-operation.ts',
   'triggers/hooks/HookRunner.ts',
+  'triggers/hooks/hook-flags.ts',
   'triggers/providers/docker/self-update-controller.ts',
   'triggers/providers/docker/self-update-finalize-entrypoint.ts',
   'updates/health-gate-heartbeat.ts',
@@ -3970,7 +3971,7 @@ describe('applyConfigurationReload', () => {
 });
 
 describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
-  // This test enumerates the 21 files so a new direct reader shows up as a
+  // This test enumerates the 22 files so a new direct reader shows up as a
   // failing assertion instead of a silent coverage gap.
   const DIRECT_ENV_PATTERN = /process\.env(?:\.DD_|\[['"]DD_)/;
   const SKIPPED_DIRECTORY_NAMES = new Set(['node_modules', 'dist', 'coverage']);
@@ -3991,7 +3992,7 @@ describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)',
     return results;
   }
 
-  test('is exactly these 21 files, verified against the tree rather than trusted', () => {
+  test('is exactly these 22 files, verified against the tree rather than trusted', () => {
     const appRoot = path.resolve(TEST_DIRECTORY, '..');
     const actual = listProductionTsFiles(appRoot)
       .filter((filePath) => DIRECT_ENV_PATTERN.test(fs.readFileSync(filePath, 'utf-8')))
@@ -4004,7 +4005,7 @@ describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)',
 
 describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
   // Every DD_* variable actually read via process.env(.DD_ / ['DD_...']) in
-  // the 21 direct-reader files above, minus DD_SELF_UPDATE_*: every one of
+  // the 22 direct-reader files above, minus DD_SELF_UPDATE_*: every one of
   // those is a handoff value the app writes itself as environment for a
   // helper container it spawns (SelfUpdateTransitionShared.ts and
   // self-update-controller.ts's own `-e` argument lists), never something an
