@@ -87,16 +87,11 @@ type HookExecutorConstructorOptions = Omit<
 
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
 const DEFAULT_HOOK_TIMEOUT_MS = 60000;
-const HOOK_LABEL_PREFIXES = ['dd.hook.', 'wud.hook.'] as const;
-const HOOK_COMMAND_LABEL_KEYS = new Set([
-  'dd.hook.pre',
-  'dd.hook.post',
-  'wud.hook.pre',
-  'wud.hook.post',
-]);
+const HOOK_LABEL_PREFIX = 'dd.hook.';
+const HOOK_COMMAND_LABEL_KEYS = new Set(['dd.hook.pre', 'dd.hook.post']);
 
 function isHookLabelKey(key: string): boolean {
-  return HOOK_LABEL_PREFIXES.some((prefix) => key.startsWith(prefix));
+  return key.startsWith(HOOK_LABEL_PREFIX);
 }
 
 /**

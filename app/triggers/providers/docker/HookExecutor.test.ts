@@ -969,15 +969,19 @@ describe('HookExecutor', () => {
       ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
     });
 
-    test('also covers wud prefixed hook labels', async () => {
-      const { executor, context } = createProvenanceHarness({ 'wud.hook.pre': 'echo pre' });
+    test('does not check provenance for legacy wud hook labels, which are never read', async () => {
+      const inspectImageConfig = vi.fn().mockRejectedValue(new Error('image gone'));
+      const { executor, warn, context } = createProvenanceHarness(null, { inspectImageConfig });
 
       const config = await executor.resolveHookConfig(
-        createContainer({ labels: { 'wud.hook.pre': 'echo pre' } }),
+        createContainer({ labels: { 'wud.hook.pre': 'echo pre', 'wud.hook.post': 'echo post' } }),
         context,
       );
 
       expect(config.hookPre).toBeUndefined();
+      expect(config.hookPost).toBeUndefined();
+      expect(inspectImageConfig).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
     });
 
     test('tolerates a logger without warn', async () => {
