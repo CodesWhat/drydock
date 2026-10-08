@@ -25,6 +25,7 @@
     "fileUnavailable": "Aucun fichier de configuration disponible. Montez-en un avant de modifier.",
     "watcherUnavailable": "Ce surveillant précis est absent de l’instantané de l’éditeur.",
     "accessDenied": "Votre session n’est pas autorisée à utiliser cet éditeur.",
+    "recoveryAssurance": "Vous vous êtes connecté avec un code de récupération, vous ne pouvez donc pas modifier la configuration. Connectez-vous avec un code de votre application d'authentification.",
     "apiUnavailable": "Ce serveur ne fournit pas l’API de l’éditeur.",
     "rateLimited": "Trop de requêtes. Attendez une minute avant de recharger.",
     "loadFailed": "Chargement impossible. Aucune modification envoyée.",

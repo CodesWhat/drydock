@@ -44,7 +44,8 @@
       "none": "Żadne",
       "notSet": "Nie ustawiono",
       "labelValue": "Wartość etykiety: {value}",
-      "noLabel": "Brak etykiety"
+      "noLabel": "Brak etykiety",
+      "explicitNone": "Brak (nadpisanie)"
     },
     "actions": {
       "edit": "Edytuj",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Zapis zmienia wartość dla wszystkiego w zakresie pokazanym powyżej."
+      "scopeReminder": "Zapis zmienia wartość dla wszystkiego w zakresie pokazanym powyżej.",
+      "dependsOnInput": "Dodaj kontener",
+      "dependsOnHelp": "Wybierz kontener na tym samym hoście albo wpisz nazwę, która jeszcze nie działa. Nazwy nieznane Drydock są zapisywane z ostrzeżeniem.",
+      "notificationInput": "Dodaj wyzwalacz powiadomień",
+      "actionInput": "Dodaj wyzwalacz akcji",
+      "routingHelp": "Id lub nazwa wyzwalacza, opcjonalnie z progiem, np. minor.",
+      "threshold": "Próg",
+      "thresholdDefault": "Bez progu",
+      "addEntry": "Dodaj",
+      "removeEntry": "Usuń {entry}",
+      "locked": "z etykiety",
+      "noneHint": "Lista jest pusta. Zapisanie ustawi to pole na brak i zignoruje wartość z etykiety. Użyj Przywróć z etykiety, aby zamiast tego usunąć nadpisanie.",
+      "autoWarning": "Dzięki temu wymienione wyzwalacze mogą automatycznie aktualizować ten kontener, gdy działają w trybie onauto.",
+      "dependencyAction": "Akcja zależności",
+      "dependencyActionHelp": "Co Drydock robi z kontenerami, od których ten zależy, gdy jest aktualizowany.",
+      "dependencyActions": {
+        "update": "Aktualizuj",
+        "restart": "Uruchom ponownie"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Usuń znaki sterujące, znaczniki kierunku, < i >.",
         "invalid-icon": "Użyj źródła ikon i nazwy, a nie adresu URL.",
         "invalid-type": "Serwer odrzucił tę wartość.",
-        "invalid-value": "Serwer odrzucił tę wartość."
-      }
+        "invalid-value": "Serwer odrzucił tę wartość.",
+        "invalid-name": "Nieprawidłowa nazwa kontenera: {entries}.",
+        "duplicate-entry": "Wymienione więcej niż raz: {entries}.",
+        "too-many-entries": "Użyj najwyżej 32 wpisów.",
+        "depends-on-self": "Kontener nie może zależeć od samego siebie: {entries}.",
+        "invalid-reference": "Nieprawidłowe odwołanie do wyzwalacza: {entries}.",
+        "invalid-threshold": "Nieobsługiwany próg: {entries}.",
+        "unknown-trigger-reference": "Żaden zarejestrowany wyzwalacz nie pasuje do: {entries}.",
+        "wrong-trigger-category": "Zły rodzaj wyzwalacza dla tego pola: {entries}.",
+        "agent-enforced-widening": "Agent odrzuciłby to, bo rozszerza to, na co pozwalają jego etykiety: {entries}.",
+        "invalid-action": "Wybierz aktualizację lub ponowne uruchomienie."
+      },
+      "cycle": "Te zależności utworzyłyby cykl obejmujący: {containers}."
+    },
+    "agent": {
+      "note": "Ten kontener działa na agencie {agent}, który wymusza własne etykiety. Drydock może tu tylko zawęzić dostęp do akcji.",
+      "excludeHint": "Wykluczenia z etykiet zostają. Możesz tylko dodać kolejne.",
+      "narrowHint": "Możesz tylko usuwać wpisy albo użyć węższego progu niż w etykiecie.",
+      "nothingToNarrow": "Etykiety niczego tu nie dopuszczają, więc nie ma czego zawężać."
     }
   }
 }

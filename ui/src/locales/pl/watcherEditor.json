@@ -25,6 +25,7 @@
     "fileUnavailable": "Brak pliku konfiguracji. Zamontuj plik przed edycją.",
     "watcherUnavailable": "Tego konkretnego obserwatora nie ma w migawce edytora.",
     "accessDenied": "Sesja nie ma uprawnień do tego edytora.",
+    "recoveryAssurance": "Zalogowano kodem odzyskiwania, więc nie możesz zmieniać konfiguracji. Zaloguj się kodem z aplikacji uwierzytelniającej.",
     "apiUnavailable": "Ten serwer nie udostępnia API edytora.",
     "rateLimited": "Zbyt wiele żądań. Poczekaj minutę przed ponownym wczytaniem.",
     "loadFailed": "Nie udało się wczytać edytora. Nie wysłano zmian.",

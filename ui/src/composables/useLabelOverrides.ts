@@ -43,13 +43,6 @@ const LABEL_OVERRIDE_GROUPS: { id: LabelOverrideGroupId; fields: LabelOwnedField
   { id: 'action', fields: ['actionTriggerInclude', 'actionTriggerExclude', 'actionTriggerAuto'] },
 ];
 
-/** Dependency and routing editors are a later slice; those fields are read-only here. */
-const EDITABLE_FIELDS: ReadonlySet<LabelOwnedField> = new Set(['displayName', 'displayIcon']);
-
-function isEditableField(field: LabelOwnedField): boolean {
-  return EDITABLE_FIELDS.has(field);
-}
-
 const MAX_DISPLAY_NAME_CODE_POINTS = 128;
 
 function isForbiddenInDisplayName(codePoint: number): boolean {
@@ -116,11 +109,14 @@ function failureFromError(error: unknown): LabelOverrideFailure {
   return { kind: 'unknown', message };
 }
 
-/** The server error codes about one field, in the order the server sent them. */
-function fieldErrorCodes(failure: LabelOverrideFailure | null, field: LabelOwnedField): string[] {
+/** The server errors about one field, in the order the server sent them. */
+function fieldErrors(
+  failure: LabelOverrideFailure | null,
+  field: LabelOwnedField,
+): { code: string; entries: string[] }[] {
   return (failure?.errors ?? [])
     .filter((error) => error.field === field)
-    .map((error) => error.code);
+    .map((error) => ({ code: error.code, entries: error.entries ?? [] }));
 }
 
 function useLabelOverrides(containerId: Ref<string>) {
@@ -229,10 +225,9 @@ function useLabelOverrides(containerId: Ref<string>) {
 export {
   buildIconValue,
   failureFromError,
-  fieldErrorCodes,
+  fieldErrors,
   ICON_PROVIDERS,
   type IconProvider,
-  isEditableField,
   isValidIconSlug,
   LABEL_OVERRIDE_GROUPS,
   type LabelOverrideFailure,

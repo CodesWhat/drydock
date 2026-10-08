@@ -44,7 +44,8 @@
       "none": "Yok",
       "notSet": "Ayarlanmadı",
       "labelValue": "Etiket değeri: {value}",
-      "noLabel": "Etiket yok"
+      "noLabel": "Etiket yok",
+      "explicitNone": "Yok (geçersiz kılma)"
     },
     "actions": {
       "edit": "Düzenle",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Kaydetmek, yukarıda gösterilen kapsamdaki her şey için değeri değiştirir."
+      "scopeReminder": "Kaydetmek, yukarıda gösterilen kapsamdaki her şey için değeri değiştirir.",
+      "dependsOnInput": "Kapsayıcı ekle",
+      "dependsOnHelp": "Aynı ana makinedeki bir kapsayıcıyı seçin veya henüz çalışmayan bir ad yazın. Drydock'un tanımadığı adlar bir uyarıyla kaydedilir.",
+      "notificationInput": "Bildirim tetikleyicisi ekle",
+      "actionInput": "Eylem tetikleyicisi ekle",
+      "routingHelp": "Tetikleyici kimliği veya adı, isteğe bağlı olarak minor gibi bir eşikle.",
+      "threshold": "Eşik",
+      "thresholdDefault": "Eşik yok",
+      "addEntry": "Ekle",
+      "removeEntry": "{entry} öğesini kaldır",
+      "locked": "etiketten",
+      "noneHint": "Liste boş. Kaydedince bu alan yok olarak ayarlanır ve etiket değeri yok sayılır. Geçersiz kılmayı kaldırmak için Etikete döndür seçeneğini kullanın.",
+      "autoWarning": "Bu, listelenen tetikleyicilerin onauto modunda çalışırken bu kapsayıcıyı otomatik güncellemesine izin verir.",
+      "dependencyAction": "Bağımlılık eylemi",
+      "dependencyActionHelp": "Bu kapsayıcı güncellenirken bağlı olduğu kapsayıcılara Drydock'un ne yaptığı.",
+      "dependencyActions": {
+        "update": "Güncelle",
+        "restart": "Yeniden başlat"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Denetim karakterlerini, yön işaretlerini, < ve > karakterlerini kaldırın.",
         "invalid-icon": "Bir simge kaynağı ve ad kullanın, URL değil.",
         "invalid-type": "Sunucu bu değeri reddetti.",
-        "invalid-value": "Sunucu bu değeri reddetti."
-      }
+        "invalid-value": "Sunucu bu değeri reddetti.",
+        "invalid-name": "Geçerli bir kapsayıcı adı değil: {entries}.",
+        "duplicate-entry": "Birden fazla kez listelenmiş: {entries}.",
+        "too-many-entries": "En fazla 32 girdi kullanın.",
+        "depends-on-self": "Bir kapsayıcı kendine bağlı olamaz: {entries}.",
+        "invalid-reference": "Geçerli bir tetikleyici başvurusu değil: {entries}.",
+        "invalid-threshold": "Desteklenmeyen eşik: {entries}.",
+        "unknown-trigger-reference": "Kayıtlı hiçbir tetikleyici şununla eşleşmiyor: {entries}.",
+        "wrong-trigger-category": "Bu alan için yanlış tetikleyici türü: {entries}.",
+        "agent-enforced-widening": "Ajan bunu reddederdi, çünkü etiketlerinin izin verdiğini genişletiyor: {entries}.",
+        "invalid-action": "Güncelle veya yeniden başlat seçeneğini seçin."
+      },
+      "cycle": "Bu bağımlılıklar şu kapsayıcılar üzerinden bir döngü oluştururdu: {containers}."
+    },
+    "agent": {
+      "note": "Bu kapsayıcı kendi etiketlerini uygulayan {agent} ajanında çalışıyor. Drydock burada eylem erişimini yalnızca daraltabilir.",
+      "excludeHint": "Etiketlerdeki hariç tutmalar kalır. Yalnızca yenilerini ekleyebilirsiniz.",
+      "narrowHint": "Yalnızca girdileri kaldırabilir veya etiketten daha dar bir eşik kullanabilirsiniz.",
+      "nothingToNarrow": "Etiketler burada hiçbir şeye izin vermiyor, yani daraltılacak bir şey yok."
     }
   }
 }

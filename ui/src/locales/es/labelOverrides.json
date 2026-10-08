@@ -44,7 +44,8 @@
       "none": "Ninguno",
       "notSet": "Sin definir",
       "labelValue": "Valor de la etiqueta: {value}",
-      "noLabel": "Sin etiqueta"
+      "noLabel": "Sin etiqueta",
+      "explicitNone": "Ninguna (anulación)"
     },
     "actions": {
       "edit": "Editar",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Al guardar se cambia el valor de todo lo que está en el ámbito indicado arriba."
+      "scopeReminder": "Al guardar se cambia el valor de todo lo que está en el ámbito indicado arriba.",
+      "dependsOnInput": "Añadir un contenedor",
+      "dependsOnHelp": "Elige un contenedor del mismo host o escribe un nombre que aún no se esté ejecutando. Los nombres que Drydock no conoce se guardan con una advertencia.",
+      "notificationInput": "Añadir un activador de notificaciones",
+      "actionInput": "Añadir un activador de acciones",
+      "routingHelp": "Id o nombre del activador, seguido opcionalmente de un umbral como minor.",
+      "threshold": "Umbral",
+      "thresholdDefault": "Sin umbral",
+      "addEntry": "Añadir",
+      "removeEntry": "Quitar {entry}",
+      "locked": "de la etiqueta",
+      "noneHint": "La lista está vacía. Al guardar, este campo queda en ninguno y se ignora cualquier valor de la etiqueta. Usa Restablecer a la etiqueta para quitar la anulación.",
+      "autoWarning": "Esto permite que los activadores indicados actualicen este contenedor automáticamente cuando se ejecutan en modo onauto.",
+      "dependencyAction": "Acción de dependencia",
+      "dependencyActionHelp": "Lo que hace Drydock con los contenedores de los que depende este cuando se actualiza.",
+      "dependencyActions": {
+        "update": "Actualizar",
+        "restart": "Reiniciar"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Quita los caracteres de control, las marcas de dirección, < y >.",
         "invalid-icon": "Usa un origen de icono y un nombre, no una URL.",
         "invalid-type": "El servidor rechazó este valor.",
-        "invalid-value": "El servidor rechazó este valor."
-      }
+        "invalid-value": "El servidor rechazó este valor.",
+        "invalid-name": "No es un nombre de contenedor válido: {entries}.",
+        "duplicate-entry": "Aparece más de una vez: {entries}.",
+        "too-many-entries": "Usa 32 entradas o menos.",
+        "depends-on-self": "Un contenedor no puede depender de sí mismo: {entries}.",
+        "invalid-reference": "No es una referencia de activador válida: {entries}.",
+        "invalid-threshold": "Umbral no admitido: {entries}.",
+        "unknown-trigger-reference": "Ningún activador registrado coincide con: {entries}.",
+        "wrong-trigger-category": "Tipo de activador incorrecto para este campo: {entries}.",
+        "agent-enforced-widening": "El agente lo rechazaría, amplía lo que permiten sus etiquetas: {entries}.",
+        "invalid-action": "Elige actualizar o reiniciar."
+      },
+      "cycle": "Estas dependencias crearían un ciclo a través de: {containers}."
+    },
+    "agent": {
+      "note": "Este contenedor se ejecuta en el agente {agent}, que aplica sus propias etiquetas. Drydock solo puede restringir el acceso a las acciones aquí.",
+      "excludeHint": "Las exclusiones de las etiquetas se mantienen. Solo puedes añadir más.",
+      "narrowHint": "Solo puedes quitar entradas o usar un umbral más estricto que el de la etiqueta.",
+      "nothingToNarrow": "Las etiquetas no permiten nada aquí, así que no hay nada que restringir."
     }
   }
 }
