@@ -16,7 +16,8 @@
  * only for a session that somehow carries neither. A background sweep timer,
  * unref'd so it never keeps the process alive on its own, deletes expired
  * rows on an interval; `get()` also opportunistically deletes a row it finds
- * already expired rather than serving it.
+ * already expired rather than serving it. Either way the streams the session
+ * opened are closed with it, as they are when it is destroyed.
  */
 import session from 'express-session';
 import logger from '../log/index.js';
@@ -94,9 +95,18 @@ export class SessionStore extends session.Store {
     unref(this.sweepTimer);
   }
 
-  /** Delete every expired row now, outside the timer's own schedule. Safe to call any time, including after stop(). */
+  /**
+   * Delete every expired row now, outside the timer's own schedule. Safe to call any time, including after stop().
+   *
+   * An expired session ends the way a destroyed one does, so its streams are
+   * closed first, for the same reason `destroy()` closes them first. Both
+   * statements read the one instant, so the rows deleted are the rows whose
+   * streams were told.
+   */
   sweepExpiredNow(): number {
-    const removed = sessionStore.sweepExpiredSessions();
+    const now = Date.now();
+    closeStreamsForRevokedSessions(sessionStore.listExpiredSessionIds(now));
+    const removed = sessionStore.sweepExpiredSessions(now);
     if (removed > 0) {
       log.debug(`Swept ${removed} expired session(s)`);
     }
@@ -139,7 +149,9 @@ export class SessionStore extends session.Store {
         return;
       }
       if (row.expiresAt <= Date.now()) {
-        // Opportunistic sweep: an expired row read here is dropped rather than served.
+        // Opportunistic sweep: an expired row read here is dropped rather than
+        // served, and the streams it opened close with it.
+        closeStreamsForRevokedSessions([sid]);
         sessionStore.destroySession(sid);
         callback(null, null);
         return;
