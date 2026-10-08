@@ -1,10 +1,17 @@
-const { mockWarn } = vi.hoisted(() => ({ mockWarn: vi.fn() }));
+const { mockWarn, mockGetSession, mockCheckSessionIdentity } = vi.hoisted(() => ({
+  mockWarn: vi.fn(),
+  mockGetSession: vi.fn(),
+  mockCheckSessionIdentity: vi.fn(),
+}));
 
 vi.mock('../log/index.js', () => ({ default: { child: () => ({ warn: mockWarn }) } }));
+vi.mock('../store/session.js', () => ({ getSession: mockGetSession }));
+vi.mock('./totp-identity.js', () => ({ checkSessionIdentity: mockCheckSessionIdentity }));
 
 type SessionStreams = typeof import('./session-streams.js');
 
 let closeStreamsForRevokedSessions: SessionStreams['closeStreamsForRevokedSessions'];
+let closeStreamsOfEndedSessions: SessionStreams['closeStreamsOfEndedSessions'];
 let registerSessionStreamCloser: SessionStreams['registerSessionStreamCloser'];
 let trackSessionSocket: SessionStreams['trackSessionSocket'];
 let trackSessionStream: SessionStreams['trackSessionStream'];
@@ -16,6 +23,7 @@ beforeEach(async () => {
   mockWarn.mockClear();
   ({
     closeStreamsForRevokedSessions,
+    closeStreamsOfEndedSessions,
     registerSessionStreamCloser,
     trackSessionSocket,
     trackSessionStream,
@@ -170,5 +178,168 @@ describe('a closer that throws', () => {
     expect(failing).toHaveBeenCalledTimes(1);
     expect(silent).toHaveBeenCalledTimes(1);
     expect(mockWarn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the sessions that hold a stream are asked about again', () => {
+  const RECHECK_INTERVAL_MS = 15_000;
+
+  /** The row express-session keeps for a signed-in session. */
+  function storedSession(sid: string, user: unknown = { username: 'scott' }) {
+    return {
+      sid,
+      expiresAt: Date.now() + 60_000,
+      data: JSON.stringify({ cookie: {}, passport: { user: JSON.stringify(user) } }),
+    };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockGetSession.mockReset();
+    mockGetSession.mockImplementation((sid: string) => storedSession(sid));
+    mockCheckSessionIdentity.mockReset();
+    mockCheckSessionIdentity.mockReturnValue('valid');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('a stream whose session is still good stays open, however long it has been', () => {
+    const close = vi.fn();
+    const forget = trackSessionStream('still-good', close);
+
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 10);
+
+    expect(close).not.toHaveBeenCalled();
+    expect(mockGetSession).toHaveBeenCalledTimes(10);
+    // The validator sees the user the row holds, not something kept from connect.
+    expect(mockCheckSessionIdentity).toHaveBeenLastCalledWith({ username: 'scott' });
+    forget();
+  });
+
+  test('a session that holds nothing but a tracked stream is closed once its row is gone', () => {
+    const stream = vi.fn();
+    const webSocket = { close: vi.fn() };
+    trackSessionStream('row-gone', stream);
+    trackSessionSocket('row-gone', webSocket);
+    const kept = vi.fn();
+    const forgetKept = trackSessionStream('row-kept', kept);
+    mockGetSession.mockImplementation((sid: string) =>
+      sid === 'row-gone' ? undefined : storedSession(sid),
+    );
+
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS - 1);
+    expect(stream).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(webSocket.close).toHaveBeenCalledWith(1008, 'Session revoked');
+    expect(kept).not.toHaveBeenCalled();
+    // The identity was never the question: there is no row to hold one.
+    expect(mockCheckSessionIdentity).toHaveBeenCalledTimes(1);
+    forgetKept();
+  });
+
+  test.each([
+    ['has expired', (sid: string) => ({ ...storedSession(sid), expiresAt: Date.now() })],
+    ['holds no user', (sid: string) => ({ ...storedSession(sid), data: '{"cookie":{}}' })],
+    ['holds nothing at all', (sid: string) => ({ ...storedSession(sid), data: 'null' })],
+    ['does not parse', (sid: string) => ({ ...storedSession(sid), data: '{not json' })],
+    ['holds a user that does not deserialize', (sid: string) => storedSession(sid, { v: 9 })],
+  ])('a session whose row %s is closed without the validator being asked', (_name, row) => {
+    const close = vi.fn();
+    trackSessionStream('bad-row', close);
+    mockGetSession.mockImplementation(row);
+
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(mockCheckSessionIdentity).not.toHaveBeenCalled();
+  });
+
+  test.each([['stale'], ['unavailable']])(
+    'a session the validator reads as %s is closed, and no other',
+    (status) => {
+      const gone = vi.fn();
+      const kept = vi.fn();
+      trackSessionStream('gone', gone);
+      const forgetKept = trackSessionStream('kept', kept);
+      mockGetSession.mockImplementation((sid: string) => storedSession(sid, { username: sid }));
+      mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+        user.username === 'gone' ? status : 'valid',
+      );
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+      expect(gone).toHaveBeenCalledTimes(1);
+      expect(kept).not.toHaveBeenCalled();
+      forgetKept();
+    },
+  );
+
+  test('a row that cannot be read closes the stream, and the session id stays out of the log', () => {
+    const close = vi.fn();
+    trackSessionStream('unreadable-session', close);
+    mockGetSession.mockImplementation(() => {
+      throw new Error('database is locked');
+    });
+
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('database is locked'));
+    expect(JSON.stringify(mockWarn.mock.calls)).not.toContain('unreadable-session');
+  });
+
+  test('nothing is asked once the last stream has gone, and asking starts again with the next', () => {
+    const forgetFirst = trackSessionStream('first', vi.fn());
+    const forgetSecond = trackSessionStream('second', vi.fn());
+    forgetFirst();
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+    expect(mockGetSession.mock.calls).toEqual([['second']]);
+
+    forgetSecond();
+    mockGetSession.mockClear();
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const forgetThird = trackSessionStream('third', vi.fn());
+    vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+    expect(mockGetSession.mock.calls).toEqual([['third']]);
+    forgetThird();
+  });
+
+  test('revoking the last session that held a stream stops the asking too', () => {
+    trackSessionStream('revoked', vi.fn());
+
+    closeStreamsForRevokedSessions(['revoked']);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('a stream kept in a registry of its own is asked about by id, once per session', () => {
+    const closer = vi.fn(() => 1);
+    registerSessionStreamCloser(closer);
+    mockGetSession.mockImplementation((sid: string) =>
+      sid === 'registry-gone' ? undefined : storedSession(sid),
+    );
+
+    closeStreamsOfEndedSessions(['registry-kept', 'registry-gone', 'registry-gone']);
+
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+    expect(closer).toHaveBeenCalledTimes(1);
+    expect(closer).toHaveBeenCalledWith(new Set(['registry-gone']));
+  });
+
+  test('when every session asked about is still good, no closer is called', () => {
+    const closer = vi.fn(() => 1);
+    registerSessionStreamCloser(closer);
+
+    closeStreamsOfEndedSessions(['registry-kept']);
+
+    expect(closer).not.toHaveBeenCalled();
   });
 });

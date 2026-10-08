@@ -36,7 +36,7 @@ import { stripContainerDetailOnlySecurityFields } from './container/container-pr
 import { projectLabelOwnedForApi } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
-import { closeStreamsForRevokedSessions, registerSessionStreamCloser } from './session-streams.js';
+import { closeStreamsOfEndedSessions, registerSessionStreamCloser } from './session-streams.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -47,7 +47,6 @@ import { SSE_STALE_SWEEP_INTERVAL_MS } from './sse-constants.js';
 import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 import { bootId, SseEventBuffer } from './sse-event-buffer.js';
 import { createSelfUpdateAckProtocol } from './sse-self-update-ack-protocol.js';
-import { checkSessionIdentity } from './totp-identity.js';
 
 const router = express.Router();
 let initialized = false;
@@ -299,20 +298,15 @@ function apiKeyClientFields(
 }
 
 /**
- * The session a stream authenticated with: its id, so revoking the session can
- * close it, and the user it restored, so the heartbeat can ask again whether
- * that session is still good.
+ * The session a stream authenticated with, so revoking the session can close
+ * it and the heartbeat can ask again whether that session is still good.
  */
-function sessionClientFields(req: Request): Pick<ActiveSseClient, 'sessionId' | 'sessionUser'> {
+function sessionClientFields(req: Request): Pick<ActiveSseClient, 'sessionId'> {
   const sessionId = (req as Request & { sessionID?: unknown }).sessionID;
-  const principal = req.principal;
-  if (principal?.kind !== 'session' || typeof sessionId !== 'string' || sessionId === '') {
+  if (req.principal?.kind !== 'session' || typeof sessionId !== 'string' || sessionId === '') {
     return {};
   }
-  return {
-    sessionId,
-    sessionUser: { username: principal.username, identity: principal.identity },
-  };
+  return { sessionId };
 }
 
 function isClientApiKeyExpired(response: FlushableResponse, nowMs: number): boolean {
@@ -471,26 +465,25 @@ function disconnectClientsWithInvalidApiKeys(now: Date): void {
 }
 
 /**
- * Close the streams of any session the validator no longer accepts.
+ * Close the streams of any session that has ended since it opened one here.
  *
  * Destroying a session closes its streams at once, through the session store.
  * This is the floor under that, the same one keys get: a session can stop
  * being valid with its row still there (a factor change whose cleanup failed
- * part-way, a revocation the delete never followed), and a stream never makes
- * the next read that would notice. It asks the check HTTP restoration and the
- * WebSocket upgrade ask, and anything short of valid closes the stream, a
- * store that cannot answer included: that request would be refused too, and
- * the client reconnects once it can be answered. The verdict goes through the
- * shared hook, so the session's log sockets close with its event streams.
+ * part-way, a revocation the delete never followed), or lose its row with
+ * nothing saying so, and a stream never makes the next read that would notice.
+ * The question is the shared one every session-backed stream is asked, and the
+ * verdict goes through the shared hook, so the session's log sockets and stats
+ * streams close with its event streams.
  */
 function closeStreamsOfInvalidSessions(): void {
-  const invalidSessionIds = new Set<string>();
-  for (const { sessionId, sessionUser } of sseClientRegistry.listClients()) {
-    if (sessionId !== undefined && checkSessionIdentity(sessionUser) !== 'valid') {
-      invalidSessionIds.add(sessionId);
+  const sessionIds: string[] = [];
+  for (const { sessionId } of sseClientRegistry.listClients()) {
+    if (sessionId !== undefined) {
+      sessionIds.push(sessionId);
     }
   }
-  closeStreamsForRevokedSessions([...invalidSessionIds]);
+  closeStreamsOfEndedSessions(sessionIds);
 }
 
 function startSharedHeartbeatIntervalIfNeeded(): void {

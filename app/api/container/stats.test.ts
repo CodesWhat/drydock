@@ -1,4 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+// A stream's session is asked about again on a timer. Every session here has
+// a live row unless a test takes it away; an OIDC user needs no factor store.
+const { mockGetSession } = vi.hoisted(() => ({
+  mockGetSession: vi.fn((sid: string) => ({
+    sid,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    data: JSON.stringify({
+      passport: { user: JSON.stringify({ v: 2, kind: 'oidc', username: 'alice' }) },
+    }),
+  })),
+}));
+vi.mock('../../store/session.js', () => ({ getSession: mockGetSession }));
+
 import logger from '../../log/index.js';
 import { validateOpenApiJsonResponse } from '../openapi-contract.js';
 import { closeStreamsForRevokedSessions } from '../session-streams.js';
@@ -359,6 +373,24 @@ describe('api/container/stats', () => {
       expect(res.write).toHaveBeenCalledTimes(writesAfterRevocation);
       // Closed once: the session ending a second time has nothing left to close.
       expect(closeStreamsForRevokedSessions(['stats-revoked'])).toBe(0);
+    });
+
+    test('is closed by the periodic re-check once its session row is gone, with no event stream open', async () => {
+      const harness = createHarness();
+      const req = sessionRequest('stats-row-gone');
+      const res = createResponse();
+
+      harness.handlers.streamContainerStats(req as any, res as any);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(mockGetSession).toHaveBeenCalledWith('stats-row-gone');
+      expect(res.destroy).not.toHaveBeenCalled();
+
+      mockGetSession.mockReturnValueOnce(undefined as never);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(res.destroy).toHaveBeenCalledOnce();
+      expect(harness.unsubscribe).toHaveBeenCalledOnce();
+      expect(closeStreamsForRevokedSessions(['stats-row-gone'])).toBe(0);
     });
 
     test('is forgotten once the client has gone, so a later revocation finds nothing', () => {
@@ -768,6 +800,24 @@ describe('api/container/stats — summary handlers', () => {
       await vi.advanceTimersByTimeAsync(15_000);
       expect(res.write).toHaveBeenCalledTimes(writesAfterRevocation);
       expect(closeStreamsForRevokedSessions(['summary-revoked'])).toBe(0);
+    });
+
+    test('is closed by the periodic re-check once its session row is gone, with no event stream open', async () => {
+      const harness = createSummaryHarness();
+      const req = sessionRequest('summary-row-gone');
+      const res = createResponse();
+
+      harness.handlers.streamStatsSummary(req as any, res as any);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(mockGetSession).toHaveBeenCalledWith('summary-row-gone');
+      expect(res.destroy).not.toHaveBeenCalled();
+
+      mockGetSession.mockReturnValueOnce(undefined as never);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(res.destroy).toHaveBeenCalledOnce();
+      expect(harness.unsubscribe).toHaveBeenCalledOnce();
+      expect(closeStreamsForRevokedSessions(['summary-row-gone'])).toBe(0);
     });
 
     test('is forgotten once the client has gone, so a later revocation finds nothing', () => {

@@ -1,5 +1,4 @@
 import type { Response } from 'express';
-import type { SessionUser } from './auth-types.js';
 
 export interface FlushableResponse extends Response {
   flush?: () => void;
@@ -30,15 +29,10 @@ export interface ActiveSseClient {
   /**
    * The login session this stream authenticated with, when it authenticated
    * with one. A stream authenticates once and stays open, so this is what lets
-   * a revoked session be chased down its live connections.
+   * a revoked session be chased down its live connections, and what the
+   * heartbeat asks about again.
    */
   sessionId?: string;
-  /**
-   * What that session restored at connect, set together with `sessionId`. The
-   * heartbeat hands it back to the session validator, which is how a session
-   * that stopped being valid without its row being destroyed is noticed.
-   */
-  sessionUser?: SessionUser;
 }
 
 export class ActiveSseClientRegistry {

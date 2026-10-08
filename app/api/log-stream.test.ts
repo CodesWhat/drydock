@@ -6,6 +6,20 @@ vi.mock('../store/totp.js', () => ({
   hasEnrolledUsername: vi.fn(() => false),
 }));
 
+// A socket's session is asked about again on a timer. Every session here has a
+// live row unless a test takes it away.
+const { mockGetSession } = vi.hoisted(() => ({
+  mockGetSession: vi.fn((sid: string) => ({
+    sid,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    data: JSON.stringify({ passport: { user: '{"username":"alice"}' } }),
+  })),
+}));
+vi.mock('../store/session.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../store/session.js')>()),
+  getSession: mockGetSession,
+}));
+
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import * as configuration from '../configuration/index.js';
@@ -16,7 +30,7 @@ import {
   parseSystemLogStreamQuery,
 } from './log-stream.js';
 import * as rateLimitKey from './rate-limit-key.js';
-import { closeStreamsForRevokedSessions } from './session-streams.js';
+import { closeStreamsForRevokedSessions, closeStreamsOfEndedSessions } from './session-streams.js';
 import { createIdentityAwareUpgradeRateLimitKeyResolver } from './ws-upgrade-utils.js';
 
 function createUpgradeSocket() {
@@ -145,6 +159,20 @@ describe('api/log-stream', () => {
       expect(ws.close).not.toHaveBeenCalled();
 
       expect(closeStreamsForRevokedSessions(['session-1'])).toBe(1);
+      expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
+    });
+
+    // The timer that asks about every tracked session is covered where it
+    // lives; this is the verdict it reaches reaching a log socket.
+    test('is closed by the session re-check once its session row is gone', async () => {
+      const { ws } = await connect(authenticatingSessionMiddleware);
+
+      closeStreamsOfEndedSessions(['session-1']);
+      expect(ws.close).not.toHaveBeenCalled();
+
+      mockGetSession.mockReturnValueOnce(undefined as never);
+      closeStreamsOfEndedSessions(['session-1']);
+
       expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
     });
 
