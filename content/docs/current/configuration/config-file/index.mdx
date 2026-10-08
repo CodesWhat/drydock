@@ -111,7 +111,7 @@ The same permission check `_FILE`-referenced secrets already get, plus one addit
 
 ## What the file does not cover
 
-41 `DD_*` variables are read directly from `process.env` by code that never goes through the merged configuration map the file populates, so the file layer can never reach them — `UNSUPPORTED_FILE_KEYS` in `app/configuration/file/flatten.ts` names them. Setting one of these in `drydock.yml` is **not** a silent no-op: the loader rejects the file at load time, naming the YAML path and the variable, and startup fails before anything else runs:
+42 `DD_*` variables are read directly from `process.env` by code that never goes through the merged configuration map the file populates, so the file layer can never reach them — `UNSUPPORTED_FILE_KEYS` in `app/configuration/file/flatten.ts` names them. Setting one of these in `drydock.yml` is **not** a silent no-op: the loader rejects the file at load time, naming the YAML path and the variable, and startup fails before anything else runs:
 
 ```text
 Config file "/config/drydock.yml": agent.secret: DD_AGENT_SECRET is only read from the environment in this release, not from a config file; set it as an environment variable instead
