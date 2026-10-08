@@ -71,6 +71,8 @@ const candidates = useLabelOverrideCandidates();
 const editing = ref<LabelOwnedField | null>(null);
 const nameDraft = ref('');
 const listDraft = ref<string[]>([]);
+/** The list the editor opened with, so an unchanged draft can't be saved. */
+const listOpened = ref<string[]>([]);
 const actionDraft = ref<(typeof DEPENDS_ON_ACTIONS)[number]>('update');
 const iconProvider = ref<IconProvider>('sh');
 const iconSlug = ref('');
@@ -202,6 +204,7 @@ function startEdit(field: LabelOwnedField) {
       field === 'actionTriggerExclude' && isRestricted(field)
         ? restrictedExcludeDraft(field, current)
         : current;
+    listOpened.value = [...listDraft.value];
     void candidates.load();
   }
   editing.value = field;
@@ -256,6 +259,13 @@ function problemText(problem: DraftProblem): string {
 }
 const listClientErrors = computed(() => listProblems.value.map(problemText));
 
+/** The server keeps list order, so the draft is compared in order. */
+const listPristine = computed(
+  () =>
+    listDraft.value.length === listOpened.value.length &&
+    listDraft.value.every((entry, index) => entry.trim() === listOpened.value[index]),
+);
+
 const canSave = computed(() => {
   if (saving.value || needsReload.value || readOnly.value) return false;
   switch (editingKind.value) {
@@ -266,7 +276,7 @@ const canSave = computed(() => {
     case 'action':
       return true;
     default:
-      return listProblems.value.length === 0;
+      return listProblems.value.length === 0 && !listPristine.value;
   }
 });
 

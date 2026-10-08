@@ -162,6 +162,61 @@ beforeEach(() => {
   useConfirmDialog().dismiss();
 });
 
+describe('unchanged list drafts', () => {
+  const saveDisabled = (wrapper: Awaited<ReturnType<typeof mountPanel>>) =>
+    wrapper.find(tid('save')).attributes('disabled') !== undefined;
+  const removeButton = (name: string) => `[data-testid="label-overrides-list-remove-${name}"]`;
+
+  it('keeps save off on a field with nothing set until an entry is added', async () => {
+    const wrapper = await mountPanel(snapshot());
+    await openEditor(wrapper, 'dependsOn');
+    expect(saveDisabled(wrapper)).toBe(true);
+    await addEntry(wrapper, 'db');
+    expect(saveDisabled(wrapper)).toBe(false);
+    await wrapper.find(removeButton('db')).trigger('click');
+    expect(saveDisabled(wrapper)).toBe(true);
+    expect(patchLabelOverrides).not.toHaveBeenCalled();
+  });
+
+  it('applies to every list editor', async () => {
+    const wrapper = await mountPanel(snapshot());
+    for (const field of [
+      'notificationTriggerInclude',
+      'notificationTriggerExclude',
+      'actionTriggerInclude',
+      'actionTriggerExclude',
+      'actionTriggerAuto',
+    ]) {
+      await openEditor(wrapper, field);
+      expect(saveDisabled(wrapper)).toBe(true);
+    }
+  });
+
+  it('enables save when every label entry is removed', async () => {
+    const wrapper = await mountPanel(snapshot({ dependsOn: declaredList(['db']) }));
+    await openEditor(wrapper, 'dependsOn');
+    expect(saveDisabled(wrapper)).toBe(true);
+    await wrapper.find(removeButton('db')).trigger('click');
+    expect(saveDisabled(wrapper)).toBe(false);
+  });
+
+  it('enables save when an entry is swapped for another of the same count', async () => {
+    const wrapper = await mountPanel(snapshot({ dependsOn: overridden(['db']) }));
+    await openEditor(wrapper, 'dependsOn');
+    await wrapper.find(removeButton('db')).trigger('click');
+    await addEntry(wrapper, 'cache');
+    expect(saveDisabled(wrapper)).toBe(false);
+  });
+
+  it('keeps save off on an existing explicit none opened unchanged', async () => {
+    const wrapper = await mountPanel(
+      snapshot({ dependsOn: overridden([], { value: ['cache'], source: 'label' }, 'cache') }),
+    );
+    await openEditor(wrapper, 'dependsOn');
+    expect(saveDisabled(wrapper)).toBe(true);
+  });
+});
+
 describe('dependency editor', () => {
   it('offers containers on the same watcher, not the scope itself, and saves the list', async () => {
     const current = snapshot();
