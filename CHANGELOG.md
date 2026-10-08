@@ -131,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New [two-factor key ring and recovery](https://getdrydock.com/docs/configuration/authentications/two-factor) page: the `DD_AUTH_TOTP_KEYRING__FILE` and `DD_AUTH_TOTP_ACTIVE_KEY_ID` settings (undocumented until now) and the key ring file format, the key rotation procedure, recovering an account that lost its device or its recovery codes, what a lost key ring means, renamed and removed accounts, and rehearsing all of it on a copy of the store.
 - The current translation guide distinguishes Crowdin UI contributions, in-repository README translations and maintainer feature keys that enter synchronization after merge.
+- All seven README languages are back on the star-history.com embed, with dark and light variants, now that api.star-history.com serves charts again. The committed `docs/assets/star-history*.svg` charts stop being referenced.
 
 - **The agents page's paired Gitea registry example had the controller talking HTTPS to an agent serving plain HTTP.** The controller block set `DD_AGENT_REMOTE1_CAFILE=/certs/agent-ca.pem`, but the agent block above it had no `DD_SERVER_TLS_*` variables or certificate mounts, so the example copied as written could never connect. The agent block now mounts `agent.pem`/`agent-key.pem` and sets `DD_SERVER_TLS_ENABLED`, `DD_SERVER_TLS_CERT`, and `DD_SERVER_TLS_KEY`, with a comment noting the certificate must be signed by the `agent-ca.pem` the controller mounts and be valid for the host the controller dials.
 

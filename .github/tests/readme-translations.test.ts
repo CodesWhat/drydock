@@ -87,8 +87,9 @@ const requiredFragments = [
   '[`GOVERNANCE.md`](GOVERNANCE.md)',
   '[`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)',
   '[`SECURITY.md`](SECURITY.md)',
-  'https://github.com/CodesWhat/drydock/stargazers',
-  'docs/assets/star-history.svg',
+  'https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left',
+  'https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left',
+  'https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left',
 ];
 
 describe.each(translatedReadmes)('%s', (readme) => {
@@ -106,11 +107,9 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).toContain('`503`');
   });
 
-  test('does not retain superseded release or star-history markup', () => {
+  test('does not retain superseded release markup', () => {
     expect(content).not.toContain('img.shields.io/badge/version-');
     expect(content).not.toContain('GHCR-150K%2B_pulls');
-    expect(content).not.toContain('https://api.star-history.com/svg');
-    expect(content).not.toContain('https://star-history.com/#');
   });
 
   test('keeps public README labels in the target language', () => {
@@ -151,20 +150,25 @@ describe.each(allReadmes)('%s release notes', (readme) => {
 describe.each(allReadmes)('%s star history', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
-  test('uses only the committed star-history chart', () => {
-    // The chart must be the committed asset wired into the actual <img>, not
-    // merely mentioned somewhere in the file.
-    expect(content).toMatch(/<img[^>]*src="docs\/assets\/star-history\.svg"/);
-    // Match the retired hosts, not particular URL shapes. `star-history.com/#`
-    // only caught the embed form, so a bare https://star-history.com/CodesWhat/
-    // drydock link would have walked straight back in. The host assertion also
-    // subsumes api.star-history.com. warpchart.dev is retired too: Warpchart
-    // was the D12 replacement candidate before that decision was reversed in
-    // favor of a committed SVG refreshed by a scheduled workflow. The retired
-    // self-hosted route is forbidden in any attribute (src/href), absolute or
-    // same-origin, but stays mentionable in prose: the v1.6.0 release-history
-    // bullets describe what shipped and frozen history is never rewritten.
-    expect(content).not.toContain('star-history.com');
+  test('uses the star-history.com embed and no retired chart source', () => {
+    // The third-party embed is back now that api.star-history.com serves
+    // charts again. Both theme variants must be wired into the actual <picture>
+    // sources and fallback <img>, not merely mentioned somewhere in the file.
+    expect(content).toContain(
+      'href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left"',
+    );
+    expect(content).toMatch(
+      /<source media="\(prefers-color-scheme: dark\)" srcset="https:\/\/api\.star-history\.com\/svg\?repos=CodesWhat\/drydock&type=timeline&theme=dark&legend=top-left"/,
+    );
+    expect(content).toMatch(
+      /<img[^>]*src="https:\/\/api\.star-history\.com\/svg\?repos=CodesWhat\/drydock&type=timeline&legend=top-left"/,
+    );
+    // The committed-SVG chart, the self-hosted route and Warpchart are all
+    // retired. The self-hosted route is forbidden in any attribute (src/href),
+    // absolute or same-origin, but stays mentionable in prose: the v1.6.0
+    // release-history bullets describe what shipped and frozen history is
+    // never rewritten.
+    expect(content).not.toContain('docs/assets/star-history');
     expect(content).not.toMatch(/=["'][^"']*\/api\/star-history/);
     expect(content).not.toContain('getdrydock.com/api/star-history');
     expect(content).not.toContain('warpchart.dev');
@@ -179,10 +183,12 @@ describe('apps/web source', () => {
     .filter((path) => /\.(ts|tsx|mjs|js|jsx|json|css|mdx?)$/.test(path));
 
   test('carries no retired star-history surface', () => {
+    // The README embed is the only star-history.com consumer. The website must
+    // not grow its own chart route or a Warpchart dependency.
     expect(webSourceFiles.length).toBeGreaterThan(0);
     for (const path of webSourceFiles) {
       const source = readFileSync(path, 'utf8');
-      for (const retired of ['star-history.com', '/api/star-history', 'warpchart.dev']) {
+      for (const retired of ['/api/star-history', 'warpchart.dev']) {
         expect(source, `${path} references retired surface ${retired}`).not.toContain(retired);
       }
     }

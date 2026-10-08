@@ -435,8 +435,12 @@ Thèmes généraux uniquement ; consultez [CHANGELOG.md](CHANGELOG.md) pour les
 <h2 align="center" id="star-history">Historique des étoiles</h2>
 
 <div align="center">
-  <a href="https://github.com/CodesWhat/drydock/stargazers">
-    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
+  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+    </picture>
   </a>
 </div>
 
