@@ -135,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Auto badge in the Update Status panel never appeared.** The UI dropped the server's action policy while normalising the container payload, so the badge had nothing to read. The policy now comes through the container mapper for the list, the detail views and live updates.
 - The Playwright suite no longer fails now and then with `route.fetch: socket hang up` in the stabilization countdown test. The server closes an idle keep-alive connection six seconds after its last response, Playwright's request client never expires its pooled ones, and a fetch that reused one right at that moment died. Intercepted fetches now retry a connection reset, the way a browser already does.
 - `POST /auth/login` no longer accepts a session cookie as the credential. It used to mint a fresh session from a valid cookie, so a copied cookie could outlive the owner's logout and an enrolled account's cookie skipped the second factor. Only a verified password creates a session.
 - A recovery code is no longer spent when the login it was for fails with a server error (a session that can't be created, or a revocation that can't be recorded). The code goes back, and the `totp-recovery-used` audit entry is written only once a session exists.

@@ -17,6 +17,7 @@
 import { getEffectiveDisplayIcon } from '../services/image-icon';
 import type { ApiContainerUpdateOperation } from '../types/api';
 import type {
+  ActionPolicy,
   Container,
   ContainerReleaseNotes,
   ContainerSecurityDelta,
@@ -140,6 +141,7 @@ interface ApiContainerUpdateEligibility {
   blockers?: unknown;
   evaluatedAt?: unknown;
   updateMode?: unknown;
+  actionPolicy?: unknown;
 }
 
 type SecurityScanType = 'scan' | 'updateScan';
@@ -889,6 +891,19 @@ function deriveEligibilityUpdateMode(value: unknown): UpdateEligibilityUpdateMod
   return result;
 }
 
+const ACTION_POLICY_STATES: ReadonlySet<unknown> = new Set(['blocked', 'manual', 'auto']);
+const ACTION_POLICY_REASONS: ReadonlySet<unknown> = new Set(['excluded', 'not-included']);
+
+function deriveActionPolicy(value: unknown): ActionPolicy | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as { state?: unknown; triggerId?: unknown; reason?: unknown };
+  if (!ACTION_POLICY_STATES.has(raw.state)) return undefined;
+  const result: ActionPolicy = { state: raw.state as ActionPolicy['state'] };
+  if (typeof raw.triggerId === 'string') result.triggerId = raw.triggerId;
+  if (ACTION_POLICY_REASONS.has(raw.reason)) result.reason = raw.reason as ActionPolicy['reason'];
+  return result;
+}
+
 function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibility | undefined {
   const eligibility = apiContainer.updateEligibility;
   if (!eligibility || typeof eligibility !== 'object') return undefined;
@@ -900,10 +915,12 @@ function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibi
     .map(deriveUpdateBlocker)
     .filter((b): b is UpdateBlocker => b !== null);
   const updateMode = deriveEligibilityUpdateMode(eligibility.updateMode);
+  const actionPolicy = deriveActionPolicy(eligibility.actionPolicy);
   return {
     eligible: eligibility.eligible,
     blockers,
     evaluatedAt,
+    ...(actionPolicy ? { actionPolicy } : {}),
     ...(updateMode ? { updateMode } : {}),
   };
 }
