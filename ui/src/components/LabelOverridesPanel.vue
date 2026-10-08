@@ -71,7 +71,7 @@ const candidates = useLabelOverrideCandidates();
 const editing = ref<LabelOwnedField | null>(null);
 const nameDraft = ref('');
 const listDraft = ref<string[]>([]);
-/** The list the editor opened with, so an unchanged draft can't be saved. */
+/** The list the server holds for the field, so a draft equal to it can't be saved. */
 const listOpened = ref<string[]>([]);
 const actionDraft = ref<(typeof DEPENDS_ON_ACTIONS)[number]>('update');
 const iconProvider = ref<IconProvider>('sh');
@@ -204,7 +204,7 @@ function startEdit(field: LabelOwnedField) {
       field === 'actionTriggerExclude' && isRestricted(field)
         ? restrictedExcludeDraft(field, current)
         : current;
-    listOpened.value = [...listDraft.value];
+    listOpened.value = [...current];
     void candidates.load();
   }
   editing.value = field;

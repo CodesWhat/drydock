@@ -514,6 +514,7 @@ describe('restrict-only on an agent container', () => {
     );
     await openEditor(wrapper, 'actionTriggerExclude');
     expect(entries(wrapper)).toEqual(['docker.local', 'dockercompose.stack']);
+    expect(wrapper.find(tid('save')).attributes('disabled')).toBeUndefined();
   });
 
   it('only offers the declared references for include and narrower thresholds', async () => {
