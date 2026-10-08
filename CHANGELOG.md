@@ -207,6 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API-key list, create and revoke failures use the selected language when the server provides no useful error message. Blank server errors now show the translated fallback and HTTP status; nonblank server diagnostics are preserved.
 - Update the Docker image's timezone package pin to `tzdata=2026d-r0`, available in Alpine 3.24 for amd64 and arm64, after `2026c-r0` left the package index.
 - Paused application logs now offer Retry after a failed fetch, without leaving the page or restarting the live stream.
+- The application log view reopens its live stream after the session behind it is replaced. Signing in again or changing two-factor in another tab closes the log socket, and the view stayed disconnected until a filter was changed or the page reloaded. It now reopens with the same filters once the app's event stream is connected again, one attempt each time, so it never retries against a session the server just refused.
 
 - Logs now use the selected language for HTTP load failures without a usable server diagnostic, while preserving server and network error details.
 - Notification-rule and trigger list failures now use the selected language and retain the HTTP status, including responses without a reason phrase. Network diagnostics and request behavior are unchanged.
