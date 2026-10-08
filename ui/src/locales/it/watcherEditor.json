@@ -25,6 +25,7 @@
     "fileUnavailable": "Nessun file di configurazione disponibile. Montane uno prima di modificare.",
     "watcherUnavailable": "Questo watcher esatto non è presente nell’istantanea dell’editor.",
     "accessDenied": "La sessione non è autorizzata a usare questo editor.",
+    "recoveryAssurance": "Hai effettuato l'accesso con un codice di recupero, quindi non puoi modificare la configurazione. Accedi con un codice della tua app di autenticazione.",
     "apiUnavailable": "Il server non fornisce l’API dell’editor.",
     "rateLimited": "Troppe richieste. Attendi un minuto prima di ricaricare.",
     "loadFailed": "Impossibile caricare l’editor. Nessuna modifica inviata.",

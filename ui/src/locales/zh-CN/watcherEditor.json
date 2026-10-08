@@ -25,6 +25,7 @@
     "fileUnavailable": "没有可用的配置文件。编辑前请挂载文件。",
     "watcherUnavailable": "编辑器快照中没有这个确切的监视器。",
     "accessDenied": "当前会话无权使用此编辑器。",
+    "recoveryAssurance": "你使用恢复码登录，因此无法更改配置。请使用验证器应用中的验证码登录。",
     "apiUnavailable": "此服务器未提供监视器编辑器 API。",
     "rateLimited": "编辑器请求过多。请等待一分钟后再加载。",
     "loadFailed": "无法加载编辑器。未发送任何更改。",
