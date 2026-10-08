@@ -290,4 +290,34 @@ describe('notification editor state', () => {
     expect(editor.hasProblems.value).toBe(true);
     expect(editor.result.value).toEqual(outcome);
   });
+
+  it.each([
+    ['load', 'recovery-assurance', 'recoveryAssurance'],
+    ['load', undefined, 'accessDenied'],
+    ['load', 'other-reason', 'accessDenied'],
+    ['save', 'recovery-assurance', 'recoveryAssurance'],
+    ['save', undefined, 'accessDenied'],
+  ] as const)('maps a 403 on %s with reason %s to %s', async (phase, reason, key) => {
+    const { editor } = setup();
+    const error = new NotificationEditorHttpError(403, reason);
+    if (phase === 'load') {
+      vi.mocked(getNotificationEditor).mockRejectedValueOnce(error);
+      await editor.open();
+    } else {
+      await editor.open();
+      editor.setValue('once', false);
+      vi.mocked(saveNotificationEdits).mockRejectedValueOnce(error);
+      await editor.save();
+    }
+    expect(editor.errorKey.value).toBe(key);
+  });
+
+  it('keeps the generic message for a 401 even when a reason is attached', async () => {
+    const { editor } = setup();
+    vi.mocked(getNotificationEditor).mockRejectedValueOnce(
+      new NotificationEditorHttpError(401, 'recovery-assurance'),
+    );
+    await editor.open();
+    expect(editor.errorKey.value).toBe('accessDenied');
+  });
 });

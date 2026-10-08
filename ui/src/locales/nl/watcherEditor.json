@@ -25,6 +25,7 @@
     "fileUnavailable": "Geen configuratiebestand beschikbaar. Koppel een bestand voordat je gaat bewerken.",
     "watcherUnavailable": "Deze exacte watcher ontbreekt in de editorsnapshot.",
     "accessDenied": "Je sessie heeft geen toegang tot deze editor.",
+    "recoveryAssurance": "Je bent aangemeld met een herstelcode, dus je kunt de configuratie niet wijzigen. Meld je aan met een code uit je authenticator-app.",
     "apiUnavailable": "Deze server biedt de editor-API niet aan.",
     "rateLimited": "Te veel aanvragen. Wacht een minuut voor je opnieuw laadt.",
     "loadFailed": "Editor laden mislukt. Er zijn geen wijzigingen verstuurd.",

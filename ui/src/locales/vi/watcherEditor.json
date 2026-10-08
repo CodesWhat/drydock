@@ -25,6 +25,7 @@
     "fileUnavailable": "Không có tệp cấu hình. Hãy gắn tệp trước khi chỉnh sửa.",
     "watcherUnavailable": "Không có đúng trình theo dõi này trong ảnh chụp cấu hình.",
     "accessDenied": "Phiên của bạn không có quyền dùng trình chỉnh sửa này.",
+    "recoveryAssurance": "Bạn đã đăng nhập bằng mã khôi phục nên không thể thay đổi cấu hình. Hãy đăng nhập bằng mã từ ứng dụng xác thực.",
     "apiUnavailable": "Máy chủ này không cung cấp API chỉnh sửa trình theo dõi.",
     "rateLimited": "Quá nhiều yêu cầu. Chờ một phút rồi tải lại.",
     "loadFailed": "Không tải được trình chỉnh sửa. Chưa gửi thay đổi nào.",

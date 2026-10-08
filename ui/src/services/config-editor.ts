@@ -67,8 +67,26 @@ export interface WatcherEditOutcome {
   };
 }
 
+/** The server's `details.reason` on a refused request, e.g. `recovery-assurance`. */
+export function failureReason(payload: unknown): string | undefined {
+  const details = (payload as { details?: { reason?: unknown } | null } | null)?.details;
+  const reason = details?.reason;
+  return typeof reason === 'string' ? reason : undefined;
+}
+
+export async function readFailureReason(response: Response): Promise<string | undefined> {
+  try {
+    return failureReason(await response.json());
+  } catch {
+    return undefined;
+  }
+}
+
 export class WatcherEditorHttpError extends Error {
-  constructor(public status: number) {
+  constructor(
+    public status: number,
+    public reason?: string,
+  ) {
     super(`Watcher editor HTTP ${status}`);
   }
 }
@@ -80,7 +98,8 @@ export async function getWatcherEditor(): Promise<WatcherEditSnapshot> {
     credentials: 'include',
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new WatcherEditorHttpError(response.status);
+  if (!response.ok)
+    throw new WatcherEditorHttpError(response.status, await readFailureReason(response));
   return readJsonResponse<WatcherEditSnapshot>(response, 'Watcher editor');
 }
 
@@ -107,6 +126,6 @@ export async function saveWatcherEdits(request: WatcherEditRequest): Promise<Wat
     (body.reload !== undefined &&
       (typeof body.reload?.applied !== 'boolean' || !Array.isArray(body.reload.errors)))
   )
-    throw new WatcherEditorHttpError(response.status);
+    throw new WatcherEditorHttpError(response.status, failureReason(body));
   return { ...body, status: response.status } as WatcherEditOutcome;
 }

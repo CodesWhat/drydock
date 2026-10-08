@@ -1,5 +1,11 @@
 import { readJsonResponse } from '../utils/api';
-import type { WatcherEditOutcome, WatcherEditRequest, WatcherEditRow } from './config-editor';
+import {
+  failureReason,
+  readFailureReason,
+  type WatcherEditOutcome,
+  type WatcherEditRequest,
+  type WatcherEditRow,
+} from './config-editor';
 
 export const notificationEditFields = [
   'threshold',
@@ -52,7 +58,10 @@ export function isNotificationProvider(type: string) {
   return !['docker', 'dockercompose', 'portainer', 'command'].includes(type.toLowerCase());
 }
 export class NotificationEditorHttpError extends Error {
-  constructor(public status: number) {
+  constructor(
+    public status: number,
+    public reason?: string,
+  ) {
     super(`Notification editor HTTP ${status}`);
   }
 }
@@ -62,7 +71,8 @@ export async function getNotificationEditor(): Promise<NotificationEditSnapshot>
     credentials: 'include',
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new NotificationEditorHttpError(response.status);
+  if (!response.ok)
+    throw new NotificationEditorHttpError(response.status, await readFailureReason(response));
   return readJsonResponse<NotificationEditSnapshot>(response, 'Notification editor');
 }
 export async function saveNotificationEdits(
@@ -91,6 +101,6 @@ export async function saveNotificationEdits(
     (body.reload !== undefined &&
       (typeof body.reload?.applied !== 'boolean' || !Array.isArray(body.reload?.errors)))
   )
-    throw new NotificationEditorHttpError(response.status);
+    throw new NotificationEditorHttpError(response.status, failureReason(body));
   return { ...body, status: response.status } as WatcherEditOutcome;
 }
