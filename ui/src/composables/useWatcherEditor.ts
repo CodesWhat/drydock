@@ -50,6 +50,7 @@ export function useWatcherEditor(identity: () => WatcherIdentity) {
 
   function failureKey(error: unknown, fallback: string) {
     if (error instanceof WatcherEditorHttpError) {
+      if (error.status === 403 && error.reason === 'recovery-assurance') return 'recoveryAssurance';
       if (error.status === 401 || error.status === 403) return 'accessDenied';
       if (error.status === 404 || error.status === 501) return 'apiUnavailable';
       if (error.status === 429) return 'rateLimited';

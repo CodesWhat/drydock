@@ -288,4 +288,34 @@ describe('action editor drafts', () => {
         (outcome.reload?.reconcile?.errors ?? 0) > 0,
     );
   });
+
+  it.each([
+    ['load', 'recovery-assurance', 'recoveryAssurance'],
+    ['load', undefined, 'accessDenied'],
+    ['load', 'other-reason', 'accessDenied'],
+    ['save', 'recovery-assurance', 'recoveryAssurance'],
+    ['save', undefined, 'accessDenied'],
+  ] as const)('maps a 403 on %s with reason %s to %s', async (phase, reason, key) => {
+    const { editor } = setup();
+    const error = new ActionEditorHttpError(403, reason);
+    if (phase === 'load') {
+      vi.mocked(getActionEditor).mockRejectedValueOnce(error);
+      await editor.open();
+    } else {
+      await editor.open();
+      editor.setValue('auto', 'none');
+      vi.mocked(saveActionEdits).mockRejectedValueOnce(error);
+      await editor.save();
+    }
+    expect(editor.errorKey.value).toBe(key);
+  });
+
+  it('keeps the generic message for a 401 even when a reason is attached', async () => {
+    const { editor } = setup();
+    vi.mocked(getActionEditor).mockRejectedValueOnce(
+      new ActionEditorHttpError(401, 'recovery-assurance'),
+    );
+    await editor.open();
+    expect(editor.errorKey.value).toBe('accessDenied');
+  });
 });

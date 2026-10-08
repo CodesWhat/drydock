@@ -1,5 +1,11 @@
 import { readJsonResponse } from '../utils/api';
-import type { WatcherEditOutcome, WatcherEditRequest, WatcherEditRow } from './config-editor';
+import {
+  failureReason,
+  readFailureReason,
+  type WatcherEditOutcome,
+  type WatcherEditRequest,
+  type WatcherEditRow,
+} from './config-editor';
 
 export const actionEditFields = ['auto', 'order', 'concurrency'] as const;
 export type ActionEditField = (typeof actionEditFields)[number];
@@ -24,7 +30,10 @@ export function isActionProvider(type: string) {
   return ['docker', 'dockercompose', 'portainer', 'command'].includes(type.toLowerCase());
 }
 export class ActionEditorHttpError extends Error {
-  constructor(public status: number) {
+  constructor(
+    public status: number,
+    public reason?: string,
+  ) {
     super(`Action editor HTTP ${status}`);
   }
 }
@@ -34,7 +43,8 @@ export async function getActionEditor(): Promise<ActionEditSnapshot> {
     credentials: 'include',
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new ActionEditorHttpError(response.status);
+  if (!response.ok)
+    throw new ActionEditorHttpError(response.status, await readFailureReason(response));
   return readJsonResponse<ActionEditSnapshot>(response, 'Action editor');
 }
 export async function saveActionEdits(request: WatcherEditRequest): Promise<WatcherEditOutcome> {
@@ -61,6 +71,6 @@ export async function saveActionEdits(request: WatcherEditRequest): Promise<Watc
     (body.reload !== undefined &&
       (typeof body.reload?.applied !== 'boolean' || !Array.isArray(body.reload.errors)))
   )
-    throw new ActionEditorHttpError(response.status);
+    throw new ActionEditorHttpError(response.status, failureReason(body));
   return { ...body, status: response.status };
 }

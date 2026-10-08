@@ -103,3 +103,49 @@ describe('action editor HTTP boundary', () => {
     await expect(saveActionEdits(request)).rejects.toThrow('invalid JSON');
   });
 });
+
+describe('action editor keeps the server refusal reason', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const refusal = (details?: unknown) =>
+    Response.json({ error: 'Sign in with an authenticator code', details }, { status: 403 });
+
+  it('carries details.reason from a refused snapshot read', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(refusal({ reason: 'recovery-assurance' })));
+    await expect(getActionEditor()).rejects.toMatchObject({
+      status: 403,
+      reason: 'recovery-assurance',
+    });
+  });
+
+  it('carries details.reason from a refused write', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(refusal({ reason: 'recovery-assurance' })));
+    await expect(saveActionEdits({ revision: 'first', changes: [] })).rejects.toMatchObject({
+      status: 403,
+      reason: 'recovery-assurance',
+    });
+  });
+
+  it.each([undefined, {}, { reason: 7 }, null, 'text'])(
+    'leaves the reason empty for details %j',
+    async (details) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(refusal(details)));
+      await expect(getActionEditor()).rejects.toMatchObject({ status: 403, reason: undefined });
+      await expect(saveActionEdits({ revision: 'first', changes: [] })).rejects.toMatchObject({
+        status: 403,
+        reason: undefined,
+      });
+    },
+  );
+
+  it('leaves the reason empty when the refusal body is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => new Response('Denied', { status: 403 })),
+    );
+    await expect(getActionEditor()).rejects.toMatchObject({ status: 403, reason: undefined });
+    await expect(saveActionEdits({ revision: 'first', changes: [] })).rejects.toMatchObject({
+      status: 403,
+      reason: undefined,
+    });
+  });
+});
