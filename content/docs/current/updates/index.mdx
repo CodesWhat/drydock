@@ -7,7 +7,7 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## v1.7.0-rc.20 Highlights — October 8, 2026
 
-This candidate differs from rc.19 by one security fix and one website dependency patch. Lifecycle hook labels (`dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort`, `dd.hook.timeout`) now only take effect when set on the container itself, not when inherited from an image's `LABEL` instructions; set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to keep the previous behavior for images you build yourself. This only affects installs with `DD_HOOKS_ENABLED=true`. The website moves to Next.js 16.3.8 for six newly published advisories.
+This candidate differs from rc.19 by one security fix and one website dependency patch. Lifecycle hook labels (`dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort`, `dd.hook.timeout`) now only take effect when set on the container itself, not when inherited from an image's `LABEL` instructions; set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to keep the previous behavior for images you build yourself. This only affects installs with `DD_HOOKS_ENABLED=true`. The website moves to Next.js 16.3.8 for seven newly published advisories.
 
 See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.20/CHANGELOG.md#170-rc20--2026-10-08) for the full release notes.
 
