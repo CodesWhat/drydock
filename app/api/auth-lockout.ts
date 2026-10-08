@@ -680,9 +680,10 @@ export function rejectFailedReauthentication(
 }
 
 /**
- * A login fully succeeded (password, plus factor when one is due): forgive the
- * budget. Passing the subject also clears its persisted second-factor count,
- * which only a successful factor proof may do.
+ * A login or a factor-management re-authentication fully succeeded (password,
+ * plus factor when one is due): forgive the budget. Passing the subject also
+ * clears its persisted second-factor count, which only a successful factor
+ * proof may do.
  */
 export function clearLoginLockoutsAfterSuccess(
   req: AuthRequest,

@@ -101,6 +101,17 @@ export function clearSessions(): void {
   db.prepare('DELETE FROM sessions').run();
 }
 
+/** The ids of every session whose expiry is at or before `now`: the rows a sweep at the same `now` deletes. */
+export function listExpiredSessionIds(now: number): string[] {
+  if (!db) {
+    return [];
+  }
+  return db
+    .prepare('SELECT sid FROM sessions WHERE expires_at <= ?')
+    .all(now)
+    .map((row) => String(row.sid));
+}
+
 /** Delete every session whose expiry is at or before `now`. Returns the count removed. */
 export function sweepExpiredSessions(now: number = Date.now()): number {
   if (!db) {

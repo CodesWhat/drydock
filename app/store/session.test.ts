@@ -6,6 +6,7 @@ import {
   createCollections,
   destroySession,
   getSession,
+  listExpiredSessionIds,
   listSessions,
   setSession,
   sweepExpiredSessions,
@@ -34,6 +35,7 @@ describe('session store', () => {
     expect(freshModule.getSession('missing')).toBeUndefined();
     expect(freshModule.touchSession('missing', 1)).toBe(false);
     expect(freshModule.listSessions()).toEqual([]);
+    expect(freshModule.listExpiredSessionIds(Date.now())).toEqual([]);
     expect(freshModule.countSessions()).toBe(0);
     expect(freshModule.sweepExpiredSessions(Date.now())).toBe(0);
     expect(() => freshModule.setSession('sid', 1, '{}')).not.toThrow();
@@ -96,6 +98,17 @@ describe('session store', () => {
 
     expect(listSessions()).toEqual([]);
     expect(countSessions()).toBe(0);
+  });
+
+  test('listExpiredSessionIds names exactly the rows a sweep at the same cutoff deletes', () => {
+    setSession('expired-1', 100, '{}');
+    setSession('expired-2', 200, '{}');
+    setSession('live', 5000, '{}');
+
+    expect(listExpiredSessionIds(200).sort()).toEqual(['expired-1', 'expired-2']);
+    expect(listExpiredSessionIds(99)).toEqual([]);
+    // Listing changes nothing.
+    expect(countSessions()).toBe(3);
   });
 
   test('sweepExpiredSessions deletes rows at or before the cutoff and reports the count', () => {

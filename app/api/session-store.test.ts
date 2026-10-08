@@ -349,6 +349,109 @@ describe('SessionStore', () => {
     });
   });
 
+  describe('a session that expires closes the streams it opened', () => {
+    const closed: string[][] = [];
+    registerSessionStreamCloser((revoked) => {
+      closed.push([...revoked]);
+      return revoked.size;
+    });
+
+    beforeEach(() => {
+      closed.length = 0;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test('the sweep closes the streams of every expired session, and no live one', () => {
+      const expired = vi.fn();
+      const alsoExpired = vi.fn();
+      const live = vi.fn();
+      const forget = [
+        trackSessionStream('expired-1', expired),
+        trackSessionStream('expired-2', alsoExpired),
+        trackSessionStream('live', live),
+      ];
+      sessionModel.setSession('expired-1', Date.now() - 1000, '{}');
+      sessionModel.setSession('expired-2', Date.now() - 1000, '{}');
+      sessionModel.setSession('live', Date.now() + TTL_MS, '{}');
+
+      expect(store?.sweepExpiredNow()).toBe(2);
+
+      expect(expired).toHaveBeenCalledTimes(1);
+      expect(alsoExpired).toHaveBeenCalledTimes(1);
+      expect(live).not.toHaveBeenCalled();
+      expect(closed.map((ids) => ids.sort())).toEqual([['expired-1', 'expired-2']]);
+      for (const release of forget) {
+        release();
+      }
+    });
+
+    test('a sweep that finds nothing expired tells no stream anything', () => {
+      sessionModel.setSession('live', Date.now() + TTL_MS, '{}');
+
+      expect(store?.sweepExpiredNow()).toBe(0);
+
+      expect(closed).toEqual([]);
+    });
+
+    test('the sweep closes exactly the sessions it deletes, read at one instant', () => {
+      const now = vi.spyOn(Date, 'now');
+      now.mockReturnValue(1_000_000);
+      sessionModel.setSession('at-the-cutoff', 1_000_000, '{}');
+      sessionModel.setSession('just-after', 1_000_001, '{}');
+      // A clock that moved between the two statements would delete a row whose
+      // streams were never told.
+      now.mockReturnValueOnce(1_000_000).mockReturnValue(1_000_001);
+
+      expect(store?.sweepExpiredNow()).toBe(1);
+
+      expect(closed).toEqual([['at-the-cutoff']]);
+      expect(sessionModel.listSessions().map((row) => row.sid)).toEqual(['just-after']);
+    });
+
+    test('the streams are closed before the rows go, so a sweep that fails still closes them', () => {
+      sessionModel.setSession('expired', Date.now() - 1000, '{}');
+      vi.spyOn(sessionModel, 'sweepExpiredSessions').mockImplementationOnce(() => {
+        expect(closed).toEqual([['expired']]);
+        throw new Error('boom');
+      });
+
+      expect(() => store?.sweepExpiredNow()).toThrow('boom');
+      expect(closed).toEqual([['expired']]);
+    });
+
+    test('reading a session that has expired closes its streams, and no other session’s', async () => {
+      const mine = vi.fn();
+      const theirs = vi.fn();
+      const forget = [trackSessionStream('sid-1', mine), trackSessionStream('sid-2', theirs)];
+      sessionModel.setSession('sid-1', Date.now() - 1000, JSON.stringify({ cookie: {} }));
+      sessionModel.setSession('sid-2', Date.now() + TTL_MS, JSON.stringify({ cookie: {} }));
+
+      await expect(getAsync('sid-1')).resolves.toBeNull();
+      await expect(getAsync('sid-2')).resolves.not.toBeNull();
+
+      expect(mine).toHaveBeenCalledTimes(1);
+      expect(theirs).not.toHaveBeenCalled();
+      expect(closed).toEqual([['sid-1']]);
+      for (const release of forget) {
+        release();
+      }
+    });
+
+    test('a read closes the streams before the row goes, so a delete that fails still closes them', async () => {
+      sessionModel.setSession('sid-1', Date.now() - 1000, JSON.stringify({ cookie: {} }));
+      vi.spyOn(sessionModel, 'destroySession').mockImplementationOnce(() => {
+        expect(closed).toEqual([['sid-1']]);
+        throw new Error('boom');
+      });
+
+      await expect(getAsync('sid-1')).rejects.toThrow('boom');
+      expect(closed).toEqual([['sid-1']]);
+    });
+  });
+
   describe('destroyed sessions stay destroyed', () => {
     const live = () => sessionWithExpiry(new Date(Date.now() + TTL_MS));
 

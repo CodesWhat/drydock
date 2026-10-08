@@ -1,7 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+// A stream's session is asked about again on a timer. Every session here has
+// a live row unless a test takes it away; an OIDC user needs no factor store.
+const { mockGetSession } = vi.hoisted(() => ({
+  mockGetSession: vi.fn((sid: string) => ({
+    sid,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    data: JSON.stringify({
+      passport: { user: JSON.stringify({ v: 2, kind: 'oidc', username: 'alice' }) },
+    }),
+  })),
+}));
+vi.mock('../../store/session.js', () => ({ getSession: mockGetSession }));
+
 import logger from '../../log/index.js';
 import { validateOpenApiJsonResponse } from '../openapi-contract.js';
-import { closeStreamsForRevokedSessions } from '../session-streams.js';
+import {
+  closeStreamsForLocalSubjects,
+  closeStreamsForRevokedSessions,
+} from '../session-streams.js';
 import { createStatsHandlers, createSummaryStatsHandlers } from './stats.js';
 
 function createResponse() {
@@ -43,6 +60,23 @@ function createRequest(overrides: Record<string, unknown> = {}) {
       listeners[event]?.(...args);
     },
     ...overrides,
+  };
+}
+
+const HEADER_SUBJECT = 'a'.repeat(64);
+
+/** What an `Authorization: Basic` header resolves to: a local account and its stable subject. */
+function basicPrincipal(subjectId = HEADER_SUBJECT) {
+  return {
+    kind: 'basic',
+    username: 'alice',
+    identity: {
+      subjectId,
+      providerId: 'basic.default',
+      assurance: 'password',
+      factorVersion: 0,
+      issuedAt: 1,
+    },
   };
 }
 
@@ -361,6 +395,24 @@ describe('api/container/stats', () => {
       expect(closeStreamsForRevokedSessions(['stats-revoked'])).toBe(0);
     });
 
+    test('is closed by the periodic re-check once its session row is gone, with no event stream open', async () => {
+      const harness = createHarness();
+      const req = sessionRequest('stats-row-gone');
+      const res = createResponse();
+
+      harness.handlers.streamContainerStats(req as any, res as any);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(mockGetSession).toHaveBeenCalledWith('stats-row-gone');
+      expect(res.destroy).not.toHaveBeenCalled();
+
+      mockGetSession.mockReturnValueOnce(undefined as never);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(res.destroy).toHaveBeenCalledOnce();
+      expect(harness.unsubscribe).toHaveBeenCalledOnce();
+      expect(closeStreamsForRevokedSessions(['stats-row-gone'])).toBe(0);
+    });
+
     test('is forgotten once the client has gone, so a later revocation finds nothing', () => {
       const harness = createHarness();
       const req = sessionRequest('stats-gone');
@@ -412,6 +464,51 @@ describe('api/container/stats', () => {
         req.emit('close');
       },
     );
+  });
+
+  describe('a stats stream opened with an Authorization: Basic header', () => {
+    const headerRequest = (subjectId?: string) =>
+      createRequest({
+        params: { id: 'c1' },
+        // express-session gives every request a session id, signed in or not.
+        sessionID: 'stats-header-rode-in',
+        principal: basicPrincipal(subjectId),
+      });
+
+    test('is closed and fully cleaned up when its account stops being let in on a password', () => {
+      const harness = createHarness();
+      const req = headerRequest();
+      const res = createResponse();
+      const otherReq = headerRequest('b'.repeat(64));
+      const otherRes = createResponse();
+      const releaseWatch = vi.fn();
+      harness.watch.mockReturnValue(releaseWatch);
+
+      harness.handlers.streamContainerStats(req as any, res as any);
+      harness.handlers.streamContainerStats(otherReq as any, otherRes as any);
+      expect(closeStreamsForRevokedSessions(['stats-header-rode-in'])).toBe(0);
+      expect(res.destroy).not.toHaveBeenCalled();
+
+      expect(closeStreamsForLocalSubjects([HEADER_SUBJECT])).toBe(1);
+
+      expect(res.destroy).toHaveBeenCalledOnce();
+      expect(releaseWatch).toHaveBeenCalledTimes(1);
+      expect(otherRes.destroy).not.toHaveBeenCalled();
+      expect(closeStreamsForLocalSubjects([HEADER_SUBJECT])).toBe(0);
+      otherReq.emit('close');
+    });
+
+    test('is forgotten once the client has gone, so a later enrollment finds nothing', () => {
+      const harness = createHarness();
+      const req = headerRequest();
+      const res = createResponse();
+
+      harness.handlers.streamContainerStats(req as any, res as any);
+      req.emit('close');
+
+      expect(closeStreamsForLocalSubjects([HEADER_SUBJECT])).toBe(0);
+      expect(res.destroy).not.toHaveBeenCalled();
+    });
   });
 
   test('returns 404 when trying to stream a missing container', () => {
@@ -745,6 +842,39 @@ describe('api/container/stats — summary handlers', () => {
     );
   });
 
+  describe('a summary stream opened with an Authorization: Basic header', () => {
+    const headerRequest = () =>
+      createRequest({ sessionID: 'summary-header-rode-in', principal: basicPrincipal() });
+
+    test('is closed and fully cleaned up when its account stops being let in on a password', () => {
+      const harness = createSummaryHarness();
+      const req = headerRequest();
+      const res = createResponse();
+
+      harness.handlers.streamStatsSummary(req as any, res as any);
+      expect(closeStreamsForRevokedSessions(['summary-header-rode-in'])).toBe(0);
+      expect(res.destroy).not.toHaveBeenCalled();
+
+      expect(closeStreamsForLocalSubjects([HEADER_SUBJECT])).toBe(1);
+
+      expect(res.destroy).toHaveBeenCalledOnce();
+      expect(harness.unsubscribe).toHaveBeenCalledOnce();
+      expect(closeStreamsForLocalSubjects([HEADER_SUBJECT])).toBe(0);
+    });
+
+    test('is forgotten once the client has gone, so a later enrollment finds nothing', () => {
+      const harness = createSummaryHarness();
+      const req = headerRequest();
+      const res = createResponse();
+
+      harness.handlers.streamStatsSummary(req as any, res as any);
+      res.emit('close');
+
+      expect(closeStreamsForLocalSubjects([HEADER_SUBJECT])).toBe(0);
+      expect(res.destroy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('a summary stream whose session ends', () => {
     const sessionRequest = (sessionID: string) =>
       createRequest({ sessionID, principal: { kind: 'session', username: 'alice' } });
@@ -768,6 +898,24 @@ describe('api/container/stats — summary handlers', () => {
       await vi.advanceTimersByTimeAsync(15_000);
       expect(res.write).toHaveBeenCalledTimes(writesAfterRevocation);
       expect(closeStreamsForRevokedSessions(['summary-revoked'])).toBe(0);
+    });
+
+    test('is closed by the periodic re-check once its session row is gone, with no event stream open', async () => {
+      const harness = createSummaryHarness();
+      const req = sessionRequest('summary-row-gone');
+      const res = createResponse();
+
+      harness.handlers.streamStatsSummary(req as any, res as any);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(mockGetSession).toHaveBeenCalledWith('summary-row-gone');
+      expect(res.destroy).not.toHaveBeenCalled();
+
+      mockGetSession.mockReturnValueOnce(undefined as never);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(res.destroy).toHaveBeenCalledOnce();
+      expect(harness.unsubscribe).toHaveBeenCalledOnce();
+      expect(closeStreamsForRevokedSessions(['summary-row-gone'])).toBe(0);
     });
 
     test('is forgotten once the client has gone, so a later revocation finds nothing', () => {

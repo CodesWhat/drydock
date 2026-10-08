@@ -1022,6 +1022,22 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       expect(storedUsers(h.db).filter(Boolean)).toHaveLength(0);
     });
 
+    test('a password login that failed holds no slot against the concurrent-session limit', async () => {
+      const h = await boot();
+      configureSessionLimits({ session: { maxconcurrentsessions: 2 } });
+      const desktop = await post(h, { Authorization: BASIC_AUTH_HEADER });
+      expect(desktop.status).toBe(200);
+      failTheSuccessAuditOnce();
+      expect((await post(h, { Authorization: BASIC_AUTH_HEADER })).status).toBe(500);
+
+      const phone = await post(h, { Authorization: BASIC_AUTH_HEADER });
+
+      // Two live sessions fit a limit of two; the failed login is not a third.
+      expect(phone.status).toBe(200);
+      expect(await protectedStatus(h, cookieOf(desktop))).toBe(200);
+      expect(await protectedStatus(h, cookieOf(phone))).toBe(200);
+    });
+
     test('a recovery login mints no session, so the code it hands back was not also spent on one', async () => {
       const h = await boot();
       const enrolled = enroll();

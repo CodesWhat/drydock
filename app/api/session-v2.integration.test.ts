@@ -32,6 +32,7 @@ import {
   writeSessionPrincipal,
 } from './session-principal.js';
 import { SessionStore } from './session-store.js';
+import { createSessionStreamRecheck, registerSessionStreamCloser } from './session-streams.js';
 import {
   encryptTotpSeed,
   generateTotpSeed,
@@ -74,6 +75,39 @@ function createArgon2Hash(password: string): string {
 
 function cookieOf(response: Awaited<ReturnType<typeof fetch>>): string {
   return (response.headers.get('set-cookie') as string).split(';')[0];
+}
+
+/** The session id inside the signed cookie express-session set. */
+function sidOf(cookie: string): string {
+  return decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1))
+    .slice(2)
+    .split('.')[0];
+}
+
+// Every session whose streams were closed, as the event stream's own closer hears it.
+const closedStreams: string[] = [];
+registerSessionStreamCloser((revoked) => {
+  closedStreams.push(...revoked);
+  return revoked.size;
+});
+
+/**
+ * Ask the stream re-check about these sessions and answer the ones it closed.
+ * Cleared first: signing in regenerates the session, which closes the streams
+ * of the id it replaces through the same closer.
+ */
+function recheckStreamsOf(...cookies: string[]): string[] {
+  return recheckStreamsWith(createSessionStreamRecheck(), ...cookies);
+}
+
+/** The same, for a re-check that has asked before and remembers what went unanswered. */
+function recheckStreamsWith(
+  recheck: ReturnType<typeof createSessionStreamRecheck>,
+  ...cookies: string[]
+): string[] {
+  closedStreams.length = 0;
+  recheck(cookies.map(sidOf));
+  return [...closedStreams];
 }
 
 function storedUsers(db: Database): unknown[] {
@@ -493,6 +527,56 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
     });
   });
 
+  describe('the stream re-check asks the same question of the same rows', () => {
+    test('sessions HTTP still lets in keep their streams, whatever kind they are', async () => {
+      const h = await boot();
+      const local = await login(h);
+      const legacy = await plant(h, JSON.stringify({ username: 'someone-else' }));
+      const oidc = await plant(h, JSON.stringify({ v: 2, kind: 'oidc', username: TEST_USER }));
+
+      expect(recheckStreamsOf(local, legacy, oidc)).toEqual([]);
+    });
+
+    test('a session the factor version left behind loses its streams, and no other', async () => {
+      const h = await boot();
+      const local = await login(h);
+      const oidc = await plant(h, JSON.stringify({ v: 2, kind: 'oidc', username: TEST_USER }));
+      enrollSubject(SUBJECT_ID, 1);
+
+      expect(recheckStreamsOf(local, oidc)).toEqual([sidOf(local)]);
+      expect(await protectedStatus(h, oidc)).toBe(200);
+    });
+
+    test('a session whose row was deleted behind the store loses its streams', async () => {
+      const h = await boot();
+      const gone = await login(h);
+      const kept = await login(h);
+      sessionModel.destroySession(sidOf(gone));
+
+      expect(recheckStreamsOf(gone, kept)).toEqual([sidOf(gone)]);
+      expect(await protectedStatus(h, kept)).toBe(200);
+    });
+
+    test('a session whose row has run out loses its streams before any sweep', async () => {
+      const h = await boot();
+      const cookie = await login(h);
+      sessionModel.touchSession(sidOf(cookie), Date.now() - 1);
+
+      expect(recheckStreamsOf(cookie)).toEqual([sidOf(cookie)]);
+    });
+
+    test('a session that was signed out in place loses its streams', async () => {
+      const h = await boot();
+      const cookie = await login(h);
+      const row = sessionModel.getSession(sidOf(cookie));
+      const { passport: _passport, ...signedOut } = JSON.parse(String(row?.data));
+      sessionModel.setSession(sidOf(cookie), Date.now() + 60_000, JSON.stringify(signedOut));
+
+      expect(recheckStreamsOf(cookie)).toEqual([sidOf(cookie)]);
+      expect(await protectedStatus(h, cookie)).toBe(401);
+    });
+  });
+
   test('a store that cannot answer refuses a local session without destroying it', async () => {
     const h = await boot();
     const cookie = await login(h);
@@ -504,5 +588,44 @@ describe('TOTP slice 2: v2 sessions and the shared validator', () => {
 
     h.db.exec('ALTER TABLE totp_subject_versions_away RENAME TO totp_subject_versions');
     expect(await protectedStatus(h, cookie)).toBe(200);
+  });
+
+  describe('a store that cannot answer and the streams of a session it would still accept', () => {
+    const breakStore = (h: Harness) =>
+      h.db.exec('ALTER TABLE totp_subject_versions RENAME TO totp_subject_versions_away');
+    const mendStore = (h: Harness) =>
+      h.db.exec('ALTER TABLE totp_subject_versions_away RENAME TO totp_subject_versions');
+
+    test('a fault that passes closes nothing, and the session works again afterwards', async () => {
+      const h = await boot();
+      const cookie = await login(h);
+      const recheck = createSessionStreamRecheck();
+
+      breakStore(h);
+      expect(await protectedStatus(h, cookie)).toBe(401);
+      for (let unanswered = 1; unanswered <= 3; unanswered += 1) {
+        expect(recheckStreamsWith(recheck, cookie)).toEqual([]);
+      }
+
+      mendStore(h);
+      expect(recheckStreamsWith(recheck, cookie)).toEqual([]);
+      expect(await protectedStatus(h, cookie)).toBe(200);
+    });
+
+    test('a fault that lasts closes the streams on the fourth unanswered re-check, and keeps the session', async () => {
+      const h = await boot();
+      const cookie = await login(h);
+      const recheck = createSessionStreamRecheck();
+      breakStore(h);
+
+      for (let unanswered = 1; unanswered <= 3; unanswered += 1) {
+        expect(recheckStreamsWith(recheck, cookie)).toEqual([]);
+      }
+      expect(recheckStreamsWith(recheck, cookie)).toEqual([sidOf(cookie)]);
+
+      // Only the streams went: the row is intact, so the session is good once the store is.
+      mendStore(h);
+      expect(await protectedStatus(h, cookie)).toBe(200);
+    });
   });
 });

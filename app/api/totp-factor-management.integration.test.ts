@@ -89,7 +89,7 @@ import { validateOpenApiJsonResponse } from './openapi-contract.js';
 import * as portwingRouter from './portwing.js';
 import { restoreSessionPrincipal, sessionAuthenticator } from './session-principal.js';
 import { SessionStore } from './session-store.js';
-import { registerSessionStreamCloser } from './session-streams.js';
+import { registerSessionStreamCloser, trackBasicHeaderStream } from './session-streams.js';
 import { resetLoginChallengesForTests } from './totp-challenge.js';
 import {
   digestRecoveryCode,
@@ -1091,6 +1091,81 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(locked.status).toBe(423);
     });
 
+    test('a re-authentication that succeeds forgives the wrong passwords before it, as a login does', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const wrong = () =>
+        call(h, 'POST', '/totp-enrollments', { cookie, body: { password: 'nope' } });
+      const right = async () => {
+        const started = await startEnrollment(h, cookie);
+        expect(started.status).toBe(201);
+        const { id } = (await started.json()) as EnrollmentReveal;
+        await call(h, 'DELETE', `/totp-enrollments/${id}`, { cookie });
+      };
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await wrong()).status).toBe(403);
+      }
+      await right();
+
+      // Three more would have been the fourth, fifth and sixth: a lock at the fifth.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await wrong()).status).toBe(403);
+      }
+      await right();
+    });
+
+    test('with a factor, only the password and the proof together forgive anything', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const reauth = (body: Record<string, unknown>) =>
+        call(h, 'POST', '/totp-recovery-code-sets', { cookie, body });
+      const wrongPassword = () => reauth({ password: 'nope', code: code(enrolled.seed, 1) });
+
+      expect((await wrongPassword()).status).toBe(403);
+      expect((await wrongPassword()).status).toBe(403);
+      // The right password with a wrong code is a third failure, not a pardon for the two before.
+      expect(
+        (await reauth({ password: TEST_PASSWORD, code: wrongCode(enrolled.seed) })).status,
+      ).toBe(403);
+      expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(1);
+      expect((await wrongPassword()).status).toBe(403);
+      expect((await wrongPassword()).status).toBe(423);
+    });
+
+    test.each([
+      ['a code from the authenticator', (enrolled: Enrolled) => ({ code: code(enrolled.seed, 1) })],
+      ['a recovery code', (enrolled: Enrolled) => ({ recoveryCode: enrolled.recoveryCodes[0] })],
+    ])(
+      'a re-authentication proved with %s forgives the wrong codes before it, the persisted count included',
+      async (_name, proofOf) => {
+        const h = await boot();
+        const enrolled = enroll();
+        const cookie = await loginCookieWithCode(h, enrolled);
+        const reauth = (proof: Record<string, unknown>) =>
+          call(h, 'POST', '/totp-recovery-code-sets', {
+            cookie,
+            body: { password: TEST_PASSWORD, ...proof },
+          });
+        const wrong = () => reauth({ code: wrongCode(enrolled.seed) });
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          expect((await wrong()).status).toBe(403);
+        }
+        expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(3);
+
+        expect((await reauth(proofOf(enrolled))).status).toBe(201);
+
+        expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(0);
+        // Three more would have been the fourth, fifth and sixth: a lock at the fifth.
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          expect((await wrong()).status).toBe(403);
+        }
+        expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(3);
+      },
+    );
+
     test('a parallel burst of wrong passwords is hashed one at a time and cannot outrun the lockout budget', async () => {
       const h = await boot();
       const cookie = await sessionCookie(h);
@@ -1212,6 +1287,46 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0);
       expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
     });
+
+    test.each([
+      [
+        'a factor confirmed',
+        () => {
+          enroll();
+        },
+      ],
+      [
+        'the subject version bumped',
+        () => {
+          enroll();
+          totpStore.removeFactor({
+            subjectId: SUBJECT_ID,
+            expectedFactorVersion: totpStore.getSubjectVersion(SUBJECT_ID),
+          });
+        },
+      ],
+    ])(
+      'with %s while the password was being checked, the password alone clears no budget and the call is refused as a missing proof',
+      async (_name, change) => {
+        const h = await boot();
+        const cookie = await sessionCookie(h);
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await loginPassword(h, TEST_USER, 'nope');
+        }
+        const held = holdNextPasswordCheck();
+
+        const pending = startEnrollment(h, cookie);
+        await held.arrived;
+        change();
+        held.release();
+
+        expect((await pending).status).toBe(400);
+        expect(h.db.prepare('SELECT COUNT(*) AS n FROM totp_enrollments').get()).toEqual({ n: 0 });
+        // Four failures stand: had the password cleared them, one more would not lock.
+        await loginPassword(h, TEST_USER, 'nope');
+        expect((await loginPassword(h, TEST_USER, 'nope')).status).toBe(423);
+      },
+    );
 
     test('a second factor locked while the password was being checked is refused before the proof is looked at', async () => {
       const h = await boot();
@@ -2005,6 +2120,39 @@ describe('TOTP slice 4: factor-management API', () => {
         });
       expect((await attempt(code(enrolled.seed, 2))).status).toBe(401);
       expect((await attempt(code(newSeed, 1))).status).toBe(200);
+    });
+
+    test('confirming a replacement closes whatever a Basic header still holds for the account', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      // Nothing can open one while a factor is active, so it is tracked the way a handler would.
+      const close = vi.fn();
+      const forget = trackBasicHeaderStream(
+        {
+          kind: 'basic',
+          username: TEST_USER,
+          identity: {
+            subjectId: SUBJECT_ID,
+            providerId: PROVIDER,
+            assurance: 'password',
+            factorVersion: 1,
+            issuedAt: Date.now(),
+          },
+        },
+        close,
+      );
+
+      const reveal = await revealEnrollment(h, cookie, { code: code(enrolled.seed, 1) });
+      expect(close).not.toHaveBeenCalled();
+      const confirm = await call(h, 'PUT', `/totp-enrollments/${reveal.id}`, {
+        cookie,
+        body: { code: code(base32Decode(reveal.secret)) },
+      });
+
+      expect(confirm.status).toBe(201);
+      expect(close).toHaveBeenCalledTimes(1);
+      forget();
     });
 
     test('an abandoned replacement leaves the old factor, its sessions and its codes alone', async () => {
@@ -2954,6 +3102,78 @@ describe('TOTP slice 4: factor-management API', () => {
         expect(await onPhone.endedWithin(2_000)).toBe(true);
       },
     );
+
+    test.each(STREAMS)(
+      '%s: a stream opened with a Basic header ends when its account enrolls a factor, and another account’s stays',
+      async (_name, path) => {
+        const h = await boot();
+        const header = { Authorization: basicHeader(TEST_USER, TEST_PASSWORD) };
+        const onPassword = await openStream(h, path, header);
+        // The same username under the other provider is another account.
+        const otherAccount = await openStream(h, path, {
+          Authorization: basicHeader(TEST_USER, OTHER_PASSWORD),
+        });
+        expect(await onPassword.endedWithin(100)).toBe(false);
+
+        await enrollThroughApi(h, await sessionCookie(h));
+
+        // The header stopped authenticating, so what it opened ends with it.
+        expect((await fetch(url(h, path), { headers: header })).status).toBe(401);
+        expect(await onPassword.endedWithin(2_000)).toBe(true);
+        expect(await otherAccount.endedWithin(200)).toBe(false);
+      },
+    );
+
+    test.each(STREAMS)(
+      '%s: a factor nothing announced ends the Basic header stream at the next re-check',
+      async (_name, path) => {
+        const h = await boot();
+        // Only the intervals: the re-check is one, and the requests need real time.
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const onPassword = await openStream(h, path, {
+          Authorization: basicHeader(TEST_USER, TEST_PASSWORD),
+        });
+        const otherAccount = await openStream(h, path, {
+          Authorization: basicHeader(TEST_USER, OTHER_PASSWORD),
+        });
+        vi.advanceTimersByTime(15_000);
+        expect(await onPassword.endedWithin(100)).toBe(false);
+
+        // Straight into the store: no route ran, so nothing told the stream.
+        enroll();
+        vi.advanceTimersByTime(15_000);
+
+        expect(await onPassword.endedWithin(2_000)).toBe(true);
+        expect(await otherAccount.endedWithin(200)).toBe(false);
+      },
+      10_000,
+    );
+
+    test('an orphaned factor ends the Basic header streams of every account without one of its own', async () => {
+      const h = await boot();
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const [, path] = STREAMS[0];
+      const first = await openStream(h, path, {
+        Authorization: basicHeader(TEST_USER, TEST_PASSWORD),
+      });
+      const second = await openStream(h, path, {
+        Authorization: basicHeader(TEST_USER, OTHER_PASSWORD),
+      });
+
+      // A factor no registered account owns: the orphan guard now refuses both headers.
+      enroll(deriveSubjectId('basic.renamed', TEST_USER), 'basic.renamed');
+      expect(
+        (
+          await fetch(url(h, path), {
+            headers: { Authorization: basicHeader(TEST_USER, TEST_PASSWORD) },
+          })
+        ).status,
+      ).toBe(503);
+      vi.advanceTimersByTime(15_000);
+
+      expect(await first.endedWithin(2_000)).toBe(true);
+      expect(await second.endedWithin(2_000)).toBe(true);
+    }, 10_000);
 
     test.each(STREAMS)(
       '%s: a stream opened with an API key outlives every session that ends',

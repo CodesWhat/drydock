@@ -178,6 +178,7 @@ function destroyStoredSession(sessionStore: SessionStoreLike, sid: string): Prom
   });
 }
 
+/** Does the store still hold this session with somebody signed in to it? */
 function hasStoredSession(
   getSession: NonNullable<SessionStoreLike['get']>,
   sid: string,
@@ -188,7 +189,10 @@ function hasStoredSession(
         reject(error);
         return;
       }
-      resolve(session !== undefined && session !== null);
+      const payload = extractSessionPayload(session);
+      resolve(
+        payload !== undefined && readSessionUsername(extractSessionUser(payload)) !== undefined,
+      );
     });
   });
 }
@@ -308,9 +312,11 @@ function removeDestroyedSessionsFromIndex(
 /**
  * The index hears of a session when a login records it and never hears that it
  * ended: a logout, an expiry and a regenerated id all remove the row behind its
- * back. A session with no row cannot authenticate, so it must not hold a slot
- * against one that can. Each of these sessions is checked against the store,
- * and the ones whose row is gone are dropped from the index.
+ * back, and a login that fails after it was recorded saves a row with nobody
+ * signed in to it. A session with no row, or with a row that names nobody,
+ * cannot authenticate, so it must not hold a slot against one that can. Each of
+ * these sessions is checked against the store, and the ones that ended either
+ * way are dropped from the index.
  */
 async function forgetEndedSessions(
   sessionStore: SessionStoreLike,
