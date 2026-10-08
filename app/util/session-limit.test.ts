@@ -799,6 +799,52 @@ describe('sessions that ended without the limit being asked', () => {
     expect(store.sessionStore.get).not.toHaveBeenCalledWith('jane-1', expect.any(Function));
   });
 
+  describe('a login that was recorded and then failed', () => {
+    /** The login answered 500 after the limit recorded it; what it leaves is a saved row with nobody in it. */
+    async function failedLogin(
+      store: ReturnType<typeof createStore>,
+      sid: string,
+      row: unknown,
+      maxConcurrentSessions = 2,
+    ) {
+      await enforceConcurrentSessionLimit({
+        username: 'john',
+        maxConcurrentSessions,
+        currentSessionId: sid,
+        sessionStore: store.sessionStore,
+      });
+      store.rows.set(sid, row);
+      vi.advanceTimersByTime(1_000);
+    }
+
+    test.each([
+      ['no user', { cookie: {} }],
+      ['a user that names nobody', { passport: { user: '{}' }, cookie: {} }],
+      ['a payload that does not parse', '{not json'],
+    ])('does not hold a slot when its row carries %s', async (_name, row) => {
+      const store = createStore();
+      await store.login('desktop', 2);
+      await failedLogin(store, 'failed', row);
+
+      // Two live sessions fit a limit of two. Counting the failed one evicted the desktop.
+      await expect(store.login('phone', 2)).resolves.toBe(0);
+
+      expect(store.evicted).toEqual([]);
+      expect([...store.rows.keys()]).toEqual(['desktop', 'failed', 'phone']);
+    });
+
+    test('is forgotten, so the limit still evicts the oldest live session at the right login', async () => {
+      const store = createStore();
+      await store.login('desktop', 2);
+      await failedLogin(store, 'failed', { cookie: {} });
+      await store.login('phone', 2);
+
+      await expect(store.login('tablet', 2)).resolves.toBe(1);
+
+      expect(store.evicted).toEqual(['desktop']);
+    });
+  });
+
   test('a login that recorded its session while the store was being read is still counted', async () => {
     const store = createStore({
       a: { passport: { user: oidc('john') }, cookie: { expires: '2025-01-01T00:00:00.000Z' } },
