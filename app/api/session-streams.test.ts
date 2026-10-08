@@ -1,18 +1,32 @@
-const { mockWarn, mockGetSession, mockCheckSessionIdentity } = vi.hoisted(() => ({
+const {
+  mockWarn,
+  mockGetSession,
+  mockCheckSessionIdentity,
+  mockIsSecondFactorRequired,
+  mockListOrphanedFactors,
+} = vi.hoisted(() => ({
   mockWarn: vi.fn(),
   mockGetSession: vi.fn(),
   mockCheckSessionIdentity: vi.fn(),
+  mockIsSecondFactorRequired: vi.fn(),
+  mockListOrphanedFactors: vi.fn(),
 }));
 
 vi.mock('../log/index.js', () => ({ default: { child: () => ({ warn: mockWarn }) } }));
 vi.mock('../store/session.js', () => ({ getSession: mockGetSession }));
-vi.mock('./totp-identity.js', () => ({ checkSessionIdentity: mockCheckSessionIdentity }));
+vi.mock('./totp-identity.js', () => ({
+  checkSessionIdentity: mockCheckSessionIdentity,
+  isSecondFactorRequired: mockIsSecondFactorRequired,
+}));
+vi.mock('./totp-orphans.js', () => ({ listOrphanedFactors: mockListOrphanedFactors }));
 
 type SessionStreams = typeof import('./session-streams.js');
 
+let closeStreamsForLocalSubjects: SessionStreams['closeStreamsForLocalSubjects'];
 let closeStreamsForRevokedSessions: SessionStreams['closeStreamsForRevokedSessions'];
 let createSessionStreamRecheck: SessionStreams['createSessionStreamRecheck'];
 let registerSessionStreamCloser: SessionStreams['registerSessionStreamCloser'];
+let trackBasicHeaderStream: SessionStreams['trackBasicHeaderStream'];
 let trackSessionSocket: SessionStreams['trackSessionSocket'];
 let trackSessionStream: SessionStreams['trackSessionStream'];
 
@@ -22,9 +36,11 @@ beforeEach(async () => {
   vi.resetModules();
   mockWarn.mockClear();
   ({
+    closeStreamsForLocalSubjects,
     closeStreamsForRevokedSessions,
     createSessionStreamRecheck,
     registerSessionStreamCloser,
+    trackBasicHeaderStream,
     trackSessionSocket,
     trackSessionStream,
   } = await import('./session-streams.js'));
@@ -496,5 +512,195 @@ describe('the sessions that hold a stream are asked about again', () => {
     recheck(['registry-unanswered']);
     expect(closer).toHaveBeenCalledTimes(1);
     expect(closer).toHaveBeenCalledWith(new Set(['registry-unanswered']));
+  });
+});
+
+describe('streams an Authorization: Basic header opened', () => {
+  const RECHECK_INTERVAL_MS = 15_000;
+  const SUBJECT = 'a'.repeat(64);
+  const OTHER_SUBJECT = 'b'.repeat(64);
+
+  const basicPrincipal = (subjectId: string) =>
+    ({
+      kind: 'basic',
+      username: 'scott',
+      identity: {
+        subjectId,
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+        issuedAt: 1,
+      },
+    }) as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockIsSecondFactorRequired.mockReset();
+    mockIsSecondFactorRequired.mockReturnValue(false);
+    mockListOrphanedFactors.mockReset();
+    mockListOrphanedFactors.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('are closed when their account stops being let in on a password, and no other account’s', () => {
+    const mine = vi.fn();
+    const alsoMine = vi.fn();
+    const theirs = vi.fn();
+    trackBasicHeaderStream(basicPrincipal(SUBJECT), mine);
+    trackBasicHeaderStream(basicPrincipal(SUBJECT), alsoMine);
+    const forgetTheirs = trackBasicHeaderStream(basicPrincipal(OTHER_SUBJECT), theirs);
+
+    expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(2);
+
+    expect(mine).toHaveBeenCalledTimes(1);
+    expect(alsoMine).toHaveBeenCalledTimes(1);
+    expect(theirs).not.toHaveBeenCalled();
+    // Closed once: the same account enrolling again has nothing left to close.
+    expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(0);
+    forgetTheirs();
+  });
+
+  test('are kept apart from sessions: neither revocation reaches the other’s streams', () => {
+    const header = vi.fn();
+    const session = vi.fn();
+    const forgetHeader = trackBasicHeaderStream(basicPrincipal(SUBJECT), header);
+    // A session id that happens to spell a subject is still a session id.
+    const forgetSession = trackSessionStream(OTHER_SUBJECT, session);
+
+    expect(closeStreamsForRevokedSessions([SUBJECT])).toBe(0);
+    expect(closeStreamsForLocalSubjects([OTHER_SUBJECT])).toBe(0);
+
+    expect(header).not.toHaveBeenCalled();
+    expect(session).not.toHaveBeenCalled();
+    forgetHeader();
+    forgetSession();
+  });
+
+  test('a stream that ended on its own is forgotten', () => {
+    const close = vi.fn();
+    const forget = trackBasicHeaderStream(basicPrincipal(SUBJECT), close);
+
+    forget();
+
+    expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(0);
+    expect(close).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each([
+    ['a session', { kind: 'session', username: 'scott' }],
+    ['an API key', { kind: 'api-key', username: 'ci', keyId: 'key-1', scopes: ['read'] }],
+    ['an OIDC bearer', { kind: 'oidc', username: 'scott' }],
+    ['anonymous access', { kind: 'anonymous', username: 'anonymous' }],
+    ['no principal at all', undefined],
+  ])('a stream opened with %s is not tracked under any account', (_name, principal) => {
+    const close = vi.fn();
+    const forget = trackBasicHeaderStream(principal as never, close);
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(() => forget()).not.toThrow();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  test('one stream failing to close is logged without the subject, and the rest still close', () => {
+    const failing = vi.fn(() => {
+      throw new Error('destroy failed');
+    });
+    const other = vi.fn();
+    trackBasicHeaderStream(basicPrincipal(SUBJECT), failing);
+    trackBasicHeaderStream(basicPrincipal(SUBJECT), other);
+
+    expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(1);
+
+    expect(other).toHaveBeenCalledTimes(1);
+    expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('destroy failed'));
+    expect(JSON.stringify(mockWarn.mock.calls)).not.toContain(SUBJECT);
+  });
+
+  describe('are asked about again, like every other stream', () => {
+    test('an account whose header is still let in keeps its streams', () => {
+      const close = vi.fn();
+      const forget = trackBasicHeaderStream(basicPrincipal(SUBJECT), close);
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 10);
+
+      expect(close).not.toHaveBeenCalled();
+      expect(mockIsSecondFactorRequired).toHaveBeenCalledTimes(10);
+      expect(mockIsSecondFactorRequired).toHaveBeenLastCalledWith(SUBJECT);
+      forget();
+    });
+
+    test('an account that gained a factor with nothing saying so loses its streams, and no other', () => {
+      const enrolled = vi.fn();
+      const unenrolled = vi.fn();
+      trackBasicHeaderStream(basicPrincipal(SUBJECT), enrolled);
+      const forget = trackBasicHeaderStream(basicPrincipal(OTHER_SUBJECT), unenrolled);
+      mockIsSecondFactorRequired.mockImplementation((subjectId: string) => subjectId === SUBJECT);
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+      expect(enrolled).toHaveBeenCalledTimes(1);
+      expect(unenrolled).not.toHaveBeenCalled();
+      forget();
+    });
+
+    test('an orphaned factor, which refuses every account without one of its own, closes them all', () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      trackBasicHeaderStream(basicPrincipal(SUBJECT), first);
+      trackBasicHeaderStream(basicPrincipal(OTHER_SUBJECT), second);
+      mockListOrphanedFactors.mockReturnValue([{ subjectId: 'c'.repeat(64) }]);
+
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    test('a store that cannot answer is waited out, then the streams close on the fourth re-check', () => {
+      const waitedFor = vi.fn();
+      const givenUpOn = vi.fn();
+      const forget = trackBasicHeaderStream(basicPrincipal(SUBJECT), waitedFor);
+      const failing = () => {
+        throw new Error('database is locked');
+      };
+
+      mockIsSecondFactorRequired.mockImplementation(failing);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+      mockIsSecondFactorRequired.mockReturnValue(false);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+      expect(waitedFor).not.toHaveBeenCalled();
+      forget();
+
+      trackBasicHeaderStream(basicPrincipal(OTHER_SUBJECT), givenUpOn);
+      mockListOrphanedFactors.mockImplementation(failing);
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS * 3);
+      expect(givenUpOn).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+
+      expect(givenUpOn).toHaveBeenCalledTimes(1);
+      expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('database is locked'));
+      expect(JSON.stringify(mockWarn.mock.calls)).not.toContain(OTHER_SUBJECT);
+    });
+
+    test('the asking goes on while either kind of stream is open, and stops when neither is', () => {
+      mockGetSession.mockReset();
+      mockGetSession.mockReturnValue(undefined);
+      const header = vi.fn();
+      const forgetHeader = trackBasicHeaderStream(basicPrincipal(SUBJECT), header);
+      const forgetSession = trackSessionStream('alongside', vi.fn());
+
+      forgetSession();
+      vi.advanceTimersByTime(RECHECK_INTERVAL_MS);
+      expect(mockIsSecondFactorRequired).toHaveBeenCalledTimes(1);
+      expect(mockGetSession).not.toHaveBeenCalled();
+
+      forgetHeader();
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });

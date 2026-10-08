@@ -20,6 +20,7 @@ var {
   mockLoggerWarn,
   mockFindApiKeyById,
   mockCheckSessionIdentity,
+  mockIsSecondFactorRequired,
   mockGetSession,
   mockBootId,
   mockSseEventBuffer,
@@ -95,6 +96,7 @@ var {
     mockLoggerWarn: vi.fn(),
     mockFindApiKeyById: vi.fn(),
     mockCheckSessionIdentity: vi.fn(),
+    mockIsSecondFactorRequired: vi.fn(() => false),
     mockGetSession: vi.fn(),
     mockBootId: bootId,
     mockSseEventBuffer,
@@ -158,7 +160,12 @@ vi.mock('../store/api-key.js', async (importOriginal) => ({
   findApiKeyById: mockFindApiKeyById,
 }));
 
-vi.mock('./totp-identity.js', () => ({ checkSessionIdentity: mockCheckSessionIdentity }));
+vi.mock('./totp-identity.js', () => ({
+  checkSessionIdentity: mockCheckSessionIdentity,
+  isSecondFactorRequired: mockIsSecondFactorRequired,
+}));
+
+vi.mock('./totp-orphans.js', () => ({ listOrphanedFactors: () => [] }));
 
 vi.mock('../store/session.js', () => ({ getSession: mockGetSession }));
 
@@ -171,7 +178,11 @@ vi.mock('../log', () => ({
   },
 }));
 
-import { closeStreamsForRevokedSessions, registerSessionStreamCloser } from './session-streams.js';
+import {
+  closeStreamsForLocalSubjects,
+  closeStreamsForRevokedSessions,
+  registerSessionStreamCloser,
+} from './session-streams.js';
 import * as sseRouter from './sse.js';
 
 function getHandler() {
@@ -328,6 +339,7 @@ describe('SSE Router', () => {
     mockGetSession.mockImplementation((sid: string) => storedSession(sid));
     mockCheckSessionIdentity.mockReset();
     mockCheckSessionIdentity.mockReturnValue('valid');
+    mockIsSecondFactorRequired.mockReset();
   });
 
   afterEach(() => {
@@ -2852,6 +2864,76 @@ describe('SSE Router', () => {
 
         expect(closer).toHaveBeenCalledTimes(1);
         expect(closer).toHaveBeenCalledWith(new Set(['session-10.2.0.1']));
+      });
+    });
+
+    describe('a stream an Authorization: Basic header opened', () => {
+      const SUBJECT = 'a'.repeat(64);
+      const OTHER_SUBJECT = 'b'.repeat(64);
+      const basicPrincipal = (subjectId: string) => ({
+        kind: 'basic',
+        username: 'scott',
+        identity: {
+          subjectId,
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+          issuedAt: 1,
+        },
+      });
+
+      afterEach(() => {
+        // Nothing of one test stays tracked into the next.
+        closeStreamsForLocalSubjects([SUBJECT, OTHER_SUBJECT]);
+      });
+
+      test('is closed when its account stops being let in on a password, and nothing else is', () => {
+        const handler = getHandler();
+        const header = connectSseClient(handler, '10.3.0.1', basicPrincipal(SUBJECT));
+        const otherAccount = connectSseClient(handler, '10.3.0.2', basicPrincipal(OTHER_SUBJECT));
+        const session = connectSseClient(handler, '10.3.0.3', {
+          kind: 'session',
+          username: 'scott',
+        });
+        const keyed = connectSseClient(handler, '10.3.0.4', KEY_PRINCIPAL);
+        // No session opened it, so the session id its request carried ends nothing.
+        expect(closeStreamsForRevokedSessions(['session-10.3.0.1'])).toBe(0);
+        expect(header.res.destroy).not.toHaveBeenCalled();
+
+        expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(1);
+
+        expect(header.res.destroy).toHaveBeenCalled();
+        expect(sseRouter._clients.has(header.res)).toBe(false);
+        expect(sseRouter._activeSseClientRegistry.hasByResponse(header.res)).toBe(false);
+        expect(sseRouter._connectionsPerIp.has('10.3.0.1')).toBe(false);
+        expect(otherAccount.res.destroy).not.toHaveBeenCalled();
+        expect(session.res.destroy).not.toHaveBeenCalled();
+        expect(keyed.res.destroy).not.toHaveBeenCalled();
+      });
+
+      test('is forgotten once the client has gone, so a later enrollment finds nothing', () => {
+        const handler = getHandler();
+        const { req, res } = connectSseClient(handler, '10.3.0.5', basicPrincipal(SUBJECT));
+
+        req._listeners.close();
+
+        expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(0);
+        expect(res.destroy).not.toHaveBeenCalled();
+      });
+
+      test('is closed by the re-check once its account has a factor nothing announced', () => {
+        const handler = getHandler();
+        const header = connectSseClient(handler, '10.3.0.6', basicPrincipal(SUBJECT));
+        const otherAccount = connectSseClient(handler, '10.3.0.7', basicPrincipal(OTHER_SUBJECT));
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+        expect(header.res.destroy).not.toHaveBeenCalled();
+
+        mockIsSecondFactorRequired.mockImplementation((subjectId: string) => subjectId === SUBJECT);
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(header.res.destroy).toHaveBeenCalled();
+        expect(sseRouter._clients.has(header.res)).toBe(false);
+        expect(otherAccount.res.destroy).not.toHaveBeenCalled();
       });
     });
 

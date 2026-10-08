@@ -6,7 +6,7 @@ import type { ContainerStatsCollector } from '../../stats/collector.js';
 import { STATS_STREAM_HEARTBEAT_INTERVAL_MS } from '../../stats/config.js';
 import { getErrorMessage } from '../../util/error.js';
 import { sendErrorResponse } from '../error-response.js';
-import { trackSessionStream } from '../session-streams.js';
+import { trackBasicHeaderStream, trackSessionStream } from '../session-streams.js';
 import { SSE_STALE_SWEEP_INTERVAL_MS } from '../sse-constants.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -272,9 +272,11 @@ function createStreamContainerStatsHandler({
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
     // The request authenticated once; a session revoked afterwards ends the
-    // stream here. Tracked only now, with the cleanup that forgets it, so a
-    // failure above never leaves a stream tracked that nothing would forget.
+    // stream here, and so does a Basic header that stops being let in. Tracked
+    // only now, with the cleanup that forgets it, so a failure above never
+    // leaves a stream tracked that nothing would forget.
     const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
+    const forgetBasicHeaderStream = trackBasicHeaderStream(req.principal, closeStream);
     let disconnected = false;
     cleanup = () => {
       if (disconnected) {
@@ -282,6 +284,7 @@ function createStreamContainerStatsHandler({
       }
       disconnected = true;
       forgetSessionStream();
+      forgetBasicHeaderStream();
       pressureController.cleanup();
       try {
         globalThis.clearInterval(heartbeatInterval);
@@ -357,9 +360,11 @@ function createStreamStatsSummaryHandler(
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
     // The request authenticated once; a session revoked afterwards ends the
-    // stream here. Tracked only now, with the cleanup that forgets it, so a
-    // failure above never leaves a stream tracked that nothing would forget.
+    // stream here, and so does a Basic header that stops being let in. Tracked
+    // only now, with the cleanup that forgets it, so a failure above never
+    // leaves a stream tracked that nothing would forget.
     const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
+    const forgetBasicHeaderStream = trackBasicHeaderStream(req.principal, closeStream);
     let disconnected = false;
     let streamClient: SummaryStatsStreamClient;
     cleanup = () => {
@@ -368,6 +373,7 @@ function createStreamStatsSummaryHandler(
       }
       disconnected = true;
       forgetSessionStream();
+      forgetBasicHeaderStream();
       runtime.clients.delete(streamClient);
       stopSummaryStatsStaleSweepIfIdle(runtime);
       pressureController.cleanup();

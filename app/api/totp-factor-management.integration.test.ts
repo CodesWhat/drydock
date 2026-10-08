@@ -89,7 +89,7 @@ import { validateOpenApiJsonResponse } from './openapi-contract.js';
 import * as portwingRouter from './portwing.js';
 import { restoreSessionPrincipal, sessionAuthenticator } from './session-principal.js';
 import { SessionStore } from './session-store.js';
-import { registerSessionStreamCloser } from './session-streams.js';
+import { registerSessionStreamCloser, trackBasicHeaderStream } from './session-streams.js';
 import { resetLoginChallengesForTests } from './totp-challenge.js';
 import {
   digestRecoveryCode,
@@ -2007,6 +2007,39 @@ describe('TOTP slice 4: factor-management API', () => {
       expect((await attempt(code(newSeed, 1))).status).toBe(200);
     });
 
+    test('confirming a replacement closes whatever a Basic header still holds for the account', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      // Nothing can open one while a factor is active, so it is tracked the way a handler would.
+      const close = vi.fn();
+      const forget = trackBasicHeaderStream(
+        {
+          kind: 'basic',
+          username: TEST_USER,
+          identity: {
+            subjectId: SUBJECT_ID,
+            providerId: PROVIDER,
+            assurance: 'password',
+            factorVersion: 1,
+            issuedAt: Date.now(),
+          },
+        },
+        close,
+      );
+
+      const reveal = await revealEnrollment(h, cookie, { code: code(enrolled.seed, 1) });
+      expect(close).not.toHaveBeenCalled();
+      const confirm = await call(h, 'PUT', `/totp-enrollments/${reveal.id}`, {
+        cookie,
+        body: { code: code(base32Decode(reveal.secret)) },
+      });
+
+      expect(confirm.status).toBe(201);
+      expect(close).toHaveBeenCalledTimes(1);
+      forget();
+    });
+
     test('an abandoned replacement leaves the old factor, its sessions and its codes alone', async () => {
       const h = await boot();
       const enrolled = enroll();
@@ -2954,6 +2987,78 @@ describe('TOTP slice 4: factor-management API', () => {
         expect(await onPhone.endedWithin(2_000)).toBe(true);
       },
     );
+
+    test.each(STREAMS)(
+      '%s: a stream opened with a Basic header ends when its account enrolls a factor, and another account’s stays',
+      async (_name, path) => {
+        const h = await boot();
+        const header = { Authorization: basicHeader(TEST_USER, TEST_PASSWORD) };
+        const onPassword = await openStream(h, path, header);
+        // The same username under the other provider is another account.
+        const otherAccount = await openStream(h, path, {
+          Authorization: basicHeader(TEST_USER, OTHER_PASSWORD),
+        });
+        expect(await onPassword.endedWithin(100)).toBe(false);
+
+        await enrollThroughApi(h, await sessionCookie(h));
+
+        // The header stopped authenticating, so what it opened ends with it.
+        expect((await fetch(url(h, path), { headers: header })).status).toBe(401);
+        expect(await onPassword.endedWithin(2_000)).toBe(true);
+        expect(await otherAccount.endedWithin(200)).toBe(false);
+      },
+    );
+
+    test.each(STREAMS)(
+      '%s: a factor nothing announced ends the Basic header stream at the next re-check',
+      async (_name, path) => {
+        const h = await boot();
+        // Only the intervals: the re-check is one, and the requests need real time.
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const onPassword = await openStream(h, path, {
+          Authorization: basicHeader(TEST_USER, TEST_PASSWORD),
+        });
+        const otherAccount = await openStream(h, path, {
+          Authorization: basicHeader(TEST_USER, OTHER_PASSWORD),
+        });
+        vi.advanceTimersByTime(15_000);
+        expect(await onPassword.endedWithin(100)).toBe(false);
+
+        // Straight into the store: no route ran, so nothing told the stream.
+        enroll();
+        vi.advanceTimersByTime(15_000);
+
+        expect(await onPassword.endedWithin(2_000)).toBe(true);
+        expect(await otherAccount.endedWithin(200)).toBe(false);
+      },
+      10_000,
+    );
+
+    test('an orphaned factor ends the Basic header streams of every account without one of its own', async () => {
+      const h = await boot();
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const [, path] = STREAMS[0];
+      const first = await openStream(h, path, {
+        Authorization: basicHeader(TEST_USER, TEST_PASSWORD),
+      });
+      const second = await openStream(h, path, {
+        Authorization: basicHeader(TEST_USER, OTHER_PASSWORD),
+      });
+
+      // A factor no registered account owns: the orphan guard now refuses both headers.
+      enroll(deriveSubjectId('basic.renamed', TEST_USER), 'basic.renamed');
+      expect(
+        (
+          await fetch(url(h, path), {
+            headers: { Authorization: basicHeader(TEST_USER, TEST_PASSWORD) },
+          })
+        ).status,
+      ).toBe(503);
+      vi.advanceTimersByTime(15_000);
+
+      expect(await first.endedWithin(2_000)).toBe(true);
+      expect(await second.endedWithin(2_000)).toBe(true);
+    }, 10_000);
 
     test.each(STREAMS)(
       '%s: a stream opened with an API key outlives every session that ends',

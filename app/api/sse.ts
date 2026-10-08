@@ -36,7 +36,11 @@ import { stripContainerDetailOnlySecurityFields } from './container/container-pr
 import { projectLabelOwnedForApi } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
-import { createSessionStreamRecheck, registerSessionStreamCloser } from './session-streams.js';
+import {
+  createSessionStreamRecheck,
+  registerSessionStreamCloser,
+  trackBasicHeaderStream,
+} from './session-streams.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -618,6 +622,11 @@ function eventsHandler(req: Request, res: Response): void {
     ...sessionClientFields(req),
   };
   sseClientRegistry.add(activeClient);
+  // A Basic header has no session to end with, so the stream is tracked under
+  // the account it proved and closed when a password stops letting it in.
+  const forgetBasicHeaderStream = trackBasicHeaderStream(principal, () =>
+    forceDisconnectResponse(client),
+  );
 
   let disconnected = false;
   const cleanup = () => {
@@ -625,6 +634,7 @@ function eventsHandler(req: Request, res: Response): void {
       return;
     }
     disconnected = true;
+    forgetBasicHeaderStream();
     const disconnectedClient = sseClientRegistry.getByResponse(client);
     if (disconnectedClient) {
       dropActiveClient(disconnectedClient);

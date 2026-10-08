@@ -42,6 +42,7 @@ import { sendErrorResponse } from './error-response.js';
 import type { AuthenticatedPrincipal } from './principal.js';
 import { getAuthenticatedRouteRateLimitKey } from './rate-limit-key.js';
 import { SESSION_ONLY, scoped } from './route-scopes.js';
+import { closeStreamsForLocalSubjects } from './session-streams.js';
 import {
   decryptTotpSeed,
   digestRecoveryCode,
@@ -372,6 +373,10 @@ async function confirmEnrollment(req: Request, res: Response): Promise<void> {
     enrollment.replacesFactorId === null ? 'totp-enabled' : 'totp-replaced',
     `subject=${context.subjectId} factor=${factorId}`,
   );
+  // From here a password alone is not this account, so a stream it opened
+  // with an `Authorization: Basic` header ends now; no session ties it to
+  // the sessions replaced below.
+  closeStreamsForLocalSubjects([context.subjectId]);
   // The factor is live and the codes below exist nowhere else, so a session
   // that cannot be replaced still gets its answer; the person signs in again.
   await replaceSessionAfterFactorChange(
