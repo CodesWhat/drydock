@@ -2751,8 +2751,96 @@ describe('additional docker trigger coverage', () => {
     expect(removeImageSpy).not.toHaveBeenCalled();
   });
 
-  test('buildHookConfig should default update env values to empty strings when missing', () => {
-    const hookConfig = docker.buildHookConfig({
+  describe('buildHookConfig image label provenance', () => {
+    const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
+
+    afterEach(() => {
+      if (originalHooksEnabled === undefined) {
+        delete process.env.DD_HOOKS_ENABLED;
+      } else {
+        process.env.DD_HOOKS_ENABLED = originalHooksEnabled;
+      }
+    });
+
+    function hookContainer(labels: Record<string, string>) {
+      return {
+        id: 'container-id',
+        name: 'container-name',
+        image: { name: 'repo/name', tag: { value: '1.0.0' } },
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.0.1' },
+        labels,
+      };
+    }
+
+    test('ignores a hook label the image config also carries', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi
+            .fn()
+            .mockResolvedValue({ Config: { Labels: { 'dd.hook.pre': 'echo baked' } } }),
+        })),
+      };
+
+      const hookConfig = await docker.buildHookConfig(
+        hookContainer({ 'dd.hook.pre': 'echo baked', 'dd.hook.post': 'echo operator' }),
+        { dockerApi, currentContainerSpec: { Image: 'sha256:image-id' } },
+      );
+
+      expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:image-id');
+      expect(hookConfig.hookPre).toBeUndefined();
+      expect(hookConfig.hookPost).toBe('echo operator');
+    });
+
+    test('inspects the live container when the context has no container spec', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({ Config: { Labels: {} } }),
+        })),
+      };
+      const liveContainer = { id: 'live' };
+      const getCurrentContainerSpy = vi
+        .spyOn(docker, 'getCurrentContainer')
+        .mockResolvedValue(liveContainer);
+      const inspectContainerSpy = vi
+        .spyOn(docker, 'inspectContainer')
+        .mockResolvedValue({ Image: 'sha256:live-image' });
+
+      const hookConfig = await docker.buildHookConfig(
+        hookContainer({ 'dd.hook.pre': 'echo pre' }),
+        {
+          dockerApi,
+          currentContainerSpec: null,
+        },
+      );
+
+      expect(getCurrentContainerSpy).toHaveBeenCalledWith(
+        dockerApi,
+        expect.objectContaining({ id: 'container-id' }),
+      );
+      expect(inspectContainerSpy).toHaveBeenCalledWith(liveContainer, expect.anything());
+      expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:live-image');
+      expect(hookConfig.hookPre).toBe('echo pre');
+    });
+
+    test('fails closed when the image cannot be inspected', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(new Error('gone')) })),
+      };
+
+      await expect(
+        docker.buildHookConfig(hookContainer({ 'dd.hook.pre': 'echo pre' }), {
+          dockerApi,
+          currentContainerSpec: { Image: 'sha256:image-id' },
+        }),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+  });
+
+  test('buildHookConfig should default update env values to empty strings when missing', async () => {
+    const hookConfig = await docker.buildHookConfig({
       id: 'container-id',
       name: 'container-name',
       image: {
