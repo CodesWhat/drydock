@@ -9,6 +9,7 @@ import { flattenConfigTree } from './flatten.js';
 import { interpolateConfigTree } from './interpolate.js';
 import { getConfigFileInfo } from './layer.js';
 import { type ConfigurationReloadResult, reloadConfiguration } from './reload.js';
+import { settingKeyForms, toSettingKey } from './sources.js';
 import { type ConfigurationValidationResult, validateConfiguration } from './validate.js';
 
 /**
@@ -255,7 +256,16 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
   const sectionEnvKeys = Object.keys(candidateFileLayer).filter(
     (key) => ddEnvKeyToSection(key) === sectionNormalized,
   );
-  const envSourcedKeys = sectionEnvKeys.filter((key) => configFileSources[key] === 'env').sort();
+  // A body's `x: { _file }` (`DD_X__FILE`) and `x: value` (`DD_X`) set the
+  // same setting, and the environment may have provided it under either name
+  // too: `configFileSources` holds `DD_X__FILE` for an environment secret file
+  // read at startup and `DD_X` once a reload has resolved it. Either name
+  // attributed to `env` means the environment wins, so the refusal names the
+  // setting, `DD_X`, whichever form the body used.
+  const envSourcedKeys = sectionEnvKeys
+    .map(toSettingKey)
+    .filter((key) => settingKeyForms(key).some((form) => configFileSources[form] === 'env'))
+    .sort();
   if (envSourcedKeys.length > 0) {
     return { kind: 'env-sourced', section: sectionNormalized, keys: envSourcedKeys };
   }
