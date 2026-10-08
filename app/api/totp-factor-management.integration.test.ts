@@ -1091,6 +1091,81 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(locked.status).toBe(423);
     });
 
+    test('a re-authentication that succeeds forgives the wrong passwords before it, as a login does', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const wrong = () =>
+        call(h, 'POST', '/totp-enrollments', { cookie, body: { password: 'nope' } });
+      const right = async () => {
+        const started = await startEnrollment(h, cookie);
+        expect(started.status).toBe(201);
+        const { id } = (await started.json()) as EnrollmentReveal;
+        await call(h, 'DELETE', `/totp-enrollments/${id}`, { cookie });
+      };
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await wrong()).status).toBe(403);
+      }
+      await right();
+
+      // Three more would have been the fourth, fifth and sixth: a lock at the fifth.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await wrong()).status).toBe(403);
+      }
+      await right();
+    });
+
+    test('with a factor, only the password and the proof together forgive anything', async () => {
+      const h = await boot();
+      const enrolled = enroll();
+      const cookie = await loginCookieWithCode(h, enrolled);
+      const reauth = (body: Record<string, unknown>) =>
+        call(h, 'POST', '/totp-recovery-code-sets', { cookie, body });
+      const wrongPassword = () => reauth({ password: 'nope', code: code(enrolled.seed, 1) });
+
+      expect((await wrongPassword()).status).toBe(403);
+      expect((await wrongPassword()).status).toBe(403);
+      // The right password with a wrong code is a third failure, not a pardon for the two before.
+      expect(
+        (await reauth({ password: TEST_PASSWORD, code: wrongCode(enrolled.seed) })).status,
+      ).toBe(403);
+      expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(1);
+      expect((await wrongPassword()).status).toBe(403);
+      expect((await wrongPassword()).status).toBe(423);
+    });
+
+    test.each([
+      ['a code from the authenticator', (enrolled: Enrolled) => ({ code: code(enrolled.seed, 1) })],
+      ['a recovery code', (enrolled: Enrolled) => ({ recoveryCode: enrolled.recoveryCodes[0] })],
+    ])(
+      'a re-authentication proved with %s forgives the wrong codes before it, the persisted count included',
+      async (_name, proofOf) => {
+        const h = await boot();
+        const enrolled = enroll();
+        const cookie = await loginCookieWithCode(h, enrolled);
+        const reauth = (proof: Record<string, unknown>) =>
+          call(h, 'POST', '/totp-recovery-code-sets', {
+            cookie,
+            body: { password: TEST_PASSWORD, ...proof },
+          });
+        const wrong = () => reauth({ code: wrongCode(enrolled.seed) });
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          expect((await wrong()).status).toBe(403);
+        }
+        expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(3);
+
+        expect((await reauth(proofOf(enrolled))).status).toBe(201);
+
+        expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(0);
+        // Three more would have been the fourth, fifth and sixth: a lock at the fifth.
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          expect((await wrong()).status).toBe(403);
+        }
+        expect(totpStore.getFactorFailureState(SUBJECT_ID).failures).toBe(3);
+      },
+    );
+
     test('a parallel burst of wrong passwords is hashed one at a time and cannot outrun the lockout budget', async () => {
       const h = await boot();
       const cookie = await sessionCookie(h);

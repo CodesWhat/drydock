@@ -12,6 +12,7 @@ import * as registry from '../registry/index.js';
 import type { TotpFactorRecord } from '../store/totp.js';
 import { getErrorMessage } from '../util/error.js';
 import {
+  clearLoginLockoutsAfterSuccess,
   rejectFailedReauthentication,
   rejectIfFactorLocked,
   rejectIfLockedOut,
@@ -260,6 +261,11 @@ function proveSecondFactor(
  * persisted second-factor budgets login does, one call at a time per subject
  * so a burst cannot outrun them. A code that proves the call is spent like any
  * other, so a replayed one fails.
+ *
+ * Success forgives those budgets exactly as a login's does, and no sooner: the
+ * password alone forgives nothing while a factor is active, so guessing codes
+ * behind a right password cannot reset the count that bounds the guesses. The
+ * persisted second-factor count is cleared only by a proof that passed.
  */
 export async function reauthenticate(
   req: Request,
@@ -304,9 +310,14 @@ export async function reauthenticate(
       return undefined;
     }
     if (factor === undefined || body.proof === undefined) {
+      clearLoginLockoutsAfterSuccess(authRequest, context.username);
       return {};
     }
-    return proveSecondFactor(authRequest, res, context, factor, body.proof);
+    const proven = proveSecondFactor(authRequest, res, context, factor, body.proof);
+    if (proven !== undefined) {
+      clearLoginLockoutsAfterSuccess(authRequest, context.username, context.subjectId);
+    }
+    return proven;
   } finally {
     reauthenticating.delete(context.subjectId);
   }
