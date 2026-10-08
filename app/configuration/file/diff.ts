@@ -1,5 +1,5 @@
 import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
-import { type ConfigValueSource, mergeConfigLayers } from './sources.js';
+import { type ConfigValueSource, mergeConfigLayers, settingKeyForms } from './sources.js';
 
 /**
  * Pure "would this candidate file layer change anything" comparison, shared
@@ -104,7 +104,13 @@ export function buildCandidateEnvAndDiff(
   const changedKeys = new Set<string>();
   const candidateKeys = Object.keys(candidateFileLayer);
   for (const key of new Set([...currentFileKeys, ...candidateKeys])) {
-    if (configFileSources[key] === 'env' && !configFileInterpolatedKeys.has(key)) {
+    // Both names of the setting are checked: `DD_X` and `DD_X__FILE` are one
+    // key, so the environment owning either shadows a candidate in the other.
+    if (
+      settingKeyForms(key).some(
+        (form) => configFileSources[form] === 'env' && !configFileInterpolatedKeys.has(form),
+      )
+    ) {
       // Env always wins; the candidate file can never change this key's
       // effective value, whatever it sets. A key that's `'env'`-attributed
       // only because it's currently interpolated is NOT skipped here: its

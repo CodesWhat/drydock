@@ -25,6 +25,7 @@
     "fileUnavailable": "Yapılandırma dosyası yok. Düzenlemeden önce bir dosya bağlayın.",
     "watcherUnavailable": "Bu izleyici düzenleyici anlık görüntüsünde bulunmuyor.",
     "accessDenied": "Oturumunuzun bu düzenleyiciyi kullanma yetkisi yok.",
+    "recoveryAssurance": "Kurtarma koduyla oturum açtığınız için yapılandırmayı değiştiremezsiniz. Kimlik doğrulama uygulamanızdaki bir kodla oturum açın.",
     "apiUnavailable": "Bu sunucu düzenleyici API’sini sağlamıyor.",
     "rateLimited": "Çok fazla istek. Yeniden yüklemeden önce bir dakika bekleyin.",
     "loadFailed": "Düzenleyici yüklenemedi. Değişiklik gönderilmedi.",

@@ -164,10 +164,13 @@ Object.keys(process.env)
 const configFileLayer = getConfigFileLayer();
 export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInterpolatedKeys());
 
-// 3. Merge the file layer beneath the real environment: a key already set in
-// step 1 wins, an unset one is filled in from the file, and Joi defaults are
-// untouched either way — the whole env > file > defaults precedence is this
-// one `=== undefined` test, done in mergeConfigLayers. Records which layer
+// 3. Merge the file layer beneath the real environment: a setting already
+// provided in step 1 wins, an unset one is filled in from the file, and Joi
+// defaults are untouched either way — the whole env > file > defaults
+// precedence is this one test, done in mergeConfigLayers. `DD_X` and
+// `DD_X__FILE` count as the same setting there, so step 4 never resolves a
+// file `_file` node over a value the environment set, nor a file value beside
+// a secret file the environment named. Records which layer
 // supplied each key; an interpolated key attributes as `env` even though it
 // reached ddEnvVars via the file layer.
 export const configFileSources: Record<string, ConfigValueSource> = mergeConfigLayers(

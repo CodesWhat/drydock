@@ -368,4 +368,34 @@ describe('watcher editor state', () => {
     await editor.save();
     expect(editor.hasProblems.value).toBe(true);
   });
+
+  it.each([
+    ['load', 'recovery-assurance', 'recoveryAssurance'],
+    ['load', undefined, 'accessDenied'],
+    ['load', 'other-reason', 'accessDenied'],
+    ['save', 'recovery-assurance', 'recoveryAssurance'],
+    ['save', undefined, 'accessDenied'],
+  ] as const)('maps a 403 on %s with reason %s to %s', async (phase, reason, key) => {
+    const { editor } = setup();
+    const error = new WatcherEditorHttpError(403, reason);
+    if (phase === 'load') {
+      vi.mocked(getWatcherEditor).mockRejectedValueOnce(error);
+      await editor.open();
+    } else {
+      await editor.open();
+      editor.setValue('cron', 'draft');
+      vi.mocked(saveWatcherEdits).mockRejectedValueOnce(error);
+      await editor.save();
+    }
+    expect(editor.errorKey.value).toBe(key);
+  });
+
+  it('keeps the generic message for a 401 even when a reason is attached', async () => {
+    const { editor } = setup();
+    vi.mocked(getWatcherEditor).mockRejectedValueOnce(
+      new WatcherEditorHttpError(401, 'recovery-assurance'),
+    );
+    await editor.open();
+    expect(editor.errorKey.value).toBe('accessDenied');
+  });
 });

@@ -87,4 +87,92 @@ describe('mergeConfigLayers', () => {
     expect(envVars.DD_SERVER_PORT).toBe('3000');
     expect(sources.DD_SERVER_PORT).toBe('env');
   });
+
+  // DD_X and DD_X__FILE name one setting: replaceSecrets turns the second into
+  // the first. Whichever form the environment uses, the file's entry for that
+  // setting is dropped, in either form.
+  describe('a setting and its secret-file form are one key', () => {
+    const KEY = 'DD_REGISTRY_GHCR_PRIVATE_TOKEN';
+    const FILE_KEY = `${KEY}__FILE`;
+
+    test('a file secret-file entry is dropped when the environment sets the value itself', () => {
+      const envVars: Record<string, string | undefined> = { [KEY]: 'from-env' };
+      const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
+
+      expect(envVars).toStrictEqual({ [KEY]: 'from-env' });
+      expect(sources).toStrictEqual({ [KEY]: 'env' });
+    });
+
+    test('a file value is dropped when the environment sets the secret-file form', () => {
+      const envVars: Record<string, string | undefined> = { [FILE_KEY]: '/run/secrets/from-env' };
+      const sources = mergeConfigLayers(envVars, { [KEY]: 'from-file' });
+
+      expect(envVars).toStrictEqual({ [FILE_KEY]: '/run/secrets/from-env' });
+      expect(sources).toStrictEqual({ [FILE_KEY]: 'env' });
+    });
+
+    test('a file secret-file entry is dropped when the environment sets the secret-file form', () => {
+      const envVars: Record<string, string | undefined> = { [FILE_KEY]: '/run/secrets/from-env' };
+      const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
+
+      expect(envVars).toStrictEqual({ [FILE_KEY]: '/run/secrets/from-env' });
+      expect(sources).toStrictEqual({ [FILE_KEY]: 'env' });
+    });
+
+    test.each([
+      ['value', { [KEY]: 'from-file' }],
+      ['secret-file entry', { [FILE_KEY]: '/run/secrets/from-file' }],
+    ])('a file %s is dropped when the environment sets both forms', (_, fileLayer) => {
+      const environment = { [KEY]: 'from-env', [FILE_KEY]: '/run/secrets/from-env' };
+      const envVars: Record<string, string | undefined> = { ...environment };
+      const sources = mergeConfigLayers(envVars, fileLayer);
+
+      expect(envVars).toStrictEqual(environment);
+      expect(sources).toStrictEqual({ [KEY]: 'env', [FILE_KEY]: 'env' });
+    });
+
+    test('the file supplies the secret-file form when the environment sets neither', () => {
+      const envVars: Record<string, string | undefined> = {};
+      const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
+
+      expect(envVars).toStrictEqual({ [FILE_KEY]: '/run/secrets/from-file' });
+      expect(sources).toStrictEqual({ [FILE_KEY]: 'file' });
+    });
+
+    test.each([
+      [KEY, { [FILE_KEY]: '/run/secrets/from-file' }],
+      [FILE_KEY, { [KEY]: 'from-file' }],
+    ])(
+      '%s explicitly set to undefined is unset, so the file still supplies the setting',
+      (unsetKey, fileLayer) => {
+        const envVars: Record<string, string | undefined> = { [unsetKey]: undefined };
+        const sources = mergeConfigLayers(envVars, fileLayer);
+
+        expect(envVars).toStrictEqual({ [unsetKey]: undefined, ...fileLayer });
+        expect(sources).toStrictEqual(
+          Object.fromEntries(Object.keys(fileLayer).map((key) => [key, 'file'])),
+        );
+      },
+    );
+
+    test('a dropped entry named in envSourcedFileKeys still leaves no trace in sources', () => {
+      const envVars: Record<string, string | undefined> = { [KEY]: 'from-env' };
+      const sources = mergeConfigLayers(
+        envVars,
+        { [FILE_KEY]: '/run/secrets/from-file' },
+        new Set([FILE_KEY]),
+      );
+
+      expect(envVars).toStrictEqual({ [KEY]: 'from-env' });
+      expect(sources).toStrictEqual({ [KEY]: 'env' });
+    });
+
+    test('a different setting that merely shares a prefix is not shadowed', () => {
+      const envVars: Record<string, string | undefined> = { [`${KEY}_TTL`]: '60' };
+      const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
+
+      expect(envVars[FILE_KEY]).toBe('/run/secrets/from-file');
+      expect(sources[FILE_KEY]).toBe('file');
+    });
+  });
 });

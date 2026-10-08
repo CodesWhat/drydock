@@ -44,7 +44,8 @@
       "none": "Nenhum",
       "notSet": "Não definido",
       "labelValue": "Valor do label: {value}",
-      "noLabel": "Sem label"
+      "noLabel": "Sem label",
+      "explicitNone": "Nenhuma (substituição)"
     },
     "actions": {
       "edit": "Editar",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Salvar altera o valor de tudo no escopo mostrado acima."
+      "scopeReminder": "Salvar altera o valor de tudo no escopo mostrado acima.",
+      "dependsOnInput": "Adicionar um contêiner",
+      "dependsOnHelp": "Escolha um contêiner no mesmo host ou digite um nome que ainda não esteja em execução. Nomes que o Drydock não conhece são salvos com um aviso.",
+      "notificationInput": "Adicionar um trigger de notificação",
+      "actionInput": "Adicionar um trigger de ação",
+      "routingHelp": "ID ou nome do trigger, opcionalmente seguido de um limite como minor.",
+      "threshold": "Limite",
+      "thresholdDefault": "Sem limite",
+      "addEntry": "Adicionar",
+      "removeEntry": "Remover {entry}",
+      "locked": "do rótulo",
+      "noneHint": "A lista está vazia. Ao salvar, este campo fica como nenhum e qualquer valor do rótulo é ignorado. Use Redefinir para o rótulo para remover a substituição.",
+      "autoWarning": "Isso permite que os triggers listados atualizem este contêiner automaticamente quando rodam no modo onauto.",
+      "dependencyAction": "Ação de dependência",
+      "dependencyActionHelp": "O que o Drydock faz com os contêineres dos quais este depende quando ele é atualizado.",
+      "dependencyActions": {
+        "update": "Atualizar",
+        "restart": "Reiniciar"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Remova caracteres de controle, marcas de direção, < e >.",
         "invalid-icon": "Use uma origem de ícone e um nome, não uma URL.",
         "invalid-type": "O servidor recusou este valor.",
-        "invalid-value": "O servidor recusou este valor."
-      }
+        "invalid-value": "O servidor recusou este valor.",
+        "invalid-name": "Nome de contêiner inválido: {entries}.",
+        "duplicate-entry": "Listado mais de uma vez: {entries}.",
+        "too-many-entries": "Use no máximo 32 entradas.",
+        "depends-on-self": "Um contêiner não pode depender de si mesmo: {entries}.",
+        "invalid-reference": "Referência de trigger inválida: {entries}.",
+        "invalid-threshold": "Limite não suportado: {entries}.",
+        "unknown-trigger-reference": "Nenhum trigger registrado corresponde a: {entries}.",
+        "wrong-trigger-category": "Tipo de trigger errado para este campo: {entries}.",
+        "agent-enforced-widening": "O agente recusaria isso, pois amplia o que seus rótulos permitem: {entries}.",
+        "invalid-action": "Escolha atualizar ou reiniciar."
+      },
+      "cycle": "Essas dependências criariam um ciclo passando por: {containers}."
+    },
+    "agent": {
+      "note": "Este contêiner roda no agente {agent}, que aplica os próprios rótulos. Aqui o Drydock só pode restringir o acesso às ações.",
+      "excludeHint": "As exclusões dos rótulos permanecem. Você só pode adicionar mais.",
+      "narrowHint": "Você só pode remover entradas ou usar um limite mais estreito que o do rótulo.",
+      "nothingToNarrow": "Os rótulos não permitem nada aqui, então não há o que restringir."
     }
   }
 }

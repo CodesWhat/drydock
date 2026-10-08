@@ -181,6 +181,106 @@ describe('writeConfigurationSection', () => {
     expect(mockReloadConfiguration).not.toHaveBeenCalled();
   });
 
+  // DD_X and DD_X__FILE are one setting, so a body is refused whichever form
+  // it uses and whichever form the environment used. `configFileSources` holds
+  // the name the environment set at startup, and the base name after a reload.
+  describe('against a key the environment provides, in either form', () => {
+    const KEY = 'DD_NOTIFICATION_DISCORD_MYHOOK_URL';
+    const FILE_KEY = `${KEY}__FILE`;
+    let bodySecretPath: string;
+
+    beforeEach(() => {
+      bodySecretPath = path.join(tempDir, 'body-secret');
+      fs.writeFileSync(bodySecretPath, 'https://body-secret.example/hook\n', { mode: 0o600 });
+      writeFixture(FIXTURE_WITH_COMMENTS);
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    function setLiteralInTheEnvironment(): void {
+      vi.stubEnv(KEY, 'https://env-set.example/hook');
+      ddEnvVars[KEY] = 'https://env-set.example/hook';
+      configFileSources[KEY] = 'env';
+    }
+
+    function setSecretFileInTheEnvironment(sourceKey: string): void {
+      const envSecretPath = path.join(tempDir, 'env-secret');
+      fs.writeFileSync(envSecretPath, 'https://env-secret.example/hook\n', { mode: 0o600 });
+      vi.stubEnv(FILE_KEY, envSecretPath);
+      ddEnvVars[KEY] = 'https://env-secret.example/hook';
+      configFileSources[sourceKey] = 'env';
+    }
+
+    const environments: Array<[string, () => void]> = [
+      ['a literal', setLiteralInTheEnvironment],
+      ['a secret file, as recorded at startup', () => setSecretFileInTheEnvironment(FILE_KEY)],
+      ['a secret file, as recorded after a reload', () => setSecretFileInTheEnvironment(KEY)],
+    ];
+    const bodies: Array<[string, () => unknown]> = [
+      ['a literal', () => 'https://new.example/hook'],
+      ['a _file node', () => ({ _file: bodySecretPath })],
+    ];
+
+    describe.each(environments)('when the environment set %s', (_, setEnvironment) => {
+      test.each(bodies)('refuses a body that sets %s, naming the key once', async (__, url) => {
+        setEnvironment();
+        const before = readRaw();
+
+        const outcome = await writeConfigurationSection('notification', {
+          discord: { myhook: { url: url() } },
+        });
+
+        expect(outcome).toStrictEqual({
+          kind: 'env-sourced',
+          section: 'notification',
+          keys: [KEY],
+        });
+        expect(readRaw()).toBe(before);
+        expect(mockRename).not.toHaveBeenCalled();
+        expect(mockReloadConfiguration).not.toHaveBeenCalled();
+      });
+    });
+
+    test('writes a _file body for a key the environment does not provide and reports the key it resolves to', async () => {
+      const outcome = await writeConfigurationSection('notification', {
+        discord: { myhook: { url: { _file: bodySecretPath } } },
+      });
+
+      expect(outcome).toMatchObject({
+        kind: 'written',
+        section: 'notification',
+        changedKeys: [KEY],
+        restartRequired: false,
+      });
+      expect(yaml.parse(readRaw()).notification.discord.myhook.url).toStrictEqual({
+        _file: bodySecretPath,
+      });
+      expect(readRaw()).not.toContain('body-secret.example');
+    });
+
+    test('names every key a mixed body would set over the environment, sorted', async () => {
+      setLiteralInTheEnvironment();
+      ddEnvVars.DD_NOTIFICATION_DISCORD_ALPHA_URL = 'https://env-alpha.example/hook';
+      configFileSources.DD_NOTIFICATION_DISCORD_ALPHA_URL__FILE = 'env';
+
+      const outcome = await writeConfigurationSection('notification', {
+        discord: {
+          myhook: { url: { _file: bodySecretPath } },
+          alpha: { url: 'https://new-alpha.example/hook' },
+          other: { url: 'https://other.example/hook' },
+        },
+      });
+
+      expect(outcome).toStrictEqual({
+        kind: 'env-sourced',
+        section: 'notification',
+        keys: ['DD_NOTIFICATION_DISCORD_ALPHA_URL', KEY],
+      });
+    });
+  });
+
   test('refuses a DB-owned section even when no config file is configured', async () => {
     const outcome = await writeConfigurationSection('settings', { updateMode: 'auto' });
 

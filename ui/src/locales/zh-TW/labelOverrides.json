@@ -44,7 +44,8 @@
       "none": "無",
       "notSet": "未設定",
       "labelValue": "標籤值：{value}",
-      "noLabel": "無標籤"
+      "noLabel": "無標籤",
+      "explicitNone": "無（覆寫）"
     },
     "actions": {
       "edit": "編輯",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "儲存會變更上方所示範圍內所有項目的值。"
+      "scopeReminder": "儲存會變更上方所示範圍內所有項目的值。",
+      "dependsOnInput": "新增容器",
+      "dependsOnHelp": "選擇同一主機上的容器，或輸入尚未執行的名稱。Drydock 不認識的名稱會帶警告儲存。",
+      "notificationInput": "新增通知觸發器",
+      "actionInput": "新增操作觸發器",
+      "routingHelp": "觸發器 ID 或名稱，後面可選擇加上 minor 之類的閾值。",
+      "threshold": "閾值",
+      "thresholdDefault": "無閾值",
+      "addEntry": "新增",
+      "removeEntry": "移除 {entry}",
+      "locked": "來自標籤",
+      "noneHint": "清單是空的。儲存後此欄位會設為無，並忽略標籤的值。要移除覆寫，請改用「還原為標籤值」。",
+      "autoWarning": "這樣列出的觸發器在 onauto 模式下執行時，可以自動更新此容器。",
+      "dependencyAction": "相依性操作",
+      "dependencyActionHelp": "此容器更新時，Drydock 對它所依賴的容器執行的操作。",
+      "dependencyActions": {
+        "update": "更新",
+        "restart": "重新啟動"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "請移除控制字元、方向標記、< 和 >。",
         "invalid-icon": "請使用圖示來源和名稱，而不是 URL。",
         "invalid-type": "伺服器拒絕了此值。",
-        "invalid-value": "伺服器拒絕了此值。"
-      }
+        "invalid-value": "伺服器拒絕了此值。",
+        "invalid-name": "不是有效的容器名稱：{entries}。",
+        "duplicate-entry": "重複列出：{entries}。",
+        "too-many-entries": "最多使用 32 個項目。",
+        "depends-on-self": "容器不能依賴自身：{entries}。",
+        "invalid-reference": "不是有效的觸發器參照：{entries}。",
+        "invalid-threshold": "不支援的閾值：{entries}。",
+        "unknown-trigger-reference": "沒有已註冊的觸發器符合：{entries}。",
+        "wrong-trigger-category": "此欄位的觸發器類型不對：{entries}。",
+        "agent-enforced-widening": "代理會拒絕此項，因為它擴大了其標籤允許的範圍：{entries}。",
+        "invalid-action": "請選擇更新或重新啟動。"
+      },
+      "cycle": "這些相依性會形成一個經過以下容器的迴圈：{containers}。"
+    },
+    "agent": {
+      "note": "此容器執行於代理 {agent} 上，該代理會強制執行自己的標籤。在這裡 Drydock 只能收窄操作存取範圍。",
+      "excludeHint": "標籤中的排除項目會保留。你只能再新增更多。",
+      "narrowHint": "你只能移除項目，或使用比標籤更窄的閾值。",
+      "nothingToNarrow": "標籤在這裡不允許任何內容，所以沒有可收窄的。"
     }
   }
 }

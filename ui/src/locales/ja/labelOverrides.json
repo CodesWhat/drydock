@@ -44,7 +44,8 @@
       "none": "なし",
       "notSet": "未設定",
       "labelValue": "ラベルの値: {value}",
-      "noLabel": "ラベルなし"
+      "noLabel": "ラベルなし",
+      "explicitNone": "なし（上書き）"
     },
     "actions": {
       "edit": "編集",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "保存すると、上に示した適用範囲のすべてで値が変わります。"
+      "scopeReminder": "保存すると、上に示した適用範囲のすべてで値が変わります。",
+      "dependsOnInput": "コンテナを追加",
+      "dependsOnHelp": "同じホスト上のコンテナを選ぶか、まだ起動していない名前を入力します。Drydock が把握していない名前は警告付きで保存されます。",
+      "notificationInput": "通知トリガーを追加",
+      "actionInput": "アクショントリガーを追加",
+      "routingHelp": "トリガーの ID または名前。minor のようなしきい値を続けて指定することもできます。",
+      "threshold": "しきい値",
+      "thresholdDefault": "しきい値なし",
+      "addEntry": "追加",
+      "removeEntry": "{entry} を削除",
+      "locked": "ラベルから",
+      "noneHint": "リストが空です。保存するとこのフィールドは「なし」になり、ラベルの値は無視されます。上書きを取り除くには「ラベルに戻す」を使ってください。",
+      "autoWarning": "これにより、一覧のトリガーが onauto モードで動作するとき、このコンテナを自動で更新できるようになります。",
+      "dependencyAction": "依存アクション",
+      "dependencyActionHelp": "このコンテナの更新時に、依存先のコンテナに対して Drydock が行う操作です。",
+      "dependencyActions": {
+        "update": "更新",
+        "restart": "再起動"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "制御文字、方向指定文字、< と > を削除してください。",
         "invalid-icon": "URL ではなく、アイコンの取得元と名前を指定してください。",
         "invalid-type": "サーバーがこの値を拒否しました。",
-        "invalid-value": "サーバーがこの値を拒否しました。"
-      }
+        "invalid-value": "サーバーがこの値を拒否しました。",
+        "invalid-name": "コンテナ名として無効です: {entries}。",
+        "duplicate-entry": "複数回指定されています: {entries}。",
+        "too-many-entries": "エントリは 32 個以下にしてください。",
+        "depends-on-self": "コンテナは自分自身に依存できません: {entries}。",
+        "invalid-reference": "トリガー参照として無効です: {entries}。",
+        "invalid-threshold": "サポートされていないしきい値です: {entries}。",
+        "unknown-trigger-reference": "登録済みのトリガーに一致しません: {entries}。",
+        "wrong-trigger-category": "このフィールドには種類の違うトリガーです: {entries}。",
+        "agent-enforced-widening": "ラベルが許可する範囲を広げるため、エージェントに拒否されます: {entries}。",
+        "invalid-action": "更新か再起動を選んでください。"
+      },
+      "cycle": "これらの依存関係は次を通る循環を作ります: {containers}。"
+    },
+    "agent": {
+      "note": "このコンテナは、独自のラベルを適用するエージェント {agent} 上で動いています。ここでは Drydock はアクションへのアクセスを狭めることしかできません。",
+      "excludeHint": "ラベル由来の除外は残ります。追加することだけができます。",
+      "narrowHint": "エントリの削除か、ラベルより狭いしきい値の指定だけができます。",
+      "nothingToNarrow": "ラベルがここでは何も許可していないため、狭める対象がありません。"
     }
   }
 }

@@ -25,6 +25,7 @@
     "fileUnavailable": "No hay un archivo de configuración disponible. Monta uno antes de editar.",
     "watcherUnavailable": "Este monitor exacto no está disponible en la instantánea del editor.",
     "accessDenied": "Tu sesión no tiene permiso para usar este editor.",
+    "recoveryAssurance": "Iniciaste sesión con un código de recuperación, así que no puedes cambiar la configuración. Inicia sesión con un código de tu aplicación de autenticación.",
     "apiUnavailable": "Este servidor no proporciona la API del editor.",
     "rateLimited": "Demasiadas solicitudes. Espera un minuto antes de recargar.",
     "loadFailed": "No se pudo cargar el editor. No se enviaron cambios.",
