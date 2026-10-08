@@ -2105,6 +2105,49 @@ describe('container-mapper', () => {
       expect(c.updateEligibility).not.toHaveProperty('updateMode');
     });
 
+    it.each([
+      [{ state: 'auto', triggerId: 'docker.local' }],
+      [{ state: 'manual', triggerId: 'docker.local' }],
+      [{ state: 'blocked', reason: 'excluded', triggerId: 'docker.local' }],
+      [{ state: 'blocked', reason: 'not-included' }],
+      [{ state: 'auto' }],
+    ] as const)('passes the server actionPolicy through unchanged: %j', (actionPolicy) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, actionPolicy } }),
+      );
+      expect(c.updateEligibility?.actionPolicy).toEqual(actionPolicy);
+    });
+
+    it.each([
+      ['not an object', 'auto'],
+      ['null', null],
+      ['unknown state', { state: 'weekly' }],
+      ['missing state', { triggerId: 'docker.local' }],
+    ])('drops a malformed actionPolicy (%s)', (_label, actionPolicy) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, actionPolicy } }),
+      );
+      expect(c.updateEligibility).toBeDefined();
+      expect(c.updateEligibility).not.toHaveProperty('actionPolicy');
+    });
+
+    it('drops an invalid reason and a non-string triggerId but keeps the valid state', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            ...baseEligibility,
+            actionPolicy: { state: 'blocked', reason: 'bogus', triggerId: 7 },
+          },
+        }),
+      );
+      expect(c.updateEligibility?.actionPolicy).toEqual({ state: 'blocked' });
+    });
+
+    it('omits actionPolicy when the server did not send one', () => {
+      const c = mapApiContainer(makeApiContainer({ updateEligibility: baseEligibility }));
+      expect(c.updateEligibility).not.toHaveProperty('actionPolicy');
+    });
+
     it('omits updateMode when the server did not send one', () => {
       const c = mapApiContainer(makeApiContainer({ updateEligibility: baseEligibility }));
       expect(c.updateEligibility).not.toHaveProperty('updateMode');
