@@ -26,12 +26,14 @@ const { auditEvents, logLines, sectionWrites } = vi.hoisted(() => ({
 }));
 
 // The configuration file is not what these tests are about: a write that gets
-// as far as the engine is recorded and answered as "no file to write to".
+// as far as the engine is recorded and answered as "no file to write to". The
+// editors queue behind the same writer; here they run straight through.
 vi.mock('../configuration/file/write.js', () => ({
   writeConfigurationSection: async (section: string) => {
     sectionWrites.push(section);
     return { kind: 'no-file', section };
   },
+  withConfigurationWrite: async (task: () => Promise<unknown>) => task(),
 }));
 
 vi.mock('./audit-events.js', () => ({
@@ -537,7 +539,7 @@ const managementAudit = () =>
   auditEvents.filter((event) => String(event.action).startsWith('totp-'));
 function expectContract(
   path: string,
-  method: 'get' | 'post' | 'put' | 'delete',
+  method: 'get' | 'post' | 'put' | 'patch' | 'delete',
   statusCode: string,
   payload: unknown,
 ): void {
@@ -2472,27 +2474,35 @@ describe('TOTP slice 4: factor-management API', () => {
       details: { reason: 'recovery-assurance' },
     });
 
-    // The config router and its five-a-minute write limiter are module state
-    // shared by every harness in this file, so each test writes from an address
-    // of its own.
+    // The config router and its five-a-minute read and write limiters are
+    // module state shared by every harness in this file, so each request comes
+    // from an address of its own.
     let addressSerial = 0;
-    let clientAddress = '';
-    beforeEach(() => {
+    const configHeaders = (h: Harness, headers: Record<string, string>) => {
       addressSerial += 1;
-      clientAddress = `198.51.100.${addressSerial}`;
-    });
+      return {
+        'X-Forwarded-Proto': 'https',
+        'X-Forwarded-For': `198.51.100.${addressSerial}`,
+        Origin: originOf(h),
+        'Content-Type': 'application/json',
+        ...headers,
+      };
+    };
 
     function writeSection(h: Harness, section: string, headers: Record<string, string>) {
       return fetch(url(h, `/api/v1/config/${section}`), {
         method: 'PUT',
-        headers: {
-          'X-Forwarded-Proto': 'https',
-          'X-Forwarded-For': clientAddress,
-          Origin: originOf(h),
-          'Content-Type': 'application/json',
-          ...headers,
-        },
+        headers: configHeaders(h, headers),
         body: JSON.stringify({ basic: { eve: { user: 'eve', hash: HASH } } }),
+      });
+    }
+
+    // An empty request: the editor answers 400 for it without looking for a file.
+    function saveThroughEditor(h: Harness, headers: Record<string, string>) {
+      return fetch(url(h, '/api/v1/config/editor/watchers'), {
+        method: 'PATCH',
+        headers: configHeaders(h, headers),
+        body: '{}',
       });
     }
 
@@ -2509,24 +2519,31 @@ describe('TOTP slice 4: factor-management API', () => {
       });
     }
 
-    test('a recovery-code session cannot write the authentication section, however it is spelled', async () => {
+    test('a recovery-code session cannot write any configuration section or save through an editor, but can read', async () => {
       const h = await boot();
       const enrolled = enroll();
       const cookie = await recoveryLoginCookie(h, enrolled.recoveryCodes[0]);
 
-      for (const section of ['auth', 'AUTH', 'auth_basic_eve', 'auth_totp']) {
+      // `auth_basic_eve` is a 400 for anyone else: the refusal comes first.
+      for (const section of ['auth', 'AUTH', 'auth_basic_eve', 'auth_totp', 'server']) {
         const refused = await writeSection(h, section, { Cookie: cookie });
         expect(refused.status, section).toBe(403);
         const body = await refused.json();
-        expect(body, section).toEqual(RECOVERY_REFUSAL('change the authentication configuration'));
+        expect(body, section).toEqual(RECOVERY_REFUSAL('change the configuration file'));
         expectContract('/api/v1/config/{section}', 'put', '403', body);
       }
       expect(sectionWrites).toEqual([]);
 
-      // Any other section still reaches the write engine.
-      const allowed = await writeSection(h, 'notification', { Cookie: cookie });
-      expect(allowed.status).toBe(409);
-      expect(sectionWrites).toEqual(['notification']);
+      const edit = await saveThroughEditor(h, { Cookie: cookie });
+      expect(edit.status).toBe(403);
+      const editBody = await edit.json();
+      expect(editBody).toEqual(RECOVERY_REFUSAL('change the configuration file'));
+      expectContract('/api/v1/config/editor/watchers', 'patch', '403', editBody);
+
+      const read = await fetch(url(h, '/api/v1/config'), {
+        headers: configHeaders(h, { Cookie: cookie }),
+      });
+      expect(read.status).toBe(200);
     });
 
     test('a recovery-code session cannot register an agent key, but can list them', async () => {
@@ -2547,7 +2564,7 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(listed.status).toBe(200);
     });
 
-    test('totp, password-only and OIDC sessions write the authentication section and register agent keys; an admin API key writes the section', async () => {
+    test('totp, password-only and OIDC sessions write a section, save through an editor and register agent keys; an admin API key writes and saves', async () => {
       const h = await boot();
       const password = await sessionCookie(h, TEST_USER, OTHER_PASSWORD);
       const oidc = await plant(
@@ -2563,11 +2580,14 @@ describe('TOTP slice 4: factor-management API', () => {
         password: { Cookie: password },
         oidc: { Cookie: oidc },
       })) {
-        // 409 is the engine saying there is no file: the request got that far.
+        // 409 is the engine saying there is no file, and 400 the editor
+        // refusing an empty request: both requests got that far.
         expect((await writeSection(h, 'auth', headers)).status, name).toBe(409);
+        expect((await saveThroughEditor(h, headers)).status, name).toBe(400);
         expect((await registerAgentKey(h, headers)).status, name).toBe(201);
       }
       expect((await writeSection(h, 'auth', { Authorization: `Bearer ${key}` })).status).toBe(409);
+      expect((await saveThroughEditor(h, { Authorization: `Bearer ${key}` })).status).toBe(400);
       expect(sectionWrites).toEqual(['auth', 'auth', 'auth', 'auth']);
       expect(agentKeyStore.listKeys()).toHaveLength(3);
 

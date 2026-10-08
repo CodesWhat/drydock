@@ -321,7 +321,7 @@ const watcherEditorPaths = {
       summary: 'Edit allowlisted watcher configuration leaves',
       operationId: 'writeWatcherEdits',
       description:
-        'Admin-only changed-leaf edits guarded by an opaque revision over the actual file bytes. Shares the legacy write queue and preserves untouched YAML nodes. A saved file may have applied:false when reload is incomplete; no rollback is implied. This is not cross-process filesystem locking.',
+        'Admin-only changed-leaf edits guarded by an opaque revision over the actual file bytes. Shares the legacy write queue and preserves untouched YAML nodes. A saved file may have applied:false when reload is incomplete; no rollback is implied. This is not cross-process filesystem locking. A browser session that signed in with a two-factor recovery code is refused with 403 and `details.reason` of `recovery-assurance`.',
       requestBody: {
         required: true,
         content: {
@@ -379,7 +379,9 @@ const watcherEditorPaths = {
         200: jsonResponse('Saved and applied outcomes', watcherEditOutcomeSchema),
         400: jsonResponse('Invalid request or candidate', watcherEditOutcomeSchema),
         401: errorResponse('Authentication required'),
-        403: errorResponse('API key is missing the required scope'),
+        403: errorResponse(
+          'API key is missing the required scope, or the calling session signed in with a two-factor recovery code',
+        ),
         409: jsonResponse(
           'Stale revision, unavailable file or read-only field',
           watcherEditOutcomeSchema,
@@ -499,7 +501,7 @@ export const configPaths = {
         }),
       },
       description:
-        'Admin-only exact [action, provider, instance, field] set/remove edits for auto, order and concurrency. Shares the watcher, notification and legacy write queue, revision checks, startup Joi validation, atomic writer and saved/applied outcomes. Validation and saving do not execute actions. Reload installs changed instances for future dispatch without bypassing global update mode or container eligibility.',
+        'Admin-only exact [action, provider, instance, field] set/remove edits for auto, order and concurrency. Shares the watcher, notification and legacy write queue, revision checks, startup Joi validation, atomic writer and saved/applied outcomes. Validation and saving do not execute actions. Reload installs changed instances for future dispatch without bypassing global update mode or container eligibility. A browser session that signed in with a two-factor recovery code is refused with 403 and `details.reason` of `recovery-assurance`.',
     },
   },
   '/api/v1/config/editor/triggers': {
@@ -520,7 +522,7 @@ export const configPaths = {
       summary: 'Edit allowlisted notification trigger policy leaves',
       operationId: 'writeNotificationTriggerEdits',
       description:
-        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron, resolvenotifications, securitydigesttitle and securitydigestbody. The two template fields preserve literal scan expressions and whitespace; removal restores renderer defaults, while empty strings are invalid. Whole-scalar environment references and file/alias-owned values are read-only. MQTT does not support security digest templates. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications.',
+        'Admin-only exact [notification, provider, instance, field] set/remove edits for threshold, once, mode, securitymode, digestcron, resolvenotifications, securitydigesttitle and securitydigestbody. The two template fields preserve literal scan expressions and whitespace; removal restores renderer defaults, while empty strings are invalid. Whole-scalar environment references and file/alias-owned values are read-only. MQTT does not support security digest templates. Shares the watcher and legacy write queue, revision checks, private startup-equivalent validation, atomic writer and saved/applied outcomes. Validation does not initialize providers or send notifications. A browser session that signed in with a two-factor recovery code is refused with 403 and `details.reason` of `recovery-assurance`.',
     },
   },
   '/api/v1/config': {
@@ -560,7 +562,7 @@ export const configPaths = {
       tags: ['System'],
       summary: 'Write a configuration section through the file',
       description:
-        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). The section is one top-level key of the file: letters and digits only, matched case-insensitively. Any other name is a 400 and nothing is written, including a name with an underscore in it such as "auth_basic_eve", which would flatten into the "auth" section; write the parent section with the value nested inside it instead. Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched. A browser session that signed in with a two-factor recovery code cannot write the authentication section, under "auth" or any name that flattens into it such as "auth_basic_eve": it is refused with 403 and `details.reason` of `recovery-assurance`, because a new account or a relaxed transport rule outlives a factor reset. Every other section stays writable from such a session.',
+        'Validates the candidate the same way /validate does, then mutates the parsed drydock.yml document in place — preserving comments and key order everywhere except the section being replaced — writes it atomically, and reloads (roadmap 7.1 slice 7, spec-7.1-config-file.md section 4.4). The section is one top-level key of the file: letters and digits only, matched case-insensitively. Any other name is a 400 and nothing is written, including a name with an underscore in it such as "auth_basic_eve", which would flatten into the "auth" section; write the parent section with the value nested inside it instead. Refuses with 409 when a key the write would set is actually sourced from the environment (env still wins, so writing it would be a silent no-op) or when the section is DB-owned (see PATCH /api/v1/settings); refuses with 409 when no configuration file exists to write to. An invalid body is a 400 with the same path/envKey/message shape /validate and /reload use, and the file on disk is untouched. A browser session that signed in with a two-factor recovery code cannot write any section: it is refused with 403 and `details.reason` of `recovery-assurance` before the section name or the body is looked at, because what a section can hold (an account, a webhook or metrics credential, a registry or agent secret, a command action) outlives a factor reset. Reads stay available to such a session.',
       operationId: 'writeConfigurationSection',
       parameters: [configSectionPathParam],
       requestBody: writeConfigurationSectionRequestBody,
@@ -572,7 +574,7 @@ export const configPaths = {
         ),
         401: errorResponse('Authentication required'),
         403: errorResponse(
-          'API key is missing the required scope, or the calling session signed in with a recovery code and the section is the authentication configuration',
+          'API key is missing the required scope, or the calling session signed in with a two-factor recovery code',
         ),
         409: errorResponse(
           'No configuration file exists, a key in this section is sourced from the environment, or this section is DB-owned',
