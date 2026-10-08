@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "标签覆盖",
+    "boundary": "Drydock 会保存这些值，并将其应用在 Docker 标签之上。它不会修改 Compose 文件，也不会重新创建容器。",
+    "scope": {
+      "container": "适用于容器 {name}，监视器 {watcher}。",
+      "containerAgent": "适用于代理 {agent} 上的容器 {name}，监视器 {watcher}。",
+      "composeService": "适用于 Compose 服务 {name}，容器数：{count}，监视器 {watcher}。 | 适用于 Compose 服务 {name}，容器数：{count}，监视器 {watcher}。",
+      "composeServiceAgent": "适用于 Compose 服务 {name}，容器数：{count}，代理 {agent}，监视器 {watcher}。 | 适用于 Compose 服务 {name}，容器数：{count}，代理 {agent}，监视器 {watcher}。"
+    },
+    "loading": "正在加载标签覆盖…",
+    "noOverrides": "没有覆盖。每个值都来自标签、Compose、监视器或默认值。",
+    "unavailable": "此容器不支持标签覆盖。",
+    "readOnly": {
+      "rollback": "这是临时的回滚容器，无法更改其标签覆盖。",
+      "forbidden": "更改标签覆盖需要管理员权限。此视图为只读。"
+    },
+    "groups": {
+      "display": "显示",
+      "dependencies": "依赖",
+      "notification": "通知路由",
+      "action": "操作路由"
+    },
+    "fields": {
+      "displayName": "显示名称",
+      "displayIcon": "显示图标",
+      "dependsOn": "依赖于",
+      "dependsOnAction": "依赖操作",
+      "notificationTriggerInclude": "包含通知",
+      "notificationTriggerExclude": "排除通知",
+      "actionTriggerInclude": "包含操作",
+      "actionTriggerExclude": "排除操作",
+      "actionTriggerAuto": "自动操作"
+    },
+    "sources": {
+      "override": "覆盖",
+      "label": "标签",
+      "compose": "Compose",
+      "watcher": "监视器配置",
+      "default": "默认",
+      "unset": "未设置"
+    },
+    "values": {
+      "none": "无",
+      "notSet": "未设置",
+      "labelValue": "标签值：{value}",
+      "noLabel": "无标签"
+    },
+    "actions": {
+      "edit": "编辑",
+      "editField": "编辑 {field}",
+      "resetField": "重置为标签值",
+      "resetFieldAria": "将 {field} 重置为标签值",
+      "resetHint": "将恢复为：{value}",
+      "resetAll": "全部重置"
+    },
+    "editor": {
+      "displayName": "显示名称",
+      "displayNameHelp": "1 到 128 个字符。显示时代替容器名称。",
+      "iconProvider": "图标来源",
+      "iconName": "图标名称",
+      "iconNameHelp": "字母、数字、点、连字符和下划线。请使用图标来源中的名称，而不是 URL。",
+      "iconPreview": "图标预览",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "保存会更改上方所示范围内所有内容的值。"
+    },
+    "validation": {
+      "displayName": {
+        "empty": "请输入显示名称。",
+        "tooLong": "最多使用 128 个字符。",
+        "invalidCharacters": "请删除控制字符、方向标记、< 和 >。"
+      },
+      "iconName": "请使用字母、数字、点、连字符或下划线，并以字母或数字开头。"
+    },
+    "conflict": {
+      "message": "这些覆盖已在其他地方被更改。请重新加载以查看当前值。你的草稿会保留。",
+      "unknown": "Drydock 无法确认更改是否已保存。请重新加载以查看当前值。",
+      "notFound": "此容器已不存在。请重新加载以查看当前列表。",
+      "reload": "重新加载"
+    },
+    "status": {
+      "saved": "已保存 {field}。",
+      "reset": "已将 {field} 重置为标签值。",
+      "resetAll": "已重置为标签值的覆盖数：{count}。 | 已重置为标签值的覆盖数：{count}。",
+      "nothingToReset": "没有任何被覆盖的内容。"
+    },
+    "resetAllConfirm": {
+      "header": "重置所有覆盖",
+      "message": "要移除 {scope} 的所有 Drydock 覆盖并恢复为标签值吗？Compose 文件和容器不会被改动。",
+      "accept": "全部重置"
+    },
+    "warnings": {
+      "title": "警告",
+      "unresolved-dependency": "{field}：{reference} 还不是 Drydock 已知的容器。",
+      "cross-host-dependency": "{field}：{reference} 只存在于另一台主机上。",
+      "trigger-agent-mismatch": "{field}：{reference} 只匹配另一个代理上的触发器。",
+      "auto-inert": "{field}：{reference} 不匹配任何自动运行的触发器。",
+      "stale-trigger-reference": "{field}：{reference} 不再匹配任何已注册的触发器。",
+      "other": "{field}：{code}"
+    },
+    "invalidStored": "部分已保存的覆盖无法读取，已被忽略：{fields}",
+    "errors": {
+      "requestFailed": "标签覆盖请求失败（HTTP {status}）",
+      "load": "无法加载标签覆盖",
+      "unknown": "无法保存标签覆盖",
+      "invalid": "服务器拒绝了此更改。",
+      "codes": {
+        "display-name-empty": "请输入显示名称。",
+        "display-name-too-long": "最多使用 128 个字符。",
+        "display-name-invalid-characters": "请删除控制字符、方向标记、< 和 >。",
+        "invalid-icon": "请使用图标来源和名称，而不是 URL。",
+        "invalid-type": "服务器拒绝了此值。",
+        "invalid-value": "服务器拒绝了此值。"
+      }
+    }
+  }
+}

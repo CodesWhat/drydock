@@ -3,7 +3,6 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import setValue from 'set-value';
-import { ddEnvKeyToSection } from '../configuration/file/diff.js';
 import {
   getActionEditSnapshot,
   getNotificationTriggerEditSnapshot,
@@ -23,6 +22,7 @@ import { redactConfigurationTree } from '../debug/redact.js';
 import { recordAuditEvent } from './audit-events.js';
 import { validateCandidateConfiguration } from './config-validate.js';
 import { sendErrorResponse } from './error-response.js';
+import type { PrincipalCarrier } from './principal.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
@@ -293,33 +293,32 @@ function describeWrite(outcome: ConfigWriteOutcome): string {
 }
 
 /**
- * Would a write to this section land in the authentication configuration?
+ * A session that signed in with a two-factor recovery code cannot write the
+ * configuration file: not through `PUT /:section`, whatever the section, and
+ * not through the editors. Whatever it left there would still work after the
+ * owner reset the factor, and the file is full of such things: accounts and
+ * `auth.totp.allowhttp` under `auth`, the webhook and metrics credentials
+ * under `server`, `registry` and `agent` secrets, command actions. One rule
+ * for every write, instead of a list of sections, is a rule that does not have
+ * to be kept in step as sections gain secrets.
  *
- * The name alone does not say: a section is flattened to `DD_<SECTION>_…`, so
- * `auth_basic_eve` writes `DD_AUTH_BASIC_EVE_*`, the same account `auth` with a
- * nested `basic.eve` writes. So the name is normalised the way the write engine
- * normalises it and then classified the way the engine classifies a key, by the
- * first segment of the variable it becomes.
+ * Every handler that writes the file asks this first, before it reads the
+ * section name or the body: the refusal is about who is asking. The reads do
+ * not ask.
  */
-function writesAuthenticationSection(section: string): boolean {
-  return ddEnvKeyToSection(`DD_${section.trim().toUpperCase()}`) === 'auth';
+function refuseConfigurationWrite(req: PrincipalCarrier, res: Response): boolean {
+  return refuseRecoveryAssuranceSession(req, res, 'change the configuration file');
 }
 
 async function writeConfigurationSection(
   req: Request<{ section: string }>,
   res: Response,
 ): Promise<void> {
-  const { section } = req.params;
-  // A new account, or `auth.totp.allowhttp`, would outlast a factor reset, so a
-  // session that signed in with a recovery code cannot write this one section.
-  if (
-    writesAuthenticationSection(section) &&
-    refuseRecoveryAssuranceSession(req, res, 'change the authentication configuration')
-  ) {
+  if (refuseConfigurationWrite(req, res)) {
     return;
   }
   try {
-    const outcome = await writeConfigurationSectionToFile(section, req.body);
+    const outcome = await writeConfigurationSectionToFile(req.params.section, req.body);
     // Audited before the body is sent, matching every other route in this
     // file, and unconditionally — a refusal is as much an "attempt" as a
     // success, exactly as `/reload` audits both `applied` and refused.
@@ -519,6 +518,9 @@ async function patchConfigurationEditor(
   res: Response,
   editor: 'watchers' | 'triggers' | 'actions',
 ): Promise<void> {
+  if (refuseConfigurationWrite(req, res)) {
+    return;
+  }
   try {
     const { status, ...outcome } =
       editor === 'watchers'

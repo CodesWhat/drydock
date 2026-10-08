@@ -1,0 +1,121 @@
+{
+  "labelOverrides": {
+    "title": "Substituições de labels",
+    "boundary": "O Drydock armazena estes valores e os aplica sobre os labels do Docker. Ele nunca edita arquivos do Compose nem recria o contêiner.",
+    "scope": {
+      "container": "Aplica-se ao contêiner {name}, watcher {watcher}.",
+      "containerAgent": "Aplica-se ao contêiner {name} no agente {agent}, watcher {watcher}.",
+      "composeService": "Aplica-se ao serviço do Compose {name}, {count} contêiner, watcher {watcher}. | Aplica-se ao serviço do Compose {name}, {count} contêineres, watcher {watcher}.",
+      "composeServiceAgent": "Aplica-se ao serviço do Compose {name}, {count} contêiner, agente {agent}, watcher {watcher}. | Aplica-se ao serviço do Compose {name}, {count} contêineres, agente {agent}, watcher {watcher}."
+    },
+    "loading": "Carregando substituições de labels…",
+    "noOverrides": "Nenhuma substituição. Cada valor vem de um label, do Compose, do watcher ou de um padrão.",
+    "unavailable": "As substituições de labels não estão disponíveis para este contêiner.",
+    "readOnly": {
+      "rollback": "Este é um contêiner temporário de rollback. Suas substituições de labels não podem ser alteradas.",
+      "forbidden": "É necessário acesso de administrador para alterar substituições de labels. Esta visualização é somente leitura."
+    },
+    "groups": {
+      "display": "Exibição",
+      "dependencies": "Dependências",
+      "notification": "Roteamento de notificações",
+      "action": "Roteamento de ações"
+    },
+    "fields": {
+      "displayName": "Nome de exibição",
+      "displayIcon": "Ícone de exibição",
+      "dependsOn": "Depende de",
+      "dependsOnAction": "Ação de dependência",
+      "notificationTriggerInclude": "Incluir notificações",
+      "notificationTriggerExclude": "Excluir notificações",
+      "actionTriggerInclude": "Incluir ações",
+      "actionTriggerExclude": "Excluir ações",
+      "actionTriggerAuto": "Ação automática"
+    },
+    "sources": {
+      "override": "Substituição",
+      "label": "Label",
+      "compose": "Compose",
+      "watcher": "Configuração do watcher",
+      "default": "Padrão",
+      "unset": "Não definido"
+    },
+    "values": {
+      "none": "Nenhum",
+      "notSet": "Não definido",
+      "labelValue": "Valor do label: {value}",
+      "noLabel": "Sem label"
+    },
+    "actions": {
+      "edit": "Editar",
+      "editField": "Editar {field}",
+      "resetField": "Redefinir para o label",
+      "resetFieldAria": "Redefinir {field} para o label",
+      "resetHint": "Volta para: {value}",
+      "resetAll": "Redefinir tudo"
+    },
+    "editor": {
+      "displayName": "Nome de exibição",
+      "displayNameHelp": "De 1 a 128 caracteres. Exibido no lugar do nome do contêiner.",
+      "iconProvider": "Origem do ícone",
+      "iconName": "Nome do ícone",
+      "iconNameHelp": "Letras, números, ponto, hífen e sublinhado. Use um nome da origem do ícone, não uma URL.",
+      "iconPreview": "Prévia do ícone",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Salvar altera o valor de tudo no escopo mostrado acima."
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Digite um nome de exibição.",
+        "tooLong": "Use no máximo 128 caracteres.",
+        "invalidCharacters": "Remova caracteres de controle, marcas de direção, < e >."
+      },
+      "iconName": "Use letras, números, ponto, hífen ou sublinhado, começando por uma letra ou um número."
+    },
+    "conflict": {
+      "message": "Estas substituições foram alteradas em outro lugar. Recarregue para ver os valores atuais. Seu rascunho foi mantido.",
+      "unknown": "O Drydock não conseguiu confirmar se a alteração foi salva. Recarregue para ver os valores atuais.",
+      "notFound": "Este contêiner não existe mais. Recarregue para ver a lista atual.",
+      "reload": "Recarregar"
+    },
+    "status": {
+      "saved": "{field} salvo.",
+      "reset": "{field} redefinido para o valor do label.",
+      "resetAll": "{count} substituição redefinida para o valor do seu label. | {count} substituições redefinidas para os valores dos seus labels.",
+      "nothingToReset": "Nada estava substituído."
+    },
+    "resetAllConfirm": {
+      "header": "Redefinir todas as substituições",
+      "message": "Remover todas as substituições do Drydock para {scope} e voltar aos valores dos labels? Arquivos do Compose e contêineres não são alterados.",
+      "accept": "Redefinir tudo"
+    },
+    "warnings": {
+      "title": "Avisos",
+      "unresolved-dependency": "{field}: {reference} ainda não é um contêiner que o Drydock conhece.",
+      "cross-host-dependency": "{field}: {reference} só existe em outro host.",
+      "trigger-agent-mismatch": "{field}: {reference} só corresponde a triggers de outro agente.",
+      "auto-inert": "{field}: {reference} não corresponde a nenhum trigger executado automaticamente.",
+      "stale-trigger-reference": "{field}: {reference} não corresponde mais a nenhum trigger registrado.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Algumas substituições armazenadas não puderam ser lidas e são ignoradas: {fields}",
+    "errors": {
+      "requestFailed": "Falha na solicitação de substituição de label (HTTP {status})",
+      "load": "Falha ao carregar as substituições de labels",
+      "unknown": "Não foi possível salvar a substituição de label",
+      "invalid": "O servidor recusou esta alteração.",
+      "codes": {
+        "display-name-empty": "Digite um nome de exibição.",
+        "display-name-too-long": "Use no máximo 128 caracteres.",
+        "display-name-invalid-characters": "Remova caracteres de controle, marcas de direção, < e >.",
+        "invalid-icon": "Use uma origem de ícone e um nome, não uma URL.",
+        "invalid-type": "O servidor recusou este valor.",
+        "invalid-value": "O servidor recusou este valor."
+      }
+    }
+  }
+}

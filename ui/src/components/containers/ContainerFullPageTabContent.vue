@@ -8,6 +8,7 @@ import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
+import LabelOverridesPanel from '../LabelOverridesPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
@@ -748,6 +749,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
 
         <!-- Labels tab (full page) -->
         <div v-if="activeDetailTab === 'labels'">
+          <LabelOverridesPanel :container-id="selectedContainer.id" />
           <div class="dd-rounded overflow-hidden"
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
