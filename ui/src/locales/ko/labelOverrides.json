@@ -44,7 +44,8 @@
       "none": "없음",
       "notSet": "설정 안 됨",
       "labelValue": "레이블 값: {value}",
-      "noLabel": "레이블 없음"
+      "noLabel": "레이블 없음",
+      "explicitNone": "없음(재정의)"
     },
     "actions": {
       "edit": "편집",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "저장하면 위에 표시된 적용 범위의 모든 항목에서 값이 바뀝니다."
+      "scopeReminder": "저장하면 위에 표시된 적용 범위의 모든 항목에서 값이 바뀝니다.",
+      "dependsOnInput": "컨테이너 추가",
+      "dependsOnHelp": "같은 호스트의 컨테이너를 고르거나 아직 실행 중이 아닌 이름을 입력하세요. Drydock이 모르는 이름은 경고와 함께 저장됩니다.",
+      "notificationInput": "알림 트리거 추가",
+      "actionInput": "작업 트리거 추가",
+      "routingHelp": "트리거 ID 또는 이름이며, 뒤에 minor 같은 임계값을 붙일 수 있습니다.",
+      "threshold": "임계값",
+      "thresholdDefault": "임계값 없음",
+      "addEntry": "추가",
+      "removeEntry": "{entry} 제거",
+      "locked": "라벨에서",
+      "noneHint": "목록이 비어 있습니다. 저장하면 이 필드는 없음으로 설정되고 라벨 값은 무시됩니다. 재정의를 없애려면 대신 라벨로 되돌리기를 사용하세요.",
+      "autoWarning": "이렇게 하면 나열된 트리거가 onauto 모드로 실행될 때 이 컨테이너를 자동으로 업데이트할 수 있습니다.",
+      "dependencyAction": "의존성 작업",
+      "dependencyActionHelp": "이 컨테이너를 업데이트할 때 의존 대상 컨테이너에 Drydock이 수행하는 작업입니다.",
+      "dependencyActions": {
+        "update": "업데이트",
+        "restart": "재시작"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "제어 문자, 방향 문자, < 및 >를 제거하세요.",
         "invalid-icon": "URL이 아니라 아이콘 소스와 이름을 사용하세요.",
         "invalid-type": "서버가 이 값을 거부했습니다.",
-        "invalid-value": "서버가 이 값을 거부했습니다."
-      }
+        "invalid-value": "서버가 이 값을 거부했습니다.",
+        "invalid-name": "올바른 컨테이너 이름이 아닙니다: {entries}.",
+        "duplicate-entry": "여러 번 나열되었습니다: {entries}.",
+        "too-many-entries": "항목은 32개 이하로 사용하세요.",
+        "depends-on-self": "컨테이너는 자기 자신에 의존할 수 없습니다: {entries}.",
+        "invalid-reference": "올바른 트리거 참조가 아닙니다: {entries}.",
+        "invalid-threshold": "지원하지 않는 임계값입니다: {entries}.",
+        "unknown-trigger-reference": "등록된 트리거 중 일치하는 것이 없습니다: {entries}.",
+        "wrong-trigger-category": "이 필드에는 맞지 않는 종류의 트리거입니다: {entries}.",
+        "agent-enforced-widening": "라벨이 허용하는 범위를 넓히므로 에이전트가 거부합니다: {entries}.",
+        "invalid-action": "업데이트 또는 재시작을 선택하세요."
+      },
+      "cycle": "이 의존성은 다음을 거치는 순환을 만듭니다: {containers}."
+    },
+    "agent": {
+      "note": "이 컨테이너는 자체 라벨을 적용하는 에이전트 {agent}에서 실행됩니다. 여기서 Drydock은 작업 접근을 좁히는 것만 할 수 있습니다.",
+      "excludeHint": "라벨의 제외 항목은 그대로 유지됩니다. 더 추가하는 것만 가능합니다.",
+      "narrowHint": "항목을 제거하거나 라벨보다 좁은 임계값을 쓰는 것만 가능합니다.",
+      "nothingToNarrow": "라벨이 여기서 아무것도 허용하지 않으므로 좁힐 대상이 없습니다."
     }
   }
 }

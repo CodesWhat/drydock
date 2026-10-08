@@ -44,7 +44,8 @@
       "none": "Nessuno",
       "notSet": "Non impostato",
       "labelValue": "Valore dell'etichetta: {value}",
-      "noLabel": "Nessuna etichetta"
+      "noLabel": "Nessuna etichetta",
+      "explicitNone": "Nessuna (override)"
     },
     "actions": {
       "edit": "Modifica",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Il salvataggio cambia il valore per tutto l'ambito mostrato sopra."
+      "scopeReminder": "Il salvataggio cambia il valore per tutto l'ambito mostrato sopra.",
+      "dependsOnInput": "Aggiungi un container",
+      "dependsOnHelp": "Scegli un container sullo stesso host oppure digita un nome non ancora in esecuzione. I nomi che Drydock non conosce vengono salvati con un avviso.",
+      "notificationInput": "Aggiungi un trigger di notifica",
+      "actionInput": "Aggiungi un trigger di azione",
+      "routingHelp": "ID o nome del trigger, seguito facoltativamente da una soglia come minor.",
+      "threshold": "Soglia",
+      "thresholdDefault": "Nessuna soglia",
+      "addEntry": "Aggiungi",
+      "removeEntry": "Rimuovi {entry}",
+      "locked": "dal label",
+      "noneHint": "L'elenco è vuoto. Salvando, questo campo diventa nessuno e qualsiasi valore del label viene ignorato. Usa Ripristina il label per rimuovere l'override.",
+      "autoWarning": "Così i trigger elencati possono aggiornare questo container automaticamente quando girano in modalità onauto.",
+      "dependencyAction": "Azione di dipendenza",
+      "dependencyActionHelp": "Cosa fa Drydock ai container da cui questo dipende quando si aggiorna.",
+      "dependencyActions": {
+        "update": "Aggiorna",
+        "restart": "Riavvia"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Rimuovi i caratteri di controllo, i segni di direzione, < e >.",
         "invalid-icon": "Usa un'origine dell'icona e un nome, non un URL.",
         "invalid-type": "Il server ha rifiutato questo valore.",
-        "invalid-value": "Il server ha rifiutato questo valore."
-      }
+        "invalid-value": "Il server ha rifiutato questo valore.",
+        "invalid-name": "Nome di container non valido: {entries}.",
+        "duplicate-entry": "Elencato più di una volta: {entries}.",
+        "too-many-entries": "Usa al massimo 32 voci.",
+        "depends-on-self": "Un container non può dipendere da se stesso: {entries}.",
+        "invalid-reference": "Riferimento al trigger non valido: {entries}.",
+        "invalid-threshold": "Soglia non supportata: {entries}.",
+        "unknown-trigger-reference": "Nessun trigger registrato corrisponde a: {entries}.",
+        "wrong-trigger-category": "Tipo di trigger sbagliato per questo campo: {entries}.",
+        "agent-enforced-widening": "L'agente lo rifiuterebbe, perché amplia ciò che i suoi label consentono: {entries}.",
+        "invalid-action": "Scegli aggiorna o riavvia."
+      },
+      "cycle": "Queste dipendenze creerebbero un ciclo che passa per: {containers}."
+    },
+    "agent": {
+      "note": "Questo container gira sull'agente {agent}, che applica i propri label. Qui Drydock può solo restringere l'accesso alle azioni.",
+      "excludeHint": "Le esclusioni dei label restano. Puoi solo aggiungerne altre.",
+      "narrowHint": "Puoi solo rimuovere voci o usare una soglia più stretta di quella del label.",
+      "nothingToNarrow": "I label qui non consentono nulla, quindi non c'è nulla da restringere."
     }
   }
 }

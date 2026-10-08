@@ -44,7 +44,8 @@
       "none": "لا شيء",
       "notSet": "غير محدد",
       "labelValue": "قيمة التسمية: {value}",
-      "noLabel": "لا توجد تسمية"
+      "noLabel": "لا توجد تسمية",
+      "explicitNone": "لا شيء (تجاوز)"
     },
     "actions": {
       "edit": "تعديل",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "يؤدي الحفظ إلى تغيير القيمة لكل ما يقع ضمن النطاق الموضح أعلاه."
+      "scopeReminder": "يؤدي الحفظ إلى تغيير القيمة لكل ما يقع ضمن النطاق الموضح أعلاه.",
+      "dependsOnInput": "إضافة حاوية",
+      "dependsOnHelp": "اختر حاوية على المضيف نفسه أو اكتب اسمًا غير قيد التشغيل بعد. الأسماء التي لا يعرفها Drydock تُحفظ مع تحذير.",
+      "notificationInput": "إضافة مشغّل إشعارات",
+      "actionInput": "إضافة مشغّل إجراءات",
+      "routingHelp": "معرّف المشغّل أو اسمه، يليه اختياريًا حدّ مثل minor.",
+      "threshold": "الحدّ",
+      "thresholdDefault": "بلا حدّ",
+      "addEntry": "إضافة",
+      "removeEntry": "إزالة {entry}",
+      "locked": "من الوسم",
+      "noneHint": "القائمة فارغة. عند الحفظ يُضبط هذا الحقل على لا شيء وتُتجاهل أي قيمة في الوسم. استخدم إعادة الضبط إلى الوسم لإزالة التجاوز بدلًا من ذلك.",
+      "autoWarning": "يتيح هذا للمشغّلات المدرجة تحديث هذه الحاوية تلقائيًا عندما تعمل في وضع onauto.",
+      "dependencyAction": "إجراء التبعية",
+      "dependencyActionHelp": "ما يفعله Drydock بالحاويات التي تعتمد عليها هذه الحاوية عند تحديثها.",
+      "dependencyActions": {
+        "update": "تحديث",
+        "restart": "إعادة تشغيل"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "أزل أحرف التحكم وعلامات الاتجاه و< و>.",
         "invalid-icon": "استخدم مصدر أيقونة واسمًا، وليس عنوان URL.",
         "invalid-type": "رفض الخادم هذه القيمة.",
-        "invalid-value": "رفض الخادم هذه القيمة."
-      }
+        "invalid-value": "رفض الخادم هذه القيمة.",
+        "invalid-name": "ليس اسم حاوية صالحًا: {entries}.",
+        "duplicate-entry": "مدرج أكثر من مرة: {entries}.",
+        "too-many-entries": "استخدم 32 إدخالًا أو أقل.",
+        "depends-on-self": "لا يمكن لحاوية أن تعتمد على نفسها: {entries}.",
+        "invalid-reference": "ليس مرجع مشغّل صالحًا: {entries}.",
+        "invalid-threshold": "حدّ غير مدعوم: {entries}.",
+        "unknown-trigger-reference": "لا يوجد مشغّل مسجّل يطابق: {entries}.",
+        "wrong-trigger-category": "نوع مشغّل غير مناسب لهذا الحقل: {entries}.",
+        "agent-enforced-widening": "سيرفض الوكيل هذا لأنه يوسّع ما تسمح به وسومه: {entries}.",
+        "invalid-action": "اختر تحديث أو إعادة تشغيل."
+      },
+      "cycle": "ستُنشئ هذه التبعيات حلقة تمر عبر: {containers}."
+    },
+    "agent": {
+      "note": "تعمل هذه الحاوية على الوكيل {agent}، الذي يفرض وسومه الخاصة. لا يستطيع Drydock هنا إلا تضييق الوصول إلى الإجراءات.",
+      "excludeHint": "تبقى الاستثناءات من الوسوم. يمكنك فقط إضافة المزيد.",
+      "narrowHint": "يمكنك فقط إزالة إدخالات أو استخدام حدّ أضيق من الوسم.",
+      "nothingToNarrow": "لا تسمح الوسوم هنا بأي شيء، لذا لا يوجد ما يمكن تضييقه."
     }
   }
 }

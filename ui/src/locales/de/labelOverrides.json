@@ -44,7 +44,8 @@
       "none": "Keine",
       "notSet": "Nicht festgelegt",
       "labelValue": "Label-Wert: {value}",
-      "noLabel": "Kein Label"
+      "noLabel": "Kein Label",
+      "explicitNone": "Keine (Override)"
     },
     "actions": {
       "edit": "Bearbeiten",
@@ -66,7 +67,25 @@
         "hl": "Homarr",
         "si": "Simple Icons"
       },
-      "scopeReminder": "Das Speichern ändert den Wert für alles im oben angezeigten Geltungsbereich."
+      "scopeReminder": "Das Speichern ändert den Wert für alles im oben angezeigten Geltungsbereich.",
+      "dependsOnInput": "Container hinzufügen",
+      "dependsOnHelp": "Wähle einen Container auf demselben Host oder gib einen Namen ein, der noch nicht läuft. Namen, die Drydock nicht kennt, werden mit einer Warnung gespeichert.",
+      "notificationInput": "Benachrichtigungs-Trigger hinzufügen",
+      "actionInput": "Aktions-Trigger hinzufügen",
+      "routingHelp": "Trigger-ID oder -Name, optional gefolgt von einem Schwellenwert wie minor.",
+      "threshold": "Schwellenwert",
+      "thresholdDefault": "Kein Schwellenwert",
+      "addEntry": "Hinzufügen",
+      "removeEntry": "{entry} entfernen",
+      "locked": "aus Label",
+      "noneHint": "Die Liste ist leer. Beim Speichern wird dieses Feld auf „keine“ gesetzt und jeder Label-Wert ignoriert. Nutze stattdessen „Auf Label zurücksetzen“, um den Override zu entfernen.",
+      "autoWarning": "Damit können die aufgeführten Trigger diesen Container automatisch aktualisieren, wenn sie im Modus onauto laufen.",
+      "dependencyAction": "Abhängigkeitsaktion",
+      "dependencyActionHelp": "Was Drydock mit den Containern macht, von denen dieser abhängt, wenn er aktualisiert wird.",
+      "dependencyActions": {
+        "update": "Aktualisieren",
+        "restart": "Neu starten"
+      }
     },
     "validation": {
       "displayName": {
@@ -114,8 +133,25 @@
         "display-name-invalid-characters": "Entferne Steuerzeichen, Richtungszeichen, < und >.",
         "invalid-icon": "Verwende eine Symbolquelle und einen Namen, keine URL.",
         "invalid-type": "Der Server hat diesen Wert abgelehnt.",
-        "invalid-value": "Der Server hat diesen Wert abgelehnt."
-      }
+        "invalid-value": "Der Server hat diesen Wert abgelehnt.",
+        "invalid-name": "Kein gültiger Containername: {entries}.",
+        "duplicate-entry": "Mehrfach aufgeführt: {entries}.",
+        "too-many-entries": "Verwende höchstens 32 Einträge.",
+        "depends-on-self": "Ein Container kann nicht von sich selbst abhängen: {entries}.",
+        "invalid-reference": "Keine gültige Trigger-Referenz: {entries}.",
+        "invalid-threshold": "Nicht unterstützter Schwellenwert: {entries}.",
+        "unknown-trigger-reference": "Kein registrierter Trigger passt zu: {entries}.",
+        "wrong-trigger-category": "Falscher Trigger-Typ für dieses Feld: {entries}.",
+        "agent-enforced-widening": "Der Agent würde das ablehnen, es erweitert, was seine Labels erlauben: {entries}.",
+        "invalid-action": "Wähle „Aktualisieren“ oder „Neu starten“."
+      },
+      "cycle": "Diese Abhängigkeiten würden einen Zyklus bilden über: {containers}."
+    },
+    "agent": {
+      "note": "Dieser Container läuft auf dem Agent {agent}, der seine eigenen Labels durchsetzt. Drydock kann den Zugriff auf Aktionen hier nur einschränken.",
+      "excludeHint": "Die Ausschlüsse aus den Labels bleiben bestehen. Du kannst nur weitere hinzufügen.",
+      "narrowHint": "Du kannst nur Einträge entfernen oder einen engeren Schwellenwert als im Label verwenden.",
+      "nothingToNarrow": "Die Labels erlauben hier nichts, also gibt es nichts einzuschränken."
     }
   }
 }
