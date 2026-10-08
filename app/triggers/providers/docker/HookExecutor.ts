@@ -25,7 +25,6 @@ type HookContainer = {
 
 type HookProvenanceContainerSpec = {
   Image?: string;
-  Config?: { Image?: string };
 };
 
 type HookProvenanceContext = {
@@ -258,7 +257,9 @@ class HookExecutor {
       const spec =
         context?.currentContainerSpec ??
         (await this.inspectContainerSpec(context?.dockerApi, container));
-      const imageRef = spec?.Image ?? spec?.Config?.Image;
+      // Image ID only: a tag may have been re-pulled to a different image since
+      // the container was created, so it can't establish where labels came from.
+      const imageRef = spec?.Image;
       if (!imageRef) {
         return undefined;
       }
