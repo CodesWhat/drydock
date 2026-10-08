@@ -337,7 +337,7 @@ test('cli exits 1 and reports pending discussion when strict RC check has an unc
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.19'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.20'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -354,7 +354,7 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0-rc.19'],
+    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0-rc.20'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -369,7 +369,7 @@ test('cli exits 0 with warning when tracker file does not exist', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.19'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.20'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -386,7 +386,7 @@ test('cli exits 0 for prerelease tags with pending replies (informational only)'
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.19'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.20'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -402,7 +402,7 @@ test('cli exits 1 for prerelease tags with --strict and pending replies', () => 
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.19'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.20'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -418,7 +418,7 @@ test('cli exits 0 and prints success when tracker has no pending replies', () =>
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.19'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.20'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
