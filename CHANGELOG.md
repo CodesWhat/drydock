@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Lifecycle hook labels baked into an image are no longer run.** `dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort` and `dd.hook.timeout` now only take effect when set on the container itself (Compose `labels:`, `docker run --label`), not when they arrive from an image's `LABEL` instructions. Drydock compares the container's labels against the image it was created from, logs a warning for each ignored label, and fails the update if the image labels can't be read while a pre or post hook label is present. Set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the previous behavior for images you build yourself.
+- Patch the website to Next.js 16.3.8 for six newly published advisories.
+
 ## [1.7.0-rc.19] — 2026-10-07
 
 ### Security

@@ -2893,4 +2893,62 @@ describe('Dockercompose Trigger', () => {
   });
 
   // -----------------------------------------------------------------------
+  describe('hook label provenance', () => {
+    const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
+
+    afterEach(() => {
+      if (originalHooksEnabled === undefined) {
+        delete process.env.DD_HOOKS_ENABLED;
+      } else {
+        process.env.DD_HOOKS_ENABLED = originalHooksEnabled;
+      }
+    });
+
+    async function buildComposeContext() {
+      return trigger.createTriggerContext(makeContainer(), mockLog, {
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          registry: { id: 'registry' },
+          auth: '',
+          newImage: 'nginx:9.9.9',
+        },
+      });
+    }
+
+    test('ignores an image-baked hook label for a compose-managed container', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      mockDockerApi.getContainer = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Image: 'sha256:running-image' }),
+      }));
+      mockDockerApi.getImage = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Config: { Labels: { 'dd.hook.pre': 'echo baked' } } }),
+      }));
+      const context = await buildComposeContext();
+      expect(context.currentContainerSpec).toBeNull();
+
+      const hookConfig = await trigger.buildHookConfig(
+        makeContainer({ labels: { 'dd.hook.pre': 'echo baked', 'dd.hook.post': 'echo operator' } }),
+        context,
+      );
+
+      expect(mockDockerApi.getImage).toHaveBeenCalledWith('sha256:running-image');
+      expect(hookConfig.hookPre).toBeUndefined();
+      expect(hookConfig.hookPost).toBe('echo operator');
+    });
+
+    test('fails closed for a compose-managed container when the image cannot be inspected', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      mockDockerApi.getContainer = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Image: 'sha256:running-image' }),
+      }));
+      mockDockerApi.getImage = vi.fn(() => ({
+        inspect: vi.fn().mockRejectedValue(new Error('no such image')),
+      }));
+      const context = await buildComposeContext();
+
+      await expect(
+        trigger.buildHookConfig(makeContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), context),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+  });
 });

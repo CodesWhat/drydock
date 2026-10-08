@@ -1,4 +1,5 @@
 import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
+import { isHooksExecutionEnabled, isImageHookLabelsAllowed } from '../../hooks/hook-flags.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
@@ -20,6 +21,15 @@ type HookContainer = {
     remoteValue?: string | null;
   };
   labels?: Record<string, string>;
+};
+
+type HookProvenanceContainerSpec = {
+  Image?: string;
+};
+
+type HookProvenanceContext = {
+  dockerApi?: unknown;
+  currentContainerSpec?: HookProvenanceContainerSpec | null;
 };
 
 type HookResult = {
@@ -48,6 +58,15 @@ type HookExecutorDependencies = {
     logger?: unknown,
   ) => string | undefined;
   getLogger: () => HookExecutorLogger | undefined;
+  inspectImageConfig: (
+    dockerApi: unknown,
+    imageRef: string | undefined,
+    logger: unknown,
+  ) => Promise<{ Labels?: Record<string, string> | null } | undefined>;
+  inspectContainerSpec: (
+    dockerApi: unknown,
+    container: HookContainer,
+  ) => Promise<HookProvenanceContainerSpec | undefined>;
   recordHookAudit: (
     action: string,
     container: HookContainer,
@@ -58,14 +77,22 @@ type HookExecutorDependencies = {
 
 type HookExecutorConstructorOptions = Omit<
   HookExecutorDependencies,
-  'getLogger' | 'recordHookAudit'
+  'getLogger' | 'recordHookAudit' | 'inspectImageConfig' | 'inspectContainerSpec'
 > & {
   getLogger?: HookExecutorDependencies['getLogger'];
+  inspectImageConfig?: HookExecutorDependencies['inspectImageConfig'];
+  inspectContainerSpec?: HookExecutorDependencies['inspectContainerSpec'];
   recordHookAudit?: HookExecutorDependencies['recordHookAudit'];
 };
 
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
 const DEFAULT_HOOK_TIMEOUT_MS = 60000;
+const HOOK_LABEL_PREFIX = 'dd.hook.';
+const HOOK_COMMAND_LABEL_KEYS = new Set(['dd.hook.pre', 'dd.hook.post']);
+
+function isHookLabelKey(key: string): boolean {
+  return key.startsWith(HOOK_LABEL_PREFIX);
+}
 
 /**
  * Shell-unsafe characters that must not appear unescaped in env values
@@ -146,6 +173,10 @@ class HookExecutor {
 
   getLogger: HookExecutorDependencies['getLogger'];
 
+  inspectImageConfig: HookExecutorDependencies['inspectImageConfig'];
+
+  inspectContainerSpec: HookExecutorDependencies['inspectContainerSpec'];
+
   recordHookAudit: HookExecutorDependencies['recordHookAudit'];
 
   constructor(options: HookExecutorConstructorOptions) {
@@ -153,11 +184,92 @@ class HookExecutor {
       requiredKeys: REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS,
       defaults: {
         getLogger: () => undefined,
+        inspectImageConfig: async () => undefined,
+        inspectContainerSpec: async () => undefined,
         recordHookAudit: () => undefined,
       },
       componentName: 'HookExecutor',
     });
     Object.assign(this, dependencies);
+  }
+
+  /**
+   * Docker merges an image's baked-in labels into the container's label set, so
+   * a hook label only counts as the operator's when the container carries it
+   * and the image it was created from does not carry the same key and value.
+   */
+  async resolveHookConfig(
+    container: HookContainer,
+    context?: HookProvenanceContext,
+  ): Promise<HookConfig> {
+    const labels = await this.resolveTrustedHookLabels(container, context);
+    return this.buildHookConfig(labels === container.labels ? container : { ...container, labels });
+  }
+
+  private async resolveTrustedHookLabels(
+    container: HookContainer,
+    context?: HookProvenanceContext,
+  ): Promise<Record<string, string> | undefined> {
+    const labels = container.labels;
+    if (!isHooksExecutionEnabled() || isImageHookLabelsAllowed() || !labels) {
+      return labels;
+    }
+    const hookKeys = Object.keys(labels).filter(isHookLabelKey);
+    if (hookKeys.length === 0) {
+      return labels;
+    }
+
+    const imageLabels = await this.readImageLabels(container, context);
+    if (imageLabels === undefined) {
+      if (hookKeys.some((key) => HOOK_COMMAND_LABEL_KEYS.has(key))) {
+        throw new TriggerPipelineError(
+          'hook-provenance-unverified',
+          `Lifecycle hooks for container ${container.name} were not run because hook provenance could not be established (image labels could not be read). Set DD_HOOKS_ALLOW_IMAGE_LABELS=true to trust hook labels baked into images.`,
+          { source: 'HookExecutor' },
+        );
+      }
+      return labels;
+    }
+
+    const trustedLabels: Record<string, string> = {};
+    for (const [key, value] of Object.entries(labels)) {
+      if (isHookLabelKey(key) && imageLabels[key] === value) {
+        this.getLogger()?.warn?.(
+          `Ignoring lifecycle hook label ${key} on container ${container.name}: it comes from the image, not the container. Set DD_HOOKS_ALLOW_IMAGE_LABELS=true to trust image-baked hook labels.`,
+        );
+        continue;
+      }
+      trustedLabels[key] = value;
+    }
+    return trustedLabels;
+  }
+
+  private async readImageLabels(
+    container: HookContainer,
+    context?: HookProvenanceContext,
+  ): Promise<Record<string, string> | undefined> {
+    try {
+      const spec =
+        context?.currentContainerSpec ??
+        (await this.inspectContainerSpec(context?.dockerApi, container));
+      // Image ID only: a tag may have been re-pulled to a different image since
+      // the container was created, so it can't establish where labels came from.
+      const imageRef = spec?.Image;
+      if (!imageRef) {
+        return undefined;
+      }
+      const imageConfig = await this.inspectImageConfig(
+        context?.dockerApi,
+        imageRef,
+        this.getLogger(),
+      );
+      if (!imageConfig) {
+        return undefined;
+      }
+      return imageConfig.Labels ?? {};
+    } catch {
+      return undefined;
+    }
   }
 
   buildHookConfig(container: HookContainer): HookConfig {
