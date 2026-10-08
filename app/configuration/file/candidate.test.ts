@@ -83,19 +83,43 @@ describe('private candidate resolution', () => {
     ).rejects.toThrow(/^Unable to resolve configuration secret files$/);
   });
 
-  test('matches startup when a YAML file reference overlays a real environment base, including removal', async () => {
+  test('keeps a real environment base over a YAML file reference, as startup does, including removal', async () => {
     const key = 'DD_REGISTRY_HUB_PRIVATE_PASSWORD';
     vi.stubEnv(key, 'environment-private-value');
     const layer = { [`${key}__FILE`]: credentialPath };
     const startupEnv = { [key]: process.env[key] };
     const startupSources = mergeConfigLayers(startupEnv, layer);
     await replaceSecrets(startupEnv);
+    expect(startupEnv).toStrictEqual({ [key]: 'environment-private-value' });
+    expect(startupSources).toStrictEqual({ [key]: 'env' });
     Object.assign(ddEnvVars, startupEnv);
     Object.assign(configFileSources, startupSources);
-    expect((await resolveCandidateEnvAndDiff(layer)).candidateEnv[key]).toBe(startupEnv[key]);
+    const overlaid = await resolveCandidateEnvAndDiff(layer);
+    expect(overlaid.candidateEnv[key]).toBe('environment-private-value');
+    expect(overlaid.candidateSources).toStrictEqual({ [key]: 'env' });
+    expect(overlaid.diff.changed).toEqual([]);
     expect((await resolveCandidateEnvAndDiff({})).candidateEnv[key]).toBe(
       'environment-private-value',
     );
+  });
+
+  test('keeps a real environment base over an interpolated YAML file reference', async () => {
+    const key = 'DD_REGISTRY_HUB_PRIVATE_PASSWORD';
+    vi.stubEnv(key, 'environment-private-value');
+    const layer = { [`${key}__FILE`]: credentialPath };
+    const interpolatedAtStartup = new Set([`${key}__FILE`]);
+    const startupEnv = { [key]: process.env[key] };
+    const startupSources = mergeConfigLayers(startupEnv, layer, interpolatedAtStartup);
+    await replaceSecrets(startupEnv);
+    Object.assign(ddEnvVars, startupEnv);
+    Object.assign(configFileSources, startupSources);
+    for (const interpolatedKey of interpolatedAtStartup) {
+      configFileInterpolatedKeys.add(interpolatedKey);
+    }
+    const result = await resolveCandidateEnvAndDiff(layer, interpolatedAtStartup);
+    expect(result.candidateEnv[key]).toBe('environment-private-value');
+    expect(result.candidateSources[key]).toBe('env');
+    expect(result.diff.changed).toEqual([]);
   });
 
   test('live configuration stays unchanged while a private candidate awaits secret I/O', async () => {

@@ -52,7 +52,7 @@ This flattens to `DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE=/run/secrets/ghcr`, which
 
 - A mapping whose keys include `_file` must contain `_file` and nothing else. `{ _file: x, value: y }` is a validation error naming the offending YAML path.
 - `_file` may only appear at a leaf, and its value must be a non-empty string.
-- Setting both a `_file` node and its own base key in the same file is an error — a value can't be both a literal and a reference to one. Setting the base key through the *environment* while the file sets `_file` is not an error: that's ordinary precedence, and the environment value wins.
+- Setting both a `_file` node and its own base key in the same file is an error — a value can't be both a literal and a reference to one. Setting the same key through the *environment* is not an error, whichever form either side uses: that's ordinary precedence, and the environment wins. See [a value and its secret file are one key](#a-value-and-its-secret-file-are-one-key).
 
 ## Interpolating an environment variable
 
@@ -75,6 +75,19 @@ Only a scalar whose **whole value** matches the pattern is substituted — `pref
 ## Precedence, and why the environment wins
 
 **Environment > file > Joi schema default.** The file is the deployment's committed baseline; the environment is the per-instance override an operator reaches for when something is on fire. Compose sets environment variables from `.env` files and from the shell at `docker compose up` time, so an operator who exports `DD_LOG_LEVEL=debug` to chase a bug expects it to win over a file they didn't touch — the reverse ordering would make that export a silent no-op, the worst possible failure mode for a debugging aid. It also means every existing environment-only deployment upgrades to v1.8 unchanged: with no file mounted, nothing about behavior differs from v1.7.
+
+### A value and its secret file are one key
+
+`DD_X` and `DD_X__FILE` are two ways to set the same key, and so are `x: value` and `x: { _file: path }` in the file. Precedence is decided per key, not per spelling. If the environment sets the key in either form, the environment's form is used and the file's entry for that key is ignored, whichever form the file used.
+
+| Environment sets | File sets `x` as | Effective value | Source |
+| --- | --- | --- | --- |
+| nothing | a value or a `_file` node | the file's | `file` |
+| `DD_X` | a value or a `_file` node | `DD_X` | `env` |
+| `DD_X__FILE` | a value or a `_file` node | the contents of the environment's file | `env` |
+| `DD_X` and `DD_X__FILE` | a value or a `_file` node | the contents of the environment's file | `env` |
+
+An ignored `_file` entry is never opened, so a path that doesn't exist only fails startup when that entry is the one in use. A secret file the environment names is always read, and a missing one fails startup whether or not the file sets the same key.
 
 ### Strict validation once a file is present
 
@@ -205,7 +218,7 @@ The editors are new in unreleased v1.8 builds. They edit existing, local file-ow
 
 `PUT /api/v1/config/:section` writes the given section's tree back into `drydock.yml`, preserving every other key's comments and formatting, then reloads. It refuses with **409** in three cases:
 
-- **A key in the write is actually sourced from the environment.** Writing it to the file would be a silent no-op, since the environment still wins — the response names the offending keys.
+- **A key in the write is actually sourced from the environment.** Writing it to the file would be a silent no-op, since the environment still wins — the response names the offending keys. Both forms count: a body that sets `x: { _file: path }` is refused when the environment sets `DD_X` or `DD_X__FILE`, the same as a body that sets `x` directly, and the response names `DD_X`.
 - **The section is owned by the database, not the file** (settings, notification rules, API keys, approvals, containers) — the response points at `PATCH /api/v1/settings`.
 - **No configuration file exists to write to.** This endpoint never creates `drydock.yml`; mount one first.
 
@@ -213,7 +226,7 @@ The editors are new in unreleased v1.8 builds. They edit existing, local file-ow
 
 An invalid candidate body is a `400` with the same `path`/`envKey`/`message` shape `/validate` uses, and the file on disk is left byte-identical. A successful write reports `restartRequired` when the section it wrote needs a restart to take effect.
 
-A session that signed in with a two-factor recovery code can't write the `auth` section. The request gets `403` with `details.reason` set to `recovery-assurance`, under `auth` or any section name that flattens into it, such as `auth_basic_eve`. Every other section stays writable from that session. See [what a recovery login can't do](/docs/api#what-a-recovery-login-cant-do).
+A session that signed in with a two-factor recovery code can't write the configuration file at all. `PUT /api/v1/config/:section` and the three editor `PATCH` routes answer `403` with `details.reason` set to `recovery-assurance`, whatever the section, before the name or the body is checked. It isn't only `auth` that holds something that would outlast a factor reset: `server` has the webhook and metrics credentials, `registry` and `agent` have theirs, and a command action runs what it's given. One rule covers all of them and doesn't need updating as sections gain secrets. The `GET` routes still work from that session. See [what a recovery login can't do](/docs/api#what-a-recovery-login-cant-do).
 
 ## Coexistence with the settings database
 

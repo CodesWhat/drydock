@@ -120,6 +120,57 @@ function getPutHandler(path: string) {
   return mockRouter.put.mock.calls.find((call) => call[0] === path)?.at(-1);
 }
 
+function getPatchHandler(path: string) {
+  return mockRouter.patch.mock.calls.find((call) => call[0] === path)?.at(-1);
+}
+
+const localIdentity = (assurance: 'password' | 'totp' | 'recovery') => ({
+  type: 'local',
+  subjectId: 's'.repeat(64),
+  providerId: 'basic.default',
+  assurance,
+  factorVersion: 1,
+  issuedAt: 1,
+});
+const RECOVERY_PRINCIPAL = {
+  kind: 'session',
+  username: 'scott',
+  identity: localIdentity('recovery'),
+};
+const RECOVERY_REFUSAL = {
+  error:
+    'A session that signed in with a recovery code cannot change the configuration file. Sign in with a code from your authenticator app and try again.',
+  details: { reason: 'recovery-assurance' },
+};
+// Everyone a recovery-code session is not.
+const OTHER_CALLERS: Array<[string, unknown]> = [
+  [
+    'a code from the authenticator app',
+    { kind: 'session', username: 'scott', identity: localIdentity('totp') },
+  ],
+  [
+    'a password and no factor',
+    { kind: 'session', username: 'scott', identity: localIdentity('password') },
+  ],
+  ['an OIDC provider', { kind: 'session', username: 'scott', identity: { type: 'oidc' } }],
+  ['a release before two-factor support', { kind: 'session', username: 'scott' }],
+  ['an API key holding admin', { kind: 'api-key', username: 'ci', scopes: ['admin'] }],
+];
+
+// A request that throws if a handler reads its parameters or its body: the
+// recovery refusal is about who is asking, so it has to come before either.
+function unreadRequest(principal: unknown) {
+  return {
+    principal,
+    get params(): never {
+      throw new Error('the parameters were read');
+    },
+    get body(): never {
+      throw new Error('the body was read');
+    },
+  };
+}
+
 describe('Config Router', () => {
   test('action editor keeps shared limiters and session-only/admin boundaries', async () => {
     configRouter.init();
@@ -1279,19 +1330,6 @@ describe('Config Router', () => {
     });
 
     describe('from a session that signed in with a recovery code', () => {
-      const localIdentity = (assurance: 'password' | 'totp' | 'recovery') => ({
-        type: 'local',
-        subjectId: 's'.repeat(64),
-        providerId: 'basic.default',
-        assurance,
-        factorVersion: 1,
-        issuedAt: 1,
-      });
-      const recoveryPrincipal = {
-        kind: 'session',
-        username: 'scott',
-        identity: localIdentity('recovery'),
-      };
       const newAccount = { basic: { eve: { user: 'eve', hash: 'argon2id$...' } } };
 
       async function put(section: string, principal: unknown, body: unknown = newAccount) {
@@ -1302,58 +1340,57 @@ describe('Config Router', () => {
         return res;
       }
 
-      // A section name is flattened to DD_<SECTION>_..., so `auth_basic_eve`
-      // writes DD_AUTH_BASIC_EVE_* exactly as `auth` with a nested body does.
+      // Every section, not only `auth`: `server` holds the webhook and metrics
+      // credentials, `registry` and `agent` hold theirs, and a command action
+      // runs whatever it is given. Names the engine would answer 400 or 409 for
+      // are refused the same way, because the engine is never asked.
       test.each([
         ['auth'],
         ['AUTH'],
         [' Auth '],
+        ['server'],
+        ['notification'],
+        ['registry'],
+        ['agent'],
+        ['action'],
+        ['banana'],
         ['auth_basic_eve'],
-        ['AUTH_Basic_Eve'],
-        ['auth_totp'],
-        ['auth_'],
+        ['a-b'],
+        ['settings'],
+        [''],
       ])(
-        'cannot write the authentication section, spelled %j: 403 with the reason, nothing written or audited',
+        'cannot write the %j section: 403 with the reason, nothing written or audited',
         async (section) => {
-          const res = await put(section, recoveryPrincipal);
+          const res = await put(section, RECOVERY_PRINCIPAL);
 
           expect(res.status).toHaveBeenCalledWith(403);
-          expect(res.json).toHaveBeenCalledWith({
-            error:
-              'A session that signed in with a recovery code cannot change the authentication configuration. Sign in with a code from your authenticator app and try again.',
-            details: { reason: 'recovery-assurance' },
-          });
+          expect(res.json).toHaveBeenCalledWith(RECOVERY_REFUSAL);
           expect(mockWriteConfigurationSection).not.toHaveBeenCalled();
           expect(mockRecordAuditEvent).not.toHaveBeenCalled();
         },
       );
 
-      test.each([['notification'], ['server'], ['watcher'], ['authx'], ['_auth'], ['oauth'], ['']])(
-        'can still write a section that is not authentication, such as %j',
-        async (section) => {
-          const res = await put(section, recoveryPrincipal, { anything: 'at all' });
+      test('is refused before the section name or the body is read', async () => {
+        configRouter.init();
+        const res = createResponse();
 
-          expect(mockWriteConfigurationSection).toHaveBeenCalledWith(section, {
-            anything: 'at all',
-          });
-          expect(res.status).toHaveBeenCalledWith(200);
-        },
-      );
+        await getPutHandler('/:section')(unreadRequest(RECOVERY_PRINCIPAL), res);
 
-      test.each([
-        [
-          'a code from the authenticator app',
-          { kind: 'session', username: 'scott', identity: localIdentity('totp') },
-        ],
-        [
-          'a password and no factor',
-          { kind: 'session', username: 'scott', identity: localIdentity('password') },
-        ],
-        ['an OIDC provider', { kind: 'session', username: 'scott', identity: { type: 'oidc' } }],
-        ['a release before two-factor support', { kind: 'session', username: 'scott' }],
-        ['an API key holding admin', { kind: 'api-key', username: 'ci', scopes: ['admin'] }],
-      ])(
-        'a caller that signed in with %s still writes the authentication section',
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(RECOVERY_REFUSAL);
+        expect(mockWriteConfigurationSection).not.toHaveBeenCalled();
+        expect(
+          validateOpenApiJsonResponse({
+            path: '/api/v1/config/{section}',
+            method: 'put',
+            statusCode: '403',
+            payload: (res.json as any).mock.calls[0][0],
+          }),
+        ).toEqual({ valid: true, errors: [] });
+      });
+
+      test.each(OTHER_CALLERS)(
+        'a caller that signed in with %s still writes a section',
         async (_name, principal) => {
           const res = await put('auth', principal);
 
@@ -1432,6 +1469,81 @@ describe('Config Router', () => {
       });
       expect(contractValidation.valid).toBe(true);
       expect(contractValidation.errors).toStrictEqual([]);
+    });
+  });
+
+  describe('the editors and the reads, from a session that signed in with a recovery code', () => {
+    const EDITORS = [
+      ['watchers', mockWatcherEdits, mockEditSnapshot],
+      ['triggers', mockTriggerEdits, mockTriggerSnapshot],
+      ['actions', mockActionEdits, mockActionSnapshot],
+    ] as const;
+
+    test.each(EDITORS)(
+      'cannot save through the %s editor: 403 with the reason, before the body is read, nothing written or audited',
+      async (editor, writer) => {
+        configRouter.init();
+        const res = createResponse();
+
+        await getPatchHandler(`/editor/${editor}`)(unreadRequest(RECOVERY_PRINCIPAL), res);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(RECOVERY_REFUSAL);
+        expect(writer).not.toHaveBeenCalled();
+        expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+        expect(
+          validateOpenApiJsonResponse({
+            path: `/api/v1/config/editor/${editor}`,
+            method: 'patch',
+            statusCode: '403',
+            payload: (res.json as any).mock.calls[0][0],
+          }),
+        ).toEqual({ valid: true, errors: [] });
+      },
+    );
+
+    test.each(EDITORS)('can still open the %s editor', async (editor, _writer, reader) => {
+      reader.mockResolvedValueOnce({ available: false });
+      configRouter.init();
+      const res = createResponse();
+
+      await getHandler(`/editor/${editor}`)({ principal: RECOVERY_PRINCIPAL }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ available: false });
+    });
+
+    test.each(['/', '/:section'])('can still read the configuration: GET %s', async (route) => {
+      configRouter.init();
+      const res = createResponse();
+
+      await getHandler(route)(
+        { params: { section: 'server' }, principal: RECOVERY_PRINCIPAL },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    describe.each(OTHER_CALLERS)('a caller that signed in with %s', (_name, principal) => {
+      test.each(EDITORS)('still saves through the %s editor', async (editor, writer) => {
+        writer.mockResolvedValueOnce({
+          status: 200,
+          saved: true,
+          applied: true,
+          changedKeys: [],
+          restartRequired: [],
+          errors: [],
+        });
+        configRouter.init();
+        const res = createResponse();
+        const body = { revision: 'r', changes: [] };
+
+        await getPatchHandler(`/editor/${editor}`)({ body, principal }, res);
+
+        expect(writer).toHaveBeenCalledWith(body);
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
     });
   });
 });

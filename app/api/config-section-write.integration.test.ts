@@ -2,7 +2,8 @@
  * `PUT /api/v1/config/:section` over a loopback listener, with the real router,
  * the real write engine and the real component schemas underneath it.
  * `config.test.ts` mocks the engine and `write.test.ts` never sees a request, so
- * neither can show what a section name does on its way from the URL to the file.
+ * neither can show what a section name does on its way from the URL to the file,
+ * or that a recovery-code session is turned away before any of it runs.
  * Only the reload a write triggers and the audit store are replaced.
  */
 import { argon2Sync, randomBytes } from 'node:crypto';
@@ -118,32 +119,39 @@ describe('PUT /api/v1/config/:section, from the URL to the file', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
-  async function put(section: string, body: unknown, headers: Record<string, string> = {}) {
+  async function send(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ) {
     addressSerial += 1;
-    const response = await fetch(
-      `http://127.0.0.1:${port}/api/v1/config/${encodeURIComponent(section)}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Forwarded-For': `10.0.${addressSerial >> 8}.${addressSerial & 255}`,
-          ...headers,
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/config${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-For': `10.0.${addressSerial >> 8}.${addressSerial & 255}`,
+        ...headers,
       },
-    );
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   }
 
-  function expectContract(statusCode: string, payload: unknown): void {
-    expect(
-      validateOpenApiJsonResponse({
-        path: '/api/v1/config/{section}',
-        method: 'put',
-        statusCode,
-        payload,
-      }),
-    ).toEqual({ valid: true, errors: [] });
+  function put(section: string, body: unknown, headers: Record<string, string> = {}) {
+    return send('PUT', `/${encodeURIComponent(section)}`, body, headers);
+  }
+
+  function expectContract(
+    statusCode: string,
+    payload: unknown,
+    path = '/api/v1/config/{section}',
+    method = 'put',
+  ): void {
+    expect(validateOpenApiJsonResponse({ path, method, statusCode, payload })).toEqual({
+      valid: true,
+      errors: [],
+    });
   }
 
   function expectAudit(status: 'info' | 'error', details: string): void {
@@ -160,6 +168,13 @@ describe('PUT /api/v1/config/:section, from the URL to the file', () => {
   function setByTheEnvironment(key: string, value: string): void {
     ddEnvVars[key] = value;
     configFileSources[key] = 'env';
+  }
+
+  /** The hook as a `_file` node, pointing at a secret file that holds `NEW_URL`. */
+  function secretFileHook() {
+    const secretPath = path.join(directory, 'hook-secret');
+    fs.writeFileSync(secretPath, `${NEW_URL}\n`, { mode: 0o600 });
+    return { discord: { myhook: { url: { _file: secretPath } } } };
   }
 
   test.each([
@@ -289,39 +304,139 @@ describe('PUT /api/v1/config/:section, from the URL to the file', () => {
       expect(response.status).toBe(400);
       expectFileUntouched();
     });
+
+    test('refuses a _file body for the same key with the same 409', async () => {
+      const response = await put('notification', secretFileHook());
+
+      expect(response.status).toBe(409);
+      expect(response.body).toStrictEqual({
+        error:
+          'Cannot write section "notification": the following keys are set by the environment ' +
+          `and would not take effect: ${HOOK_KEY}`,
+      });
+      expectContract('409', response.body);
+      expectAudit(
+        'error',
+        `Wrote configuration section "notification": refused (env-sourced keys: ${HOOK_KEY})`,
+      );
+      expectFileUntouched();
+    });
+  });
+
+  describe('with the key set by the environment as a secret file', () => {
+    beforeEach(() => {
+      const envSecretPath = path.join(directory, 'env-secret');
+      fs.writeFileSync(envSecretPath, 'https://env-secret.example/hook\n', { mode: 0o600 });
+      vi.stubEnv(`${HOOK_KEY}__FILE`, envSecretPath);
+      ddEnvVars[HOOK_KEY] = 'https://env-secret.example/hook';
+      configFileSources[`${HOOK_KEY}__FILE`] = 'env';
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    test.each([
+      ['a literal', () => NEW_HOOK],
+      ['a _file', secretFileHook],
+    ])('refuses %s body with 409, naming the key', async (_, body) => {
+      const response = await put('notification', body());
+
+      expect(response.status).toBe(409);
+      expect(response.body).toStrictEqual({
+        error:
+          'Cannot write section "notification": the following keys are set by the environment ' +
+          `and would not take effect: ${HOOK_KEY}`,
+      });
+      expectContract('409', response.body);
+      expectFileUntouched();
+    });
+  });
+
+  test('writes a _file body for a key the environment does not set and reports the key', async () => {
+    const response = await put('notification', secretFileHook());
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      applied: true,
+      section: 'notification',
+      changedKeys: [HOOK_KEY],
+      restartRequired: false,
+    });
+    expectContract('200', response.body);
+    expectAudit('info', 'Wrote configuration section "notification": 1 key(s) changed');
+    expect(yaml.parse(fs.readFileSync(configPath, 'utf8')).notification).toStrictEqual(
+      secretFileHook(),
+    );
   });
 
   describe('from a session that signed in with a recovery code', () => {
     const recovery = { 'X-Test-Principal': 'recovery' };
+    const REFUSAL = {
+      error:
+        'A session that signed in with a recovery code cannot change the configuration file. Sign in with a code from your authenticator app and try again.',
+      details: { reason: 'recovery-assurance' },
+    };
 
+    // The refusal is about who is asking, so it comes before the section name
+    // is looked at: `auth_basic_eve` and `a-b` are a 400 for anyone else, and
+    // `settings` a 409.
     test.each([
       ['auth', NEW_ACCOUNT],
       ['AUTH', NEW_ACCOUNT],
       [' auth ', NEW_ACCOUNT],
+      ['server', { port: 4000 }],
+      ['notification', NEW_HOOK],
+      ['banana', { peel: 'yes' }],
       ['auth_basic_eve', { user: 'eve', hash: HASH }],
-      ['auth_totp', { allowhttp: true }],
-    ])(
-      'is refused the authentication section, spelled %j, before the engine sees it',
-      async (name, body) => {
-        const response = await put(name, body, recovery);
+      ['a-b', { c: 'd' }],
+      ['settings', { updatemode: 'auto' }],
+    ])('is refused the %j section with 403, before the engine sees it', async (name, body) => {
+      const response = await put(name, body, recovery);
+
+      expect(response.status).toBe(403);
+      expect(response.body).toStrictEqual(REFUSAL);
+      expectContract('403', response.body);
+      expect(audit).not.toHaveBeenCalled();
+      expectFileUntouched();
+    });
+
+    test.each([['watchers'], ['triggers'], ['actions']])(
+      'is refused a save through the %s editor with 403',
+      async (editor) => {
+        const response = await send('PATCH', `/editor/${editor}`, {}, recovery);
 
         expect(response.status).toBe(403);
-        expect(response.body).toStrictEqual({
-          error:
-            'A session that signed in with a recovery code cannot change the authentication configuration. Sign in with a code from your authenticator app and try again.',
-          details: { reason: 'recovery-assurance' },
-        });
-        expectContract('403', response.body);
+        expect(response.body).toStrictEqual(REFUSAL);
+        expectContract('403', response.body, `/api/v1/config/editor/${editor}`, 'patch');
         expect(audit).not.toHaveBeenCalled();
         expectFileUntouched();
       },
     );
 
-    test('still writes a section that is not authentication', async () => {
-      const response = await put('notification', NEW_HOOK, recovery);
+    test.each([[''], ['/server'], ['/editor/watchers']])(
+      'can still read: GET /api/v1/config%s',
+      async (path) => {
+        ddEnvVars.DD_SERVER_PORT = '3000';
 
-      expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({ section: 'notification', changedKeys: [HOOK_KEY] });
-    });
+        const response = await send('GET', path, undefined, recovery);
+
+        expect(response.status).toBe(200);
+      },
+    );
   });
+
+  test.each([
+    ['watchers', 'Invalid watcher edit request'],
+    ['triggers', 'Invalid notification policy edit request'],
+    ['actions', 'Invalid action policy edit request'],
+  ])(
+    'a session that did not sign in with a recovery code reaches the %s editor',
+    async (editor, message) => {
+      const response = await send('PATCH', `/editor/${editor}`, {});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ saved: false, errors: [{ message }] });
+    },
+  );
 });
