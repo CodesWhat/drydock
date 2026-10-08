@@ -714,8 +714,8 @@ describe('additional docker trigger coverage', () => {
     expect(removeImageSpy).not.toHaveBeenCalled();
   });
 
-  test('buildHookConfig should default update env values to empty strings when missing', () => {
-    const hookConfig = docker.buildHookConfig({
+  test('buildHookConfig should default update env values to empty strings when missing', async () => {
+    const hookConfig = await docker.buildHookConfig({
       id: 'container-id',
       name: 'container-name',
       image: {

@@ -107,7 +107,10 @@ type UpdateLifecycleExecutorCallbacks = {
     logger: UpdateLifecycleOperationLogger,
     options?: { setPhase?: (phase: 'scanning' | 'sbom-generating') => void },
   ) => Promise<void>;
-  buildHookConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
+  buildHookConfig: (
+    container: UpdateLifecycleContainer,
+    context: UpdateLifecycleContext,
+  ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   recordHookConfigurationAudit: (
     container: UpdateLifecycleContainer,
     hookConfig: Record<string, unknown>,
@@ -355,7 +358,7 @@ class UpdateLifecycleExecutor {
         await this.security.verifySignaturePreUpdate(context, container, containerLogger);
       }
 
-      const hookConfig = this.hooks.buildHookConfig(container);
+      const hookConfig = await this.hooks.buildHookConfig(container, context);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
 
       // A runtime update that defers its security gate to the post-pull hook has
