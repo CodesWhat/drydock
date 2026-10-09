@@ -621,15 +621,21 @@ class ContainerRuntimeConfigManager {
   }
 
   /**
-   * Read the labels of the image a container was created from so its hook
-   * labels can be told apart from image-baked ones. Returns undefined, without
-   * inspecting anything, for a container that carries no hook label.
+   * Work out where a container's hook labels can have come from, given the
+   * config of the image it was created from. Returns undefined for a container
+   * that carries no hook label.
+   *
+   * `sourceImageConfig` has to be that image read by its image ID, or
+   * undefined when it could not be read that way. Config.Image is a tag that a
+   * same-tag pull has already moved to the new image, or a tag@digest the
+   * daemon stops resolving once the tag moves, so an image looked up through
+   * it can't say which image the labels came from.
    */
-  async getHookLabelProvenance(
-    dockerApi: Parameters<ContainerRuntimeConfigManager['inspectImageConfig']>[0],
+  getHookLabelProvenance(
     currentContainerSpec: HookLabelProvenanceContainerSpec | undefined,
+    sourceImageConfig: RuntimeConfigObject | undefined,
     logContainer: RuntimeConfigLogger | undefined,
-  ): Promise<HookLabelProvenance | undefined> {
+  ): HookLabelProvenance | undefined {
     const containerLabels = currentContainerSpec?.Config?.Labels;
     const hookLabelKeys = isRecord(containerLabels)
       ? Object.keys(containerLabels).filter(isHookLabelKey)
@@ -638,15 +644,10 @@ class ContainerRuntimeConfigManager {
       return undefined;
     }
 
-    // Image ID only. Config.Image is a tag that a same-tag pull has already
-    // moved to the new image, or a tag@digest the daemon stops resolving once
-    // the tag moves, so it can't say which image the labels came from.
-    const sourceImageId = currentContainerSpec?.Image;
-    const sourceImageConfig = await this.inspectImageConfig(dockerApi, sourceImageId, logContainer);
     if (!sourceImageConfig) {
       const containerName = String(currentContainerSpec?.Name ?? '').replace(/^\//, '');
       logContainer?.warn?.(
-        `Hook labels ${hookLabelKeys.join(', ')} on container ${containerName || 'unknown'} will not be carried onto the recreated container: the image it was created from (image ${sourceImageId ?? 'unknown'}) could not be inspected, so they cannot be told apart from image-baked labels. Set them on the container again if they are yours.`,
+        `Hook labels ${hookLabelKeys.join(', ')} on container ${containerName || 'unknown'} will not be carried onto the recreated container: the image it was created from (image ${currentContainerSpec?.Image ?? 'unknown'}) could not be inspected, so they cannot be told apart from image-baked labels. Set them on the container again if they are yours.`,
       );
       return { sourceImageLabels: undefined };
     }
@@ -737,21 +738,29 @@ class ContainerRuntimeConfigManager {
     // tag@digest the daemon stops resolving once the tag moves, so it only
     // stands in for a spec that carries no image ID. It is never a second try
     // for an ID that cannot be inspected: by then it may name another image.
-    const sourceImageRef = currentContainerSpec?.Image || currentContainerSpec?.Config?.Image;
-    const [sourceImageConfig, targetImageConfig, defaultRuntime, hookLabelProvenance] =
-      await Promise.all([
-        this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
-        this.inspectImageConfig(dockerApi, newImage, logContainer),
-        this.getDefaultRuntime(dockerApi, logContainer),
-        this.getHookLabelProvenance(dockerApi, currentContainerSpec, logContainer),
-      ]);
+    const sourceImageId = currentContainerSpec?.Image || undefined;
+    const [sourceImageConfig, targetImageConfig, defaultRuntime] = await Promise.all([
+      this.inspectImageConfig(
+        dockerApi,
+        sourceImageId ?? currentContainerSpec?.Config?.Image,
+        logContainer,
+      ),
+      this.inspectImageConfig(dockerApi, newImage, logContainer),
+      this.getDefaultRuntime(dockerApi, logContainer),
+    ]);
 
     return {
       sourceImageConfig,
       targetImageConfig,
       runtimeFieldOrigins: this.getRuntimeFieldOrigins(currentContainerSpec?.Config),
       defaultRuntime,
-      hookLabelProvenance,
+      // Hook labels are only ever checked against the image read by ID. The
+      // Config.Image stand-in is good enough for runtime defaults, not for this.
+      hookLabelProvenance: this.getHookLabelProvenance(
+        currentContainerSpec,
+        sourceImageId ? sourceImageConfig : undefined,
+        logContainer,
+      ),
       logContainer,
     };
   }
