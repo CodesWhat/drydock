@@ -732,7 +732,12 @@ class ContainerRuntimeConfigManager {
     newImage: string,
     logContainer: RuntimeConfigLogger | undefined,
   ): Promise<RuntimeConfigOptions> {
-    const sourceImageRef = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image;
+    // The image ID names the image the container was created from. Config.Image
+    // is a tag that a same-tag pull has already moved to the new image, or a
+    // tag@digest the daemon stops resolving once the tag moves, so it only
+    // stands in for a spec that carries no image ID. It is never a second try
+    // for an ID that cannot be inspected: by then it may name another image.
+    const sourceImageRef = currentContainerSpec?.Image || currentContainerSpec?.Config?.Image;
     const [sourceImageConfig, targetImageConfig, defaultRuntime, hookLabelProvenance] =
       await Promise.all([
         this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
