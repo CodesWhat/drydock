@@ -550,7 +550,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.pruneOldBackups).toHaveBeenCalledWith(container, 5);
   });
 
-  test('builds the hook config with the trigger context and fails the update before any hook runs when provenance is unverified', async () => {
+  test('builds the hook config with the trigger and runtime contexts and fails the update before any hook runs when provenance is unverified', async () => {
     const context = createContext();
     const failure = new Error('hook provenance could not be established');
     const buildHookConfig = vi.fn().mockRejectedValue(failure);
@@ -564,7 +564,9 @@ describe('UpdateLifecycleExecutor', () => {
       'hook provenance could not be established',
     );
 
-    expect(buildHookConfig).toHaveBeenCalledWith(container, context);
+    // The runtime context goes along so a provider that already resolved the
+    // hook configuration can hand it back instead of resolving it again.
+    expect(buildHookConfig).toHaveBeenCalledWith(container, context, { runtime: true });
     expect(harness.runPreUpdateHook).not.toHaveBeenCalled();
     expect(harness.performContainerUpdate).not.toHaveBeenCalled();
     expect(harness.runPostUpdateHook).not.toHaveBeenCalled();

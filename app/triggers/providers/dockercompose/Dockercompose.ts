@@ -265,6 +265,8 @@ function sanitizeComposeCallerRuntimeContext(runtimeContext: unknown): unknown {
   return sanitized;
 }
 
+type ComposeHookConfig = Awaited<ReturnType<Docker['buildHookConfig']>>;
+
 type ComposeUpdateLifecycleContext = {
   composeFile: string;
   service: string;
@@ -275,6 +277,16 @@ type ComposeUpdateLifecycleContext = {
   skipPull?: boolean;
   runtimeContext?: ComposeRuntimeContext;
   postPullGateCompleted?: boolean;
+  /**
+   * The hook configuration the batch preflight resolved for this container,
+   * provenance check included. The lifecycle runs its hooks from this rather
+   * than resolving it again, so the check has one answer per container and it
+   * is the one given before the batch touched anything (SEC-27). It sits on
+   * the lifecycle context itself and never under `runtimeContext`, which is
+   * where a caller's argument is merged in: a hook configuration names the
+   * commands that run, so it must not be something a caller can supply.
+   */
+  hookConfig?: ComposeHookConfig;
 };
 
 type ComposeRuntimeUpdateMapping = {
@@ -2083,6 +2095,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   }
 
   /**
+   * Override: a batch resolves every container's hook configuration in its
+   * preflight, before anything is pulled or written, and each lifecycle runs
+   * from the one resolved for it there. A lifecycle that arrives without one
+   * resolves it here, the ordinary way.
+   */
+  override async buildHookConfig(
+    container,
+    context?,
+    composeContext?: ComposeUpdateLifecycleContext,
+  ) {
+    return composeContext?.hookConfig ?? super.buildHookConfig(container, context);
+  }
+
+  /**
    * Override: apply compose-specific hooks while performing runtime refresh
    * through the Docker Engine API.
    */
@@ -2767,6 +2793,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * for the same "never attempted" story (DR-37). When the error carries no
    * attribution (nothing above tagged it), every mapping falls back to
    * `failed`, as before.
+   *
+   * The hook provenance preflight, which runs in every mode and not only
+   * compose-file-once, records its failures through this too (SEC-27).
    */
   private terminalizeComposeFileOncePreflightOperations(
     mappings: ComposeRuntimeUpdateMapping[],
@@ -3129,6 +3158,50 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   }
 
   /**
+   * Resolve every container's lifecycle hook configuration, provenance check
+   * included, before the batch pulls an image or writes the compose file. The
+   * check used to run only at the start of each container's own lifecycle,
+   * which in a batch is after the compose file was rewritten, after every
+   * compose-file-once candidate was pulled, and after the services ahead of it
+   * were recreated, so a `hook-provenance-unverified` failure arrived with all
+   * of that already done (SEC-27). The check reads the running container and
+   * the image it was created from, neither of which the batch has changed yet,
+   * so each lifecycle is handed its answer instead of asking a second time.
+   *
+   * A failure is recorded the way the compose-file-once preflight records its
+   * own: the container that failed terminalizes `failed` and the rest of the
+   * batch `skipped-dependency`, since none of them was attempted.
+   */
+  private async runComposeHookProvenancePreflight(
+    orderedMappings: ComposeRuntimeUpdateMapping[],
+    requestedRuntimeContext: Record<string, unknown> | undefined,
+  ): Promise<Map<object, ComposeHookConfig>> {
+    const hookConfigByContainer = new Map<object, ComposeHookConfig>();
+    for (const { container, service } of orderedMappings) {
+      try {
+        hookConfigByContainer.set(
+          container,
+          await this.buildHookConfig(container, {
+            dockerApi: this.getWatcher(container).dockerApi,
+          }),
+        );
+      } catch (error: unknown) {
+        const failure = tagComposeFileOncePreflightError(error, {
+          service,
+          containerId: typeof container.id === 'string' ? container.id : undefined,
+        });
+        this.terminalizeComposeFileOncePreflightOperations(
+          orderedMappings,
+          requestedRuntimeContext,
+          failure,
+        );
+        throw failure;
+      }
+    }
+    return hookConfigByContainer;
+  }
+
+  /**
    * Pull, bind and gate every compose-file-once service in the batch. Runs
    * before `maybeApplyComposeFileMutations` so a candidate the gate rejects
    * leaves neither a rewritten compose file nor a stray `.back` behind
@@ -3235,6 +3308,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       string,
       NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
     > = new Map(),
+    hookConfigByContainer: Map<object, ComposeHookConfig> = new Map(),
   ): Promise<void> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
@@ -3257,6 +3331,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       // method with no preflight would suppress the gate entirely.
       const composeFileOncePreflighted =
         composeFileOnceEnabled && composeFileOnceRuntimeContext !== undefined;
+      // A container the hook preflight did not cover carries no configuration,
+      // and its lifecycle then resolves one itself, provenance check included.
+      const preflightedHookConfig = hookConfigByContainer.get(container);
       const composeContext: ComposeUpdateLifecycleContext = {
         composeFile,
         composeFiles: composeFileChain,
@@ -3282,6 +3359,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           ),
         ),
         postPullGateCompleted: composeFileOncePreflighted,
+        ...(preflightedHookConfig ? { hookConfig: preflightedHookConfig } : {}),
       };
       let runtimeUpdateRecorded = false;
       const recordRuntimeUpdate = () => {
@@ -3334,6 +3412,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       runtimeContext && typeof runtimeContext === 'object'
         ? (runtimeContext as Record<string, unknown>)
         : undefined;
+    const orderedMappings = sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate);
+    // Hook provenance is settled for the whole batch first, in every mode: it
+    // needs nothing pulled, so a failure here costs no pull and no file write
+    // (SEC-27).
+    const hookConfigByContainer = await this.runComposeHookProvenancePreflight(
+      orderedMappings,
+      requestedRuntimeContext,
+    );
     // Compose-file-once gates the whole batch before the compose file is
     // touched, so a rejected candidate leaves no rewritten file and no `.back`
     // to clean up (DR-47).
@@ -3342,7 +3428,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           composeFile,
           composeFileChain,
           compose,
-          sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate),
+          orderedMappings,
           requestedRuntimeContext,
           versionMappings,
         )
@@ -3366,6 +3452,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         onSelfUpdateOperationId,
         lifecycleClassifications,
         composeFileOnceRuntimeContextByService,
+        hookConfigByContainer,
       );
     } catch (runtimeError: unknown) {
       if (completedRuntimeUpdates.length === 0) {

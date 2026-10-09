@@ -1584,7 +1584,7 @@ class Docker<
     return { error: 'Container not found in Docker' };
   }
 
-  async buildHookConfig(container, context?) {
+  async buildHookConfig(container, context?, _runtimeContext?: unknown) {
     return this.hookExecutor.resolveHookConfig(container, context);
   }
 
