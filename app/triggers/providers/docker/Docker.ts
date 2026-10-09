@@ -1165,6 +1165,7 @@ class Docker<
       targetImageConfig,
       runtimeFieldOrigins,
       defaultRuntime,
+      hookLabelProvenance,
       logContainer,
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
@@ -1197,6 +1198,7 @@ class Docker<
       targetImageConfig,
       runtimeFieldOrigins,
       logContainer,
+      hookLabelProvenance,
     );
     const shouldAnnotateRuntimeFieldOrigins =
       sourceImageConfig !== undefined ||

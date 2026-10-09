@@ -1,3 +1,4 @@
+import { isHookLabelKey } from '../../hooks/hook-labels.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 
 const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'] as const;
@@ -27,11 +28,31 @@ type RuntimeConfigObject = {
   [key: string]: unknown;
 };
 
+/**
+ * Where a container's `dd.hook.*` labels can have come from. Only looked up
+ * for a container that carries at least one such label.
+ */
+type HookLabelProvenance = {
+  /**
+   * Labels of the image the container was created from, read by image ID.
+   * Undefined when that image could not be inspected, which leaves the
+   * container's hook labels unverifiable.
+   */
+  sourceImageLabels: Record<string, string> | undefined;
+};
+
+type HookLabelProvenanceContainerSpec = {
+  Name?: string;
+  Image?: string;
+  Config?: { Image?: string; Labels?: Record<string, string> | null };
+};
+
 type RuntimeConfigOptions = {
   sourceImageConfig?: RuntimeConfigObject;
   targetImageConfig?: RuntimeConfigObject;
   runtimeFieldOrigins?: RuntimeFieldOrigins;
   defaultRuntime?: string;
+  hookLabelProvenance?: HookLabelProvenance;
   logContainer?: RuntimeConfigLogger;
 };
 
@@ -120,6 +141,7 @@ function isRuntimeConfigOptions(
     Object.hasOwn(runtimeOptionsOrLogContainer, 'targetImageConfig') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'runtimeFieldOrigins') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'defaultRuntime') ||
+    Object.hasOwn(runtimeOptionsOrLogContainer, 'hookLabelProvenance') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer')
   );
 }
@@ -414,6 +436,7 @@ class ContainerRuntimeConfigManager {
     targetImageConfig: RuntimeConfigObject | undefined,
     runtimeFieldOrigins: RuntimeFieldOrigins | undefined,
     logContainer: RuntimeConfigLogger | undefined,
+    hookLabelProvenance?: HookLabelProvenance,
   ) {
     const sanitizedConfig = { ...(containerConfig || {}) };
     const evaluationContext: ClonedRuntimeFieldEvaluationContext = {
@@ -450,10 +473,14 @@ class ContainerRuntimeConfigManager {
       }
     }
 
-    const sanitizedLabels = this.sanitizeImageInheritedLabels(
-      sanitizedConfig.Labels,
-      sourceImageConfig,
-      targetImageConfig,
+    const sanitizedLabels = this.sanitizeImageInheritedHookLabels(
+      this.sanitizeImageInheritedLabels(
+        sanitizedConfig.Labels,
+        sourceImageConfig,
+        targetImageConfig,
+        logContainer,
+      ),
+      hookLabelProvenance,
       logContainer,
     );
     if (sanitizedLabels !== sanitizedConfig.Labels) {
@@ -537,6 +564,98 @@ class ContainerRuntimeConfigManager {
     return changed ? filteredLabels : containerLabels;
   }
 
+  /**
+   * Keep image-baked hook labels off the recreated container. Docker merges an
+   * image's labels into every container created from it, and a recreate copies
+   * the old container's label set into the new create request, which turns an
+   * inherited label into one the new container itself sets. From then on it is
+   * indistinguishable from a label the operator put there, so the hook
+   * provenance check would run it.
+   *
+   * Unlike sanitizeImageInheritedLabels this never looks at the target image
+   * and never resolves the source by tag: a same-tag pull has already moved the
+   * tag to the target image by the time the container is recreated. If the
+   * target image bakes the label too, Docker applies it again from that image.
+   */
+  sanitizeImageInheritedHookLabels(
+    containerLabels: Record<string, string> | undefined,
+    hookLabelProvenance: HookLabelProvenance | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
+    if (!isRecord(containerLabels) || !hookLabelProvenance) {
+      return containerLabels;
+    }
+
+    const { sourceImageLabels } = hookLabelProvenance;
+    let changed = false;
+    const filteredLabels: Record<string, string> = {};
+    for (const [labelKey, labelValue] of Object.entries(containerLabels)) {
+      if (isHookLabelKey(labelKey)) {
+        const dropReason = this.getHookLabelDropReason(labelKey, labelValue, sourceImageLabels);
+        if (dropReason) {
+          changed = true;
+          logContainer?.info?.(
+            `Dropping hook label ${labelKey} from cloned container spec: ${dropReason}`,
+          );
+          continue;
+        }
+      }
+      filteredLabels[labelKey] = labelValue;
+    }
+
+    return changed ? filteredLabels : containerLabels;
+  }
+
+  private getHookLabelDropReason(
+    labelKey: string,
+    labelValue: string,
+    sourceImageLabels: Record<string, string> | undefined,
+  ): string | undefined {
+    if (sourceImageLabels === undefined) {
+      return 'the image the container was created from could not be inspected, so the label cannot be told apart from an image-baked one';
+    }
+    if (sourceImageLabels[labelKey] === labelValue) {
+      return 'it comes from the image the container was created from, not from the container';
+    }
+    return undefined;
+  }
+
+  /**
+   * Read the labels of the image a container was created from so its hook
+   * labels can be told apart from image-baked ones. Returns undefined, without
+   * inspecting anything, for a container that carries no hook label.
+   */
+  async getHookLabelProvenance(
+    dockerApi: Parameters<ContainerRuntimeConfigManager['inspectImageConfig']>[0],
+    currentContainerSpec: HookLabelProvenanceContainerSpec | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ): Promise<HookLabelProvenance | undefined> {
+    const containerLabels = currentContainerSpec?.Config?.Labels;
+    const hookLabelKeys = isRecord(containerLabels)
+      ? Object.keys(containerLabels).filter(isHookLabelKey)
+      : [];
+    if (hookLabelKeys.length === 0) {
+      return undefined;
+    }
+
+    // Image ID only. Config.Image is a tag that a same-tag pull has already
+    // moved to the new image, or a tag@digest the daemon stops resolving once
+    // the tag moves, so it can't say which image the labels came from.
+    const sourceImageId = currentContainerSpec?.Image;
+    const sourceImageConfig = await this.inspectImageConfig(dockerApi, sourceImageId, logContainer);
+    if (!sourceImageConfig) {
+      const containerName = String(currentContainerSpec?.Name ?? '').replace(/^\//, '');
+      logContainer?.warn?.(
+        `Hook labels ${hookLabelKeys.join(', ')} on container ${containerName || 'unknown'} will not be carried onto the recreated container: the image it was created from (image ${sourceImageId ?? 'unknown'}) could not be inspected, so they cannot be told apart from image-baked labels. Set them on the container again if they are yours.`,
+      );
+      return { sourceImageLabels: undefined };
+    }
+
+    return {
+      sourceImageLabels: isRecord(sourceImageConfig.Labels) ? sourceImageConfig.Labels : {},
+    };
+  }
+
   async inspectImageConfig(
     dockerApi:
       | {
@@ -609,22 +728,25 @@ class ContainerRuntimeConfigManager {
           info?: () => Promise<unknown>;
         }
       | undefined,
-    currentContainerSpec: { Config?: { Image?: string }; Image?: string } | undefined,
+    currentContainerSpec: HookLabelProvenanceContainerSpec | undefined,
     newImage: string,
     logContainer: RuntimeConfigLogger | undefined,
   ): Promise<RuntimeConfigOptions> {
     const sourceImageRef = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image;
-    const [sourceImageConfig, targetImageConfig, defaultRuntime] = await Promise.all([
-      this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
-      this.inspectImageConfig(dockerApi, newImage, logContainer),
-      this.getDefaultRuntime(dockerApi, logContainer),
-    ]);
+    const [sourceImageConfig, targetImageConfig, defaultRuntime, hookLabelProvenance] =
+      await Promise.all([
+        this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
+        this.inspectImageConfig(dockerApi, newImage, logContainer),
+        this.getDefaultRuntime(dockerApi, logContainer),
+        this.getHookLabelProvenance(dockerApi, currentContainerSpec, logContainer),
+      ]);
 
     return {
       sourceImageConfig,
       targetImageConfig,
       runtimeFieldOrigins: this.getRuntimeFieldOrigins(currentContainerSpec?.Config),
       defaultRuntime,
+      hookLabelProvenance,
       logContainer,
     };
   }

@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, type Route, test } from '@playwright/test';
+import { fetchIntercepted } from './helpers/route-fetch.mjs';
 import {
   dismissAnnouncementBanners,
   registerServerAvailabilityCheck,
@@ -74,7 +75,7 @@ function fixtureContainer(source: JsonRecord, index: number): JsonRecord {
 }
 
 async function interceptContainerCollection(route: Route): Promise<void> {
-  const response = await route.fetch();
+  const response = await fetchIntercepted(route);
   const payload: unknown = await response.json();
   const collection = collectionFrom(payload);
   if (collection.length < FIXTURE_NAMES.length) {

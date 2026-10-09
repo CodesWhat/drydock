@@ -4,7 +4,7 @@ import test from 'node:test';
 import { auditEntries } from '../apps/demo/src/mocks/data/audit.ts';
 
 const BASE_VERSION = '1.7.0';
-const RC_VERSION = '1.7.0-rc.20';
+const RC_VERSION = '1.7.0-rc.21';
 const DEMO_RELEASE_FIXTURES = [
   {
     path: 'apps/demo/src/mocks/data/server.ts',

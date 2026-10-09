@@ -779,6 +779,351 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(options.defaultRuntime).toBe('runc');
   });
 
+  describe('hook label provenance on recreate', () => {
+    const BAKED_HOOK = { 'dd.hook.pre': 'echo baked' };
+
+    function createHookLog() {
+      return { info: vi.fn(), debug: vi.fn(), warn: vi.fn() };
+    }
+
+    // Resolves an image reference the way the daemon does: a known reference
+    // returns its inspect payload, anything else is "No such image".
+    function createImageApi(images: Record<string, unknown>) {
+      return {
+        getImage: vi.fn((imageRef: string) => ({
+          inspect: vi.fn(async () => {
+            if (!Object.hasOwn(images, imageRef)) {
+              throw new Error(`No such image: ${imageRef}`);
+            }
+            return images[imageRef];
+          }),
+        })),
+      };
+    }
+
+    test('getHookLabelProvenance reads the image the container was created from by image ID, not by tag', async () => {
+      const manager = createManager();
+      const log = createHookLog();
+      const dockerApi = createImageApi({
+        // The tag has already moved to an image that bakes no hook label.
+        'repo/app:latest': { Config: {} },
+        'sha256:image-a': { Config: { Labels: { ...BAKED_HOOK, maintainer: 'publisher' } } },
+      });
+
+      await expect(
+        manager.getHookLabelProvenance(
+          dockerApi,
+          {
+            Name: '/app',
+            Image: 'sha256:image-a',
+            Config: { Image: 'repo/app:latest', Labels: { ...BAKED_HOOK, 'dd.watch': 'true' } },
+          },
+          log,
+        ),
+      ).resolves.toEqual({ sourceImageLabels: { ...BAKED_HOOK, maintainer: 'publisher' } });
+
+      expect(dockerApi.getImage).toHaveBeenCalledTimes(1);
+      expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:image-a');
+      expect(log.warn).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['an image config without a Labels key', { Config: {} }],
+      ['an image config with null Labels', { Config: { Labels: null } }],
+    ])(
+      'getHookLabelProvenance treats %s as an image that bakes no labels',
+      async (_name, image) => {
+        const manager = createManager();
+        const dockerApi = createImageApi({ 'sha256:image-b': image });
+
+        await expect(
+          manager.getHookLabelProvenance(
+            dockerApi,
+            {
+              Name: '/app',
+              Image: 'sha256:image-b',
+              Config: { Labels: { 'dd.hook.post': 'echo op' } },
+            },
+            createHookLog(),
+          ),
+        ).resolves.toEqual({ sourceImageLabels: {} });
+      },
+    );
+
+    test.each([
+      [
+        'only non-hook labels',
+        { Image: 'sha256:image-a', Config: { Labels: { 'dd.watch': 'true' } } },
+      ],
+      ['an empty label set', { Image: 'sha256:image-a', Config: { Labels: {} } }],
+      ['no labels', { Image: 'sha256:image-a', Config: {} }],
+      ['no config', { Image: 'sha256:image-a' }],
+      ['no container spec', undefined],
+    ])('getHookLabelProvenance inspects no image for a container with %s', async (_name, spec) => {
+      const manager = createManager();
+      const dockerApi = createImageApi({ 'sha256:image-a': { Config: { Labels: BAKED_HOOK } } });
+
+      await expect(
+        manager.getHookLabelProvenance(dockerApi, spec, createHookLog()),
+      ).resolves.toBeUndefined();
+
+      expect(dockerApi.getImage).not.toHaveBeenCalled();
+    });
+
+    test('getHookLabelProvenance reports unknown provenance and warns when the image cannot be inspected by ID', async () => {
+      const manager = createManager();
+      const log = createHookLog();
+      // Only the tag resolves; the image the container runs is gone.
+      const dockerApi = createImageApi({ 'repo/app:1.0.0': { Config: { Labels: BAKED_HOOK } } });
+
+      await expect(
+        manager.getHookLabelProvenance(
+          dockerApi,
+          {
+            Name: '/app',
+            Image: 'sha256:image-gone',
+            Config: {
+              Image: 'repo/app:1.0.0',
+              Labels: { 'dd.hook.pre': 'echo pre', 'dd.hook.timeout': '5000', 'dd.watch': 'true' },
+            },
+          },
+          log,
+        ),
+      ).resolves.toEqual({ sourceImageLabels: undefined });
+
+      expect(dockerApi.getImage).toHaveBeenCalledTimes(1);
+      expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:image-gone');
+      expect(log.warn).toHaveBeenCalledTimes(1);
+      const warning = log.warn.mock.calls[0][0];
+      expect(warning).toContain('container app');
+      expect(warning).toContain('sha256:image-gone');
+      expect(warning).toContain('dd.hook.pre, dd.hook.timeout');
+      expect(warning).not.toContain('dd.watch');
+    });
+
+    test('getHookLabelProvenance reports unknown provenance when the container spec carries no image ID or name', async () => {
+      const manager = createManager();
+      const log = createHookLog();
+      const dockerApi = createImageApi({ 'repo/app:1.0.0': { Config: { Labels: {} } } });
+
+      await expect(
+        manager.getHookLabelProvenance(
+          dockerApi,
+          { Config: { Image: 'repo/app:1.0.0', Labels: { 'dd.hook.pre': 'echo pre' } } },
+          log,
+        ),
+      ).resolves.toEqual({ sourceImageLabels: undefined });
+
+      // The tag is never used as a stand-in for the missing image ID.
+      expect(dockerApi.getImage).not.toHaveBeenCalled();
+      const warning = log.warn.mock.calls[0][0];
+      expect(warning).toContain('container unknown');
+      expect(warning).toContain('image unknown');
+    });
+
+    test('getHookLabelProvenance still reports unknown provenance when the logger has no warn method', async () => {
+      const manager = createManager();
+
+      await expect(
+        manager.getHookLabelProvenance(
+          createImageApi({}),
+          { Name: '/app', Image: 'sha256:image-gone', Config: { Labels: BAKED_HOOK } },
+          undefined,
+        ),
+      ).resolves.toEqual({ sourceImageLabels: undefined });
+    });
+
+    test('sanitizeImageInheritedHookLabels drops hook labels the source image carries and keeps the operator ones', () => {
+      const manager = createManager();
+      const log = createHookLog();
+      const labels = {
+        'dd.watch': 'true',
+        'dd.hook.pre': 'echo baked',
+        'dd.hook.post': 'echo operator',
+        'dd.hook.timeout': '5000',
+        maintainer: 'publisher',
+      };
+
+      expect(
+        manager.sanitizeImageInheritedHookLabels(
+          labels,
+          {
+            sourceImageLabels: {
+              'dd.hook.pre': 'echo baked',
+              // Same key, different value: the operator overrode the image.
+              'dd.hook.timeout': '9000',
+              // Inherited, but not a hook label: left to the tag-based sanitizer.
+              maintainer: 'publisher',
+            },
+          },
+          log,
+        ),
+      ).toEqual({
+        'dd.watch': 'true',
+        'dd.hook.post': 'echo operator',
+        'dd.hook.timeout': '5000',
+        maintainer: 'publisher',
+      });
+
+      expect(log.info).toHaveBeenCalledTimes(1);
+      expect(log.info).toHaveBeenCalledWith(
+        'Dropping hook label dd.hook.pre from cloned container spec: it comes from the image the container was created from, not from the container',
+      );
+    });
+
+    test('sanitizeImageInheritedHookLabels drops every hook label when provenance is unknown', () => {
+      const manager = createManager();
+      const log = createHookLog();
+
+      expect(
+        manager.sanitizeImageInheritedHookLabels(
+          {
+            'dd.watch': 'true',
+            'dd.hook.pre': 'echo pre',
+            'dd.hook.pre.abort': 'false',
+            maintainer: 'publisher',
+          },
+          { sourceImageLabels: undefined },
+          log,
+        ),
+      ).toEqual({ 'dd.watch': 'true', maintainer: 'publisher' });
+
+      expect(log.info).toHaveBeenCalledTimes(2);
+      expect(log.info).toHaveBeenCalledWith(
+        'Dropping hook label dd.hook.pre from cloned container spec: the image the container was created from could not be inspected, so the label cannot be told apart from an image-baked one',
+      );
+      expect(log.info).toHaveBeenCalledWith(
+        expect.stringContaining('Dropping hook label dd.hook.pre.abort from cloned container spec'),
+      );
+    });
+
+    test('sanitizeImageInheritedHookLabels returns the same labels when there is nothing to drop', () => {
+      const manager = createManager();
+      const labels = { 'dd.watch': 'true', 'dd.hook.pre': 'echo operator' };
+
+      // No hook label on the container: provenance was never looked up.
+      expect(manager.sanitizeImageInheritedHookLabels(labels, undefined, createHookLog())).toBe(
+        labels,
+      );
+      expect(
+        manager.sanitizeImageInheritedHookLabels(
+          undefined,
+          { sourceImageLabels: BAKED_HOOK },
+          createHookLog(),
+        ),
+      ).toBeUndefined();
+      expect(
+        manager.sanitizeImageInheritedHookLabels(labels, { sourceImageLabels: {} }, undefined),
+      ).toBe(labels);
+      expect(
+        manager.sanitizeImageInheritedHookLabels(
+          labels,
+          { sourceImageLabels: BAKED_HOOK },
+          createHookLog(),
+        ),
+      ).toBe(labels);
+    });
+
+    test('sanitizeClonedRuntimeConfig drops an inherited hook label when the tag-resolved source image is already the target image', () => {
+      const manager = createManager();
+      const log = createHookLog();
+      // Same-tag update: after the pull `repo/app:latest` resolves to the new
+      // image, so the tag-based comparison sees source === target.
+      const movedTagImageConfig = { Labels: { maintainer: 'publisher' } };
+
+      const result = manager.sanitizeClonedRuntimeConfig(
+        {
+          Image: 'repo/app:latest',
+          Labels: { ...BAKED_HOOK, 'dd.watch': 'true', maintainer: 'publisher' },
+        },
+        movedTagImageConfig,
+        movedTagImageConfig,
+        {},
+        log,
+        { sourceImageLabels: BAKED_HOOK },
+      );
+
+      expect(result.Labels).toEqual({ 'dd.watch': 'true', maintainer: 'publisher' });
+    });
+
+    test('sanitizeClonedRuntimeConfig removes Labels entirely when only inherited hook labels were set', () => {
+      const manager = createManager();
+
+      const result = manager.sanitizeClonedRuntimeConfig(
+        { Labels: { ...BAKED_HOOK } },
+        undefined,
+        undefined,
+        {},
+        createHookLog(),
+        { sourceImageLabels: BAKED_HOOK },
+      );
+
+      expect(result).toEqual({});
+    });
+
+    test('getCloneRuntimeConfigOptions resolves hook label provenance by image ID and leaves the runtime defaults on the tag', async () => {
+      const manager = createManager();
+      const log = createHookLog();
+      const dockerApi = createImageApi({
+        'repo/app:latest': { Config: { Entrypoint: ['/new-entry'] } },
+        'repo/app:latest@sha256:b': { Config: { Entrypoint: ['/new-entry'] } },
+        'sha256:image-a': { Config: { Entrypoint: ['/old-entry'], Labels: BAKED_HOOK } },
+      });
+
+      const options = await manager.getCloneRuntimeConfigOptions(
+        dockerApi,
+        {
+          Name: '/app',
+          Image: 'sha256:image-a',
+          Config: { Image: 'repo/app:latest', Labels: { ...BAKED_HOOK, 'dd.watch': 'true' } },
+        },
+        'repo/app:latest@sha256:b',
+        log,
+      );
+
+      // Unchanged: Entrypoint/Cmd/Env sanitisation keeps resolving the source by tag.
+      expect(options.sourceImageConfig).toEqual({ Entrypoint: ['/new-entry'] });
+      expect(options.targetImageConfig).toEqual({ Entrypoint: ['/new-entry'] });
+      expect(options.hookLabelProvenance).toEqual({ sourceImageLabels: BAKED_HOOK });
+      expect(dockerApi.getImage.mock.calls.map(([imageRef]) => imageRef).sort()).toEqual([
+        'repo/app:latest',
+        'repo/app:latest@sha256:b',
+        'sha256:image-a',
+      ]);
+    });
+
+    test('getCloneRuntimeConfigOptions makes no extra image inspect when the container has no hook label', async () => {
+      const manager = createManager();
+      const dockerApi = createImageApi({
+        'repo/app:latest': { Config: {} },
+        'repo/app:latest@sha256:b': { Config: {} },
+        'sha256:image-a': { Config: { Labels: BAKED_HOOK } },
+      });
+
+      const options = await manager.getCloneRuntimeConfigOptions(
+        dockerApi,
+        {
+          Name: '/app',
+          Image: 'sha256:image-a',
+          Config: { Image: 'repo/app:latest', Labels: { 'dd.watch': 'true' } },
+        },
+        'repo/app:latest@sha256:b',
+        createHookLog(),
+      );
+
+      expect(options.hookLabelProvenance).toBeUndefined();
+      expect(dockerApi.getImage).toHaveBeenCalledTimes(2);
+      expect(dockerApi.getImage).not.toHaveBeenCalledWith('sha256:image-a');
+    });
+
+    test('buildCloneRuntimeConfigOptions recognises an options object that only carries hook label provenance', () => {
+      const manager = createManager();
+      const options = { hookLabelProvenance: { sourceImageLabels: BAKED_HOOK } };
+
+      expect(manager.buildCloneRuntimeConfigOptions(options)).toBe(options);
+    });
+  });
+
   describe('getDefaultRuntime', () => {
     test('returns the daemon DefaultRuntime reported by info()', async () => {
       const manager = createManager();

@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.21] — 2026-10-09
+
+### Security
+
+- **Lifecycle hook labels baked into an image are no longer carried onto a recreated container.** When drydock replaces a container it now leaves out any `dd.hook.*` label whose key and value match the image the old container was created from, so a label an image baked in can't become a container label and run at a later update. Labels you set on the container are carried over unchanged. The check runs on every recreate, whatever `DD_HOOKS_ENABLED` and `DD_HOOKS_ALLOW_IMAGE_LABELS` are set to. If the old image's labels can't be read, hook labels are left off the new container and a warning is logged. A container an earlier version already recreated can still carry such a label; [Labels baked into images](https://getdrydock.com/docs/configuration/hooks#containers-recreated-by-an-earlier-version) shows how to check. The hook provenance failure now ends with its code, `[hook-provenance-unverified]`, in the log, the audit entry and the update operation.
+
+### Fixed
+
+- The Playwright suite no longer fails now and then with `route.fetch: socket hang up` in the stabilization countdown test. The server closes an idle keep-alive connection six seconds after its last response, Playwright's request client never expires its pooled ones, and a fetch that reused one right at that moment died. Intercepted fetches now retry a connection reset, the way a browser already does.
+
 ## [1.7.0-rc.20] — 2026-10-08
 
 ### Security
@@ -2812,7 +2822,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.20...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.21...HEAD
+[1.7.0-rc.21]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.20...v1.7.0-rc.21
 [1.7.0-rc.20]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.19...v1.7.0-rc.20
 [1.7.0-rc.19]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.18...v1.7.0-rc.19
 [1.7.0-rc.18]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.17...v1.7.0-rc.18
