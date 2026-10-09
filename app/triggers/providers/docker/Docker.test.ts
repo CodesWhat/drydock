@@ -6224,6 +6224,280 @@ describe('additional direct wrapper coverage', () => {
     expect(createPayload.Entrypoint).toBeUndefined();
   });
 
+  describe('recreateContainer hook label provenance', () => {
+    const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
+    const originalAllowImageLabels = process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+
+    function restoreEnv(key: string, value: string | undefined) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+
+    afterEach(() => {
+      restoreEnv('DD_HOOKS_ENABLED', originalHooksEnabled);
+      restoreEnv('DD_HOOKS_ALLOW_IMAGE_LABELS', originalAllowImageLabels);
+    });
+
+    const BAKED_HOOK = { 'dd.hook.pre': 'echo baked' };
+    const IMAGE_A = { Config: { Labels: { ...BAKED_HOOK } } };
+    const IMAGE_WITHOUT_LABELS = { Config: {} };
+
+    // Resolves an image reference the way the daemon does: a known reference
+    // returns its inspect payload, anything else is "No such image".
+    function createImageApi(images: Record<string, unknown>) {
+      return {
+        getImage: vi.fn((imageRef: string) => ({
+          inspect: vi.fn(async () => {
+            if (!Object.hasOwn(images, imageRef)) {
+              throw new Error(`No such image: ${imageRef}`);
+            }
+            return images[imageRef];
+          }),
+        })),
+      };
+    }
+
+    function containerSpec(image: string, imageId: string, labels: Record<string, string>) {
+      return {
+        Id: 'old-container-id',
+        Name: '/app',
+        Image: imageId,
+        Config: { Image: image, Labels: labels },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      };
+    }
+
+    // Recreates the container and returns the labels drydock asked Docker to
+    // create the replacement with. Image labels are merged in by Docker on top
+    // of these, so a label absent here is one the container itself never set.
+    async function recreate(
+      dockerApi: ReturnType<typeof createImageApi>,
+      spec: ReturnType<typeof containerSpec>,
+      newImage: string,
+      logContainer = createMockLog('info', 'warn', 'debug'),
+    ) {
+      const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+      await docker.recreateContainer(
+        dockerApi as any,
+        spec as any,
+        newImage,
+        { name: 'app' } as any,
+        logContainer,
+      );
+
+      const createPayload = createSpy.mock.calls.at(-1)[1] as { Labels: Record<string, string> };
+      return createPayload.Labels;
+    }
+
+    test('same-tag updates A -> B -> C never carry the hook label image A baked', async () => {
+      // Update 1: image A baked the hook, the pull has already moved
+      // repo/app:latest to image B, which bakes no label.
+      const afterFirstPull = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:b': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labelsAfterFirstUpdate = await recreate(
+        afterFirstPull,
+        containerSpec('repo/app:latest', 'sha256:image-a', { ...BAKED_HOOK, 'dd.watch': 'true' }),
+        'repo/app:latest@sha256:b',
+      );
+
+      expect(afterFirstPull.getImage).toHaveBeenCalledWith('sha256:image-a');
+      expect(labelsAfterFirstUpdate).not.toHaveProperty('dd.hook.pre');
+      expect(labelsAfterFirstUpdate).toMatchObject({ 'dd.watch': 'true' });
+
+      // Update 2: the container created from that spec runs image B. The tag
+      // moved on to image C, so its tag@digest reference no longer resolves.
+      const afterSecondPull = createImageApi({
+        'sha256:image-b': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:c': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labelsAfterSecondUpdate = await recreate(
+        afterSecondPull,
+        containerSpec('repo/app:latest@sha256:b', 'sha256:image-b', labelsAfterFirstUpdate),
+        'repo/app:latest@sha256:c',
+      );
+
+      expect(labelsAfterSecondUpdate).not.toHaveProperty('dd.hook.pre');
+      expect(labelsAfterSecondUpdate).toMatchObject({ 'dd.watch': 'true' });
+      // Nothing hook-shaped is left on the container, so no provenance lookup is made.
+      expect(afterSecondPull.getImage).not.toHaveBeenCalledWith('sha256:image-b');
+    });
+
+    test('a hook label a later image bakes again is not carried either', async () => {
+      // Image C bakes the hook again, so the container created from it inherits
+      // the label from C. The next same-tag update must leave it behind too.
+      const afterPull = createImageApi({
+        'sha256:image-c': IMAGE_A,
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:d': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labels = await recreate(
+        afterPull,
+        containerSpec('repo/app:latest@sha256:c', 'sha256:image-c', {
+          ...BAKED_HOOK,
+          'dd.watch': 'true',
+        }),
+        'repo/app:latest@sha256:d',
+      );
+
+      expect(labels).not.toHaveProperty('dd.hook.pre');
+    });
+
+    test('an operator hook label survives consecutive same-tag recreates', async () => {
+      const operatorLabels = { 'dd.hook.pre': 'echo operator', 'dd.watch': 'true' };
+      const afterFirstPull = createImageApi({
+        'sha256:image-a': { Config: { Labels: { maintainer: 'publisher' } } },
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:b': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labelsAfterFirstUpdate = await recreate(
+        afterFirstPull,
+        containerSpec('repo/app:latest', 'sha256:image-a', operatorLabels),
+        'repo/app:latest@sha256:b',
+      );
+
+      expect(labelsAfterFirstUpdate).toMatchObject(operatorLabels);
+
+      const afterSecondPull = createImageApi({
+        'sha256:image-b': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:c': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labelsAfterSecondUpdate = await recreate(
+        afterSecondPull,
+        containerSpec('repo/app:latest@sha256:b', 'sha256:image-b', labelsAfterFirstUpdate),
+        'repo/app:latest@sha256:c',
+      );
+
+      expect(labelsAfterSecondUpdate).toMatchObject(operatorLabels);
+    });
+
+    test('an operator hook label that overrides the value the image bakes is carried', async () => {
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:b': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labels = await recreate(
+        dockerApi,
+        containerSpec('repo/app:latest', 'sha256:image-a', { 'dd.hook.pre': 'echo operator' }),
+        'repo/app:latest@sha256:b',
+      );
+
+      expect(labels['dd.hook.pre']).toBe('echo operator');
+    });
+
+    test('a tag climb to an image without the hook label still drops it', async () => {
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        // The old tag was not re-pulled, so it still resolves to image A.
+        'repo/app:1.0.0': IMAGE_A,
+        'repo/app:1.0.1@sha256:b': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labels = await recreate(
+        dockerApi,
+        containerSpec('repo/app:1.0.0', 'sha256:image-a', { ...BAKED_HOOK, 'dd.watch': 'true' }),
+        'repo/app:1.0.1@sha256:b',
+      );
+
+      expect(labels).not.toHaveProperty('dd.hook.pre');
+      expect(labels).toMatchObject({ 'dd.watch': 'true' });
+    });
+
+    test('an inherited hook label is left to the target image when that image bakes the same label', async () => {
+      // Docker merges the target image's labels into the new container, so the
+      // label is still there after the recreate, and still an image label.
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:1.0.0': IMAGE_A,
+        'repo/app:1.0.1@sha256:b': IMAGE_A,
+      });
+
+      const labels = await recreate(
+        dockerApi,
+        containerSpec('repo/app:1.0.0', 'sha256:image-a', { ...BAKED_HOOK, 'dd.watch': 'true' }),
+        'repo/app:1.0.1@sha256:b',
+      );
+
+      expect(labels).not.toHaveProperty('dd.hook.pre');
+    });
+
+    test.each([
+      ['hooks are disabled', { DD_HOOKS_ENABLED: 'false' }],
+      ['hooks are enabled', { DD_HOOKS_ENABLED: 'true' }],
+      [
+        'image hook labels are trusted',
+        { DD_HOOKS_ENABLED: 'true', DD_HOOKS_ALLOW_IMAGE_LABELS: 'true' },
+      ],
+    ])('an inherited hook label is not carried when %s', async (_name, env) => {
+      delete process.env.DD_HOOKS_ENABLED;
+      delete process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+      Object.assign(process.env, env);
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:b': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labels = await recreate(
+        dockerApi,
+        containerSpec('repo/app:latest', 'sha256:image-a', {
+          ...BAKED_HOOK,
+          'dd.hook.post': 'echo operator',
+        }),
+        'repo/app:latest@sha256:b',
+      );
+
+      expect(labels).not.toHaveProperty('dd.hook.pre');
+      expect(labels['dd.hook.post']).toBe('echo operator');
+    });
+
+    test('hook labels are not carried, with a warning, when the source image cannot be inspected by ID', async () => {
+      const logContainer = createMockLog('info', 'warn', 'debug');
+      // The image the container runs is gone; only tags resolve.
+      const dockerApi = createImageApi({
+        'repo/app:latest': IMAGE_WITHOUT_LABELS,
+        'repo/app:latest@sha256:b': IMAGE_WITHOUT_LABELS,
+      });
+
+      const labels = await recreate(
+        dockerApi,
+        containerSpec('repo/app:latest', 'sha256:image-gone', {
+          'dd.hook.pre': 'echo operator',
+          'dd.hook.timeout': '5000',
+          'dd.watch': 'true',
+        }),
+        'repo/app:latest@sha256:b',
+        logContainer,
+      );
+
+      expect(labels).not.toHaveProperty('dd.hook.pre');
+      expect(labels).not.toHaveProperty('dd.hook.timeout');
+      expect(labels).toMatchObject({ 'dd.watch': 'true' });
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining('dd.hook.pre, dd.hook.timeout'),
+      );
+      expect(logContainer.warn).toHaveBeenCalledWith(expect.stringContaining('container app'));
+    });
+  });
+
   test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {
     vi.useFakeTimers();
     const dateNowSpy = vi.spyOn(Date, 'now');
