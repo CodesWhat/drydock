@@ -1,5 +1,6 @@
 import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { isHooksExecutionEnabled, isImageHookLabelsAllowed } from '../../hooks/hook-flags.js';
+import { isHookLabelKey } from '../../hooks/hook-labels.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
@@ -87,12 +88,8 @@ type HookExecutorConstructorOptions = Omit<
 
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
 const DEFAULT_HOOK_TIMEOUT_MS = 60000;
-const HOOK_LABEL_PREFIX = 'dd.hook.';
 const HOOK_COMMAND_LABEL_KEYS = new Set(['dd.hook.pre', 'dd.hook.post']);
-
-function isHookLabelKey(key: string): boolean {
-  return key.startsWith(HOOK_LABEL_PREFIX);
-}
+const HOOK_PROVENANCE_UNVERIFIED_CODE = 'hook-provenance-unverified';
 
 /**
  * Shell-unsafe characters that must not appear unescaped in env values
@@ -222,9 +219,12 @@ class HookExecutor {
     const imageLabels = await this.readImageLabels(container, context);
     if (imageLabels === undefined) {
       if (hookKeys.some((key) => HOOK_COMMAND_LABEL_KEYS.has(key))) {
+        // The update failure log line, the update-failed audit row and the
+        // operation's lastError are all built from the message alone, so the
+        // code rides in the message to reach them.
         throw new TriggerPipelineError(
-          'hook-provenance-unverified',
-          `Lifecycle hooks for container ${container.name} were not run because hook provenance could not be established (image labels could not be read). Set DD_HOOKS_ALLOW_IMAGE_LABELS=true to trust hook labels baked into images.`,
+          HOOK_PROVENANCE_UNVERIFIED_CODE,
+          `Lifecycle hooks for container ${container.name} were not run because hook provenance could not be established (image labels could not be read). Set DD_HOOKS_ALLOW_IMAGE_LABELS=true to trust hook labels baked into images. [${HOOK_PROVENANCE_UNVERIFIED_CODE}]`,
           { source: 'HookExecutor' },
         );
       }
