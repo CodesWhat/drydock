@@ -60,6 +60,8 @@ A label you set on the container with exactly the same value the image carries c
 
 If drydock can't read the image labels and the container has a `dd.hook.pre` or `dd.hook.post` label, the update fails with an error saying hook provenance could not be established (`hook-provenance-unverified`), and no hook runs. Containers without hook labels are not affected, and drydock never looks up image labels for them.
 
+A Docker Compose action runs this check for every container in the batch before it pulls an image or writes the compose file. If one container fails it, nothing in that batch is updated: the failing container's update is marked failed, and the others are skipped until the next run.
+
 If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` and drydock runs them. Only do that for images you control. A baked hook follows the image: it applies while the image the container was created from carries it, and stops once an update moves the container to an image that doesn't.
 
 ### Recreated containers
