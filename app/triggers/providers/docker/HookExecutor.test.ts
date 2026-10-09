@@ -773,6 +773,19 @@ describe('HookExecutor', () => {
       }
     });
 
+    test('carries the error code in the failure message so it reaches the log, audit row and operation record', async () => {
+      const { executor, context } = createProvenanceHarness(undefined);
+
+      await expect(
+        executor.resolveHookConfig(
+          createContainer({ labels: { 'dd.hook.pre': 'echo hi' } }),
+          context,
+        ),
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/ \[hook-provenance-unverified\]$/),
+      });
+    });
+
     test('does not fail when image labels cannot be read and no pre or post hook label exists', async () => {
       const { executor, context } = createProvenanceHarness(undefined);
 
