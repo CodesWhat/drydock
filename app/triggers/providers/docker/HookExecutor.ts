@@ -1,5 +1,6 @@
 import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { isHooksExecutionEnabled, isImageHookLabelsAllowed } from '../../hooks/hook-flags.js';
+import { isHookLabelKey } from '../../hooks/hook-labels.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
@@ -87,12 +88,7 @@ type HookExecutorConstructorOptions = Omit<
 
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
 const DEFAULT_HOOK_TIMEOUT_MS = 60000;
-const HOOK_LABEL_PREFIX = 'dd.hook.';
 const HOOK_COMMAND_LABEL_KEYS = new Set(['dd.hook.pre', 'dd.hook.post']);
-
-function isHookLabelKey(key: string): boolean {
-  return key.startsWith(HOOK_LABEL_PREFIX);
-}
 
 /**
  * Shell-unsafe characters that must not appear unescaped in env values
