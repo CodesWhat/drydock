@@ -16,6 +16,21 @@ function createLog() {
   };
 }
 
+// Resolves an image reference the way the daemon does: a known reference
+// returns its inspect payload, anything else is "No such image".
+function createImageApi(images: Record<string, unknown>) {
+  return {
+    getImage: vi.fn((imageRef: string) => ({
+      inspect: vi.fn(async () => {
+        if (!Object.hasOwn(images, imageRef)) {
+          throw new Error(`No such image: ${imageRef}`);
+        }
+        return images[imageRef];
+      }),
+    })),
+  };
+}
+
 describe('ContainerRuntimeConfigManager', () => {
   test('constructor should provide a default logger factory when omitted', () => {
     const manager = new ContainerRuntimeConfigManager({
@@ -779,26 +794,196 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(options.defaultRuntime).toBe('runc');
   });
 
+  describe('source image of a recreate', () => {
+    // Image A is the one the container was created from, image B the one it
+    // is being recreated on.
+    const IMAGE_A = {
+      Config: {
+        Entrypoint: ['/entry-a.sh'],
+        Cmd: ['serve', '--v1'],
+        Env: ['PATH=/usr/bin', 'APP_VERSION=1'],
+        Labels: { 'test.inherited': '1', maintainer: 'publisher' },
+      },
+    };
+    const IMAGE_B = {
+      Config: {
+        Entrypoint: ['/entry-b.sh'],
+        Cmd: ['serve', '--v2'],
+        Env: ['PATH=/usr/bin', 'APP_VERSION=2'],
+        Labels: { 'test.inherited': '2', maintainer: 'publisher' },
+      },
+    };
+    const TARGET = 'repo/app:latest@sha256:b';
+    // What is left once everything image A contributed and image B changed is
+    // gone: the PATH and maintainer label both images agree on, and the label
+    // the operator set.
+    const REFRESHED = {
+      Env: ['PATH=/usr/bin'],
+      Labels: { maintainer: 'publisher', 'dd.watch': 'true' },
+    };
+
+    // What `docker inspect` reports for a container created from image A with
+    // nothing of its own but a dd.watch label: Docker has merged the image's
+    // Entrypoint, Cmd, Env and labels into Config.
+    function containerOnImageA(configImage: string, configOverrides = {}) {
+      return {
+        Name: '/app',
+        Image: 'sha256:image-a',
+        Config: {
+          Image: configImage,
+          Entrypoint: [...IMAGE_A.Config.Entrypoint],
+          Cmd: [...IMAGE_A.Config.Cmd],
+          Env: [...IMAGE_A.Config.Env],
+          Labels: { ...IMAGE_A.Config.Labels, 'dd.watch': 'true' },
+          ...configOverrides,
+        },
+      };
+    }
+
+    // The two steps a recreate takes: resolve the clone options, then sanitise
+    // the old container's config with them.
+    async function sanitizeForRecreate(
+      dockerApi: ReturnType<typeof createImageApi>,
+      spec: { Image?: string; Config: Record<string, unknown> },
+      newImage = TARGET,
+    ) {
+      const manager = createManager();
+      const log = { info: vi.fn(), debug: vi.fn(), warn: vi.fn() };
+      const options = await manager.getCloneRuntimeConfigOptions(dockerApi, spec, newImage, log);
+      const config = manager.sanitizeClonedRuntimeConfig(
+        spec.Config,
+        options.sourceImageConfig,
+        options.targetImageConfig,
+        options.runtimeFieldOrigins,
+        log,
+        options.hookLabelProvenance,
+      );
+      return { config, options, manager };
+    }
+
+    test('a same-tag pull refreshes the inherited Entrypoint, Cmd, Env and labels from the image read by ID', async () => {
+      // The pull has already moved repo/app:latest to image B.
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': IMAGE_B,
+        [TARGET]: IMAGE_B,
+      });
+
+      const { config } = await sanitizeForRecreate(dockerApi, containerOnImageA('repo/app:latest'));
+
+      expect(config).toEqual({ Image: 'repo/app:latest', ...REFRESHED });
+      expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:image-a');
+      expect(dockerApi.getImage).not.toHaveBeenCalledWith('repo/app:latest');
+    });
+
+    test('an inherited Entrypoint follows the new image when it is the only thing that changed', async () => {
+      const imageWithNewEntrypoint = {
+        Config: { ...IMAGE_A.Config, Entrypoint: ['/entry-b.sh'] },
+      };
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': imageWithNewEntrypoint,
+        [TARGET]: imageWithNewEntrypoint,
+      });
+      const spec = containerOnImageA('repo/app:latest');
+
+      const { config } = await sanitizeForRecreate(dockerApi, spec);
+
+      expect(config).not.toHaveProperty('Entrypoint');
+      expect(config.Cmd).toEqual(['serve', '--v1']);
+      expect(config.Env).toBe(spec.Config.Env);
+      expect(config.Labels).toBe(spec.Config.Labels);
+    });
+
+    test('a refreshed Entrypoint and Cmd are stamped as inherited on the recreated container', async () => {
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': IMAGE_B,
+        [TARGET]: IMAGE_B,
+      });
+
+      const { config, options, manager } = await sanitizeForRecreate(
+        dockerApi,
+        containerOnImageA('repo/app:latest'),
+      );
+      const annotated = manager.annotateClonedRuntimeFieldOrigins(
+        config,
+        options.runtimeFieldOrigins,
+        options.targetImageConfig,
+      );
+
+      expect(annotated.Labels).toEqual({
+        ...REFRESHED.Labels,
+        'dd.runtime.entrypoint.origin': 'inherited',
+        'dd.runtime.cmd.origin': 'inherited',
+      });
+    });
+
+    test('values the operator set survive a same-tag pull', async () => {
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': IMAGE_B,
+        [TARGET]: IMAGE_B,
+      });
+      // A variable of their own, an override of an image variable, their own
+      // entrypoint and an override of an image label. Cmd is left to the image.
+      const operatorConfig = {
+        Entrypoint: ['/operator-entry.sh'],
+        Env: ['OPERATOR_VAR=x', 'APP_VERSION=custom', 'PATH=/usr/bin'],
+        Labels: { 'test.inherited': 'mine', maintainer: 'publisher', 'dd.watch': 'true' },
+      };
+
+      const { config } = await sanitizeForRecreate(
+        dockerApi,
+        containerOnImageA('repo/app:latest', operatorConfig),
+      );
+
+      expect(config).toEqual({ Image: 'repo/app:latest', ...operatorConfig });
+    });
+
+    test.each([
+      ['the tag@digest an earlier update pinned no longer resolves', 'repo/app:latest@sha256:a'],
+      ['the old tag was untagged locally', 'repo/app:1.0.0'],
+    ])('the inherited defaults still refresh when %s', async (_name, configImage) => {
+      const dockerApi = createImageApi({ 'sha256:image-a': IMAGE_A, [TARGET]: IMAGE_B });
+
+      const { config } = await sanitizeForRecreate(dockerApi, containerOnImageA(configImage));
+
+      expect(config).toEqual({ Image: configImage, ...REFRESHED });
+      expect(dockerApi.getImage).not.toHaveBeenCalledWith(configImage);
+    });
+
+    test('a container spec without an image ID falls back to Config.Image', async () => {
+      const dockerApi = createImageApi({ 'repo/app:1.0.0': IMAGE_A, [TARGET]: IMAGE_B });
+      const { Config } = containerOnImageA('repo/app:1.0.0');
+
+      const { config } = await sanitizeForRecreate(dockerApi, { Config });
+
+      expect(config).toEqual({ Image: 'repo/app:1.0.0', ...REFRESHED });
+      expect(dockerApi.getImage).toHaveBeenCalledWith('repo/app:1.0.0');
+    });
+
+    test('an image ID that cannot be inspected keeps everything and is not retried by tag', async () => {
+      // The image the container runs is gone. Its tag still resolves, to an
+      // image whose defaults match the container, so falling back to the tag
+      // would drop them.
+      const dockerApi = createImageApi({ 'repo/app:latest': IMAGE_A, [TARGET]: IMAGE_B });
+      const spec = { ...containerOnImageA('repo/app:latest'), Image: 'sha256:image-gone' };
+
+      const { config, options } = await sanitizeForRecreate(dockerApi, spec);
+
+      expect(options.sourceImageConfig).toBeUndefined();
+      expect(config).toEqual(spec.Config);
+      expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:image-gone');
+      expect(dockerApi.getImage).not.toHaveBeenCalledWith('repo/app:latest');
+    });
+  });
+
   describe('hook label provenance on recreate', () => {
     const BAKED_HOOK = { 'dd.hook.pre': 'echo baked' };
 
     function createHookLog() {
       return { info: vi.fn(), debug: vi.fn(), warn: vi.fn() };
-    }
-
-    // Resolves an image reference the way the daemon does: a known reference
-    // returns its inspect payload, anything else is "No such image".
-    function createImageApi(images: Record<string, unknown>) {
-      return {
-        getImage: vi.fn((imageRef: string) => ({
-          inspect: vi.fn(async () => {
-            if (!Object.hasOwn(images, imageRef)) {
-              throw new Error(`No such image: ${imageRef}`);
-            }
-            return images[imageRef];
-          }),
-        })),
-      };
     }
 
     test('getHookLabelProvenance reads the image the container was created from by image ID, not by tag', async () => {
@@ -1061,7 +1246,7 @@ describe('ContainerRuntimeConfigManager', () => {
       expect(result).toEqual({});
     });
 
-    test('getCloneRuntimeConfigOptions resolves hook label provenance by image ID and leaves the runtime defaults on the tag', async () => {
+    test('getCloneRuntimeConfigOptions resolves hook label provenance and the runtime defaults by image ID', async () => {
       const manager = createManager();
       const log = createHookLog();
       const dockerApi = createImageApi({
@@ -1081,18 +1266,14 @@ describe('ContainerRuntimeConfigManager', () => {
         log,
       );
 
-      // Unchanged: Entrypoint/Cmd/Env sanitisation keeps resolving the source by tag.
-      expect(options.sourceImageConfig).toEqual({ Entrypoint: ['/new-entry'] });
+      // The tag has moved to the new image. The image ID still names the old one.
+      expect(options.sourceImageConfig).toEqual({ Entrypoint: ['/old-entry'], Labels: BAKED_HOOK });
       expect(options.targetImageConfig).toEqual({ Entrypoint: ['/new-entry'] });
       expect(options.hookLabelProvenance).toEqual({ sourceImageLabels: BAKED_HOOK });
-      expect(dockerApi.getImage.mock.calls.map(([imageRef]) => imageRef).sort()).toEqual([
-        'repo/app:latest',
-        'repo/app:latest@sha256:b',
-        'sha256:image-a',
-      ]);
+      expect(dockerApi.getImage).not.toHaveBeenCalledWith('repo/app:latest');
     });
 
-    test('getCloneRuntimeConfigOptions makes no extra image inspect when the container has no hook label', async () => {
+    test('getCloneRuntimeConfigOptions makes no hook provenance lookup when the container has no hook label', async () => {
       const manager = createManager();
       const dockerApi = createImageApi({
         'repo/app:latest': { Config: {} },
@@ -1112,8 +1293,11 @@ describe('ContainerRuntimeConfigManager', () => {
       );
 
       expect(options.hookLabelProvenance).toBeUndefined();
-      expect(dockerApi.getImage).toHaveBeenCalledTimes(2);
-      expect(dockerApi.getImage).not.toHaveBeenCalledWith('sha256:image-a');
+      // One inspect for the source image, one for the target, none for hooks.
+      expect(dockerApi.getImage.mock.calls.map(([imageRef]) => imageRef).sort()).toEqual([
+        'repo/app:latest@sha256:b',
+        'sha256:image-a',
+      ]);
     });
 
     test('buildCloneRuntimeConfigOptions recognises an options object that only carries hook label provenance', () => {
