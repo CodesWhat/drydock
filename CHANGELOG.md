@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.22] — 2026-10-09
+
+### Fixed
+
+- **A same-tag update no longer leaves the old image's defaults on the new container.** When an update stayed on the same tag (`latest`, or any tag whose digest moved), the recreated container kept the old image's environment variables, labels, entrypoint and command, so an app could keep reporting its old version. Drydock tells inherited values from the ones you set by comparing the container with the image it was created from, and it looked that image up by tag after the pull had already moved the tag to the new image. It now looks it up by image ID. The same change covers a tag update where the old tag is no longer on the host. Values you set on the container are carried over as before. A container that an earlier version already updated still holds the stale values, and drydock can't tell them from values you set, so recreate it once: `docker compose up -d --force-recreate <service>`, or run the container again. [Image defaults after an update](https://getdrydock.com/docs/configuration/triggers/docker#image-defaults-after-an-update) has the details. ([#1351](https://github.com/CodesWhat/drydock/issues/1351))
+- **An entrypoint or command the image left unchanged is no longer pinned for good.** The first time drydock updated a container, an entrypoint or command the container had inherited from its image was labelled `explicit` (`dd.runtime.entrypoint.origin`, `dd.runtime.cmd.origin`) whenever the new image kept the same value. Every later update then carried it over as if you had set it, even after an image changed it. It's now labelled `inherited` when it matches the image the container was created from. A container already labelled `explicit` stays that way, so recreate it once if the value was never yours. ([#1351](https://github.com/CodesWhat/drydock/issues/1351))
+
+### Changed
+
+- The release cut no longer dispatches the star-history chart refresh. The workflow it started was retired, so the step failed on every cut.
+
 ## [1.7.0-rc.21] — 2026-10-09
 
 ### Security
@@ -2822,7 +2833,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.21...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.22...HEAD
+[1.7.0-rc.22]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.21...v1.7.0-rc.22
 [1.7.0-rc.21]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.20...v1.7.0-rc.21
 [1.7.0-rc.20]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.19...v1.7.0-rc.20
 [1.7.0-rc.19]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.18...v1.7.0-rc.19

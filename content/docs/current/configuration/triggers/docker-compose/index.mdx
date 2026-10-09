@@ -82,6 +82,8 @@ The Docker Compose trigger uses the Docker Engine API directly for all runtime o
 
 For **tag-based updates**, the trigger patches the compose file with the new tag and then recreates the container. For **digest-only updates** (same tag, new digest), the compose file is left unchanged and only the container runtime is refreshed (pull new image, stop/remove old container, recreate with new image).
 
+Either way the new container takes the new image's defaults for anything you didn't set yourself. [Image defaults after an update](/docs/configuration/triggers/docker#image-defaults-after-an-update) covers how drydock decides, and what to do with a container an earlier version updated.
+
 When `DIGESTPINNING=true`, compose mutations use digest references (`image@sha256:...`) when a digest is available.
 
 ## Compose file patch behavior

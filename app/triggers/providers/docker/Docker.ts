@@ -1209,6 +1209,7 @@ class Docker<
           sanitizedContainerConfig,
           runtimeFieldOrigins,
           targetImageConfig,
+          sourceImageConfig,
         )
       : sanitizedContainerConfig;
 
