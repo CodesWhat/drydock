@@ -1,11 +1,13 @@
 import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { emitContainerUpdateApplied } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { getCreatedContainerCandidate } from '../docker/created-container-candidate.js';
 import Dockercompose from './Dockercompose.js';
 import {
+  invokeComposeRefreshPostPullHook,
   makeCompose,
   makeContainer,
   makeDockerContainerHandle,
@@ -3378,6 +3380,351 @@ describe('Dockercompose Trigger', () => {
       await expect(
         trigger.buildHookConfig(makeContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), context),
       ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+
+    // A batch shares one compose file, and under compose-file-once one round of
+    // pulls, so a hook label whose provenance can't be established has to fail
+    // the batch before either of those happens and before an earlier service
+    // is recreated (SEC-27).
+    describe('in a batch', () => {
+      const composeFile = '/opt/drydock/test/stack.yml';
+
+      function makeBatch(redisHookLabels: Record<string, string> = {}) {
+        return [
+          makeContainer({
+            id: 'nginx-id',
+            name: 'nginx',
+            updateAvailable: true,
+            labels: { 'com.docker.compose.service': 'nginx' },
+          }),
+          makeContainer({
+            id: 'redis-id',
+            name: 'redis',
+            imageName: 'redis',
+            tagValue: '7.0.0',
+            remoteValue: '7.2.0',
+            updateAvailable: true,
+            labels: { 'com.docker.compose.service': 'redis', ...redisHookLabels },
+          }),
+        ];
+      }
+
+      /**
+       * Each container reports the image ID it runs, and only redis's running
+       * image decides provenance. Every other image inspect answers with a
+       * host-compatible platform, which is all the compose-file-once preflight
+       * asks of a pulled candidate.
+       */
+      function mockRedisRunningImage(inspectRunningImage: () => Promise<unknown>) {
+        mockDockerApi.getContainer = vi.fn((id) => ({
+          inspect: vi.fn().mockResolvedValue({ Image: `sha256:${id}-image` }),
+        }));
+        const inspectRunningImageSpy = vi.fn(inspectRunningImage);
+        mockDockerApi.getImage = vi.fn((imageRef) => ({
+          inspect:
+            imageRef === 'sha256:redis-id-image'
+              ? inspectRunningImageSpy
+              : vi.fn().mockResolvedValue({
+                  Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+                  Os: 'linux',
+                }),
+        }));
+        return inspectRunningImageSpy;
+      }
+
+      /** Record every side effect of the batch in the order it happens. */
+      function spyOnBatchSideEffects() {
+        const sideEffects: string[] = [];
+        vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+          makeCompose({ nginx: { image: 'nginx:1.0.0' }, redis: { image: 'redis:7.0.0' } }),
+        );
+        const spies = spyOnProcessComposeHelpers(trigger);
+        spies.writeComposeFileSpy.mockImplementation(async () => {
+          sideEffects.push('write');
+        });
+        spies.scanAndGateSpy.mockImplementation(async (_context, container) => {
+          sideEffects.push(`gate:${container.name}`);
+        });
+        spies.composeUpdateSpy.mockImplementation(
+          async (_composeFile, service, container, options = {}) => {
+            sideEffects.push(`update:${service}`);
+            await invokeComposeRefreshPostPullHook(container, options);
+          },
+        );
+        vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+          sideEffects.push('pull');
+        });
+        vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockImplementation(
+          async (_dockerApi, newImage) => ({
+            imageIdentity: `${newImage}@sha256:${'a'.repeat(64)}`,
+            unboundWarn: false,
+          }),
+        );
+        return { sideEffects, ...spies };
+      }
+
+      const originalAllowImageLabels = process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+
+      beforeEach(() => {
+        trigger.configuration.dryrun = false;
+        trigger.configuration.prune = false;
+      });
+
+      afterEach(() => {
+        if (originalAllowImageLabels === undefined) {
+          delete process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+        } else {
+          process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = originalAllowImageLabels;
+        }
+      });
+
+      test('fails on unverified provenance before the compose file is written or an earlier service is updated', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+
+        await expect(
+          trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' })),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        // nginx sorts ahead of redis and carries no hook label of its own, so
+        // without a preflight it is pulled and recreated before redis fails.
+        expect(sideEffects).toEqual([]);
+        expect(preHookSpy).not.toHaveBeenCalled();
+        expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
+      });
+
+      test('fails a compose-file-once batch on unverified provenance before any candidate is pulled or gated', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        trigger.configuration.composeFileOnce = true;
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+
+        await expect(
+          trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' })),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        expect(sideEffects).toEqual([]);
+        expect(preHookSpy).not.toHaveBeenCalled();
+        expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
+      });
+
+      test('fails the operation of the container that failed and skips the rest of the batch', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        spyOnBatchSideEffects();
+        vi.spyOn(updateOperationStore, 'getOperationById').mockImplementation(
+          (id) => ({ id, status: 'queued' }) as any,
+        );
+        const insertOperationSpy = vi.spyOn(updateOperationStore, 'insertOperation');
+        const markOperationTerminalSpy = vi
+          .spyOn(updateOperationStore, 'markOperationTerminal')
+          .mockReturnValue(undefined);
+
+        await expect(
+          trigger.processComposeFile(
+            composeFile,
+            makeBatch({ 'dd.hook.pre': 'echo baked' }),
+            undefined,
+            {
+              operationIds: new Map([
+                ['nginx-id', 'op-nginx'],
+                ['redis-id', 'op-redis'],
+              ]),
+            },
+          ),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        // Both updates were requested with an operation of their own, so those
+        // rows are the ones terminalized and none is minted.
+        expect(insertOperationSpy).not.toHaveBeenCalled();
+        expect(markOperationTerminalSpy).toHaveBeenCalledTimes(2);
+        // nginx was never attempted: it names redis as what blocked it.
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-nginx',
+          expect.objectContaining({
+            status: 'skipped-dependency',
+            phase: 'skipped-dependency',
+            skippedDependencyReason: 'upstream-failed',
+            blockingContainerId: 'redis-id',
+            blockingOperationId: 'op-redis',
+          }),
+        );
+        // The code rides in the message, which is all the operation record,
+        // the failure log line and the audit entry are built from.
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-redis',
+          expect.objectContaining({
+            status: 'failed',
+            phase: 'failed',
+            lastError: expect.stringContaining('[hook-provenance-unverified]'),
+          }),
+        );
+      });
+
+      test('records a failed operation when the update had no operation of its own', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        // The running container can't be inspected at all, so there is no image
+        // ID to read labels from and provenance is just as unestablished.
+        mockDockerApi.getContainer = vi.fn(() => ({
+          inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+        }));
+        const { sideEffects } = spyOnBatchSideEffects();
+        const insertOperationSpy = vi
+          .spyOn(updateOperationStore, 'insertOperation')
+          .mockImplementation(
+            (operation) => ({ ...operation, id: `op-${operation.containerName}` }) as any,
+          );
+        const markOperationTerminalSpy = vi
+          .spyOn(updateOperationStore, 'markOperationTerminal')
+          .mockReturnValue(undefined);
+        const [nginx, redis] = makeBatch({ 'dd.hook.post': 'echo baked' });
+        // No Docker ID on the container that fails, so the blocker can only be
+        // named by its service.
+        delete redis.id;
+
+        await expect(trigger.processComposeFile(composeFile, [nginx, redis])).rejects.toMatchObject(
+          { code: 'hook-provenance-unverified' },
+        );
+
+        expect(sideEffects).toEqual([]);
+        // Neither update came with an operation, so one is minted for each or
+        // there would be no row to terminalize and no failed event at all.
+        expect(insertOperationSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ containerName: 'redis', containerId: undefined }),
+        );
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-redis',
+          expect.objectContaining({
+            status: 'failed',
+            lastError: expect.stringContaining('[hook-provenance-unverified]'),
+          }),
+        );
+        expect(insertOperationSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ containerName: 'nginx', containerId: 'nginx-id' }),
+        );
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-nginx',
+          expect.objectContaining({
+            status: 'skipped-dependency',
+            blockingContainerId: undefined,
+            blockingOperationId: undefined,
+          }),
+        );
+      });
+
+      test('ignores an image-baked hook label once for the batch and runs each lifecycle from that answer', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        const inspectRunningImageSpy = mockRedisRunningImage(async () => ({
+          Config: { Labels: { 'dd.hook.pre': 'echo baked' } },
+        }));
+        const { sideEffects, preHookSpy, postHookSpy } = spyOnBatchSideEffects();
+        const resolveHookConfigSpy = vi.spyOn(trigger.hookExecutor, 'resolveHookConfig');
+        const [nginx, redis] = makeBatch({
+          'dd.hook.pre': 'echo baked',
+          'dd.hook.post': 'echo operator',
+        });
+
+        await trigger.processComposeFile(composeFile, [nginx, redis]);
+
+        expect(sideEffects).toEqual([
+          'write',
+          'update:nginx',
+          'gate:nginx',
+          'update:redis',
+          'gate:redis',
+        ]);
+        // One provenance decision per container: the preflight's. The lifecycle
+        // neither inspects the image again nor repeats the warning.
+        expect(resolveHookConfigSpy).toHaveBeenCalledTimes(2);
+        expect(inspectRunningImageSpy).toHaveBeenCalledTimes(1);
+        expect(
+          mockLog.warn.mock.calls.filter(([message]) =>
+            String(message).includes(
+              'Ignoring lifecycle hook label dd.hook.pre on container redis',
+            ),
+          ),
+        ).toHaveLength(1);
+        // The image's label is dropped and the operator's own still runs.
+        const redisHookConfig = expect.objectContaining({
+          hookPre: undefined,
+          hookPost: 'echo operator',
+        });
+        expect(preHookSpy).toHaveBeenCalledWith(redis, redisHookConfig, expect.anything());
+        expect(postHookSpy).toHaveBeenCalledWith(redis, redisHookConfig, expect.anything());
+      });
+
+      test('trusts an image-baked hook label without inspecting anything when DD_HOOKS_ALLOW_IMAGE_LABELS is true', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = 'true';
+        const inspectRunningImageSpy = mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+        const [nginx, redis] = makeBatch({ 'dd.hook.pre': 'echo baked' });
+
+        await trigger.processComposeFile(composeFile, [nginx, redis]);
+
+        expect(sideEffects).toEqual([
+          'write',
+          'update:nginx',
+          'gate:nginx',
+          'update:redis',
+          'gate:redis',
+        ]);
+        expect(inspectRunningImageSpy).not.toHaveBeenCalled();
+        expect(preHookSpy).toHaveBeenCalledWith(
+          redis,
+          expect.objectContaining({ hookPre: 'echo baked' }),
+          expect.anything(),
+        );
+      });
+
+      test('updates every service without inspecting anything when hooks are disabled', async () => {
+        delete process.env.DD_HOOKS_ENABLED;
+        const inspectRunningImageSpy = mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects } = spyOnBatchSideEffects();
+
+        await trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' }));
+
+        expect(sideEffects).toEqual([
+          'write',
+          'update:nginx',
+          'gate:nginx',
+          'update:redis',
+          'gate:redis',
+        ]);
+        expect(inspectRunningImageSpy).not.toHaveBeenCalled();
+        expect(mockDockerApi.getContainer).not.toHaveBeenCalled();
+      });
+
+      test('a lifecycle the preflight did not cover still checks provenance itself', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects } = spyOnBatchSideEffects();
+        const [, redis] = makeBatch({ 'dd.hook.pre': 'echo baked' });
+
+        await expect(
+          (trigger as any).runRuntimeUpdatesForComposeMappings(
+            composeFile,
+            [composeFile],
+            makeCompose({ redis: { image: 'redis:7.0.0' } }),
+            [{ service: 'redis', container: redis }],
+          ),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        expect(sideEffects).toEqual([]);
+      });
     });
   });
 });
