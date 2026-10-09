@@ -4,7 +4,7 @@
 FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
 
 # Build the upstream zlib security backport until Alpine publishes it.
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS zlib-build
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS zlib-build
 RUN apk add --no-cache alpine-sdk=1.1-r1 abuild=3.17.0-r0 \
     && abuild-keygen -a -n \
     && cp /root/.abuild/*.rsa.pub /etc/apk/keys/
@@ -55,7 +55,7 @@ RUN --mount=from=zlib-build,source=/out,target=/pkg apk --keys-dir /pkg add --no
 # Build stage for healthcheck binary (~65KB static binary)
 # Also an image index digest, never a per-platform manifest digest: a manifest
 # pin would compile this C stage for the wrong architecture (#1021).
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS healthcheck-build
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS healthcheck-build
 RUN apk add --no-cache gcc=15.2.0-r5 musl-dev=1.2.6-r2
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
