@@ -61,6 +61,18 @@ To limit the total number of simultaneous update lifecycles across your entire i
 
 See [Container Actions — Global Concurrency Cap](/docs/configuration/actions#global-concurrency-cap) for full semantics.
 
+## Image defaults after an update
+
+Docker copies an image's defaults into every container created from it: environment variables, labels, entrypoint and command. When drydock replaces a container it compares the old container with the image it was created from. A value that matches that image came from the image, so the new container takes the new image's value instead. A value that differs is one you set (Compose `environment:`, `docker run -e`, `--entrypoint`, a command, a label), and it's carried over unchanged. This applies to updates on the same tag, to tag changes, to Compose-managed containers and to rollbacks.
+
+A value you set to exactly what the image already had can't be told apart from the image's, so it follows the image too. An entrypoint or command can be pinned with `dd.runtime.entrypoint.origin=explicit` or `dd.runtime.cmd.origin=explicit` on the container.
+
+If drydock can't read the image the old container was created from, it keeps every value as it is. `dd.hook.*` labels are the exception, see [Recreated containers](/docs/configuration/hooks#recreated-containers).
+
+### Containers updated by an earlier version
+
+Earlier versions of drydock carried the old image's defaults onto the new container when an update stayed on the same tag, and labelled an entrypoint or command the image hadn't changed as `explicit`. A container updated that way still holds those values, so an app can keep reporting an old version. Drydock can't tell a stale default from a value you set. Recreate the container once to clear them: `docker compose up -d --force-recreate <service>` for a Compose service, or `docker rm` and `docker run` again.
+
 ## Image Backup & Rollback
 
 Every time a container is updated, Drydock automatically backs up the previous image metadata. Backups are retained per container up to the `BACKUPCOUNT` limit (default: 3), with older backups pruned automatically.
