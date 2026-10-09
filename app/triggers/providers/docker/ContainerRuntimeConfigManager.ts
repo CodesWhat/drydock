@@ -325,6 +325,7 @@ class ContainerRuntimeConfigManager {
     containerConfig: RuntimeConfigObject | undefined,
     runtimeFieldOrigins: RuntimeFieldOrigins | undefined,
     targetImageConfig: RuntimeConfigObject | undefined,
+    sourceImageConfig?: RuntimeConfigObject,
   ) {
     const labels = { ...(containerConfig?.Labels || {}) };
 
@@ -336,16 +337,21 @@ class ContainerRuntimeConfigManager {
         const currentRuntimeOrigin = this.normalizeRuntimeFieldOrigin(
           runtimeFieldOrigins?.[runtimeField],
         );
-        if (currentRuntimeOrigin === RUNTIME_ORIGIN_INHERITED) {
-          nextRuntimeOrigin = this.areContainerProcessArgsEqual(
-            runtimeValue,
-            targetImageConfig?.[runtimeField],
-          )
+        // A field with no origin label that matches the image the container
+        // was created from is inherited, the same call
+        // shouldDropClonedRuntimeField makes. Stamping it explicit because the
+        // target happens to keep the value would pin it against every later
+        // image that changes it.
+        const inherited =
+          currentRuntimeOrigin === RUNTIME_ORIGIN_INHERITED ||
+          (currentRuntimeOrigin === RUNTIME_ORIGIN_UNKNOWN &&
+            sourceImageConfig !== undefined &&
+            this.areContainerProcessArgsEqual(runtimeValue, sourceImageConfig[runtimeField]));
+        nextRuntimeOrigin =
+          inherited &&
+          this.areContainerProcessArgsEqual(runtimeValue, targetImageConfig?.[runtimeField])
             ? RUNTIME_ORIGIN_INHERITED
             : RUNTIME_ORIGIN_EXPLICIT;
-        } else {
-          nextRuntimeOrigin = RUNTIME_ORIGIN_EXPLICIT;
-        }
       }
 
       labels[RUNTIME_FIELD_ORIGIN_LABELS[runtimeField]] = nextRuntimeOrigin;
