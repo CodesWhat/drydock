@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
 import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
-import type { ContainerImage } from '../../../model/container.js';
+import type { Container, ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
@@ -2832,6 +2832,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         updateOperationStore.insertOperation({
           containerName: container.name ?? service,
           containerId: typeof container.id === 'string' ? container.id : undefined,
+          // The failed event is built from this row alone. Without the
+          // snapshot it names a container no notification can be matched to,
+          // where the lifecycle's own failure event carries the container.
+          container: container as Container,
         }).id;
 
       if (isBlocking) {

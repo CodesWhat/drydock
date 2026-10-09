@@ -3568,7 +3568,7 @@ describe('Dockercompose Trigger', () => {
         );
       });
 
-      test('records a failed operation when the update had no operation of its own', async () => {
+      test('records a failed operation carrying the container when the update had no operation of its own', async () => {
         process.env.DD_HOOKS_ENABLED = 'true';
         // The running container can't be inspected at all, so there is no image
         // ID to read labels from and provenance is just as unestablished.
@@ -3596,8 +3596,15 @@ describe('Dockercompose Trigger', () => {
         expect(sideEffects).toEqual([]);
         // Neither update came with an operation, so one is minted for each or
         // there would be no row to terminalize and no failed event at all.
+        // That event is built from the row alone, so the row carries the
+        // container: without it the event names a container no notification
+        // can be matched to, where the lifecycle's own failure event has it.
         expect(insertOperationSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ containerName: 'redis', containerId: undefined }),
+          expect.objectContaining({
+            containerName: 'redis',
+            containerId: undefined,
+            container: redis,
+          }),
         );
         expect(markOperationTerminalSpy).toHaveBeenCalledWith(
           'op-redis',
@@ -3607,7 +3614,11 @@ describe('Dockercompose Trigger', () => {
           }),
         );
         expect(insertOperationSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ containerName: 'nginx', containerId: 'nginx-id' }),
+          expect.objectContaining({
+            containerName: 'nginx',
+            containerId: 'nginx-id',
+            container: nginx,
+          }),
         );
         expect(markOperationTerminalSpy).toHaveBeenCalledWith(
           'op-nginx',
