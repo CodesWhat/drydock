@@ -900,7 +900,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 `dd.display.name`, `dd.display.icon`, `dd.depends_on`, `dd.depends_on.action`, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can also be overridden by Drydock itself, per container, without touching the label. See [Override labels with the API](#override-labels-with-the-api).
 
-`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
+`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd. [Image defaults after an update](/docs/configuration/triggers/docker#image-defaults-after-an-update) covers how drydock decides.
 
 <Callout type="info" title="Dependency-ordered updates">
 
