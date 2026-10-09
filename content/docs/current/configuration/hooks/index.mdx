@@ -58,9 +58,28 @@ Docker copies an image's `LABEL` instructions into every container created from 
 
 A label you set on the container with exactly the same value the image carries can't be told apart from the image's, so it is ignored too, with a warning in the log. Change the value, or set `DD_HOOKS_ALLOW_IMAGE_LABELS=true`.
 
-If drydock can't read the image labels and the container has a `dd.hook.pre` or `dd.hook.post` label, the update fails with an error saying hook provenance could not be established, and no hook runs. Containers without hook labels are not affected, and no extra image lookup happens while `DD_HOOKS_ENABLED` is off.
+If drydock can't read the image labels and the container has a `dd.hook.pre` or `dd.hook.post` label, the update fails with an error saying hook provenance could not be established, and no hook runs. Containers without hook labels are not affected, and drydock never looks up image labels for them.
 
-If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the previous behavior. Only do that for images you control.
+If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` and drydock runs them. Only do that for images you control. A baked hook follows the image: it applies while the image the container was created from carries it, and stops once an update moves the container to an image that doesn't.
+
+### Recreated containers
+
+Updating a container means replacing it, and the replacement gets the old container's labels. A `dd.hook.*` label that came from the old image is left out of that copy: if its key and value match the image the old container was created from, it isn't carried onto the new container, whatever the new image contains. Labels you set on the container are carried over unchanged. Without this, a label one image baked in would become a label the new container sets itself, and the next update would treat it as yours.
+
+This applies every time drydock recreates a container, including rollbacks and Compose-managed containers, and it doesn't depend on `DD_HOOKS_ENABLED` or `DD_HOOKS_ALLOW_IMAGE_LABELS`. If the new image bakes the same label, Docker applies it to the new container from that image, and it stays an image label.
+
+If drydock can't read the old image's labels while recreating a container, it can't tell your hook labels from baked ones. It leaves every `dd.hook.*` label off the new container and logs a warning naming the container and the labels. Set them on the container again if they were yours.
+
+### Containers recreated by an earlier version
+
+Earlier versions of drydock copied inherited hook labels onto the replacement when an update pulled a newer image under the same tag. A container one of those versions recreated can still carry a `dd.hook.*` label that came from an old image. Drydock can't tell it from a label you set, so it runs. Compare the container's labels with its image's:
+
+```bash
+docker inspect --format '{{json .Config.Labels}}' <container>
+docker image inspect --format '{{json .Config.Labels}}' "$(docker inspect --format '{{.Image}}' <container>)"
+```
+
+A `dd.hook.*` label on the container that you didn't set, and that the image doesn't carry with the same value, is a leftover. Labels can't be changed on an existing container, so recreate it without the label: `docker compose up -d --force-recreate` for a Compose service, or `docker rm` and `docker run` again.
 
 ## Hook environment variables
 
