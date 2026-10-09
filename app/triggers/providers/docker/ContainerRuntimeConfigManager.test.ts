@@ -317,6 +317,63 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(withMissingConfig.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   });
 
+  test('annotateClonedRuntimeFieldOrigins stamps an unlabelled field as inherited when it matches the source image and the target leaves it unchanged', () => {
+    const manager = createManager();
+    const imageConfig = { Entrypoint: ['/entrypoint.sh'], Cmd: ['run'] };
+
+    const annotated = manager.annotateClonedRuntimeFieldOrigins(
+      { Labels: {}, Entrypoint: ['/entrypoint.sh'], Cmd: ['run'] },
+      { Entrypoint: 'unknown', Cmd: 'unknown' },
+      imageConfig,
+      imageConfig,
+    );
+
+    expect(annotated.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+    expect(annotated.Labels['dd.runtime.cmd.origin']).toBe('inherited');
+  });
+
+  test('annotateClonedRuntimeFieldOrigins keeps an unlabelled field explicit when the source image cannot vouch for it', () => {
+    const manager = createManager();
+    const containerConfig = { Labels: {}, Entrypoint: ['/operator-entry.sh'], Cmd: ['run'] };
+    const origins = { Entrypoint: 'unknown', Cmd: 'unknown' };
+    const targetImageConfig = { Entrypoint: ['/operator-entry.sh'], Cmd: ['run'] };
+
+    // The source image is known and sets something else: the value is the operator's.
+    const differentSource = manager.annotateClonedRuntimeFieldOrigins(
+      containerConfig,
+      origins,
+      targetImageConfig,
+      { Entrypoint: ['/entrypoint.sh'], Cmd: ['serve'] },
+    );
+    expect(differentSource.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+    expect(differentSource.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+
+    // The source image could not be read at all.
+    const unknownSource = manager.annotateClonedRuntimeFieldOrigins(
+      containerConfig,
+      origins,
+      targetImageConfig,
+      undefined,
+    );
+    expect(unknownSource.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+    expect(unknownSource.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  });
+
+  test('annotateClonedRuntimeFieldOrigins never turns an explicit label back into inherited', () => {
+    const manager = createManager();
+    const imageConfig = { Entrypoint: ['/entrypoint.sh'], Cmd: ['run'] };
+
+    const annotated = manager.annotateClonedRuntimeFieldOrigins(
+      { Labels: {}, Entrypoint: ['/entrypoint.sh'], Cmd: ['run'] },
+      { Entrypoint: 'explicit', Cmd: 'explicit' },
+      imageConfig,
+      imageConfig,
+    );
+
+    expect(annotated.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+    expect(annotated.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  });
+
   test('buildCloneRuntimeConfigOptions should preserve runtime option objects and support legacy log argument', () => {
     const manager = createManager();
     const logContainer = { info: vi.fn() };
@@ -914,6 +971,36 @@ describe('ContainerRuntimeConfigManager', () => {
 
       expect(annotated.Labels).toEqual({
         ...REFRESHED.Labels,
+        'dd.runtime.entrypoint.origin': 'inherited',
+        'dd.runtime.cmd.origin': 'inherited',
+      });
+    });
+
+    test('an inherited Entrypoint and Cmd the new image leaves unchanged stay stamped as inherited', async () => {
+      const imageWithNewEnv = {
+        Config: { ...IMAGE_A.Config, Env: ['PATH=/usr/bin', 'APP_VERSION=2'] },
+      };
+      const dockerApi = createImageApi({
+        'sha256:image-a': IMAGE_A,
+        'repo/app:latest': imageWithNewEnv,
+        [TARGET]: imageWithNewEnv,
+      });
+
+      const { config, options, manager } = await sanitizeForRecreate(
+        dockerApi,
+        containerOnImageA('repo/app:latest'),
+      );
+      const annotated = manager.annotateClonedRuntimeFieldOrigins(
+        config,
+        options.runtimeFieldOrigins,
+        options.targetImageConfig,
+        options.sourceImageConfig,
+      );
+
+      // Both are still in the create request, and a later image may change them.
+      expect(annotated.Entrypoint).toEqual(['/entry-a.sh']);
+      expect(annotated.Cmd).toEqual(['serve', '--v1']);
+      expect(annotated.Labels).toMatchObject({
         'dd.runtime.entrypoint.origin': 'inherited',
         'dd.runtime.cmd.origin': 'inherited',
       });

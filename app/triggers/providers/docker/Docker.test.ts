@@ -6078,6 +6078,75 @@ describe('additional direct wrapper coverage', () => {
     expect(dockerApi.getImage).not.toHaveBeenCalledWith('repo/app:latest');
   });
 
+  test('recreateContainer still refreshes an inherited Entrypoint that an earlier update left unchanged', async () => {
+    // A -> B changes nothing but the environment, B -> C replaces the
+    // entrypoint script. The container never set an entrypoint of its own.
+    const imageA = { Config: { Entrypoint: ['/entry-v1.sh'], Env: ['APP_VERSION=1'] } };
+    const imageB = { Config: { Entrypoint: ['/entry-v1.sh'], Env: ['APP_VERSION=2'] } };
+    const imageC = { Config: { Entrypoint: ['/entry-v3.sh'], Env: ['APP_VERSION=3'] } };
+    const imageApi = (images: Record<string, unknown>) => ({
+      getImage: vi.fn((imageRef: string) => ({
+        inspect: vi.fn().mockResolvedValue(images[imageRef]),
+      })),
+    });
+    const containerSpec = (imageId: string, config: Record<string, unknown>) => ({
+      Id: 'old-container-id',
+      Name: '/app',
+      Image: imageId,
+      Config: config,
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    });
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue();
+    const recreate = async (
+      dockerApi: ReturnType<typeof imageApi>,
+      spec: ReturnType<typeof containerSpec>,
+      newImage: string,
+    ) => {
+      await docker.recreateContainer(
+        dockerApi as any,
+        spec as any,
+        newImage,
+        { name: 'app' } as any,
+        createMockLog('info', 'warn', 'debug'),
+      );
+      return createSpy.mock.calls.at(-1)[1] as {
+        Entrypoint?: string[];
+        Labels: Record<string, string>;
+      };
+    };
+
+    const afterFirstUpdate = await recreate(
+      imageApi({ 'sha256:image-a': imageA, 'repo/app:latest@sha256:b': imageB }),
+      containerSpec('sha256:image-a', {
+        Image: 'repo/app:latest',
+        Entrypoint: ['/entry-v1.sh'],
+        Env: ['APP_VERSION=1'],
+        Labels: {},
+      }),
+      'repo/app:latest@sha256:b',
+    );
+
+    expect(afterFirstUpdate.Entrypoint).toEqual(['/entry-v1.sh']);
+    expect(afterFirstUpdate.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+
+    const afterSecondUpdate = await recreate(
+      imageApi({ 'sha256:image-b': imageB, 'repo/app:latest@sha256:c': imageC }),
+      containerSpec('sha256:image-b', {
+        Image: 'repo/app:latest@sha256:b',
+        Entrypoint: afterFirstUpdate.Entrypoint,
+        Env: ['APP_VERSION=2'],
+        Labels: afterFirstUpdate.Labels,
+      }),
+      'repo/app:latest@sha256:c',
+    );
+
+    expect(afterSecondUpdate).not.toHaveProperty('Entrypoint');
+    expect(afterSecondUpdate.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  });
+
   describe('recreateContainer hook label provenance', () => {
     const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
     const originalAllowImageLabels = process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
