@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.20';
-const PREV_RC_VERSION = '1.7.0-rc.19';
-const RC_DATE = '2026-10-08';
-const RC_DISPLAY_DATE = 'October 8, 2026';
+const RC_VERSION = '1.7.0-rc.21';
+const PREV_RC_VERSION = '1.7.0-rc.20';
+const RC_DATE = '2026-10-09';
+const RC_DISPLAY_DATE = 'October 9, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
