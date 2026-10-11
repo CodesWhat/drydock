@@ -9,16 +9,16 @@
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
-    "@types/node": "25.9.8",
-    "lefthook": "2.1.15",
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "25.9.9",
+    "lefthook": "2.2.0",
     "vitest": "4.1.11",
     "yaml": "2.9.1"
   },
   "overrides": {
-    "vite": "8.3.1",
-    "postcss": "8.5.28",
-    "nanoid": "6.0.1",
+    "vite": "8.3.3",
+    "postcss": "8.5.29",
+    "nanoid": "6.0.2",
     "source-map-js": "1.2.2"
   }
 }
