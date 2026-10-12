@@ -10,6 +10,9 @@ import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './file/layer.
 import { type ConfigValueSource, mergeConfigLayers } from './file/sources.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
+const MIN_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
+const MAX_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
+const DEFAULT_TRIVY_MAX_OUTPUT_BYTES = 64 * 1024 * 1024; // 64 MB
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
 const SECRET_FILE_READ_CHUNK_BYTES = 64 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -1054,6 +1057,12 @@ export function getSecurityConfiguration() {
         server: joi.string().allow('').default(''),
         command: joi.string().default('trivy'),
         timeout: joi.number().integer().min(1000).default(600000),
+        maxoutputbytes: joi
+          .number()
+          .integer()
+          .min(MIN_TRIVY_MAX_OUTPUT_BYTES)
+          .max(MAX_TRIVY_MAX_OUTPUT_BYTES)
+          .default(DEFAULT_TRIVY_MAX_OUTPUT_BYTES),
         args: joi.string().allow('').default('[]'),
         image: joi
           .object({
@@ -1185,6 +1194,7 @@ export function getSecurityConfiguration() {
       server: configuration.trivy?.server || '',
       command: configuration.trivy?.command || 'trivy',
       timeout: configuration.trivy?.timeout || 600000,
+      maxOutputBytes: configuration.trivy?.maxoutputbytes || DEFAULT_TRIVY_MAX_OUTPUT_BYTES,
       imageSrc: configuration.trivy?.image?.src || '',
       extraArgs: parseSecurityExtraArgs(configuration.trivy?.args, 'DD_SECURITY_TRIVY_ARGS'),
       workerImage: configuration.trivy?.worker?.image || DEFAULT_TRIVY_WORKER_IMAGE,
