@@ -99,6 +99,7 @@ function createEnabledConfiguration() {
       server: '',
       command: 'trivy',
       timeout: 120000,
+      maxOutputBytes: 64 * 1024 * 1024,
       imageSrc: '',
       workerImage: 'aquasec/trivy@sha256:test',
     },
@@ -1172,9 +1173,32 @@ test('parseTrivyOutput should handle missing VulnerabilityID', async () => {
   expect(result.vulnerabilities[0].id).toBe('unknown-vulnerability');
 });
 
-test('scanImageForVulnerabilities should reject oversized trivy output before parsing', async () => {
+test('scanImageForVulnerabilities should parse trivy output above the old 20 MB parse cap', async () => {
+  const padding = 'x'.repeat(21 * 1024 * 1024);
   childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
-    callback(null, 'x'.repeat(21 * 1024 * 1024), '');
+    callback(
+      null,
+      JSON.stringify({
+        Results: [{ Target: 'app', Vulnerabilities: [{ Severity: 'HIGH', Title: padding }] }],
+      }),
+      '',
+    );
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).not.toBe('error');
+  expect(result.vulnerabilities).toHaveLength(1);
+});
+
+test('scanImageForVulnerabilities should reject trivy output over the configured limit and name the variable', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, maxOutputBytes: 1024 * 1024 },
+  });
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(null, 'x'.repeat(1024 * 1024 + 1), '');
     return { exitCode: 0 };
   };
 
@@ -1182,6 +1206,109 @@ test('scanImageForVulnerabilities should reject oversized trivy output before pa
 
   expect(result.status).toBe('error');
   expect(result.error).toContain('too large to parse');
+  expect(result.error).toContain('max supported is 1048576 bytes');
+  expect(result.error).toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
+});
+
+test.each([
+  ['lower', 2 * 1024 * 1024],
+  ['higher', 256 * 1024 * 1024],
+])('Trivy capture and parse should honour a %s configured limit', async (_label, limit) => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, maxOutputBytes: limit },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][2]).toEqual(expect.objectContaining({ maxBuffer: limit }));
+});
+
+test('Trivy SBOM capture should use the configured limit', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, maxOutputBytes: 3 * 1024 * 1024 },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await generateImageSbom({ image: 'img:test', formats: ['spdx-json'] });
+
+  expect(execFileMock.mock.calls[0][2]).toEqual(
+    expect.objectContaining({ maxBuffer: 3 * 1024 * 1024 }),
+  );
+});
+
+test('Trivy command max-buffer overflow should name the variable to raise', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    const error = new Error('stdout maxBuffer length exceeded') as NodeJS.ErrnoException;
+    error.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+    setTimeout(() => callback(error, '', ''), 0);
+    return { exitCode: null };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Trivy output exceeded 67108864 bytes');
+  expect(result.error).toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
+});
+
+test('Grype max-buffer overflow should keep the generic command error', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+  });
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    const error = new Error('stdout maxBuffer length exceeded') as NodeJS.ErrnoException;
+    error.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+    setTimeout(() => callback(error, '', ''), 0);
+    return { exitCode: null };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('stdout maxBuffer length exceeded');
+  expect(result.error).not.toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
+});
+
+test('Trivy docker worker output overflow should name the variable to raise', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'docker',
+  });
+  mockDockerRuntime.run.mockRejectedValueOnce(
+    new Error('Scanner worker output exceeded 67108864 bytes'),
+  );
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Trivy output exceeded 67108864 bytes');
+  expect(result.error).toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
+});
+
+test('Trivy docker worker errors other than output overflow should pass through', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'docker',
+  });
+  mockDockerRuntime.run.mockRejectedValueOnce(new Error('worker exploded'));
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('worker exploded');
+  expect(result.error).not.toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
 });
 
 test('runCommand should use process.env when no env option provided', async () => {

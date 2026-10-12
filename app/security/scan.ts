@@ -119,8 +119,8 @@ interface TrivyRawOutput {
   Results?: TrivyRawResult[];
 }
 
-const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
-const MAX_TRIVY_PARSE_BYTES = 20 * 1024 * 1024; // 20 MB
+const TRIVY_MAX_OUTPUT_ENV_VAR = 'DD_SECURITY_TRIVY_MAXOUTPUTBYTES';
+const DOCKER_WORKER_OUTPUT_LIMIT_PATTERN = /^Scanner worker output exceeded \d+ bytes$/;
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_SYFT_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_STORED_VULNERABILITIES = 500;
@@ -218,11 +218,15 @@ function buildSummary(vulnerabilities: ContainerVulnerability[]): ContainerVulne
   return summary;
 }
 
-function parseTrivyOutput(trivyOutput: string): ContainerVulnerability[] {
+function buildTrivyOutputLimitMessage(maxOutputBytes: number): string {
+  return `Trivy output exceeded ${maxOutputBytes} bytes; raise ${TRIVY_MAX_OUTPUT_ENV_VAR} to scan this image`;
+}
+
+function parseTrivyOutput(trivyOutput: string, maxOutputBytes: number): ContainerVulnerability[] {
   const trivyOutputBytes = Buffer.byteLength(trivyOutput, 'utf8');
-  if (trivyOutputBytes > MAX_TRIVY_PARSE_BYTES) {
+  if (trivyOutputBytes > maxOutputBytes) {
     throw new Error(
-      `Trivy output is too large to parse (${trivyOutputBytes} bytes); max supported is ${MAX_TRIVY_PARSE_BYTES} bytes`,
+      `Trivy output is too large to parse (${trivyOutputBytes} bytes); max supported is ${maxOutputBytes} bytes; raise ${TRIVY_MAX_OUTPUT_ENV_VAR} to scan this image`,
     );
   }
   const parsedOutput = JSON.parse(trivyOutput) as TrivyRawOutput;
@@ -257,6 +261,7 @@ function runCommand(options: {
   timeout: number;
   reportedTimeout?: number;
   maxBuffer: number;
+  maxBufferExceededMessage?: string;
   env: NodeJS.ProcessEnv;
   commandName: string;
   signal?: AbortSignal;
@@ -329,6 +334,12 @@ function runCommand(options: {
                   true,
                 ),
               ),
+            );
+            return;
+          }
+          if (maxBufferExceeded && options.maxBufferExceededMessage) {
+            settle(() =>
+              reject(new CommandExecutionError(options.maxBufferExceededMessage, false)),
             );
             return;
           }
@@ -491,6 +502,19 @@ function buildTrivyArgs(
   return args;
 }
 
+async function runTrivyWorker(
+  invocation: Omit<Parameters<ReturnType<typeof getDefaultScannerRuntime>['run']>[0], 'provider'>,
+): Promise<string> {
+  try {
+    return await getDefaultScannerRuntime().run({ provider: 'trivy', ...invocation });
+  } catch (error: unknown) {
+    if (DOCKER_WORKER_OUTPUT_LIMIT_PATTERN.test(getErrorMessage(error, ''))) {
+      throw new Error(buildTrivyOutputLimitMessage(invocation.maxOutputBytes));
+    }
+    throw error;
+  }
+}
+
 function runTrivyVulnerabilityCommand(
   options: ScanImageOptions,
   configuration: ReturnType<typeof getSecurityConfiguration>,
@@ -509,15 +533,15 @@ function runTrivyVulnerabilityCommand(
       args,
       timeout: configuration.trivy.timeout + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
       reportedTimeout: configuration.trivy.timeout,
-      maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
+      maxBuffer: configuration.trivy.maxOutputBytes,
+      maxBufferExceededMessage: buildTrivyOutputLimitMessage(configuration.trivy.maxOutputBytes),
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
     };
     if (configuration.backend === 'command') {
       return runCommand({ ...invocation, signal: options.signal });
     }
-    return getDefaultScannerRuntime().run({
-      provider: 'trivy',
+    return runTrivyWorker({
       args,
       env: invocation.env,
       timeoutMs: invocation.timeout,
@@ -546,15 +570,15 @@ function runTrivySbomCommand(
       args,
       timeout: configuration.trivy.timeout + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
       reportedTimeout: configuration.trivy.timeout,
-      maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
+      maxBuffer: configuration.trivy.maxOutputBytes,
+      maxBufferExceededMessage: buildTrivyOutputLimitMessage(configuration.trivy.maxOutputBytes),
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
     };
     if (configuration.backend === 'command') {
       return runCommand({ ...invocation, signal: options.signal });
     }
-    return getDefaultScannerRuntime().run({
-      provider: 'trivy',
+    return runTrivyWorker({
       args,
       env: invocation.env,
       timeoutMs: invocation.timeout,
@@ -765,7 +789,10 @@ async function scanWithProvider(
       }
       throwIfAborted(options.signal);
       const output = await runTrivyVulnerabilityCommandWithRetry(options, configuration);
-      return { provider, vulnerabilities: parseTrivyOutput(output) };
+      return {
+        provider,
+        vulnerabilities: parseTrivyOutput(output, configuration.trivy.maxOutputBytes),
+      };
     }
     if (configuration.backend !== 'command') {
       const runtime = getDefaultScannerRuntime();
