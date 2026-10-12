@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A large image could fail its security scan, and block its update, with `Trivy output is too large to parse`.** Trivy output was captured up to 50 MB but refused at 20 MB when parsed, so an image whose report landed in between failed the scan. Capture and parse now share one limit, 64 MB by default, set with `DD_SECURITY_TRIVY_MAXOUTPUTBYTES` (1 MB to 1 GB). Going over it, in the command or the Docker worker backend, now fails with a message that names the variable to raise. ([#1356](https://github.com/CodesWhat/drydock/discussions/1356))
+
 ## [1.7.0-rc.22] — 2026-10-09
 
 ### Fixed
