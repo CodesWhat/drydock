@@ -4,13 +4,13 @@ export const auditEntries = [
     timestamp: '2026-10-12T00:00:05.000Z',
     action: 'container:watch',
     container: 'drydock',
-    details: 'Started watching ghcr.io/codeswhat/drydock:1.7.0-rc.23',
+    details: 'Started watching ghcr.io/codeswhat/drydock:1.7.0-rc.24',
   },
   {
     id: 'aud-001',
     timestamp: '2026-10-12T00:00:00.000Z',
     action: 'system:start',
-    details: 'Drydock v1.7.0-rc.23 started',
+    details: 'Drydock v1.7.0-rc.24 started',
   },
   {
     id: 'aud-002',
