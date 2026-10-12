@@ -110,6 +110,7 @@ type UpdateLifecycleExecutorCallbacks = {
   buildHookConfig: (
     container: UpdateLifecycleContainer,
     context: UpdateLifecycleContext,
+    runtimeContext?: unknown,
   ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   recordHookConfigurationAudit: (
     container: UpdateLifecycleContainer,
@@ -358,7 +359,10 @@ class UpdateLifecycleExecutor {
         await this.security.verifySignaturePreUpdate(context, container, containerLogger);
       }
 
-      const hookConfig = await this.hooks.buildHookConfig(container, context);
+      // The runtime context goes along so a provider that resolved the hook
+      // configuration ahead of the lifecycle can hand that result back here
+      // instead of resolving it again.
+      const hookConfig = await this.hooks.buildHookConfig(container, context, runtimeContext);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
 
       // A runtime update that defers its security gate to the post-pull hook has
