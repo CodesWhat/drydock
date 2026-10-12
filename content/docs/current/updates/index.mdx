@@ -5,6 +5,12 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.23 Highlights — October 12, 2026
+
+This candidate differs from rc.22 by one fix. A large image's security scan no longer fails with "Trivy output is too large to parse". Drydock captured Trivy output up to 50 MB but refused anything over 20 MB when it parsed it, so a report in between failed the scan and blocked the update. Both now share one limit, 64 MB by default, set with `DD_SECURITY_TRIVY_MAXOUTPUTBYTES` (1 MB to 1 GB). Going over it now fails with a message that names the variable to raise ([#1356](https://github.com/CodesWhat/drydock/discussions/1356)).
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.23/CHANGELOG.md#170-rc23--2026-10-12) for the full release notes.
+
 ## v1.7.0-rc.22 Highlights — October 9, 2026
 
 This candidate differs from rc.21 by one update fix and one release-tooling change. An update no longer leaves the old image's environment variables, labels, entrypoint or command on the recreated container ([#1351](https://github.com/CodesWhat/drydock/issues/1351)). Containers an earlier version already updated still hold the stale values, so recreate them once. The release cut also stops dispatching the retired star-history refresh.
