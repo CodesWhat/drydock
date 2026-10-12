@@ -879,6 +879,7 @@ describe('getSecurityConfiguration', () => {
         server: '',
         command: 'trivy',
         timeout: 600000,
+        maxOutputBytes: 67108864,
         imageSrc: '',
         extraArgs: [],
         workerImage:
@@ -936,6 +937,7 @@ describe('getSecurityConfiguration', () => {
     configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = 'http://trivy:4954';
     configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND = '/usr/local/bin/trivy';
     configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT = '60000';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES = '134217728';
     configuration.ddEnvVars.DD_SECURITY_VERIFY_SIGNATURES = 'true';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND = '/usr/local/bin/cosign';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT = '45000';
@@ -967,6 +969,7 @@ describe('getSecurityConfiguration', () => {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
         timeout: 60000,
+        maxOutputBytes: 134217728,
         imageSrc: '',
         extraArgs: [],
         workerImage:
@@ -1022,6 +1025,7 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES;
     delete configuration.ddEnvVars.DD_SECURITY_VERIFY_SIGNATURES;
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND;
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT;
@@ -1119,6 +1123,34 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test.each([
+    ['below the 1 MB floor', '1048575'],
+    ['above the 1 GB ceiling', '1073741825'],
+    ['not an integer', '1048576.5'],
+    ['not a number', 'lots'],
+  ])('should throw when trivy max output bytes is %s', (_label, value) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES = value;
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow();
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES;
+  });
+
+  test.each([
+    ['1 MB floor', '1048576', 1048576],
+    ['1 GB ceiling', '1073741824', 1073741824],
+  ])('should accept the trivy max output bytes %s', (_label, value, expected) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES = value;
+
+    expect(configuration.getSecurityConfiguration().trivy.maxOutputBytes).toBe(expected);
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES;
   });
 
   test('should throw when trivy timeout is invalid', () => {
