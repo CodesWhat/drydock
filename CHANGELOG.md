@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.24] — 2026-10-12
+
+### Changed
+
+- **Routine development and test tooling updates, with no change to the shipped image** ([#1315](https://github.com/CodesWhat/drydock/pull/1315), [#1316](https://github.com/CodesWhat/drydock/pull/1316)). The root workspace moves `@biomejs/biome` to 2.5.15, `@types/node` to 25.9.9 and `lefthook` to 2.2.1, with the `vite` override at 8.3.4 and the `postcss` and `nanoid` overrides at 8.5.29 and 6.0.2. The e2e workspace moves `@dotenvx/dotenvx` to 2.34.1, with its `postcss` override at 8.5.29, `nanoid` at 6.0.2, `@opentelemetry/core` at 2.12.0 and `@grpc/grpc-js` at 1.14.6. All of these are linting, type-checking, build and test tooling in the root and e2e workspaces. The image is built from `app` and `ui` only, so its runtime dependencies are unchanged.
+
 ## [1.7.0-rc.23] — 2026-10-12
 
 ### Fixed
@@ -2839,7 +2845,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.24...HEAD
+[1.7.0-rc.24]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...v1.7.0-rc.24
 [1.7.0-rc.23]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.22...v1.7.0-rc.23
 [1.7.0-rc.22]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.21...v1.7.0-rc.22
 [1.7.0-rc.21]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.20...v1.7.0-rc.21
