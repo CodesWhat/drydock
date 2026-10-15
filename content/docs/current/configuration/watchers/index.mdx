@@ -945,7 +945,7 @@ An action trigger's `AUTO` value (`all` / `oninclude` / `onauto` / `none`) is no
 
 - **`AUTO=none`** opens **manual** access to **every** watched container for that trigger, regardless of `dd.action.include` — reading the name, you'd expect `none` to mean "closed," but it means "no automatic execution," not "no access." Automatic execution never fires either way.
 - **`AUTO=all`** (the historical default before v1.5.0) likewise opens both manual and automatic access to every container, ignoring `dd.action.include`.
-- **`AUTO=oninclude`** and **`AUTO=onauto`** are the modes where `dd.action.include` (and, under `onauto`, `dd.action.auto`) actually gate access — access is closed by default and a label grants it.
+- **`AUTO=oninclude`** and **`AUTO=onauto`** are the modes where `dd.action.include` (and, under `onauto`, `dd.action.auto`) actually gate access. Access is closed by default. On v1.8, an action's [`MANUAL=all`](/docs/configuration/triggers#manual-updates-by-default) opens manual access for containers without an explicit include list, while automatic execution still requires the matching label and explicit exclusions still win.
 
 If you're trying to restrict which containers a trigger can touch at all, set `AUTO=oninclude` or `AUTO=onauto` and use `dd.action.include` / `dd.action.auto` — `AUTO=none` will not do that.
 </Callout>

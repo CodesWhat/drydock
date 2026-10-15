@@ -650,6 +650,29 @@ test('validateConfiguration should normalize auto=true to all', () => {
   expect(validatedConfiguration.auto).toBe('all');
 });
 
+test.each(['docker', 'dockercompose', 'portainer'])(
+  'validateConfiguration accepts a manual baseline for %s update actions',
+  (type) => {
+    trigger.type = type;
+    for (const manual of ['all', 'oninclude', 'ALL']) {
+      expect(
+        trigger.validateConfiguration({ ...configurationValid, auto: 'onauto', manual }).manual,
+      ).toBe(manual.toLowerCase());
+    }
+    expect(() =>
+      trigger.validateConfiguration({ ...configurationValid, manual: 'invalid' }),
+    ).toThrow();
+  },
+);
+
+test.each(['slack', 'command'])(
+  'validateConfiguration rejects a manual baseline for %s',
+  (type) => {
+    trigger.type = type;
+    expect(() => trigger.validateConfiguration({ ...configurationValid, manual: 'all' })).toThrow();
+  },
+);
+
 test('validateConfiguration should normalize auto=false to none', () => {
   const validatedConfiguration = trigger.validateConfiguration({
     ...configurationValid,

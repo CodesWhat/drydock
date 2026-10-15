@@ -677,6 +677,7 @@ export function resolveNotificationTemplate(
 export interface TriggerConfiguration extends ComponentConfiguration {
   group?: string;
   auto?: boolean | TriggerAutoMode;
+  manual?: 'all' | 'oninclude';
   order?: number;
   threshold?: string;
   mode?: string;
@@ -3701,6 +3702,9 @@ class Trigger<
           this.joi.string().insensitive().valid('all', 'oninclude', 'onauto', 'none'),
         )
         .default(this.getCategory() === 'action' ? 'oninclude' : true),
+      manual: this.isUpdateActionTrigger()
+        ? this.joi.string().lowercase().valid('all', 'oninclude')
+        : this.joi.forbidden(),
       order: this.joi.number().default(100),
       threshold: this.joi
         .string()
