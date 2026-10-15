@@ -23,10 +23,12 @@ describe('Dockerfile release defaults', () => {
     const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
 
     expect(dockerfile).toContain(
-      'FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS zlib-build',
+      'FROM alpine:3.24@sha256:' +
+        '294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS zlib-build',
     );
     expect(dockerfile).toContain(
-      'FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS healthcheck-build',
+      'FROM alpine:3.24@sha256:' +
+        '294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS healthcheck-build',
     );
     expect(dockerfile).not.toContain(
       'sha256:2a49bdf71e9fd965a58c1703fd9ddd205b34e5782b692a72dd1d248abb0beb43',
