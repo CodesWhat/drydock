@@ -43,7 +43,7 @@ RUN apk add --no-cache \
     openssl=3.5.9-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
-    tzdata=2026d-r0 \
+    tzdata=2026e-r0 \
     && apk add --no-cache cosign=3.0.6-r2 \
     && apk upgrade --no-cache zlib libcrypto3 libssl3 \
     && mkdir -m 0700 /store && chown node:node /store

@@ -52,7 +52,7 @@ describe('Dockerfile release defaults', () => {
   test('release image pins the available Alpine tzdata revision', () => {
     const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
 
-    expect(dockerfile).toContain('tzdata=2026d-r0');
+    expect(dockerfile).toContain('tzdata=2026e-r0');
     expect(dockerfile).not.toContain('tzdata=2026c-r0');
   });
 

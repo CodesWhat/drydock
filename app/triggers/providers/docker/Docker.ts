@@ -423,6 +423,10 @@ class Docker<
       runHook,
       getPreferredLabelValue,
       getLogger: () => this.log,
+      inspectImageConfig: (dockerApi, imageRef, logContainer) =>
+        this.runtimeConfigManager.inspectImageConfig(dockerApi as never, imageRef, logContainer),
+      inspectContainerSpec: async (dockerApi, container) =>
+        this.inspectContainer(await this.getCurrentContainer(dockerApi, container), this.log),
       ...pickOrchestratorCallbacks(this, HOOK_EXECUTOR_ORCHESTRATOR_METHODS),
     });
     this.selfUpdateOrchestrator = new SelfUpdateOrchestrator({
@@ -1161,6 +1165,7 @@ class Docker<
       targetImageConfig,
       runtimeFieldOrigins,
       defaultRuntime,
+      hookLabelProvenance,
       logContainer,
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
@@ -1193,6 +1198,7 @@ class Docker<
       targetImageConfig,
       runtimeFieldOrigins,
       logContainer,
+      hookLabelProvenance,
     );
     const shouldAnnotateRuntimeFieldOrigins =
       sourceImageConfig !== undefined ||
@@ -1203,6 +1209,7 @@ class Docker<
           sanitizedContainerConfig,
           runtimeFieldOrigins,
           targetImageConfig,
+          sourceImageConfig,
         )
       : sanitizedContainerConfig;
 
@@ -1413,8 +1420,8 @@ class Docker<
     return { error: 'Container not found in Docker' };
   }
 
-  buildHookConfig(container) {
-    return this.hookExecutor.buildHookConfig(container);
+  async buildHookConfig(container, context?) {
+    return this.hookExecutor.resolveHookConfig(container, context);
   }
 
   recordAudit(action, container, status, details) {

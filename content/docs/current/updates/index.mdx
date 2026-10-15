@@ -5,6 +5,42 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.24 Highlights — October 12, 2026
+
+This candidate is rc.23 plus development and test dependency updates, and nothing else. The root and e2e workspaces pick up newer Biome, lefthook, Vite, `@types/node` and `@dotenvx/dotenvx`, with a handful of matching override bumps. None of it ships. The image is built from `app` and `ui`, so its runtime dependencies are the same as rc.23.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.24/CHANGELOG.md#170-rc24--2026-10-12) for the full release notes.
+
+## v1.7.0-rc.23 Highlights — October 12, 2026
+
+This candidate differs from rc.22 by one fix. A large image's security scan no longer fails with "Trivy output is too large to parse". Drydock captured Trivy output up to 50 MB but refused anything over 20 MB when it parsed it, so a report in between failed the scan and blocked the update. Both now share one limit, 64 MB by default, set with `DD_SECURITY_TRIVY_MAXOUTPUTBYTES` (1 MB to 1 GB). Going over it now fails with a message that names the variable to raise ([#1356](https://github.com/CodesWhat/drydock/discussions/1356)).
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.23/CHANGELOG.md#170-rc23--2026-10-12) for the full release notes.
+
+## v1.7.0-rc.22 Highlights — October 9, 2026
+
+This candidate differs from rc.21 by one update fix and one release-tooling change. An update no longer leaves the old image's environment variables, labels, entrypoint or command on the recreated container ([#1351](https://github.com/CodesWhat/drydock/issues/1351)). Containers an earlier version already updated still hold the stale values, so recreate them once. The release cut also stops dispatching the retired star-history refresh.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.22/CHANGELOG.md#170-rc22--2026-10-09) for the full release notes.
+
+## v1.7.0-rc.21 Highlights — October 9, 2026
+
+This candidate differs from rc.20 by one security fix and one test-only change. When drydock recreates a container for an update, it now leaves out any `dd.hook.*` label whose key and value match the image the old container was created from, so a label baked into an image can't become a container label and run at a later update. Labels you set on the container are carried over unchanged. A container an earlier version already recreated can still carry such a label; the [hooks docs](https://getdrydock.com/docs/configuration/hooks#containers-recreated-by-an-earlier-version) show how to check. The Playwright suite also stops failing now and then on a reused idle connection.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.21/CHANGELOG.md#170-rc21--2026-10-09) for the full release notes.
+
+## v1.7.0-rc.20 Highlights — October 8, 2026
+
+This candidate differs from rc.19 by one security fix and one website dependency patch. Lifecycle hook labels (`dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort`, `dd.hook.timeout`) now only take effect when set on the container itself, not when inherited from an image's `LABEL` instructions; set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to keep the previous behavior for images you build yourself. This only affects installs with `DD_HOOKS_ENABLED=true`. The website moves to Next.js 16.3.8 for seven newly published advisories.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.20/CHANGELOG.md#170-rc20--2026-10-08) for the full release notes.
+
+## v1.7.0-rc.19 Highlights — October 7, 2026
+
+This candidate differs from rc.18 by patch-level dependency updates only. It updates compression and Joi and overrides proxy-addr, fast-copy, smol-toml and source-map-js for newly published advisories, and moves the Alpine tzdata pin to 2026e-r0 after 2026d-r0 left the package index. The sprintf-js advisory has no fixed release and only reaches the e2e load-testing tooling, so it is triaged.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0-rc.19/CHANGELOG.md#170-rc19--2026-10-07) for the full release notes.
+
 ## v1.7.0-rc.18 Highlights — October 4, 2026
 
 Container start, stop and restart responses now redact sensitive environment values the same way the container detail endpoint does. A stable release now reports its own base version instead of the release candidate it was promoted from, and the full build identity moves to a separate `build` field in the API, About dialog and agent panel. Bulk vulnerability scans keep accurate progress and results for large fleets, the dashboard no longer shows a Local Docker host when no local watcher is configured, and the website docs pages that returned a 500 load again.
