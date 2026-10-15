@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import log from '../../log/index.js';
 import { buildHookCommandEnvironment } from '../../runtime/child-process-env.js';
+import { isHooksExecutionEnabled } from './hook-flags.js';
 
 const MAX_OUTPUT_BYTES = 10 * 1024; // 10 KB
 const DEFAULT_TIMEOUT_MS = 60_000; // 1 minute
@@ -30,10 +31,6 @@ interface HookResult {
 
 type HookLogger = Pick<typeof log, 'info' | 'warn'>;
 type HookOutput = string | Buffer;
-
-function isHooksExecutionEnabled(): boolean {
-  return process.env.DD_HOOKS_ENABLED?.trim().toLowerCase() === 'true';
-}
 
 /**
  * Extract the first whitespace-delimited token from a hook command string.

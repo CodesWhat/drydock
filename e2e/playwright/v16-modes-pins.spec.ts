@@ -1,4 +1,5 @@
 import { expect, type Page, type Route, test } from '@playwright/test';
+import { fetchIntercepted } from './helpers/route-fetch.mjs';
 import {
   dismissAnnouncementBanners,
   escapeRegExp,
@@ -88,7 +89,7 @@ async function interceptContainer(
       return;
     }
 
-    const response = await route.fetch();
+    const response = await fetchIntercepted(route);
     const payload = (await response.json()) as ContainersPayload;
     const container = payload.data.find((candidate) => candidate.displayName === displayName);
     expect(container, `QA fixture ${displayName} must exist`).toBeTruthy();
@@ -107,7 +108,7 @@ async function interceptFirstContainer(
       return;
     }
 
-    const response = await route.fetch();
+    const response = await fetchIntercepted(route);
     const payload = (await response.json()) as ContainersPayload;
     expect(payload.data[0], 'QA fixture must contain at least one container').toBeTruthy();
     mutate(payload.data[0]);

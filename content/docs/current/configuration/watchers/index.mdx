@@ -845,7 +845,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
-`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
+`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd. [Image defaults after an update](/docs/configuration/triggers/docker#image-defaults-after-an-update) covers how drydock decides.
 
 <Callout type="info" title="Dependency-ordered updates">
 

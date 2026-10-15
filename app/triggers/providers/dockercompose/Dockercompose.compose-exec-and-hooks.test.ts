@@ -1041,6 +1041,143 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('updateContainerWithCompose should refresh image-inherited defaults after a same-tag pull', async () => {
+    trigger.configuration.dryrun = false;
+    const currentContainer = makeDockerContainerHandle({
+      image: 'example/app:latest',
+    });
+    currentContainer.inspect.mockResolvedValue({
+      Id: 'container-id',
+      Name: '/nginx',
+      Image: 'sha256:image-a',
+      Config: {
+        Image: 'example/app:latest',
+        Cmd: ['serve', '--v1'],
+        Env: ['APP_VERSION=1', 'COMPOSE_VALUE=keep'],
+        Labels: { 'test.inherited': '1', 'com.docker.compose.service': 'nginx' },
+      },
+      HostConfig: {},
+      NetworkSettings: { Networks: {} },
+      State: { Running: true },
+    });
+    mockDockerApi.getContainer.mockReturnValue(currentContainer);
+    mockDockerApi.getImage.mockImplementation((imageRef) => ({
+      inspect: vi.fn().mockResolvedValue(
+        imageRef === 'sha256:image-a'
+          ? {
+              Config: {
+                Cmd: ['serve', '--v1'],
+                Env: ['APP_VERSION=1'],
+                Labels: { 'test.inherited': '1' },
+              },
+            }
+          : // The tag was pulled again, so it resolves to the new image.
+            {
+              Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+              Os: 'linux',
+              Config: {
+                Cmd: ['serve', '--v2'],
+                Env: ['APP_VERSION=2'],
+                Labels: { 'test.inherited': '2' },
+              },
+            },
+      ),
+    }));
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        skipPull: true,
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          newImage: 'example/app:latest',
+        },
+      },
+    );
+
+    const createPayload = createContainerSpy.mock.calls[0][1] as {
+      Env: string[];
+      Labels: Record<string, string>;
+    };
+    expect(createPayload).not.toHaveProperty('Cmd');
+    expect(createPayload.Env).toEqual(['COMPOSE_VALUE=keep']);
+    expect(createPayload.Labels).not.toHaveProperty('test.inherited');
+    expect(createPayload.Labels).toMatchObject({ 'com.docker.compose.service': 'nginx' });
+  });
+
+  test('updateContainerWithCompose should not carry an image-baked hook label onto the recreated container after a same-tag pull', async () => {
+    trigger.configuration.dryrun = false;
+    const currentContainer = makeDockerContainerHandle({
+      image: 'example/app:latest',
+    });
+    currentContainer.inspect.mockResolvedValue({
+      Id: 'container-id',
+      Name: '/nginx',
+      Image: 'sha256:image-a',
+      Config: {
+        Image: 'example/app:latest',
+        Labels: {
+          'dd.hook.pre': 'echo baked',
+          'dd.hook.post': 'echo operator',
+          'com.docker.compose.service': 'nginx',
+        },
+      },
+      HostConfig: {},
+      NetworkSettings: { Networks: {} },
+      State: { Running: true },
+    });
+    mockDockerApi.getContainer.mockReturnValue(currentContainer);
+    mockDockerApi.getImage.mockImplementation((imageRef) => ({
+      inspect: vi.fn().mockResolvedValue(
+        imageRef === 'sha256:image-a'
+          ? { Config: { Labels: { 'dd.hook.pre': 'echo baked' } } }
+          : // The tag was pulled again, so it resolves to an image that bakes no label.
+            {
+              Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+              Os: 'linux',
+              Config: {},
+            },
+      ),
+    }));
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        skipPull: true,
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          newImage: 'example/app:latest',
+        },
+      },
+    );
+
+    expect(mockDockerApi.getImage).toHaveBeenCalledWith('sha256:image-a');
+    const createPayload = createContainerSpy.mock.calls[0][1] as {
+      Labels: Record<string, string>;
+    };
+    expect(createPayload.Labels).not.toHaveProperty('dd.hook.pre');
+    expect(createPayload.Labels).toMatchObject({
+      'dd.hook.post': 'echo operator',
+      'com.docker.compose.service': 'nginx',
+    });
+  });
+
   test('updateContainerWithCompose should preserve stopped runtime state', async () => {
     trigger.configuration.dryrun = false;
     const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
@@ -2893,4 +3030,62 @@ describe('Dockercompose Trigger', () => {
   });
 
   // -----------------------------------------------------------------------
+  describe('hook label provenance', () => {
+    const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
+
+    afterEach(() => {
+      if (originalHooksEnabled === undefined) {
+        delete process.env.DD_HOOKS_ENABLED;
+      } else {
+        process.env.DD_HOOKS_ENABLED = originalHooksEnabled;
+      }
+    });
+
+    async function buildComposeContext() {
+      return trigger.createTriggerContext(makeContainer(), mockLog, {
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          registry: { id: 'registry' },
+          auth: '',
+          newImage: 'nginx:9.9.9',
+        },
+      });
+    }
+
+    test('ignores an image-baked hook label for a compose-managed container', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      mockDockerApi.getContainer = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Image: 'sha256:running-image' }),
+      }));
+      mockDockerApi.getImage = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Config: { Labels: { 'dd.hook.pre': 'echo baked' } } }),
+      }));
+      const context = await buildComposeContext();
+      expect(context.currentContainerSpec).toBeNull();
+
+      const hookConfig = await trigger.buildHookConfig(
+        makeContainer({ labels: { 'dd.hook.pre': 'echo baked', 'dd.hook.post': 'echo operator' } }),
+        context,
+      );
+
+      expect(mockDockerApi.getImage).toHaveBeenCalledWith('sha256:running-image');
+      expect(hookConfig.hookPre).toBeUndefined();
+      expect(hookConfig.hookPost).toBe('echo operator');
+    });
+
+    test('fails closed for a compose-managed container when the image cannot be inspected', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      mockDockerApi.getContainer = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Image: 'sha256:running-image' }),
+      }));
+      mockDockerApi.getImage = vi.fn(() => ({
+        inspect: vi.fn().mockRejectedValue(new Error('no such image')),
+      }));
+      const context = await buildComposeContext();
+
+      await expect(
+        trigger.buildHookConfig(makeContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), context),
+      ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+  });
 });
