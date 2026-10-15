@@ -49,6 +49,7 @@ export interface ActionPolicyResult {
 export interface ActionPolicyTrigger extends DockerTriggerCandidate {
   configuration?: DockerTriggerCandidate['configuration'] & {
     auto?: boolean | ActionPolicyAutoMode;
+    manual?: 'all' | 'oninclude';
   };
   getId: () => string;
 }
@@ -138,11 +139,12 @@ export function findMatchingGroupExcludeEntries(triggerId: string, container: Co
  *   autoMode = trigger auto mode           # all|oninclude|onauto|none
  *   if autoMode in {all, none}: included = true          # access open (legacy)
  *   else: included = include matches OR (autoMode==onauto AND auto matches)
+ *                    OR (manual==all AND include is absent)
  *   if !included                           -> blocked (reason: not-included)
  *   switch autoMode:
  *     none      -> manual                  # structurally cannot auto
  *     all       -> auto                    # legacy meaning frozen
- *     oninclude -> auto                    # legacy conflation frozen
+ *     oninclude -> auto if include matches else manual
  *     onauto    -> auto if auto-label matches else manual
  *
  * A group policy's `actions.exclude` (spec 7.3) is checked straight after the container's own
@@ -181,7 +183,10 @@ export function resolveForTrigger(
     container.actionTriggerAuto,
     container,
   );
-  const included = accessOpen || includeMatches || (autoMode === 'onauto' && autoMatches);
+  const manualFallback =
+    trigger.configuration?.manual === 'all' && container.actionTriggerInclude === undefined;
+  const included =
+    accessOpen || includeMatches || (autoMode === 'onauto' && autoMatches) || manualFallback;
 
   if (!included) {
     return { state: 'blocked', reason: 'not-included' };
@@ -192,8 +197,10 @@ export function resolveForTrigger(
       return { state: 'manual' };
     case 'onauto':
       return { state: autoMatches ? 'auto' : 'manual' };
+    case 'oninclude':
+      return { state: includeMatches ? 'auto' : 'manual' };
     default:
-      // 'all' and 'oninclude' both freeze the legacy "access implies auto" meaning.
+      // 'all' keeps its legacy "access implies auto" meaning.
       return { state: 'auto' };
   }
 }

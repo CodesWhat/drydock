@@ -166,8 +166,26 @@ Portainer is also an update-action provider and uses the `DD_ACTION_PORTAINER_*`
 
 All implemented triggers, in addition to their specific configuration, also support the following common configuration variables. The table uses `DD_NOTIFICATION_{trigger_type}_{trigger_name}_*` for notification triggers and `DD_ACTION_{trigger_type}_{trigger_name}_*` for action triggers (see [Environment variable prefixes](#environment-variable-prefixes) above). For brevity the rows below show the `DD_NOTIFICATION_*` form; replace with `DD_ACTION_*` for Docker, Docker Compose, Portainer, and Command triggers.
 
+### Manual updates by default
+
+On the **unreleased v1.8 line**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
+
+```text
+DD_ACTION_DOCKER_DATAVAULT_AUTO=onauto
+DD_ACTION_DOCKER_DATAVAULT_MANUAL=all
+```
+
+Set `dd.action.auto=datavault` only on the containers that should update automatically. Leave the others unlabeled. The global update mode must be `auto`; global or group `manual` remains a ceiling that labels cannot lift. Configure the action on each instance that watches the containers, and upgrade traditional agents to v1.8 before configuring this option there.
+
+`MANUAL` accepts `all` or `oninclude`. When omitted, or set to `oninclude`, the existing closed default under `AUTO=onauto` and `AUTO=oninclude` is unchanged. With `MANUAL=all`, an explicit `dd.action.include` list still restricts access, including an explicit empty override, and a matching container or group exclusion still blocks the action. Thresholds and agent matching also still apply. `AUTO=all` and `AUTO=none` keep their existing behavior regardless of this setting. Notification and Command triggers do not accept `MANUAL`.
+
+The same setting works with `AUTO=oninclude`: unlabeled containers stay manual, and `dd.action.include` opts selected containers into automatic updates. Under `AUTO=onauto`, `dd.action.include` alone grants manual access and `dd.action.auto` grants automatic access.
+
+### Variables
+
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DD_ACTION_{trigger_type}_{trigger_name}_MANUAL` | ⚪ | Manual access baseline for Docker, Docker Compose and Portainer actions on v1.8. Under `AUTO=onauto` or `AUTO=oninclude`, `all` grants manual access when no explicit include list exists. It does not grant automatic execution or bypass an exclusion. | `all`, `oninclude` | Existing access rules (`oninclude`) |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution for `update-available` events. `true` (or legacy `all`) — auto-execute for all watched containers, ignoring `dd.action.include`/`dd.action.auto`. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label (manual access follows the same label). `onauto` (action triggers only) — split manual and automatic access: `dd.action.include` still grants manual access, but automatic access additionally requires a `dd.action.auto` label match. `false` (or legacy `none`) — disable automatic `update-available` notifications/actions for this trigger, but still open **manual** access to every watched container, ignoring `dd.action.include`. Note: `AUTO=false` does **not** suppress lifecycle notifications (`update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, `agent-reconnect`). | `true`, `false`, `oninclude`, `onauto`, `all`, `none` | `oninclude` for action triggers (docker, dockercompose, portainer, command); `true` for notification triggers |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with `${containers}` context | `${containers.length} updates available` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |

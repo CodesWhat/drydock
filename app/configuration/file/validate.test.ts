@@ -4,6 +4,24 @@ import { flattenConfigTree } from './flatten.js';
 import { validateConfiguration } from './validate.js';
 
 describe('validateConfiguration', () => {
+  test('validates manual defaults through the YAML action configuration path', async () => {
+    const values = flattenConfigTree({
+      action: { docker: { datavault: { auto: 'onauto', manual: 'all' } } },
+    });
+    expect(values.DD_ACTION_DOCKER_DATAVAULT_MANUAL).toBe('all');
+    expect((await validateConfiguration(values)).errors).toEqual([]);
+    const invalid = await validateConfiguration({
+      ...values,
+      DD_ACTION_DOCKER_DATAVAULT_MANUAL: 'bad',
+    });
+    expect(invalid.errors).toEqual([
+      expect.objectContaining({
+        path: 'action.docker.datavault.manual',
+        envKey: 'DD_ACTION_DOCKER_DATAVAULT_MANUAL',
+      }),
+    ]);
+  });
+
   test('validates notification group routing through the YAML configuration path', async () => {
     const values = flattenConfigTree({
       notification: {
