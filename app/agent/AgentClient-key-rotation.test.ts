@@ -100,6 +100,7 @@ test('AgentClient rotates and resumes ordinary signed Docker requests after rest
   );
   const result = await client.rotateSigningKey('rotate');
   expect(result.current_key_id).not.toBe(originalId);
+  expect((await client.rotateSigningKey('abort')).current_key_id).toBe(result.current_key_id);
   expect(config.signingkey).toBe(pem);
   expect(config.signingkeyid).toBe(originalId);
   const response = await client.requestDockerApi('GET', '/version');
