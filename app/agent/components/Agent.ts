@@ -26,6 +26,7 @@ export interface AgentConfiguration {
   // env var convention (see app/configuration/index.ts replaceSecrets) to load
   // it from a file instead of inlining it.
   signingkey?: string;
+  rotationdir?: string;
 }
 
 export default class Agent extends Component<AgentConfiguration> {
@@ -56,6 +57,11 @@ export default class Agent extends Component<AgentConfiguration> {
         otherwise: this.joi.string().optional(),
       }),
       cafile: this.joi.string().optional(),
+      rotationdir: this.joi.string().when('authmode', {
+        is: 'ed25519',
+        then: this.joi.string().optional(),
+        otherwise: this.joi.forbidden(),
+      }),
       certfile: this.joi.string().optional(),
       keyfile: this.joi.string().optional(),
     });

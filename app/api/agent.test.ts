@@ -4,7 +4,7 @@ import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import * as containerSummary from '../util/container-summary.js';
 
 const { mockRouter, mockGetAgent } = vi.hoisted(() => ({
-  mockRouter: { get: vi.fn() },
+  mockRouter: { get: vi.fn(), post: vi.fn() },
   mockGetAgent: vi.fn(),
 }));
 
@@ -33,6 +33,60 @@ function createResponse() {
 describe('Agent Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test('rotation status exposes only the managed public key IDs', () => {
+    const status = { enabled: true, current_key_id: '0123456789abcdef' };
+    mockGetAgent.mockReturnValue({ getSigningKeyRotationStatus: vi.fn(() => status) });
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find(
+      (call) => call[0] === '/:name/key-rotation',
+    )?.[1];
+    expect(handler).toBeTypeOf('function');
+    const response = createResponse();
+    handler({ params: { name: 'remote' } }, response);
+    expect(response.json).toHaveBeenCalledWith(status);
+  });
+
+  test.each(['rotate', 'abort'])(
+    'allows a normal authenticated session to %s a managed key',
+    async (action) => {
+      const rotateSigningKey = vi.fn().mockResolvedValue({ current_key_id: '0123456789abcdef' });
+      mockGetAgent.mockReturnValue({ rotateSigningKey });
+      agentRouter.init();
+      const handler = mockRouter.post.mock.calls.find(
+        (call) => call[0] === '/:name/key-rotation',
+      )?.[1];
+      expect(handler).toBeTypeOf('function');
+      const response = createResponse();
+      await handler(
+        {
+          params: { name: 'remote' },
+          body: { action },
+          principal: { kind: 'session', username: 'operator' },
+        },
+        response,
+      );
+      expect(rotateSigningKey).toHaveBeenCalledWith(action);
+      expect(response.json).toHaveBeenCalledWith({ current_key_id: '0123456789abcdef' });
+    },
+  );
+
+  test('refuses API keys and recovery sessions before touching managed credentials', async () => {
+    agentRouter.init();
+    const handler = mockRouter.post.mock.calls.find(
+      (call) => call[0] === '/:name/key-rotation',
+    )?.[1];
+    expect(handler).toBeTypeOf('function');
+    for (const principal of [
+      { kind: 'api-key', username: 'operator', keyId: 'key', scopes: ['admin', 'api-keys:manage'] },
+      { kind: 'session', username: 'operator', identity: { type: 'local', assurance: 'recovery' } },
+    ]) {
+      const response = createResponse();
+      await handler({ principal }, response);
+      expect(response.status).toHaveBeenCalledWith(403);
+    }
+    expect(mockGetAgent).not.toHaveBeenCalled();
   });
 
   test('returns exact names before handshake without reading configuration, status or inventory', () => {
