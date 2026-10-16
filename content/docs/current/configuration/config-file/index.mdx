@@ -93,6 +93,8 @@ An ignored `_file` entry is never opened, so a path that doesn't exist only fail
 
 With no file, drydock keeps its historical tolerance: a component whose variables fail its schema is logged and skipped, and the rest of the process starts. The moment a file contributes at least one value, startup validates the **whole merged configuration** (environment included) against every component schema and exits with the failing YAML path, variable name and Joi message. Adding a one-line file to a deployment that has been running with a silently skipped component therefore turns that component's error into a startup failure. Check `node dist/index.js config validate` before mounting a file for the first time.
 
+The v1.8 digest-watch default can be set as `defaults.watch.digest: false`, equivalent to `DD_DEFAULTS_WATCH_DIGEST=false`. Labels and matching image sets override it, and the environment overrides the file. This setting requires a restart and applies to watchers owned by the configured process; configure remote agents separately. See [Digest-watch default](/docs/configuration/watchers#digest-watch-default).
+
 ## Discovery and `DD_CONFIG_FILE`
 
 | Setting | Value |

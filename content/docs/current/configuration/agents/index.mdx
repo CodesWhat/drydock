@@ -173,6 +173,8 @@ To run drydock in Agent mode, start the application with the `--agent` command l
 
 <Callout type="info">An agent reads its own [config file](/docs/configuration/config-file) from its own `/config/drydock.yml`, using the same shape and the same sections (`watcher.*`, `action.*`, `notification.*`, `registry.*`, `server.*`) it already accepts as environment variables. `DD_AGENT_SECRET` is not one of them: the file loader rejects it, so each agent still needs its secret from the environment (or `DD_AGENT_SECRET_FILE`). The controller does not push configuration to an agent in v1.8 — each side's file (or environment) is its own.</Callout>
 
+The process-wide digest default is local to each Drydock agent too: set `DD_DEFAULTS_WATCH_DIGEST=false` or `defaults.watch.digest: false` in that agent's file to make digest checks opt-in. A controller default does not replace an agent's configuration. Labels and matching image sets still override the default; see [Digest-watch default](/docs/configuration/watchers#digest-watch-default).
+
 ### Agent Environment Variables
 
 | Env var | Required | Description | Default |

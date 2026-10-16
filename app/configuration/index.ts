@@ -27,6 +27,7 @@ const DEFAULT_GRYPE_WORKER_IMAGE =
 const DEFAULT_SYFT_WORKER_IMAGE =
   'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
 const DEFAULT_PORTWING_POLL_INTERVAL = 300;
+const DEFAULT_DIGEST_WATCH_SCHEMA = joi.boolean().label('DD_DEFAULTS_WATCH_DIGEST');
 
 export type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
 export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
@@ -187,12 +188,14 @@ export const configFileSources: Record<string, ConfigValueSource> = mergeConfigL
 // suffix an env-set secret uses — resolves through this one path either way.
 await replaceSecrets(ddEnvVars);
 
+getDefaultDigestWatch();
+
 /**
  * Validate the merged configuration against every component schema —
  * roadmap 7.1 slice 2 — so a drydock.yml mistake is reported with its YAML
  * path and the underlying Joi message before anything starts, instead of
  * surfacing later as a partial-degrade warning (a bad trigger silently
- * skipped) or, for the six section schemas, an unhandled throw from
+ * skipped) or, for the section schemas, an unhandled throw from
  * whichever call site reads them first (`getServerConfiguration()` during
  * `api.init()`, etc).
  *
@@ -353,6 +356,14 @@ export function getLogBufferEnabled() {
 
 export function getLocalWatcherEnabled() {
   return ddEnvVars.DD_LOCAL_WATCHER?.trim().toLowerCase() !== 'false';
+}
+
+export function getDefaultDigestWatch(): boolean | undefined {
+  const { value, error } = DEFAULT_DIGEST_WATCH_SCHEMA.validate(ddEnvVars.DD_DEFAULTS_WATCH_DIGEST);
+  if (error) {
+    throw error;
+  }
+  return value;
 }
 
 function envFlagEnabled(value: string | undefined) {

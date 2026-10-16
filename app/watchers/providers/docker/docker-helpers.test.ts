@@ -412,6 +412,42 @@ describe('docker helper extraction module', () => {
     });
   });
 
+  describe('installation digest default and explicit exceptions', () => {
+    const cases = [
+      { tag: 'latest', automatic: true },
+      { tag: '1.4.5-alpine', automatic: true },
+      { tag: 'sha256:abc', automatic: true },
+      { tag: 'unknown', automatic: false },
+      { tag: undefined, automatic: false },
+    ].flatMap(({ tag, automatic }) =>
+      [undefined, true, false].flatMap((defaultValue) =>
+        [undefined, '', 'true', 'false'].map((explicit) => ({
+          tag,
+          defaultValue,
+          explicit,
+          expected: explicit ? explicit === 'true' : (defaultValue ?? automatic),
+        })),
+      ),
+    );
+
+    test.each(cases)(
+      'tag=$tag default=$defaultValue explicit=$explicit resolves to $expected',
+      ({ tag, defaultValue, explicit, expected }) => {
+        expect(
+          isDigestToWatch(
+            explicit,
+            { domain: 'ghcr.io', path: 'acme/service' },
+            false,
+            'floating',
+            tag,
+            undefined,
+            defaultValue,
+          ),
+        ).toBe(expected);
+      },
+    );
+  });
+
   test('digest watch defaults require a meaningful current tag', () => {
     expect(
       isDigestToWatch(

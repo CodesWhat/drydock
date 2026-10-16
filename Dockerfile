@@ -34,7 +34,8 @@ ENV DD_LOG_FORMAT=text
 
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
-# Install system packages and cosign.
+# Install system packages and cosign. Alpine publishes different cosign
+# package revisions per architecture; keep both revisions pinned.
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
     git=2.54.0-r0 \
@@ -44,7 +45,10 @@ RUN apk add --no-cache \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026e-r0 \
-    && apk add --no-cache cosign=3.0.6-r2 \
+    && case "$(apk --print-arch)" in \
+        aarch64) apk add --no-cache cosign=3.0.6-r3 ;; \
+        *) apk add --no-cache cosign=3.0.6-r2 ;; \
+    esac \
     && apk upgrade --no-cache zlib libcrypto3 libssl3 \
     && mkdir -m 0700 /store && chown node:node /store
 
