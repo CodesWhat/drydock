@@ -11,6 +11,8 @@ import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
   parseMaturityMinAgeDays,
+  parseMaturityReleaseFallbackDays,
+  parseMaturitySkipReleases,
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
@@ -42,11 +44,19 @@ type ContainerListPolicyState = {
 );
 
 type ContainerPolicyTarget = string | Pick<Container, 'id' | 'name'>;
-type DeclarativePolicyField = 'maturityMode' | 'maturityMinAgeDays' | 'skipTags' | 'skipDigests';
+type DeclarativePolicyField =
+  | 'maturityMode'
+  | 'maturityMinAgeDays'
+  | 'maturitySkipReleases'
+  | 'maturityReleaseFallbackDays'
+  | 'skipTags'
+  | 'skipDigests';
 
 const DECLARATIVE_POLICY_FIELDS: DeclarativePolicyField[] = [
   'maturityMode',
   'maturityMinAgeDays',
+  'maturitySkipReleases',
+  'maturityReleaseFallbackDays',
   'skipTags',
   'skipDigests',
 ];
@@ -54,6 +64,8 @@ const DECLARATIVE_POLICY_FIELDS: DeclarativePolicyField[] = [
 const DECLARATIVE_POLICY_FIELD_LABEL_KEYS: Record<DeclarativePolicyField, string> = {
   maturityMode: 'containerComponents.fullPageActions.maturityGroup',
   maturityMinAgeDays: 'containerComponents.fullPageActions.maturityGroup',
+  maturitySkipReleases: 'containerComponents.fullPageActions.skipReleases',
+  maturityReleaseFallbackDays: 'containerComponents.fullPageActions.releaseFallbackDays',
   skipTags: 'containerComponents.fullPageActions.skippedTags',
   skipDigests: 'containerComponents.fullPageActions.skippedDigests',
 };
@@ -273,8 +285,9 @@ function buildSnoozedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTra
 }
 
 function buildMaturityPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
-  if (state.releaseMaturityBlocker && !state.ageMaturityBlocked)
+  if (state.releaseMaturityBlocker && !state.ageMaturityBlocked) {
     return formatReleaseMaturityMessage(state.releaseMaturityBlocker, t);
+  }
   if (state.maturityMode === 'mature') {
     const minAgeDays = state.maturityMinAgeDays;
     if (state.maturityBlocked) {
@@ -383,6 +396,8 @@ type SelectedPolicyActionsArgs = {
   policyError: Ref<string | null>;
   snoozeDateInput: Ref<string>;
   maturityMinAgeDaysInput: Ref<number>;
+  maturitySkipReleasesInput: Ref<number>;
+  maturityReleaseFallbackDaysInput: Ref<number>;
   t: PolicyTranslateFn;
 };
 
@@ -489,11 +504,23 @@ function createSetMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs) 
       });
       return;
     }
+    const skipReleases = parseMaturitySkipReleases(args.maturitySkipReleasesInput.value);
+    const releaseFallbackDays = parseMaturityReleaseFallbackDays(
+      args.maturityReleaseFallbackDaysInput.value,
+    );
+    if (skipReleases === undefined || releaseFallbackDays === undefined) {
+      args.policyError.value = args.t(
+        skipReleases === undefined
+          ? 'containerComponents.policy.validation.maturityReleases'
+          : 'containerComponents.policy.validation.maturityFallback',
+      );
+      return;
+    }
     await runForSelectedContainer(args.selectedContainer, async (container) => {
       await args.applyPolicy(
         container,
         'set-maturity-policy',
-        { mode, minAgeDays },
+        { mode, minAgeDays, skipReleases, releaseFallbackDays },
         mode === 'mature'
           ? minAgeDays === 1
             ? args.t('containerComponents.policy.toasts.setMatureSingular', { days: minAgeDays })
@@ -621,6 +648,8 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     const baseline: Record<DeclarativePolicyField, unknown> = {
       maturityMode: 'all',
       maturityMinAgeDays: DEFAULT_MATURITY_MIN_AGE_DAYS,
+      maturitySkipReleases: 0,
+      maturityReleaseFallbackDays: 0,
       skipTags: [],
       skipDigests: [],
     };
@@ -638,6 +667,9 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     const normalizeForComparison = (field: DeclarativePolicyField, value: unknown) => {
       if (field === 'maturityMode') return normalizeMaturityMode(value) ?? 'all';
       if (field === 'maturityMinAgeDays') return resolveMaturityMinAgeDays(value);
+      if (field === 'maturitySkipReleases') return parseMaturitySkipReleases(value) ?? 0;
+      if (field === 'maturityReleaseFallbackDays')
+        return parseMaturityReleaseFallbackDays(value) ?? 0;
       return [...new Set(normalizePolicyEntries(value))].sort();
     };
     return new Set(
@@ -663,6 +695,13 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   const selectedMaturityMinAgeDays = computed<number>(() =>
     resolveMaturityMinAgeDays(selectedUpdatePolicy.value.maturityMinAgeDays),
   );
+  const selectedMaturitySkipReleases = computed<number>(
+    () => parseMaturitySkipReleases(selectedUpdatePolicy.value.maturitySkipReleases) ?? 0,
+  );
+  const selectedMaturityReleaseFallbackDays = computed<number>(
+    () =>
+      parseMaturityReleaseFallbackDays(selectedUpdatePolicy.value.maturityReleaseFallbackDays) ?? 0,
+  );
   const selectedHasMaturityPolicy = computed<boolean>(
     () => selectedMaturityMode.value !== undefined,
   );
@@ -670,9 +709,12 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
   );
 
+  const selectedContainerId = computed(() => input.selectedContainer.value?.id);
   const snoozeDateInput = ref('');
   const maturityModeInput = ref<'all' | 'mature'>('all');
   const maturityMinAgeDaysInput = ref<number>(DEFAULT_MATURITY_MIN_AGE_DAYS);
+  const maturitySkipReleasesInput = ref<number>(0);
+  const maturityReleaseFallbackDaysInput = ref<number>(0);
 
   watch(
     () => selectedSnoozeUntil.value,
@@ -683,26 +725,45 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   );
 
   watch(
-    () => selectedMaturityMode.value,
-    (mode) => {
+    [selectedContainerId, selectedMaturityMode],
+    ([, mode]) => {
       maturityModeInput.value = mode ?? 'all';
     },
     { immediate: true },
   );
 
   watch(
-    () => selectedMaturityMinAgeDays.value,
-    (minAgeDays) => {
+    [selectedContainerId, selectedMaturityMinAgeDays],
+    ([, minAgeDays]) => {
       maturityMinAgeDaysInput.value = minAgeDays;
+    },
+    { immediate: true },
+  );
+
+  watch(
+    [selectedContainerId, selectedMaturitySkipReleases],
+    ([, value]) => {
+      maturitySkipReleasesInput.value = value;
+    },
+    { immediate: true },
+  );
+  watch(
+    [selectedContainerId, selectedMaturityReleaseFallbackDays],
+    ([, value]) => {
+      maturityReleaseFallbackDaysInput.value = value;
     },
     { immediate: true },
   );
 
   return {
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     maturityModeInput,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
+    selectedMaturitySkipReleases,
+    selectedMaturityReleaseFallbackDays,
     selectedMaturityMode,
     selectedPolicyGroupFields,
     selectedPolicyGroupName,
@@ -794,9 +855,13 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
 
   const {
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     maturityModeInput,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
+    selectedMaturitySkipReleases,
+    selectedMaturityReleaseFallbackDays,
     selectedMaturityMode,
     selectedPolicyGroupFields,
     selectedPolicyGroupName,
@@ -829,6 +894,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     policyError,
     snoozeDateInput,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     t,
   });
 
@@ -848,6 +915,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     containerPolicyTooltip,
     getContainerListPolicyState,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     maturityModeInput,
     policyError,
     policyInProgress,
@@ -858,6 +927,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     resetPolicyMessages,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
+    selectedMaturitySkipReleases,
+    selectedMaturityReleaseFallbackDays,
     selectedMaturityMode,
     selectedPolicyGroupFields,
     selectedPolicyGroupName,

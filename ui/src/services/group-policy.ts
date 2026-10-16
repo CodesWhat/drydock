@@ -7,6 +7,8 @@ type GroupPolicyUpdateMode = 'manual' | 'notify';
 interface GroupPolicyUpdatePolicy {
   maturityMode?: GroupPolicyMaturityMode;
   maturityMinAgeDays?: number;
+  maturitySkipReleases?: number;
+  maturityReleaseFallbackDays?: number;
   skipTags?: string[];
   skipDigests?: string[];
 }

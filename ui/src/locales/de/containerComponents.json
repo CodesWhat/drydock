@@ -145,7 +145,13 @@
       "versionLabel": "Version:",
       "rollbackReasonLabel": "Rollback-Grund:",
       "lastErrorLabel": "Letzter Fehler:",
-      "noUpdateOperations": "Noch keine Update-Operationen aufgezeichnet"
+      "noUpdateOperations": "Noch keine Update-Operationen aufgezeichnet",
+      "skipReleases": "Frühe Releases überspringen",
+      "skipReleasesHint": "Die ersten N unterschiedlichen stabilen Releases je Familie überspringen: SemVer-Hauptversion oder CalVer-Monat. 0 deaktiviert diese Sperre.",
+      "releaseFallbackDays": "Altersausnahme (Tage)",
+      "releaseFallbackHint": "Nach so vielen Tagen zulassen, wenn Release-Nachweise fehlen oder die Anzahl nicht erreicht ist. 0 deaktiviert die Ausnahme. Das Mindestalter gilt weiterhin.",
+      "releasePolicySummary": "Erste {count} Releases je Familie überspringen.",
+      "releaseFallbackSummary": "Altersausnahme für die Release-Anzahl nach {days} Tagen."
     },
     "fullPageDetail": {
       "statusUpdating": "Aktualisiert",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Wählen Sie ein gültiges Pausierungsdatum",
-        "maturityAge": "Geben Sie ein Reifealter zwischen {min} und {max} Tagen ein"
+        "maturityAge": "Geben Sie ein Reifealter zwischen {min} und {max} Tagen ein",
+        "maturityReleases": "Eine ganze Release-Anzahl von 0 bis 100 eingeben.",
+        "maturityFallback": "Ganze Tage von 0 bis 365 für die Altersausnahme eingeben."
       }
     },
     "triggers": {

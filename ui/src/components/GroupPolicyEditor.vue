@@ -14,6 +14,10 @@ import {
   visibleGroupName,
 } from '../composables/useGroupPolicies';
 import type { GroupPolicy, GroupPolicyBody } from '../services/group-policy';
+import {
+  parseMaturitySkipReleases,
+  parseMaturityReleaseFallbackDays,
+} from '../utils/maturity-policy';
 
 const props = defineProps<{
   group: string;
@@ -74,6 +78,15 @@ const nameInvalid = computed(
   () => props.nameEditable && nameDraft.value !== '' && !isValidGroupName(nameDraft.value),
 );
 const minAgeInvalid = computed(() => !isValidMinAgeDays(draft.minAgeDays));
+const skipReleasesInvalid = computed(
+  () =>
+    draft.skipReleases.trim() !== '' && parseMaturitySkipReleases(draft.skipReleases) === undefined,
+);
+const releaseFallbackInvalid = computed(
+  () =>
+    draft.releaseFallbackDays.trim() !== '' &&
+    parseMaturityReleaseFallbackDays(draft.releaseFallbackDays) === undefined,
+);
 const body = computed(() => buildGroupPolicyBody(draft));
 const bodyEmpty = computed(
   () =>
@@ -91,6 +104,8 @@ const canSave = computed(
     !blockedByRefresh.value &&
     (!props.nameEditable || isValidGroupName(nameDraft.value)) &&
     !minAgeInvalid.value &&
+    !skipReleasesInvalid.value &&
+    !releaseFallbackInvalid.value &&
     !bodyEmpty.value,
 );
 
@@ -111,6 +126,16 @@ const minAgeError = computed(() =>
   minAgeInvalid.value
     ? t('groupPolicyEditor.editor.minAgeInvalid')
     : serverError('maturityMinAgeDays'),
+);
+const skipReleasesError = computed(() =>
+  skipReleasesInvalid.value
+    ? t('containerComponents.policy.validation.maturityReleases')
+    : serverError('maturitySkipReleases'),
+);
+const releaseFallbackError = computed(() =>
+  releaseFallbackInvalid.value
+    ? t('containerComponents.policy.validation.maturityFallback')
+    : serverError('maturityReleaseFallbackDays'),
 );
 
 function submit() {
@@ -210,6 +235,23 @@ function addSuggestion(trigger: string) {
       />
       <span class="dd-text-card-description">{{ t('groupPolicyEditor.editor.minAgeHelp') }}</span>
       <span v-if="minAgeError" class="block dd-text-body dd-text-danger" data-testid="group-policy-error-maturityMinAgeDays">{{ minAgeError }}</span>
+    </label>
+
+    <label class="block space-y-1">
+      <span class="dd-text-label dd-text-muted">{{ t('containerComponents.fullPageActions.skipReleases') }}</span>
+      <input v-model="draft.skipReleases" type="text" inputmode="numeric" autocomplete="off"
+             :placeholder="t('groupPolicyEditor.editor.maturityOptions.inherit')" :style="inputStyle" :disabled="readOnly"
+             class="w-full px-3 py-2 dd-rounded dd-text-value disabled:opacity-60" data-testid="group-policy-skip-releases" />
+      <span class="dd-text-card-description">{{ t('containerComponents.fullPageActions.skipReleasesHint') }}</span>
+      <span v-if="skipReleasesError" class="block dd-text-body dd-text-danger" data-testid="group-policy-error-maturitySkipReleases">{{ skipReleasesError }}</span>
+    </label>
+    <label class="block space-y-1">
+      <span class="dd-text-label dd-text-muted">{{ t('containerComponents.fullPageActions.releaseFallbackDays') }}</span>
+      <input v-model="draft.releaseFallbackDays" type="text" inputmode="numeric" autocomplete="off"
+             :placeholder="t('groupPolicyEditor.editor.maturityOptions.inherit')" :style="inputStyle" :disabled="readOnly"
+             class="w-full px-3 py-2 dd-rounded dd-text-value disabled:opacity-60" data-testid="group-policy-release-fallback-days" />
+      <span class="dd-text-card-description">{{ t('containerComponents.fullPageActions.releaseFallbackHint') }}</span>
+      <span v-if="releaseFallbackError" class="block dd-text-body dd-text-danger" data-testid="group-policy-error-maturityReleaseFallbackDays">{{ releaseFallbackError }}</span>
     </label>
 
     <label class="block space-y-1">

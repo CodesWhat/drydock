@@ -145,7 +145,13 @@
       "versionLabel": "Phiên bản:",
       "rollbackReasonLabel": "Lý do khôi phục:",
       "lastErrorLabel": "Lỗi cuối:",
-      "noUpdateOperations": "Chưa có thao tác cập nhật nào được ghi lại"
+      "noUpdateOperations": "Chưa có thao tác cập nhật nào được ghi lại",
+      "skipReleases": "Số bản phát hành đầu cần bỏ qua",
+      "skipReleasesHint": "Bỏ qua N bản phát hành ổn định khác nhau đầu tiên trong mỗi họ: phiên bản chính SemVer hoặc tháng CalVer. 0 tắt điều kiện này.",
+      "releaseFallbackDays": "Ngoại lệ theo tuổi (ngày)",
+      "releaseFallbackHint": "Cho phép sau số ngày này nếu thiếu dữ liệu phát hành hoặc chưa đủ số lượng. 0 tắt ngoại lệ. Tuổi tối thiểu vẫn được áp dụng.",
+      "releasePolicySummary": "Bỏ qua {count} bản phát hành đầu tiên trong mỗi họ.",
+      "releaseFallbackSummary": "Miễn điều kiện số bản phát hành sau {days} ngày."
     },
     "fullPageDetail": {
       "statusUpdating": "Đang cập nhật",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Chọn ngày hoãn hợp lệ",
-        "maturityAge": "Nhập số ngày độ chín trong khoảng từ {min} đến {max} ngày"
+        "maturityAge": "Nhập số ngày độ chín trong khoảng từ {min} đến {max} ngày",
+        "maturityReleases": "Nhập số bản phát hành nguyên từ 0 đến 100.",
+        "maturityFallback": "Nhập số ngày nguyên từ 0 đến 365 cho ngoại lệ."
       }
     },
     "triggers": {

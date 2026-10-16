@@ -145,7 +145,13 @@
       "versionLabel": "バージョン：",
       "rollbackReasonLabel": "ロールバック理由：",
       "lastErrorLabel": "最後のエラー：",
-      "noUpdateOperations": "更新操作の記録がまだありません"
+      "noUpdateOperations": "更新操作の記録がまだありません",
+      "skipReleases": "スキップする初期リリース数",
+      "skipReleasesHint": "各ファミリーの最初の N 個の異なる安定版をスキップします。ファミリーは SemVer のメジャーバージョン、または CalVer の年月です。0 でこの条件を無効にします。",
+      "releaseFallbackDays": "経過日数による例外（日）",
+      "releaseFallbackHint": "リリース情報がない場合や必要数に達しない場合、この日数が経過すると許可します。0 で例外を無効にします。最小経過日数の条件は引き続き適用されます。",
+      "releasePolicySummary": "各ファミリーの最初の {count} リリースをスキップします。",
+      "releaseFallbackSummary": "{days} 日後にリリース数の条件を免除します。"
     },
     "fullPageDetail": {
       "statusUpdating": "更新中",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "有効なスヌーズ日付を選択してください",
-        "maturityAge": "{min} 日から {max} 日の間で成熟度の日数を入力してください"
+        "maturityAge": "{min} 日から {max} 日の間で成熟度の日数を入力してください",
+        "maturityReleases": "リリース数を 0～100 の整数で入力してください。",
+        "maturityFallback": "例外までの日数を 0～365 の整数で入力してください。"
       }
     },
     "triggers": {

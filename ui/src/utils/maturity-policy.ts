@@ -1,9 +1,29 @@
 export const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
 export const MATURITY_MIN_AGE_DAYS_MIN = 1;
 export const MATURITY_MIN_AGE_DAYS_MAX = 365;
+const MATURITY_SKIP_RELEASES_MAX = 100;
+const MATURITY_RELEASE_FALLBACK_DAYS_MAX = 365;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type MaturityMode = 'all' | 'mature';
+
+function parseOptionalCount(value: unknown, maximum: number): number | undefined {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && value.trim() === '')
+  )
+    return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= maximum ? parsed : undefined;
+}
+
+export function parseMaturitySkipReleases(value: unknown): number | undefined {
+  return parseOptionalCount(value, MATURITY_SKIP_RELEASES_MAX);
+}
+
+export function parseMaturityReleaseFallbackDays(value: unknown): number | undefined {
+  return parseOptionalCount(value, MATURITY_RELEASE_FALLBACK_DAYS_MAX);
+}
 
 export function normalizeMaturityMode(value: unknown): MaturityMode | undefined {
   if (typeof value !== 'string') {

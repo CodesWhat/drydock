@@ -145,7 +145,13 @@
       "versionLabel": "الإصدار:",
       "rollbackReasonLabel": "سبب التراجع:",
       "lastErrorLabel": "آخر خطأ:",
-      "noUpdateOperations": "لم تُسجَّل أي عملية تحديث بعد"
+      "noUpdateOperations": "لم تُسجَّل أي عملية تحديث بعد",
+      "skipReleases": "عدد الإصدارات الأولى المراد تخطيها",
+      "skipReleasesHint": "تخطي أول N إصدارات مستقرة متميزة في كل عائلة: إصدار رئيسي في SemVer أو شهر في CalVer. القيمة 0 تعطل هذا الشرط.",
+      "releaseFallbackDays": "استثناء حسب العمر (أيام)",
+      "releaseFallbackHint": "السماح بعد هذا العدد من الأيام إذا غابت بيانات الإصدارات أو لم يتحقق العدد المطلوب. القيمة 0 تعطل الاستثناء. يظل الحد الأدنى للعمر ساريًا.",
+      "releasePolicySummary": "تخطي أول {count} إصدارات في كل عائلة.",
+      "releaseFallbackSummary": "استثناء شرط عدد الإصدارات بعد {days} أيام."
     },
     "fullPageDetail": {
       "statusUpdating": "جارٍ التحديث",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "اختر تاريخ تأجيل صالح",
-        "maturityAge": "أدخل عمر نضج بين {min} و {max} يوم"
+        "maturityAge": "أدخل عمر نضج بين {min} و {max} يوم",
+        "maturityReleases": "أدخل عددًا صحيحًا للإصدارات من 0 إلى 100.",
+        "maturityFallback": "أدخل عددًا صحيحًا لأيام الاستثناء من 0 إلى 365."
       }
     },
     "triggers": {

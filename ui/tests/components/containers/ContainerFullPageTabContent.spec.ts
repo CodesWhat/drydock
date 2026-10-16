@@ -110,6 +110,8 @@ const selectedMaturityMode = ref<'all' | 'mature'>('mature');
 const selectedMaturityMinAgeDays = ref(7);
 const maturityModeInput = ref<'all' | 'mature'>('all');
 const maturityMinAgeDaysInput = ref(7);
+const maturitySkipReleasesInput = ref(0);
+const maturityReleaseFallbackDaysInput = ref(0);
 const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
 const detailPreview = ref<Record<string, unknown> | null>(null);
@@ -244,6 +246,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     selectedMaturityMinAgeDays,
     maturityModeInput,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     confirmClearPolicy: mockClearPolicySelected,
@@ -351,6 +355,8 @@ function resetState() {
   selectedMaturityMinAgeDays.value = 7;
   maturityModeInput.value = 'all';
   maturityMinAgeDaysInput.value = 7;
+  maturitySkipReleasesInput.value = 0;
+  maturityReleaseFallbackDaysInput.value = 0;
   policyMessage.value = null;
   policyError.value = null;
   detailPreview.value = null;

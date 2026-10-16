@@ -122,6 +122,8 @@ const selectedMaturityMode = ref('mature');
 const selectedMaturityMinAgeDays = ref(7);
 const maturityModeInput = ref('all');
 const maturityMinAgeDaysInput = ref(7);
+const maturitySkipReleasesInput = ref(0);
+const maturityReleaseFallbackDaysInput = ref(0);
 const mockClearPolicySelected = vi.fn();
 const mockRevertPolicySelected = vi.fn();
 const selectedPolicyOverrideFields = ref(
@@ -217,6 +219,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     selectedMaturityMinAgeDays,
     maturityModeInput,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     confirmClearPolicy: mockClearPolicySelected,
@@ -398,6 +402,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     selectedMaturityMinAgeDays.value = 7;
     maturityModeInput.value = 'all';
     maturityMinAgeDaysInput.value = 7;
+    maturitySkipReleasesInput.value = 0;
+    maturityReleaseFallbackDaysInput.value = 0;
     policyMessage.value = null;
     policyError.value = null;
     triggersLoading.value = false;

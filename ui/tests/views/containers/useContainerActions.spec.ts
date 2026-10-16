@@ -817,6 +817,8 @@ describe('useContainerActions', () => {
       {
         mode: 'mature',
         minAgeDays: 7,
+        skipReleases: 0,
+        releaseFallbackDays: 0,
       },
     );
 
@@ -829,6 +831,8 @@ describe('useContainerActions', () => {
       {
         mode: 'all',
         minAgeDays: 21,
+        skipReleases: 0,
+        releaseFallbackDays: 0,
       },
     );
 
@@ -849,6 +853,8 @@ describe('useContainerActions', () => {
       {
         mode: 'mature',
         minAgeDays: 1,
+        skipReleases: 0,
+        releaseFallbackDays: 0,
       },
     );
 
@@ -856,6 +862,44 @@ describe('useContainerActions', () => {
     await composable.setMaturityPolicySelected('mature');
     expect(composable.policyError.value).toBe('Enter a maturity age between 1 and 365 days');
     expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(4);
+  });
+
+  it('saves release maturity controls with the day gate', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: container.id },
+    });
+    expect(composable.maturitySkipReleasesInput?.value).toBe(0);
+    composable.maturityMinAgeDaysInput.value = 5;
+    composable.maturitySkipReleasesInput.value = 2;
+    composable.maturityReleaseFallbackDaysInput.value = 10;
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith(container.id, 'set-maturity-policy', {
+      mode: 'mature',
+      minAgeDays: 5,
+      skipReleases: 2,
+      releaseFallbackDays: 10,
+    });
+  });
+
+  it('rejects invalid release maturity controls before saving', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: container.id },
+    });
+    expect(composable.maturitySkipReleasesInput).toBeDefined();
+    composable.maturitySkipReleasesInput.value = 1.5;
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(composable.policyError.value).toBeTruthy();
+    composable.maturitySkipReleasesInput.value = 2;
+    composable.maturityReleaseFallbackDaysInput.value = 366;
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
   });
 
   it('distinguishes override presence from a material declarative difference', async () => {

@@ -37,6 +37,59 @@ function mountEditor(props: Record<string, unknown> = {}) {
 const tid = (id: string) => `[data-testid="group-policy-${id}"]`;
 
 describe('GroupPolicyEditor', () => {
+  it('edits release maturity values and distinguishes zero from inherited settings', async () => {
+    const wrapper = mountEditor({
+      group: 'payments',
+      nameEditable: false,
+      policy: policy({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+      }),
+    });
+    const count = wrapper.get(tid('skip-releases'));
+    const fallback = wrapper.get(tid('release-fallback-days'));
+    expect((count.element as HTMLInputElement).value).toBe('2');
+    expect((fallback.element as HTMLInputElement).value).toBe('10');
+    await wrapper.get(tid('save')).trigger('click');
+    expect(wrapper.emitted('save')?.[0]).toEqual([
+      {
+        group: 'payments',
+        body: {
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturitySkipReleases: 2,
+            maturityReleaseFallbackDays: 10,
+          },
+          actions: { updateMode: 'manual', exclude: ['docker.local'] },
+        },
+      },
+    ]);
+    await fallback.setValue('0');
+    await count.setValue('');
+    await wrapper.get(tid('save')).trigger('click');
+    expect(wrapper.emitted('save')?.[1]).toEqual([
+      {
+        group: 'payments',
+        body: {
+          updatePolicy: { maturityMode: 'mature', maturityReleaseFallbackDays: 0 },
+          actions: { updateMode: 'manual', exclude: ['docker.local'] },
+        },
+      },
+    ]);
+  });
+
+  it('blocks fractional or out-of-range release maturity fields', async () => {
+    const wrapper = mountEditor({ group: 'payments', nameEditable: false, policy: policy() });
+    await wrapper.get(tid('skip-releases')).setValue('1.5');
+    expect(wrapper.get(tid('save')).attributes('disabled')).toBeDefined();
+    await wrapper.get(tid('skip-releases')).setValue('2');
+    await wrapper.get(tid('release-fallback-days')).setValue('366');
+    expect(wrapper.get(tid('save')).attributes('disabled')).toBeDefined();
+    expect(wrapper.find(tid('error-maturityReleaseFallbackDays')).exists()).toBe(true);
+  });
   describe('create', () => {
     it('starts empty with save disabled and says why', () => {
       const wrapper = mountEditor();
