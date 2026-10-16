@@ -839,6 +839,7 @@ const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
   'skip-tag',
   'skip-digest',
   'maturity-not-reached',
+  'maturity-releases-not-reached',
   'threshold-not-reached',
   'trigger-excluded',
   'trigger-not-included',

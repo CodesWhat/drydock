@@ -9,7 +9,11 @@ import type {
   UpdateBlockerSeverity,
   UpdateEligibility,
 } from '../types/container';
-import { hasRawUpdateCandidate, severityOf } from '../utils/update-eligibility';
+import {
+  formatReleaseMaturityMessage,
+  hasRawUpdateCandidate,
+  severityOf,
+} from '../utils/update-eligibility';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 
@@ -96,6 +100,7 @@ const POLICY_REASONS = new Set<UpdateBlockerReason>([
   'skip-tag',
   'skip-digest',
   'maturity-not-reached',
+  'maturity-releases-not-reached',
 ]);
 
 export const ELIGIBILITY_DOCS =
@@ -212,6 +217,7 @@ const CONDITION_ICONS: Record<UpdateStatusConditionReason, string> = {
   'skip-tag': 'skip-forward',
   'skip-digest': 'skip-forward',
   'maturity-not-reached': 'uptime',
+  'maturity-releases-not-reached': 'uptime',
   'maintenance-window-closed': 'uptime',
   'active-operation': 'spinner',
   'agent-mismatch': 'triggers',
@@ -278,7 +284,11 @@ function toCondition(
     icon: CONDITION_ICONS[blocker.reason],
     heading: conditionHeading(blocker.reason, t),
     body:
-      blocker.reason === 'maturity-not-reached' ? maturitySentence(blocker, t) : blocker.message,
+      blocker.reason === 'maturity-not-reached'
+        ? maturitySentence(blocker, t)
+        : blocker.reason === 'maturity-releases-not-reached'
+          ? formatReleaseMaturityMessage(blocker, t)
+          : blocker.message,
     liftableAt: blocker.liftableAt,
     action: conditionAction(blocker, container, t),
   };

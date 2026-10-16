@@ -507,7 +507,8 @@
         "maintenance-window-closed": "نافذة الصيانة مغلقة",
         "group-notify-only": "المجموعة تسمح بالإشعارات فقط",
         "group-manual-only": "المجموعة تتطلب تحديثات يدوية",
-        "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية"
+        "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية",
+        "maturity-releases-not-reached": "سياسة النضج بانتظار"
       },
       "actions": {
         "editPolicy": "تعديل سياسة التحديث",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "تهيئة التحديث الذاتي",
         "configureMaintenance": "تهيئة نافذة الصيانة",
         "editGroupPolicy": "تعديل سياسة المجموعة"
-      }
+      },
+      "releaseMaturityCount": "بانتظار إصدارات مستقرة ضمن العائلة {family}: يتوفر {count} من أصل {required} إصدارًا أقدم.",
+      "releaseMaturityUnavailable": "بيانات إصدار النسخة المرشحة غير متاحة. تظل التحديثات التلقائية معلقة."
     },
     "maturityBadge": {
       "new": "تم الاكتشاف منذ {duration}"

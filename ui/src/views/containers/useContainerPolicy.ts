@@ -2,7 +2,7 @@ import { computed, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import { updateContainerPolicy } from '../../services/container';
-import type { Container, ContainerGroupPolicySnapshot } from '../../types/container';
+import type { Container, ContainerGroupPolicySnapshot, UpdateBlocker } from '../../types/container';
 import { errorMessage } from '../../utils/error';
 import {
   DEFAULT_MATURITY_MIN_AGE_DAYS,
@@ -15,7 +15,11 @@ import {
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
 import { resolveSnoozeUntilFromInput } from '../../utils/snooze-date';
-import { findBackendMaturityBlocked } from '../../utils/update-eligibility';
+import {
+  findBackendMaturityBlocked,
+  findBackendReleaseMaturityBlocker,
+  formatReleaseMaturityMessage,
+} from '../../utils/update-eligibility';
 
 type ContainerListPolicyState = {
   snoozed: boolean;
@@ -23,6 +27,7 @@ type ContainerListPolicyState = {
   skipCount: number;
   snoozeUntil?: string;
   maturityBlocked: boolean;
+  releaseMaturityBlocker?: UpdateBlocker;
   updateDetectedAt?: string;
 } & (
   | {
@@ -197,6 +202,7 @@ function buildContainerListPolicyStateFromPolicy(
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
   const backendMaturityBlocked = findBackendMaturityBlocked(metaRecord);
+  const releaseMaturityBlocker = findBackendReleaseMaturityBlocker(metaRecord);
   const fallbackMaturityStartMs = resolveFallbackMaturityClockStartMs(metaRecord, updateDetectedAt);
   const maturityBlocked =
     backendMaturityBlocked !== undefined
@@ -218,6 +224,7 @@ function buildContainerListPolicyStateFromPolicy(
     snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
     ...(updateDetectedAt ? { updateDetectedAt } : {}),
     maturityBlocked,
+    ...(releaseMaturityBlocker ? { releaseMaturityBlocker } : {}),
   };
 
   if (!maturityMode) {
@@ -260,6 +267,8 @@ function buildSnoozedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTra
 }
 
 function buildMaturityPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
+  if (state.releaseMaturityBlocker)
+    return formatReleaseMaturityMessage(state.releaseMaturityBlocker, t);
   if (state.maturityMode === 'mature') {
     const minAgeDays = state.maturityMinAgeDays;
     if (state.maturityBlocked) {

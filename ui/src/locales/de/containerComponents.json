@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Wartungsfenster geschlossen",
         "group-notify-only": "Gruppe erlaubt nur Benachrichtigungen",
         "group-manual-only": "Gruppe verlangt manuelle Updates",
-        "dry-run-trigger": "Trigger-Konfiguration im Dry-Run-Modus"
+        "dry-run-trigger": "Trigger-Konfiguration im Dry-Run-Modus",
+        "maturity-releases-not-reached": "Reife-Policy wartet"
       },
       "actions": {
         "editPolicy": "Update-Policy bearbeiten",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Selbstaktualisierung konfigurieren",
         "configureMaintenance": "Wartungsfenster konfigurieren",
         "editGroupPolicy": "Gruppenrichtlinie bearbeiten"
-      }
+      },
+      "releaseMaturityCount": "Warte auf stabile Releases in Familie {family}: {count} von {required} früheren Releases verfügbar.",
+      "releaseMaturityUnavailable": "Für diesen Kandidaten sind keine Release-Nachweise verfügbar. Automatische Updates bleiben zurückgehalten."
     },
     "maturityBadge": {
       "new": "Vor {duration} erkannt"

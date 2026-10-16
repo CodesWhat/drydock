@@ -507,7 +507,8 @@
         "maintenance-window-closed": "维护窗口已关闭",
         "group-notify-only": "分组仅允许通知",
         "group-manual-only": "分组要求手动更新",
-        "dry-run-trigger": "触发器配置处于 dry-run 模式"
+        "dry-run-trigger": "触发器配置处于 dry-run 模式",
+        "maturity-releases-not-reached": "成熟度策略等待中"
       },
       "actions": {
         "editPolicy": "编辑更新策略",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "配置自我更新",
         "configureMaintenance": "配置维护窗口",
         "editGroupPolicy": "编辑分组策略"
-      }
+      },
+      "releaseMaturityCount": "正在等待版本系列 {family} 的稳定版：已确认 {count} 个较早版本，需要 {required} 个。",
+      "releaseMaturityUnavailable": "无法获取候选版本的发布信息。自动更新仍处于保留状态。"
     },
     "maturityBadge": {
       "new": "{duration}前检测到"

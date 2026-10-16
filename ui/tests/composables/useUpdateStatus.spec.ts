@@ -44,6 +44,57 @@ function input(overrides: Partial<UpdateStatusInput> = {}): UpdateStatusInput {
 }
 
 describe('deriveUpdateStatus', () => {
+  it('explains a release-count hold without claiming that the update is waiting for more days', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '2.0.8',
+          updateEligibility: eligibility([
+            blocker({
+              reason: 'maturity-releases-not-reached',
+              severity: 'soft',
+              details: {
+                evidenceAvailable: true,
+                family: '2',
+                earlierReleases: 1,
+                requiredReleases: 2,
+              },
+            }),
+          ]),
+        },
+      }),
+    );
+    expect(status.conditions[0]).toMatchObject({
+      icon: 'uptime',
+      body: 'Waiting for stable releases in family 2: 1 of 2 earlier releases available.',
+      action: { kind: 'tab' },
+    });
+    expect(status.conditions[0].liftableAt).toBeUndefined();
+  });
+
+  it('explains unavailable release evidence separately from an unmet count', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: 'latest',
+          updateEligibility: eligibility([
+            blocker({
+              reason: 'maturity-releases-not-reached',
+              severity: 'soft',
+              details: { evidenceAvailable: false, requiredReleases: 2 },
+            }),
+          ]),
+        },
+      }),
+    );
+    expect(status.conditions[0].body).toBe(
+      'Candidate release evidence is unavailable. Automatic updates are held.',
+    );
+  });
   it('describes an eligible manual update and allows its CTA', () => {
     const status = deriveUpdateStatus(input());
 

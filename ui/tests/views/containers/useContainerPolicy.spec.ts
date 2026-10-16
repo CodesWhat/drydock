@@ -101,6 +101,33 @@ function createPolicyHarness(
 }
 
 describe('useContainerPolicy', () => {
+  it('uses the release-count explanation in list tooltips after the day gate passes', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+          updateEligibility: {
+            blockers: [
+              {
+                reason: 'maturity-releases-not-reached',
+                message: 'Waiting',
+                details: {
+                  evidenceAvailable: true,
+                  family: '2',
+                  earlierReleases: 1,
+                  requiredReleases: 2,
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity')).toBe(
+      'Waiting for stable releases in family 2: 1 of 2 earlier releases available.',
+    );
+    harness.wrapper.unmount();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

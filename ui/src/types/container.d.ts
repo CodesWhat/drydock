@@ -14,6 +14,7 @@ export type UpdateBlockerReason =
   | 'skip-tag'
   | 'skip-digest'
   | 'maturity-not-reached'
+  | 'maturity-releases-not-reached'
   | 'threshold-not-reached'
   | 'trigger-excluded'
   | 'trigger-not-included'
@@ -99,6 +100,8 @@ export type LabelOwnedSource = 'override' | 'label' | 'compose' | 'watcher' | 'd
 export interface ContainerDeclarativeUpdatePolicy {
   maturityMode?: 'all' | 'mature';
   maturityMinAgeDays?: number;
+  maturitySkipReleases?: number;
+  maturityReleaseFallbackDays?: number;
   skipTags?: string[];
   skipDigests?: string[];
 }
