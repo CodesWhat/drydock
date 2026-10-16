@@ -37,7 +37,7 @@ on:
         type: string
         default: ""
       source_ref:
-        description: "Maintenance cuts only: dev branch to build from (e.g. dev/v1.6) when cutting a patch for a line main has moved past. Leave empty for normal cuts."
+        description: "Retained branches only: maintenance patches (e.g. dev/v1.6) or promotion of an already-published older-line minor RC to GA. Leave empty for normal cuts."
         required: false
         type: string
         default: ""
@@ -108,12 +108,15 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
           SOURCE_REF: ${{ inputs.source_ref }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
         run: |
           set -euo pipefail
 
           if [ -z "${SOURCE_REF}" ]; then
             {
               echo "is_maintenance_cut=false"
+              echo "is_retained_ga=false"
               echo "source_branch="
             } >> "$GITHUB_OUTPUT"
             echo "No source_ref supplied; normal cut from main."
@@ -170,24 +173,43 @@ jobs:
             exit 1
           fi
 
-          # Patch component must be nonzero: maintenance cuts are for patch
-          # releases (vX.Y.Z, Z>0, GA or prerelease alike) — v1.6.0 or
-          # v1.6.0-rc.N is a new minor line and belongs on main, never on a
-          # retired dev branch.
+          # New minor candidates still build only from main. An older line's
+          # already-published RC may be promoted after main advances: GA uses
+          # the candidate's exact signed image/archive and original provenance,
+          # never a rebuild from the retained branch. The source step below
+          # still verifies publication, tag/base, digest and seven-day soak.
           patch="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?[0-9]+\.[0-9]+\.([0-9]+).*/\1/')"
           if [ "${patch}" -eq 0 ]; then
-            echo "::error::release_tag '${RELEASE_TAG}' has patch version 0. Maintenance cuts (source_ref) are for patch releases (vX.Y.Z with Z>0); cut vX.Y.0 from main normally."
-            exit 1
+            if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.0$ ]] \
+              || ! [[ "${CANDIDATE_TAG}" =~ ^v[0-9]+\.[0-9]+\.0-rc\.[0-9]+$ ]] \
+              || [ "${CANDIDATE_TAG%-rc.*}" != "${RELEASE_TAG}" ] \
+              || ! [[ "${CANDIDATE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::release_tag '${RELEASE_TAG}' has patch version 0. A retained minor line only permits GA promotion with its exact published RC tag and digest; new minor prereleases must be cut from main."
+              exit 1
+            fi
+            first_line="$(printf '%s\n' "${source_line}" "${main_line}" | sort -V | head -1)"
+            if [ "${first_line}" != "${source_line}" ]; then
+              echo "::error::Retained minor GA line ${source_line} must be older than main's ${main_line}."
+              exit 1
+            fi
+            {
+              echo "is_maintenance_cut=false"
+              echo "is_retained_ga=true"
+              echo "source_branch=${SOURCE_REF}"
+            } >> "$GITHUB_OUTPUT"
+            echo "Retained minor GA validated: ${RELEASE_TAG} promotes ${CANDIDATE_TAG}; candidate provenance remains required."
+            exit 0
           fi
 
           {
             echo "is_maintenance_cut=true"
+            echo "is_retained_ga=false"
             echo "source_branch=${SOURCE_REF}"
           } >> "$GITHUB_OUTPUT"
           echo "Maintenance cut validated: ${RELEASE_TAG} from ${SOURCE_REF} (main's active line is ${main_line})."
 
       - name: Assert main is in sync with the active dev branch
-        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
+        if: steps.source_ref.outputs.source_branch == ''
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -237,13 +259,13 @@ jobs:
       - name: Resolve target SHA and lowercase repository
         id: target
         env:
-          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
           SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           set -euo pipefail
-          if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
-            # Maintenance cut: build from the named dev branch's tip, not main
-            # HEAD. The job still runs at refs/heads/main (asserted above and
+          if [ -n "${SOURCE_BRANCH}" ]; then
+            # Retained source: resolve release metadata from its branch tip, not main
+            # HEAD. For GA the actual artifacts come from its candidate.
+            # The job still runs at refs/heads/main (asserted above and
             # checked out here) — this only changes which tree gets built and
             # released, not the workflow run's own ref, which is what the
             # cosign OIDC identity is pinned to.
@@ -496,7 +518,7 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
-          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          allow-dispatch-events: ${{ steps.source_ref.outputs.source_branch != '' }}
 
       - name: Wait for successful E2E Playwright on release source SHA
         uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
@@ -506,7 +528,7 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
-          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          allow-dispatch-events: ${{ steps.source_ref.outputs.source_branch != '' }}
 
       - name: Checkout exact release source
         env:
@@ -1410,6 +1432,7 @@ jobs:
           SOAK_OVERRIDE_AGE_DAYS: ${{ steps.source.outputs.soak_override_age_days }}
           SOAK_OVERRIDE_REASON_PATH: ${{ steps.source.outputs.soak_override_reason_path }}
           IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          IS_RETAINED_GA: ${{ steps.source_ref.outputs.is_retained_ga }}
           SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
@@ -1478,6 +1501,13 @@ jobs:
               echo "**Note:** the standard seven-day release-candidate soak was shortened for this release."
               echo "- Candidate age at promotion: ${SOAK_OVERRIDE_AGE_SECONDS}s (~${SOAK_OVERRIDE_AGE_DAYS} days), short of the usual 7 days (604800s)."
               echo "- Reason: ${override_reason}"
+            } >> "${notes_path}"
+          fi
+
+          if [ "${IS_RETAINED_GA}" = "true" ]; then
+            {
+              echo ""
+              echo "**Retained-line GA:** release metadata comes from \`${SOURCE_BRANCH}\`; the signed candidate artifacts and their original build-provenance attestation are verified and reused without rebuilding."
             } >> "${notes_path}"
           fi
 
@@ -1652,6 +1682,7 @@ jobs:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           DIGEST: ${{ steps.digest.outputs.value }}
           IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          IS_RETAINED_GA: ${{ steps.source_ref.outputs.is_retained_ga }}
           SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           {
@@ -1661,6 +1692,9 @@ jobs:
             echo "- Version: \`${NEXT_VERSION}\`"
             echo "- Tag: \`${RELEASE_TAG}\`"
             echo "- Image digest: \`${DIGEST}\`"
+            if [ "${IS_RETAINED_GA}" = "true" ]; then
+              echo "- Retained-line GA: metadata from \`${SOURCE_BRANCH}\`; original signed candidate artifacts and provenance reused without rebuilding."
+            fi
             if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
               echo "- Maintenance cut: built from \`${SOURCE_BRANCH}\`, not \`main\` — no SLSA build-provenance attestation (see \"Defect 3\" comment in this workflow); cosign signature only."
             fi
