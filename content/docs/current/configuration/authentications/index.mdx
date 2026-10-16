@@ -73,7 +73,7 @@ environment:
 | Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Starts fail-closed — protected API requests return `401`; auth discovery/status stays public; `/health` returns `503` |
 | Upgrade, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
 
-Drydock detects an upgrade by the presence of an existing store file (`/store/dd.json`). If the file exists, the install is treated as an upgrade; if it does not, it is treated as a fresh install.
+Drydock identifies an existing installation from its saved application metadata. In unreleased v1.8 builds this record lives in SQLite and is carried across by the one-time JSON import; the presence of `dd.json` alone does not determine whether an installation is an upgrade. Both upgrades and fresh installs require configured authentication or explicit anonymous-access confirmation.
 
 ### Upgrading
 
@@ -84,7 +84,7 @@ To restore access, either:
 1. **Configure authentication** — set `DD_AUTH_BASIC_<name>_USER` and `DD_AUTH_BASIC_<name>_HASH` (or use [OIDC](/docs/configuration/authentications/oidc)).
 2. **Explicitly opt in to anonymous access** — set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
-<Callout type="warn">This release also renames the session cookie (`connect.sid` → `drydock.sid`), which signs out every existing session once on upgrade — Basic and OIDC alike. There's nothing to migrate; users just log back in.</Callout>
+<Callout type="warn">v1.6.0-rc.3 renamed the session cookie (`connect.sid` → `drydock.sid`). Upgrading from a build that still used the old name signs out existing sessions once, Basic and OIDC alike; users log back in. This earlier cookie change is separate from the v1.8 SQLite import.</Callout>
 
 ## Fail-closed auth enforcement
 

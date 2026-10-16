@@ -435,9 +435,10 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
   the development branch. The latest stable is v1.6.1; v1.7.0-rc.24 is a
   candidate, and v1.8 features are unreleased. Preserve the production v1.7
   docs before moving the active docs mapping to v1.8.
-- Align `DEPRECATIONS.md`, current upgrade/deprecation docs and translated
-  READMEs with those release boundaries, including the v1.7 removals and the
-  unreleased v1.8 SQLite, MQTT identity and auth-strategies changes. Keep
+- SQLite migration, session history, backup and downgrade notes are aligned
+  with the final unreleased v1.8 store. Complete the remaining deprecation
+  and translated README alignment for the v1.7 removals and unreleased v1.8
+  MQTT identity and auth-strategies changes. Keep
   `PUT /api/v1/settings` available until API v2; its `Sunset` date is not
   permission to remove a method from the frozen `/api/v1` contract.
 - Add controller-assisted Portwing rotation to the Unreleased changelog and

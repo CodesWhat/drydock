@@ -10,7 +10,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Before every container update, drydock automatically backs up the current image metadata including the image name, tag, digest, and timestamp. This ensures you always have a record of exactly which image was running prior to each update.
 
-Backups are stored in the LokiJS data store, which is persisted to the `/store` volume. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
+These image-restore backup records live in the SQLite store in unreleased v1.8 builds; v1.7 and earlier use the LokiJS JSON store. The `/store` volume persists them in either case. They describe container images, rather than snapshots of Drydock's database. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
 
 ## Backup Retention
 
