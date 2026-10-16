@@ -79,7 +79,25 @@ and label-backed settings are not made editable by this four-field feature.
 
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
-<Callout type="warn">The former `DD_WATCHER_{watcher_name}_WATCHDIGEST` and `WATCHATSTART` settings were removed in v1.6. Use the `dd.watch.digest` container label for per-container digest watching; startup scans are always scheduled.</Callout>
+<Callout type="warn">The former `DD_WATCHER_{watcher_name}_WATCHDIGEST` and `WATCHATSTART` settings were removed in v1.6 and remain rejected. Use the `dd.watch.digest` container label for per-container digest watching or the new process-wide default below; startup scans are always scheduled.</Callout>
+
+### Digest-watch default {#digest-watch-default}
+
+Set `DD_DEFAULTS_WATCH_DIGEST=false` to turn digest watching off by default for every Docker watcher owned by this Drydock process. Set `dd.watch.digest=true` on the containers that should still detect same-tag image rebuilds. `true` enables digest watching by default, and omitting the setting preserves automatic detection. Only `true` and `false` are accepted; an invalid or empty value prevents startup.
+
+Precedence, highest first: the `dd.watch.digest` container label, a matching image set's `WATCH_DIGEST`, `DD_DEFAULTS_WATCH_DIGEST`, then automatic detection. Explicit `false` values remain overrides, even when the process default is `true`. Turning digest watching off also affects digest-pinned references; tag selection rules are unchanged.
+
+The equivalent `drydock.yml` setting is:
+
+```yaml
+defaults:
+  watch:
+    digest: false
+```
+
+The environment overrides the file. Restart Drydock after changing this default; it is not a live watcher-editor field. Existing stored containers pick up the default on their next discovery refresh.
+
+Agent watchers use their agent process's configuration. Set the same variable or YAML setting on each Drydock agent that should use the default; setting it on the controller does not override remote agents' configuration. Native Portwing watchers continue to use Portwing's own configuration.
 
 <Callout type="warn" title="Watcher frequency and registry rate limits">
 The default cron is `0 */6 * * *` (every 6 hours). With many watched containers and tag lists that paginate to thousands of entries (a single GHCR image can take 20+ paginated calls), polling more often can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger `429` responses. Drydock honors `Retry-After` on 429s and rate-limits its own outbound calls with a per-host token bucket. Set `DD_WATCHER_{watcher_name}_CRON` to change the interval — use `0 * * * *` for near-real-time detection or `0 1 * * *` for once-daily polling. An explicit `CRON` you set is always preserved.

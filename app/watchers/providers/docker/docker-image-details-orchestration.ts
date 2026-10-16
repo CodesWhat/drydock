@@ -1,3 +1,4 @@
+import { getDefaultDigestWatch } from '../../../configuration/index.js';
 import {
   type Container,
   getCanonicalContainerName,
@@ -819,6 +820,7 @@ function resolveContainerImageState(
       tagPrecision,
       tagName,
       container.Image,
+      getDefaultDigestWatch(),
     ),
     repoDigest: repoDigests?.[0],
     repoDigests,

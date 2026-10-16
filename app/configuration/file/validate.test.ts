@@ -244,6 +244,18 @@ describe('validateConfiguration', () => {
   });
 
   describe('section schemas', () => {
+    test('validates YAML digest defaults and reports invalid candidates by their path', async () => {
+      const env = flattenConfigTree({ defaults: { watch: { digest: false } } });
+      expect(env).toEqual({ DD_DEFAULTS_WATCH_DIGEST: 'false' });
+      expect((await validateConfiguration(env)).errors).toEqual([]);
+      const invalid = await validateConfiguration({ DD_DEFAULTS_WATCH_DIGEST: 'sometimes' });
+      expect(invalid.errors).toHaveLength(1);
+      expect(invalid.errors[0]).toMatchObject({
+        path: 'defaults.watch.digest',
+        envKey: 'DD_DEFAULTS_WATCH_DIGEST',
+      });
+    });
+
     test('server: rejects a bad port', async () => {
       const result = await validateConfiguration({ DD_SERVER_PORT: 'not-a-port' });
       expect(result.errors).toHaveLength(1);
