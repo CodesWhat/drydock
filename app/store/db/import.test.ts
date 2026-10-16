@@ -254,6 +254,92 @@ describe('store/db/import', () => {
       db.close();
     });
 
+    test.each([
+      ['dd.json', 'dd-sessions.json'],
+      ['tenant.json', 'tenant-sessions.json'],
+      ['tenant', 'tenant-sessions.json'],
+      ['tenant.store.json', 'tenant.store-sessions.json'],
+      ['nested/tenant.json', 'nested/tenant-sessions.json'],
+    ])('imports sessions paired with %s and preserves their expiry', (file, sessionsFile) => {
+      legacyStorePath = path.join(storeDirectory, file);
+      fs.mkdirSync(path.dirname(legacyStorePath), { recursive: true });
+      const expires = new Date(Date.now() + 60_000).toISOString();
+      const content = { cookie: { expires }, passport: { user: 'alice' } };
+      writeLokiStoreFile(legacyStorePath, [
+        { name: 'secrets', data: [{ sessionSecret: 'original-secret' }] },
+        { name: 'Sessions', data: [{ sid: 'stale-shared', content }] },
+      ]);
+      const sessionsPath = path.join(storeDirectory, sessionsFile);
+      writeLokiStoreFile(sessionsPath, [
+        {
+          name: 'Sessions',
+          data: [
+            { sid: 'live-session', content },
+            { sid: 'expired-session', content: { cookie: { expires: '2000-01-01T00:00:00Z' } } },
+          ],
+        },
+      ]);
+      if (sessionsFile !== 'dd-sessions.json') {
+        writeLokiStoreFile(path.join(storeDirectory, 'dd-sessions.json'), [
+          { name: 'Sessions', data: [{ sid: 'unrelated-default', content }] },
+        ]);
+      }
+      const originalStore = fs.readFileSync(legacyStorePath);
+      const originalSessions = fs.readFileSync(sessionsPath);
+
+      expect(importOnce().rowsByTable.sessions).toBe(1);
+      const db = openDatabase(databasePath);
+      try {
+        expect(db.prepare('SELECT sid, expires_at, data FROM sessions').all()).toEqual([
+          { sid: 'live-session', expires_at: Date.parse(expires), data: JSON.stringify(content) },
+        ]);
+        expect(db.prepare('SELECT session_secret FROM secrets WHERE id = 1').get()).toEqual({
+          session_secret: 'original-secret',
+        });
+      } finally {
+        db.close();
+      }
+      expect(fs.readFileSync(sessionsPath)).toEqual(originalSessions);
+      expect(fs.readFileSync(`${legacyStorePath}${LEGACY_STORE_BACKUP_SUFFIX}`)).toEqual(
+        originalStore,
+      );
+      expect(importOnce().status).toBe('database-exists');
+    });
+
+    test('imports shared-file sessions for a custom store without its own sibling', () => {
+      legacyStorePath = path.join(storeDirectory, 'tenant.json');
+      const expires = new Date(Date.now() + 60_000).toISOString();
+      const content = { cookie: { expires } };
+      writeLokiStoreFile(legacyStorePath, [
+        { name: 'Sessions', data: [{ sid: 'shared', content }] },
+      ]);
+      writeLokiStoreFile(path.join(storeDirectory, 'dd-sessions.json'), [
+        { name: 'Sessions', data: [{ sid: 'unrelated-default', content }] },
+      ]);
+
+      expect(importOnce().rowsByTable.sessions).toBe(1);
+      const db = openDatabase(databasePath);
+      try {
+        expect(db.prepare('SELECT sid FROM sessions').all()).toEqual([{ sid: 'shared' }]);
+      } finally {
+        db.close();
+      }
+    });
+
+    test('fails without publishing a database when the custom session file is unreadable', () => {
+      legacyStorePath = path.join(storeDirectory, 'tenant.json');
+      writeLegacyStore();
+      const sessionsPath = path.join(storeDirectory, 'tenant-sessions.json');
+      fs.writeFileSync(sessionsPath, 'invalid JSON', 'utf8');
+      const before = fs.readFileSync(legacyStorePath);
+
+      expect(() => importOnce()).toThrow(/tenant-sessions.json/);
+      expect(fs.existsSync(databasePath)).toBe(false);
+      expect(fs.existsSync(`${databasePath}.importing`)).toBe(false);
+      expect(fs.readFileSync(legacyStorePath)).toEqual(before);
+      expect(fs.readFileSync(sessionsPath, 'utf8')).toBe('invalid JSON');
+    });
+
     test('fsyncs the store directory after each rename, not before', () => {
       writeLegacyStore();
       const order: string[] = [];

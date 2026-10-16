@@ -185,11 +185,11 @@ function importIntoTemporaryDatabase(
   importingPath: string,
   options: FirstStartImportOptions,
 ): ImportReport {
-  const { storeDirectory, legacyStorePath, importers } = options;
+  const { legacyStorePath, importers } = options;
   let db: Database | undefined;
   try {
     const snapshot = readLokiDatabase(legacyStorePath);
-    const sessionDocuments = resolveLegacySessionDocuments(storeDirectory, snapshot);
+    const sessionDocuments = resolveLegacySessionDocuments(legacyStorePath, snapshot);
     db = openDatabase(importingPath);
     migrate(db);
     const report = importIntoDatabase({
