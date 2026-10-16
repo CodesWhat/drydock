@@ -17,22 +17,6 @@ function generateEd25519PrivateKeyPem(): string {
 }
 
 describe('Agent component', () => {
-  test('managed key rotation is opt-in and requires Ed25519 authentication', () => {
-    const schema = new Agent().getConfigurationSchema();
-    const signed = schema.validate({
-      host: 'remote',
-      authmode: 'ed25519',
-      signingkeyid: '0123456789abcdef',
-      signingkey: generateEd25519PrivateKeyPem(),
-      rotationdir: '/store/managed-keys',
-    });
-    expect(signed.error).toBeUndefined();
-    expect(signed.value.rotationdir).toBe('/store/managed-keys');
-    expect(
-      schema.validate({ host: 'remote', secret: 'example', rotationdir: '/store/managed-keys' })
-        .error,
-    ).toBeDefined();
-  });
   test('getConfigurationSchema should validate valid config', () => {
     const agent = new Agent();
     const schema = agent.getConfigurationSchema();
@@ -304,5 +288,21 @@ describe('env → config → schema (regression: DD_AGENT_<NAME>_* must reach th
 
     expect(masked.signingkey).toBe('[REDACTED]');
     expect(masked.signingkey).not.toBe(signingKeyPem);
+  });
+  test('managed key rotation is opt-in and requires Ed25519 authentication', () => {
+    const schema = new Agent().getConfigurationSchema();
+    const signed = schema.validate({
+      host: 'remote',
+      authmode: 'ed25519',
+      signingkeyid: '0123456789abcdef',
+      signingkey: generateEd25519PrivateKeyPem(),
+      rotationdir: '/store/managed-keys',
+    });
+    expect(signed.error).toBeUndefined();
+    expect(signed.value.rotationdir).toBe('/store/managed-keys');
+    expect(
+      schema.validate({ host: 'remote', secret: 'example', rotationdir: '/store/managed-keys' })
+        .error,
+    ).toBeDefined();
   });
 });
