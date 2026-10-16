@@ -385,3 +385,71 @@ test('refuses abort during an in-flight rotation and shares concurrent recovery 
   release();
   expect(await a).toEqual(await b);
 });
+
+test('restart cannot use a renamed private replacement until its directory write is durable', async () => {
+  const f = fixture();
+  const manager = f.create();
+  const request = vi.fn();
+  const realSync = fs.fsyncSync;
+  vi.spyOn(fs, 'fsyncSync').mockImplementation((fd) => {
+    if (fs.fstatSync(fd).isDirectory()) throw new Error('fixture directory sync unavailable');
+    realSync(fd);
+  });
+  await expect(manager.rotate(request)).rejects.toThrow('directory sync unavailable');
+  expect(request).not.toHaveBeenCalled();
+  expect(manager.hasPending).toBe(false);
+  expect(f.create).toThrow('directory sync unavailable');
+  vi.restoreAllMocks();
+  const resumed = f.create();
+  expect(resumed.hasPending).toBe(true);
+  expect(resumed.identity.keyId).toBe(f.bootstrap.keyId);
+  expect((await resumed.rotate(remote(f).request)).current_key_id).not.toBe(f.bootstrap.keyId);
+});
+
+test('an uncertain abort cannot reuse a private key missing from the renamed managed file', async () => {
+  const f = fixture();
+  const manager = f.create();
+  const peer = remote(f);
+  await expect(
+    manager.rotate(async (identity, action, body) => {
+      if (action === 'commit') throw new Error('leave staged');
+      return peer.request(identity, action, body);
+    }),
+  ).rejects.toThrow('leave staged');
+  const realSync = fs.fsyncSync;
+  let directorySyncs = 0;
+  vi.spyOn(fs, 'fsyncSync').mockImplementation((fd) => {
+    if (fs.fstatSync(fd).isDirectory() && ++directorySyncs === 2)
+      throw new Error('abort directory sync failed');
+    realSync(fd);
+  });
+  await expect(manager.abort(peer.request)).rejects.toThrow('abort directory sync failed');
+  vi.restoreAllMocks();
+  const retry = vi.fn(peer.request);
+  await expect(manager.rotate(retry)).rejects.toThrow('changed');
+  expect(retry).not.toHaveBeenCalled();
+  expect(peer.keys.has(f.bootstrap.keyId)).toBe(true);
+  const recovered = f.create();
+  expect(recovered.hasPending).toBe(false);
+  const result = await recovered.rotate(peer.request);
+  expect(f.create().identity.keyId).toBe(result.current_key_id);
+  expect(peer.keys.has(f.bootstrap.keyId)).toBe(false);
+});
+
+test('rotate cannot receive the result of an in-flight abort', async () => {
+  const f = fixture();
+  const manager = f.create();
+  const peer = remote(f);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const abort = manager.abort(async (identity, action, body) => {
+    await gate;
+    return peer.request(identity, action, body);
+  });
+  const rotate = manager.rotate(peer.request);
+  release();
+  await expect(rotate).rejects.toThrow('already running');
+  expect((await abort).current_key_id).toBe(f.bootstrap.keyId);
+});

@@ -45,6 +45,7 @@ function responseBody(value: unknown): EdgeRotationStatus {
 
 export class EdgeKeyRotationController {
   private inFlight?: Promise<EdgeRotationPublicStatus>;
+  private inFlightAction?: 'rotate' | 'abort';
   constructor(
     private readonly agentName: string,
     private readonly currentKeyId: string,
@@ -64,12 +65,14 @@ export class EdgeKeyRotationController {
 
   rotate(action: 'rotate' | 'abort'): Promise<EdgeRotationPublicStatus> {
     if (this.inFlight) {
-      return action === 'abort'
-        ? Promise.reject(new Error('A key rotation is already running'))
-        : this.inFlight;
+      return action === this.inFlightAction
+        ? this.inFlight
+        : Promise.reject(new Error('A different key rotation operation is already running'));
     }
+    this.inFlightAction = action;
     this.inFlight = this.perform(action).finally(() => {
       this.inFlight = undefined;
+      this.inFlightAction = undefined;
     });
     return this.inFlight;
   }

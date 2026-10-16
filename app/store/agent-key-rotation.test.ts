@@ -129,3 +129,73 @@ test('rotation operations fail closed before the registry is initialized', async
   expect(() => uninitialized.confirmRotationKey('new', 'production')).toThrow('not initialized');
   expect(() => uninitialized.cancelRotationKey('old', 'production')).toThrow('not initialized');
 });
+
+test('a key handoff commits with EXTRA durability before restoring the ordinary store setting', () => {
+  const old = owner();
+  const next = keys.addRotationKey(old.keyId, 'production', pub());
+  const prior = db.pragma('synchronous');
+  expect(prior).toBe(1);
+  const transaction = db.transaction.bind(db);
+  const observed = vi.spyOn(db, 'transaction').mockImplementation((run, mode) => {
+    expect(db.pragma('synchronous')).toBe(3);
+    return transaction(run, mode);
+  });
+  try {
+    expect(keys.confirmRotationKey(next.keyId, 'production')).toBe(old.keyId);
+    expect(observed).toHaveBeenCalledOnce();
+    expect(db.pragma('synchronous')).toBe(prior);
+  } finally {
+    observed.mockRestore();
+  }
+});
+
+test('a missing durability setting refuses the handoff before any credential change', () => {
+  const old = owner();
+  const next = keys.addRotationKey(old.keyId, 'production', pub());
+  const pragma = vi.spyOn(db, 'pragma').mockReturnValueOnce(undefined);
+  try {
+    expect(() => keys.confirmRotationKey(next.keyId, 'production')).toThrow('durability setting');
+  } finally {
+    pragma.mockRestore();
+  }
+  expect(keys.getKey(old.keyId)).not.toBeNull();
+});
+
+test('a failed durability upgrade leaves the original key and pending candidate intact', () => {
+  const old = owner();
+  const next = keys.addRotationKey(old.keyId, 'production', pub());
+  const realPragma = db.pragma.bind(db);
+  const pragma = vi.spyOn(db, 'pragma').mockImplementation((name, value) => {
+    if (name === 'synchronous' && value === 3) throw new Error('durable writes unavailable');
+    return realPragma(name, value);
+  });
+  try {
+    expect(() => keys.confirmRotationKey(next.keyId, 'production')).toThrow(
+      'durable writes unavailable',
+    );
+  } finally {
+    pragma.mockRestore();
+  }
+  expect(keys.getKey(old.keyId)).not.toBeNull();
+  expect(keys.getKey(next.keyId)?.rotationParentId).toBe(old.keyId);
+  expect(bindings.listBindings()[0].keyId).toBe(old.keyId);
+});
+
+test.each(['stage', 'cancel'])('%s also commits credential metadata durably', (action) => {
+  const old = owner();
+  const replacement = pub();
+  if (action === 'cancel') keys.addRotationKey(old.keyId, 'production', replacement);
+  const transaction = db.transaction.bind(db);
+  const observed = vi.spyOn(db, 'transaction').mockImplementation((run, mode) => {
+    expect(db.pragma('synchronous')).toBe(3);
+    return transaction(run, mode);
+  });
+  try {
+    if (action === 'stage') keys.addRotationKey(old.keyId, 'production', replacement);
+    else keys.cancelRotationKey(old.keyId, 'production');
+    expect(observed).toHaveBeenCalledOnce();
+    expect(db.pragma('synchronous')).toBe(1);
+  } finally {
+    observed.mockRestore();
+  }
+});

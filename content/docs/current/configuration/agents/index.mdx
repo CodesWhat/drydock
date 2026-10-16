@@ -575,7 +575,9 @@ Edge returns `202` while the signed reconnect is pending; confirm the new
 current ID after reconnect. No UI action or scheduled rotation is included.
 If proof fails, the old key remains active. Retry reuses the staged key; abort
 cancels only an uncommitted replacement. Preserve managed storage while
-recovering an uncertain result. After an Edge terminal handshake rejection,
+recovering an uncertain result. After a local storage failure, restart the
+controller to reconcile its managed file before trying another rotation.
+A staged private key is checked and durably saved again before remote proof. After an Edge terminal handshake rejection,
 Portwing restores its old signer and retains the replacement for retry.
 
 For Standard mode, keep the original root line in Portwing's operator-owned

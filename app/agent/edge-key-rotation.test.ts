@@ -240,3 +240,26 @@ test('honors negotiated base64 responses and single-flights concurrent rotations
   expect(f.request).toHaveBeenCalledTimes(2);
   expect(f.close).toHaveBeenCalledOnce();
 });
+
+test('rotate cannot receive an in-flight Edge abort result', async () => {
+  const f = fixture();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const controller = new EdgeKeyRotationController(
+    'host',
+    f.old.keyId,
+    async (method, target, body) => {
+      await gate;
+      return f.request(method, target, body);
+    },
+    f.close,
+  );
+  const abort = controller.rotate('abort');
+  const rotate = controller.rotate('rotate');
+  release();
+  await expect(rotate).rejects.toThrow('already running');
+  expect((await abort).phase).toBe('aborted');
+  expect(f.close).not.toHaveBeenCalled();
+});

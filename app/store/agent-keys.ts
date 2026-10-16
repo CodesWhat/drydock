@@ -190,6 +190,19 @@ export function getPendingRotation(parentId: string, agentName: string): AgentKe
   return row ? rowToRecord(row) : null;
 }
 
+function durableRotationWrite<T>(database: Database, operation: () => T): T {
+  const ordinarySync = database.pragma('synchronous');
+  if (typeof ordinarySync !== 'number')
+    throw new Error('Cannot determine credential durability setting');
+  // Credential changes must survive power loss before either peer retires a key.
+  database.pragma('synchronous', 3);
+  try {
+    return database.transaction(operation);
+  } finally {
+    database.pragma('synchronous', ordinarySync);
+  }
+}
+
 export function addRotationKey(
   parentId: string,
   agentName: string,
@@ -197,7 +210,7 @@ export function addRotationKey(
 ): AgentKeyRecord {
   const database = db;
   if (!database) throw new Error('agent-keys collection not initialized');
-  return database.transaction(() => {
+  return durableRotationWrite(database, () => {
     assertExclusiveRotationOwner(parentId, agentName);
     const existing = getPendingRotation(parentId, agentName);
     if (existing) {
@@ -219,7 +232,7 @@ export function addRotationKey(
 export function confirmRotationKey(keyId: string, agentName: string): string | undefined {
   const database = db;
   if (!database) throw new Error('agent-keys collection not initialized');
-  return database.transaction(() => {
+  return durableRotationWrite(database, () => {
     const key = getKey(keyId);
     if (!key) throw new AgentKeyConflictError('Replacement key is not active');
     if (!key.rotationParentId) return undefined;
@@ -248,9 +261,12 @@ export function confirmRotationKey(keyId: string, agentName: string): string | u
 }
 
 export function cancelRotationKey(parentId: string, agentName: string): boolean {
-  if (!db) throw new Error('agent-keys collection not initialized');
-  const pending = getPendingRotation(parentId, agentName);
-  return pending ? revokeKey(pending.keyId) : false;
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    const pending = getPendingRotation(parentId, agentName);
+    return pending ? revokeKey(pending.keyId) : false;
+  });
 }
 
 /**

@@ -56,9 +56,20 @@ function readPrivateState(file: string): string | undefined {
         'Managed signing credentials require a regular private file of at most 64 KiB',
       );
     }
-    return fs.readFileSync(fd, 'utf8');
+    const serialized = fs.readFileSync(fd, 'utf8');
+    syncPrivateDirectory(file);
+    return serialized;
   } finally {
     fs.closeSync(fd);
+  }
+}
+
+function syncPrivateDirectory(file: string): void {
+  const directory = fs.openSync(path.dirname(file), 'r');
+  try {
+    fs.fsyncSync(directory);
+  } finally {
+    fs.closeSync(directory);
   }
 }
 
@@ -73,12 +84,7 @@ function writePrivateState(file: string, serialized: string): void {
       fs.closeSync(fd);
     }
     fs.renameSync(temporary, file);
-    const directory = fs.openSync(path.dirname(file), 'r');
-    try {
-      fs.fsyncSync(directory);
-    } finally {
-      fs.closeSync(directory);
-    }
+    syncPrivateDirectory(file);
   } finally {
     fs.rmSync(temporary, { force: true });
   }
@@ -91,6 +97,7 @@ export class StandardKeyRotation {
   private serialized?: string;
   private active: RotationIdentity;
   private inFlight?: Promise<KeyRotationStatus>;
+  private inFlightKind?: 'rotate' | 'abort';
 
   constructor(
     directory: string,
@@ -155,12 +162,11 @@ export class StandardKeyRotation {
   }
 
   rotate(request: RotationRequest): Promise<KeyRotationStatus> {
-    return this.runOnce(() => this.performRotation(request));
+    return this.runOnce('rotate', () => this.performRotation(request));
   }
 
   abort(request: RotationRequest): Promise<KeyRotationStatus> {
-    if (this.inFlight) return Promise.reject(new Error('A key rotation is already running'));
-    return this.runOnce(async () => {
+    return this.runOnce('abort', async () => {
       const current = identityFromPem(this.state.currentPem);
       const result = await request(current, 'abort');
       this.requireStatus(result, current.keyId, undefined);
@@ -169,10 +175,19 @@ export class StandardKeyRotation {
     });
   }
 
-  private runOnce(operation: () => Promise<KeyRotationStatus>): Promise<KeyRotationStatus> {
-    if (this.inFlight) return this.inFlight;
+  private runOnce(
+    kind: 'rotate' | 'abort',
+    operation: () => Promise<KeyRotationStatus>,
+  ): Promise<KeyRotationStatus> {
+    if (this.inFlight) {
+      return kind === this.inFlightKind
+        ? this.inFlight
+        : Promise.reject(new Error('A different key rotation operation is already running'));
+    }
+    this.inFlightKind = kind;
     this.inFlight = operation().finally(() => {
       this.inFlight = undefined;
+      this.inFlightKind = undefined;
     });
     return this.inFlight;
   }
@@ -184,6 +199,8 @@ export class StandardKeyRotation {
         ...this.state,
         pendingPem: privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
       });
+    } else {
+      this.persist(this.state);
     }
     const current = identityFromPem(this.state.currentPem);
     const pending = identityFromPem(this.state.pendingPem as string);
