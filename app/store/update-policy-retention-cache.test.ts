@@ -35,6 +35,27 @@ describe('createCollections', () => {
 });
 
 describe('upsertRecord', () => {
+  test('round-trips release maturity overrides in durable replacement retention', () => {
+    updatePolicyRetentionCache.createCollections(db);
+    const updatePolicyOverrides = {
+      maturityMode: 'mature' as const,
+      maturitySkipReleases: 2,
+      maturityReleaseFallbackDays: 10,
+    };
+    updatePolicyRetentionCache.upsertRecord({
+      cacheKey: 'agent::local::web',
+      updatePolicyOverrides,
+      expiresAt: 1_000,
+    });
+    expect(updatePolicyRetentionCache.listRecords()[0].updatePolicyOverrides).toEqual(
+      updatePolicyOverrides,
+    );
+    updatePolicyRetentionCache.clearCollectionForTesting();
+    updatePolicyRetentionCache.createCollections(db);
+    expect(updatePolicyRetentionCache.listRecords()[0].updatePolicyOverrides).toEqual(
+      updatePolicyOverrides,
+    );
+  });
   test('inserts a new record when none exists for the cacheKey', () => {
     updatePolicyRetentionCache.createCollections(db);
 

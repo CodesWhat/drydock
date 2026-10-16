@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Вікно обслуговування закрито",
         "group-notify-only": "Група дозволяє лише сповіщення",
         "group-manual-only": "Група вимагає ручних оновлень",
-        "dry-run-trigger": "Конфігурація тригера в режимі dry-run"
+        "dry-run-trigger": "Конфігурація тригера в режимі dry-run",
+        "maturity-releases-not-reached": "Політика зрілості очікує"
       },
       "actions": {
         "editPolicy": "Редагувати політику оновлення",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Налаштувати самооновлення",
         "configureMaintenance": "Налаштувати вікно обслуговування",
         "editGroupPolicy": "Редагувати політику групи"
-      }
+      },
+      "releaseMaturityCount": "Очікування стабільних випусків родини {family}: доступно {count} із {required} попередніх випусків.",
+      "releaseMaturityUnavailable": "Дані про випуск кандидата недоступні. Автоматичні оновлення призупинено."
     },
     "maturityBadge": {
       "new": "Виявлено {duration} тому"

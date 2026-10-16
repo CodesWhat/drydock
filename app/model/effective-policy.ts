@@ -42,6 +42,8 @@ interface EffectivePolicyField<T> {
 interface EffectiveUpdatePolicy {
   maturityMode: EffectivePolicyField<'all' | 'mature'>;
   maturityMinAgeDays: EffectivePolicyField<number>;
+  maturitySkipReleases: EffectivePolicyField<number>;
+  maturityReleaseFallbackDays: EffectivePolicyField<number>;
   skipTags: EffectivePolicyField<string[]>;
   skipDigests: EffectivePolicyField<string[]>;
   snoozeUntil: { value: string | null; source: 'default' | 'override' };
@@ -99,6 +101,8 @@ export interface EffectivePolicyContext {
 const FIELD_DEFAULTS = {
   maturityMode: 'all',
   maturityMinAgeDays: DEFAULT_MATURITY_MIN_AGE_DAYS,
+  maturitySkipReleases: 0,
+  maturityReleaseFallbackDays: 0,
   skipTags: [],
   skipDigests: [],
 } as const;
@@ -136,14 +140,12 @@ function resolveEffectiveUpdatePolicy(container: Container): EffectiveUpdatePoli
   const group = container.groupPolicy?.updatePolicy;
   const resolved = resolveUpdatePolicyLayers(declarative, overrides, group);
   const layers = { env: declarative.env, group, label: declarative.label, override: overrides };
-  const [maturityMode, maturityMinAgeDays, skipTags, skipDigests] =
-    DECLARATIVE_UPDATE_POLICY_FIELDS.map((field) => resolveField(field, layers, resolved));
+  const fields = Object.fromEntries(
+    DECLARATIVE_UPDATE_POLICY_FIELDS.map((field) => [field, resolveField(field, layers, resolved)]),
+  );
   const snoozeUntil = resolved.updatePolicy?.snoozeUntil;
   return {
-    maturityMode,
-    maturityMinAgeDays,
-    skipTags,
-    skipDigests,
+    ...fields,
     snoozeUntil:
       snoozeUntil === undefined
         ? { value: null, source: 'default' }

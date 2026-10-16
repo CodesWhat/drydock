@@ -9,6 +9,7 @@ import type {
 import { isPinGateGoverned } from '../tag/family.js';
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
+import type { ReleaseMaturityEvidence } from '../tag/version-population.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
@@ -16,10 +17,12 @@ import type {
 } from './container-update-operation.js';
 import type { LabelOwnedState } from './label-owned.js';
 import {
-  getMaturityStartMs,
   getUpdateAgeMs,
+  isMaturityGatePending,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
+  MATURITY_RELEASE_FALLBACK_DAYS_MAX,
+  MATURITY_SKIP_RELEASES_MAX,
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
@@ -94,6 +97,7 @@ export interface ContainerResult {
   digest?: string;
   created?: string;
   softwareVersion?: string;
+  releaseMaturity?: ReleaseMaturityEvidence;
   publishedAt?: string;
   publishedAtTrusted?: boolean;
   link?: string;
@@ -128,6 +132,8 @@ export interface ContainerDeclarativeUpdatePolicy {
   skipDigests?: string[];
   maturityMode?: 'all' | 'mature';
   maturityMinAgeDays?: number;
+  maturitySkipReleases?: number;
+  maturityReleaseFallbackDays?: number;
 }
 
 export interface ContainerUpdatePolicy extends ContainerDeclarativeUpdatePolicy {
@@ -378,6 +384,12 @@ export const containerDeclarativeUpdatePolicySchema = joi.object({
   skipTags: joi.array().items(joi.string()),
   skipDigests: joi.array().items(joi.string()),
   maturityMode: joi.string().valid('all', 'mature'),
+  maturitySkipReleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+  maturityReleaseFallbackDays: joi
+    .number()
+    .integer()
+    .min(0)
+    .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
   maturityMinAgeDays: joi
     .number()
     .integer()
@@ -428,6 +440,12 @@ const schema = joi.object({
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
+    maturitySkipReleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+    maturityReleaseFallbackDays: joi
+      .number()
+      .integer()
+      .min(0)
+      .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
     maturityMinAgeDays: joi
       .number()
       .integer()
@@ -443,6 +461,12 @@ const schema = joi.object({
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
+    maturitySkipReleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+    maturityReleaseFallbackDays: joi
+      .number()
+      .integer()
+      .min(0)
+      .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
     maturityMinAgeDays: joi
       .number()
       .integer()
@@ -454,6 +478,8 @@ const schema = joi.object({
     skipDigests: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
     maturityMode: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
     maturityMinAgeDays: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturitySkipReleases: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturityReleaseFallbackDays: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
   }),
   groupPolicy: joi.object({
     id: joi.string().min(1).required(),
@@ -524,6 +550,11 @@ const schema = joi.object({
     digest: joi.string(),
     created: joi.string().isoDate(),
     softwareVersion: joi.string().max(256),
+    releaseMaturity: joi.object({
+      version: joi.string().max(256).required(),
+      family: joi.string().max(256).required(),
+      earlierReleases: joi.number().integer().min(0).max(Number.MAX_SAFE_INTEGER).required(),
+    }),
     publishedAt: joi.string().isoDate(),
     publishedAtTrusted: joi.boolean(),
     link: joi.string(),
@@ -746,13 +777,8 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     }
   }
 
-  if (updatePolicy.maturityMode === 'mature') {
-    const maturityStartMs = getMaturityStartMs(container);
-    const maturityMinAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
-    const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
-    if (maturityStartMs === undefined || Date.now() - maturityStartMs < maturityMinAgeMs) {
-      return true;
-    }
+  if (isMaturityGatePending(container)) {
+    return true;
   }
 
   if (

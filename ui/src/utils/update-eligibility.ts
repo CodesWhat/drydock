@@ -25,6 +25,7 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'skip-tag': 'soft',
   'skip-digest': 'soft',
   'maturity-not-reached': 'soft',
+  'maturity-releases-not-reached': 'soft',
   'threshold-not-reached': 'soft',
   // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
   'trigger-excluded': 'hard',
@@ -37,6 +38,45 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
 
 export function severityOf(blocker: UpdateBlocker): UpdateBlockerSeverity {
   return blocker.severity ?? BLOCKER_SEVERITY[blocker.reason] ?? 'hard';
+}
+
+export function formatReleaseMaturityMessage(
+  blocker: UpdateBlocker,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  const details = blocker.details ?? {};
+  if (details.evidenceAvailable === false) {
+    return t('containerComponents.updateStatus.releaseMaturityUnavailable');
+  }
+  if (
+    details.evidenceAvailable === true &&
+    typeof details.family === 'string' &&
+    typeof details.earlierReleases === 'number' &&
+    typeof details.requiredReleases === 'number'
+  ) {
+    return t('containerComponents.updateStatus.releaseMaturityCount', {
+      family: details.family,
+      count: details.earlierReleases,
+      required: details.requiredReleases,
+    });
+  }
+  return blocker.message;
+}
+
+export function findBackendReleaseMaturityBlocker(
+  container: { updateEligibility?: unknown } | Record<string, unknown>,
+): UpdateBlocker | undefined {
+  const eligibility = container.updateEligibility;
+  if (!eligibility || typeof eligibility !== 'object') return undefined;
+  const blockers = (eligibility as { blockers?: unknown }).blockers;
+  if (!Array.isArray(blockers)) return undefined;
+  return blockers.find(
+    (candidate) =>
+      candidate &&
+      typeof candidate === 'object' &&
+      candidate.reason === 'maturity-releases-not-reached' &&
+      typeof candidate.message === 'string',
+  );
 }
 
 export function getHardBlockers(eligibility: UpdateEligibility | undefined): UpdateBlocker[] {
@@ -121,7 +161,8 @@ export function findBackendMaturityBlocked(
     (blocker) =>
       !!blocker &&
       typeof blocker === 'object' &&
-      (blocker as { reason?: unknown }).reason === 'maturity-not-reached',
+      ((blocker as { reason?: unknown }).reason === 'maturity-not-reached' ||
+        (blocker as { reason?: unknown }).reason === 'maturity-releases-not-reached'),
   );
 }
 

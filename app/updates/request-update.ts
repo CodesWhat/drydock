@@ -261,6 +261,7 @@ const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'skip-tag': 409,
   'skip-digest': 409,
   'maturity-not-reached': 409,
+  'maturity-releases-not-reached': 409,
   'threshold-not-reached': 409,
   'trigger-excluded': 409,
   'trigger-not-included': 409,

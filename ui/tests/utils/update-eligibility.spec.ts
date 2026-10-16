@@ -3,6 +3,8 @@ import { mapApiContainer } from '@/utils/container-mapper';
 import {
   BLOCKER_SEVERITY,
   findBackendMaturityBlocked,
+  findBackendReleaseMaturityBlocker,
+  formatReleaseMaturityMessage,
   getHardBlockers,
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -385,6 +387,51 @@ describe('hasRawUpdateCandidate', () => {
 });
 
 describe('findBackendMaturityBlocked', () => {
+  it('ignores malformed release blocker payloads when building policy tooltips', () => {
+    for (const updateEligibility of [
+      undefined,
+      'invalid',
+      {},
+      { blockers: 'invalid' },
+      {
+        blockers: [
+          null,
+          'invalid',
+          { reason: 'maturity-not-reached' },
+          { reason: 'maturity-releases-not-reached' },
+        ],
+      },
+    ]) {
+      expect(findBackendReleaseMaturityBlocker({ updateEligibility })).toBeUndefined();
+    }
+  });
+
+  it('keeps the server message when release details are absent or incomplete', () => {
+    for (const details of [
+      undefined,
+      {},
+      { evidenceAvailable: true },
+      { evidenceAvailable: true, family: '2', earlierReleases: '1', requiredReleases: 2 },
+      { evidenceAvailable: true, family: '2', earlierReleases: 1, requiredReleases: '2' },
+    ]) {
+      expect(
+        formatReleaseMaturityMessage(
+          makeBlocker({ message: 'Waiting for release data', details }),
+          (key) => key,
+        ),
+      ).toBe('Waiting for release data');
+    }
+  });
+  it('recognizes release-count holds and preserves their manual soft bypass on older payloads', () => {
+    const blocker = makeBlocker({
+      reason: 'maturity-releases-not-reached' as never,
+      severity: undefined,
+    });
+    expect(
+      findBackendMaturityBlocked({ updateEligibility: makeEligibility({ blockers: [blocker] }) }),
+    ).toBe(true);
+    expect(severityOf(blocker)).toBe('soft');
+  });
   it('returns undefined when updateEligibility is absent', () => {
     expect(findBackendMaturityBlocked({})).toBeUndefined();
   });

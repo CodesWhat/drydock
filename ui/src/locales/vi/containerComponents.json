@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Cửa sổ bảo trì đã đóng",
         "group-notify-only": "Nhóm chỉ cho phép thông báo",
         "group-manual-only": "Nhóm yêu cầu cập nhật thủ công",
-        "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run"
+        "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run",
+        "maturity-releases-not-reached": "Chính sách độ chín đang chờ"
       },
       "actions": {
         "editPolicy": "Chỉnh sửa chính sách cập nhật",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Cấu hình tự cập nhật",
         "configureMaintenance": "Cấu hình cửa sổ bảo trì",
         "editGroupPolicy": "Chỉnh sửa chính sách nhóm"
-      }
+      },
+      "releaseMaturityCount": "Đang chờ bản phát hành ổn định trong họ {family}: có {count} trong số {required} bản phát hành trước đó.",
+      "releaseMaturityUnavailable": "Không có dữ liệu phát hành cho bản ứng viên. Các cập nhật tự động vẫn bị giữ lại."
     },
     "maturityBadge": {
       "new": "Phát hiện {duration} trước"

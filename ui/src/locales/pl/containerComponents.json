@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Okno konserwacji zamknięte",
         "group-notify-only": "Grupa zezwala tylko na powiadomienia",
         "group-manual-only": "Grupa wymaga ręcznych aktualizacji",
-        "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run"
+        "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run",
+        "maturity-releases-not-reached": "Polityka dojrzałości oczekuje"
       },
       "actions": {
         "editPolicy": "Edytuj politykę aktualizacji",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Skonfiguruj samoaktualizację",
         "configureMaintenance": "Skonfiguruj okno konserwacji",
         "editGroupPolicy": "Edytuj zasady grupy"
-      }
+      },
+      "releaseMaturityCount": "Oczekiwanie na stabilne wydania w rodzinie {family}: dostępnych wcześniejszych wydań: {count} z {required}.",
+      "releaseMaturityUnavailable": "Dane wydania kandydata są niedostępne. Aktualizacje automatyczne pozostają wstrzymane."
     },
     "maturityBadge": {
       "new": "Wykryto {duration} temu"

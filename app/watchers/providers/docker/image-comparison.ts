@@ -14,7 +14,7 @@ import { isCredentialedInstance } from '../../../registry/index.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
-import { getTagCandidates } from './tag-candidates.js';
+import { getReleaseMaturityEvidenceForContainer, getTagCandidates } from './tag-candidates.js';
 
 interface ContainerTagLookupProvider {
   normalizeImage: (image: ContainerImage) => ContainerImage;
@@ -483,6 +483,16 @@ export async function findNewVersion(
       logContainer.warn(`Digest watch failed (${errorMessage})`);
       container.error = { message: errorMessage };
     }
+  }
+
+  const releaseMaturity = getReleaseMaturityEvidenceForContainer(
+    container,
+    tags,
+    result,
+    logContainer,
+  );
+  if (releaseMaturity) {
+    result.releaseMaturity = releaseMaturity;
   }
 
   const publishedTag = result.tag || container.image.tag.value;

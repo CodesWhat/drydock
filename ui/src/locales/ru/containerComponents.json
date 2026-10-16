@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Окно обслуживания закрыто",
         "group-notify-only": "Группа разрешает только уведомления",
         "group-manual-only": "Группа требует ручных обновлений",
-        "dry-run-trigger": "Конфигурация триггера в режиме dry-run"
+        "dry-run-trigger": "Конфигурация триггера в режиме dry-run",
+        "maturity-releases-not-reached": "Ожидание политики зрелости"
       },
       "actions": {
         "editPolicy": "Изменить политику обновления",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Настроить самообновление",
         "configureMaintenance": "Настроить окно обслуживания",
         "editGroupPolicy": "Изменить политику группы"
-      }
+      },
+      "releaseMaturityCount": "Ожидание стабильных выпусков семейства {family}: доступно {count} из {required} предыдущих выпусков.",
+      "releaseMaturityUnavailable": "Данные о выпуске кандидата недоступны. Автоматические обновления приостановлены."
     },
     "maturityBadge": {
       "new": "Обнаружено {duration} назад"

@@ -507,7 +507,8 @@
         "maintenance-window-closed": "維護視窗已關閉",
         "group-notify-only": "群組僅允許通知",
         "group-manual-only": "群組要求手動更新",
-        "dry-run-trigger": "觸發器設定處於 dry-run 模式"
+        "dry-run-trigger": "觸發器設定處於 dry-run 模式",
+        "maturity-releases-not-reached": "成熟度策略等待中"
       },
       "actions": {
         "editPolicy": "編輯更新策略",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "設定自我更新",
         "configureMaintenance": "設定維護視窗",
         "editGroupPolicy": "編輯群組政策"
-      }
+      },
+      "releaseMaturityCount": "正在等待版本系列 {family} 的穩定版：已確認 {count} 個較早版本，需要 {required} 個。",
+      "releaseMaturityUnavailable": "無法取得候選版本的發行資訊。自動更新仍處於保留狀態。"
     },
     "maturityBadge": {
       "new": "{duration}前偵測到"

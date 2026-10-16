@@ -5,6 +5,8 @@ import {
   daysToMs,
   normalizeMaturityMode,
   parseMaturityMinAgeDays,
+  parseMaturityReleaseFallbackDays,
+  parseMaturitySkipReleases,
   resolveMaturityMinAgeDays,
 } from '../../model/maturity-policy.js';
 import {
@@ -36,12 +38,16 @@ const INVALID_SNOOZE_UNTIL_ERROR = 'Invalid snoozeUntil date';
 const INVALID_SNOOZE_DAYS_ERROR = 'Invalid snooze days value';
 const INVALID_MATURITY_MODE_ERROR = 'Invalid maturity mode; expected "all" or "mature"';
 const INVALID_MATURITY_DAYS_ERROR = 'Invalid maturity minAgeDays value';
+const INVALID_MATURITY_RELEASES_ERROR = 'Invalid maturity skipReleases value';
+const INVALID_MATURITY_FALLBACK_ERROR = 'Invalid maturity releaseFallbackDays value';
 const GENERIC_UPDATE_POLICY_ERROR = 'Failed to update container policy';
 const SAFE_CLIENT_ERRORS = new Set([
   INVALID_SNOOZE_UNTIL_ERROR,
   INVALID_SNOOZE_DAYS_ERROR,
   INVALID_MATURITY_MODE_ERROR,
   INVALID_MATURITY_DAYS_ERROR,
+  INVALID_MATURITY_RELEASES_ERROR,
+  INVALID_MATURITY_FALLBACK_ERROR,
 ]);
 
 type UpdatePolicyActionResult = { policy: ContainerUpdatePolicy } | { error: string };
@@ -92,6 +98,14 @@ function normalizeUpdatePolicy(
   if (maturityMinAgeDays !== undefined) {
     normalizedPolicy.maturityMinAgeDays = maturityMinAgeDays;
   }
+  const maturitySkipReleases = parseMaturitySkipReleases(updatePolicy.maturitySkipReleases);
+  if (maturitySkipReleases !== undefined)
+    normalizedPolicy.maturitySkipReleases = maturitySkipReleases;
+  const maturityReleaseFallbackDays = parseMaturityReleaseFallbackDays(
+    updatePolicy.maturityReleaseFallbackDays,
+  );
+  if (maturityReleaseFallbackDays !== undefined)
+    normalizedPolicy.maturityReleaseFallbackDays = maturityReleaseFallbackDays;
 
   return normalizedPolicy;
 }
@@ -150,11 +164,14 @@ function applyLayeredPolicyAction(
         body,
         effective.maturityMinAgeDays ?? DEFAULT_MATURITY_MIN_AGE_DAYS,
       );
+      applyReleaseMaturityFields(overrides, body);
       return { policy: overrides };
     }
     case 'clear-maturity-policy':
       overrides.maturityMode = 'all';
       delete overrides.maturityMinAgeDays;
+      delete overrides.maturitySkipReleases;
+      delete overrides.maturityReleaseFallbackDays;
       return { policy: overrides };
     case 'revert-to-declarative':
       if (body.field !== undefined) {
@@ -163,15 +180,14 @@ function applyLayeredPolicyAction(
         }
         delete overrides[body.field];
       } else {
-        delete overrides.maturityMode;
-        delete overrides.maturityMinAgeDays;
-        delete overrides.skipTags;
-        delete overrides.skipDigests;
+        for (const field of DECLARATIVE_UPDATE_POLICY_FIELDS) delete overrides[field];
       }
       return { policy: overrides };
     case 'clear':
       overrides.maturityMode = 'all';
       delete overrides.maturityMinAgeDays;
+      delete overrides.maturitySkipReleases;
+      delete overrides.maturityReleaseFallbackDays;
       overrides.skipTags = [];
       overrides.skipDigests = [];
       delete overrides.snoozeUntil;
@@ -221,6 +237,19 @@ function getMaturityMinAgeDaysFromActionPayload(
     throw new Error(INVALID_MATURITY_DAYS_ERROR);
   }
   return minAgeDays;
+}
+
+function applyReleaseMaturityFields(policy: ContainerUpdatePolicy, body: Record<string, unknown>) {
+  if (body.skipReleases !== undefined) {
+    const count = parseMaturitySkipReleases(body.skipReleases);
+    if (count === undefined) throw new TypeError(INVALID_MATURITY_RELEASES_ERROR);
+    policy.maturitySkipReleases = count;
+  }
+  if (body.releaseFallbackDays !== undefined) {
+    const days = parseMaturityReleaseFallbackDays(body.releaseFallbackDays);
+    if (days === undefined) throw new TypeError(INVALID_MATURITY_FALLBACK_ERROR);
+    policy.maturityReleaseFallbackDays = days;
+  }
 }
 
 function applySkipCurrentAction(
@@ -312,11 +341,14 @@ function applyPolicyAction(
         body,
         updatePolicy.maturityMinAgeDays ?? DEFAULT_MATURITY_MIN_AGE_DAYS,
       );
+      applyReleaseMaturityFields(updatePolicy, body);
       return { policy: updatePolicy };
     }
     case 'clear-maturity-policy':
       delete updatePolicy.maturityMode;
       delete updatePolicy.maturityMinAgeDays;
+      delete updatePolicy.maturitySkipReleases;
+      delete updatePolicy.maturityReleaseFallbackDays;
       return { policy: updatePolicy };
     default:
       return { error: `Unknown action ${action}` };

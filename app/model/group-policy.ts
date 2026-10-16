@@ -14,7 +14,12 @@ import {
   containerDeclarativeUpdatePolicySchema,
   containerGroupPolicyActionsSchema,
 } from './container.js';
-import { normalizeMaturityMode, parseMaturityMinAgeDays } from './maturity-policy.js';
+import {
+  normalizeMaturityMode,
+  parseMaturityMinAgeDays,
+  parseMaturityReleaseFallbackDays,
+  parseMaturitySkipReleases,
+} from './maturity-policy.js';
 
 export type GroupPolicyUpdatePolicy = ContainerDeclarativeUpdatePolicy;
 export type GroupPolicyActions = ContainerGroupPolicyActions;
@@ -84,6 +89,16 @@ export function normalizeGroupPolicyUpdatePolicy(input: unknown): GroupPolicyUpd
   const maturityMinAgeDays = parseMaturityMinAgeDays(value.maturityMinAgeDays);
   if (maturityMinAgeDays !== undefined) {
     normalized.maturityMinAgeDays = maturityMinAgeDays;
+  }
+  const maturitySkipReleases = parseMaturitySkipReleases(value.maturitySkipReleases);
+  if (maturitySkipReleases !== undefined) {
+    normalized.maturitySkipReleases = maturitySkipReleases;
+  }
+  const maturityReleaseFallbackDays = parseMaturityReleaseFallbackDays(
+    value.maturityReleaseFallbackDays,
+  );
+  if (maturityReleaseFallbackDays !== undefined) {
+    normalized.maturityReleaseFallbackDays = maturityReleaseFallbackDays;
   }
   const skipTags = normalizeSkipList(value.skipTags);
   if (skipTags) {

@@ -637,9 +637,18 @@ export const containerPaths = {
                 snoozeUntil: { type: 'string', format: 'date-time' },
                 mode: { type: 'string', enum: ['all', 'mature'] },
                 minAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+                skipReleases: { type: 'integer', minimum: 0, maximum: 100 },
+                releaseFallbackDays: { type: 'integer', minimum: 0, maximum: 365 },
                 field: {
                   type: 'string',
-                  enum: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'],
+                  enum: [
+                    'maturityMode',
+                    'maturityMinAgeDays',
+                    'maturitySkipReleases',
+                    'maturityReleaseFallbackDays',
+                    'skipTags',
+                    'skipDigests',
+                  ],
                   description:
                     'Override field to revert; omit to revert all declarative policy overrides.',
                 },

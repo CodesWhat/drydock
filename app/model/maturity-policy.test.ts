@@ -63,6 +63,77 @@ describe('model/maturity-policy', () => {
   });
 });
 
+describe('release-count maturity gate', () => {
+  const now = Date.parse('2026-08-20T00:00:00Z');
+  const candidate = (ageDays: number, earlierReleases?: number, fallbackDays?: number) => ({
+    updateDetectedAt: new Date(now - daysToMs(ageDays)).toISOString(),
+    updatePolicy: {
+      maturityMode: 'mature' as const,
+      maturityMinAgeDays: 5,
+      maturitySkipReleases: 2,
+      ...(fallbackDays !== undefined ? { maturityReleaseFallbackDays: fallbackDays } : {}),
+    },
+    result: {
+      ...(earlierReleases !== undefined
+        ? { releaseMaturity: { version: '2026.8.2', family: '2026.8', earlierReleases } }
+        : {}),
+    },
+  });
+
+  test('holds an old enough update until the release count is met', () => {
+    expect(isMaturityGatePending(candidate(6, 1), now)).toBe(true);
+    expect(isMaturityGatePending(candidate(6, 2), now)).toBe(false);
+  });
+
+  test('does not let release count bypass the existing day gate', () => {
+    expect(isMaturityGatePending(candidate(4, 2), now)).toBe(true);
+    expect(isMaturityGatePending(candidate(5, 2), now)).toBe(false);
+  });
+
+  test('holds unknown evidence, including reports from older agents', () => {
+    expect(isMaturityGatePending(candidate(90), now)).toBe(true);
+  });
+
+  test('allows an explicit age escape without accelerating the day gate', () => {
+    expect(isMaturityGatePending(candidate(9, 0, 10), now)).toBe(true);
+    expect(isMaturityGatePending(candidate(10, 0, 10), now)).toBe(false);
+    expect(isMaturityGatePending(candidate(10, undefined, 10), now)).toBe(false);
+    expect(isMaturityGatePending(candidate(3, 0, 2), now)).toBe(true);
+    expect(isMaturityGatePending(candidate(5, 0, 2), now)).toBe(false);
+  });
+
+  test('zero skip count and all mode preserve their existing behavior', () => {
+    const noCountGate = candidate(6);
+    noCountGate.updatePolicy.maturitySkipReleases = 0;
+    expect(isMaturityGatePending(noCountGate, now)).toBe(false);
+    expect(
+      isMaturityGatePending({ ...candidate(0), updatePolicy: { maturityMode: 'all' } }, now),
+    ).toBe(false);
+  });
+
+  test('fallback requires a known clock and respects publishedAt trust', () => {
+    const missingClock = { ...candidate(10, 0, 10), updateDetectedAt: undefined };
+    expect(isMaturityGatePending(missingClock, now)).toBe(true);
+    const untrustedPublish = {
+      ...candidate(6, 0, 10),
+      result: {
+        publishedAt: new Date(now - daysToMs(20)).toISOString(),
+        publishedAtTrusted: false,
+      },
+    };
+    expect(isMaturityGatePending(untrustedPublish, now)).toBe(true);
+    expect(
+      isMaturityGatePending(
+        {
+          ...untrustedPublish,
+          result: { ...untrustedPublish.result, publishedAtTrusted: true },
+        },
+        now,
+      ),
+    ).toBe(false);
+  });
+});
+
 describe('getMaturityStartMs', () => {
   const NOW = new Date('2026-04-23T12:00:00.000Z').getTime();
 

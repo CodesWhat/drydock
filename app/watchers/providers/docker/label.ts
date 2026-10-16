@@ -32,6 +32,9 @@ export const ddTagPinInfo = 'dd.tag.pin.info';
 
 export const ddUpdatePolicyMaturityMode = 'dd.updatePolicy.maturityMode';
 export const ddUpdatePolicyMaturityMinAgeDays = 'dd.updatePolicy.maturityMinAgeDays';
+export const ddUpdatePolicyMaturitySkipReleases = 'dd.updatePolicy.maturitySkipReleases';
+export const ddUpdatePolicyMaturityReleaseFallbackDays =
+  'dd.updatePolicy.maturityReleaseFallbackDays';
 export const ddUpdatePolicySkipTags = 'dd.updatePolicy.skipTags';
 export const ddUpdatePolicySkipDigests = 'dd.updatePolicy.skipDigests';
 

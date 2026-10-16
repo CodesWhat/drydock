@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Maintenance window closed",
         "group-notify-only": "Group allows notifications only",
         "group-manual-only": "Group requires manual updates",
-        "dry-run-trigger": "Dry-run trigger configuration"
+        "dry-run-trigger": "Dry-run trigger configuration",
+        "maturity-releases-not-reached": "Maturity policy waiting"
       },
       "actions": {
         "editPolicy": "Edit update policy",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Configure self-update",
         "configureMaintenance": "Configure maintenance window",
         "editGroupPolicy": "Edit group policy"
-      }
+      },
+      "releaseMaturityCount": "Waiting for stable releases in family {family}: {count} of {required} earlier releases available.",
+      "releaseMaturityUnavailable": "Candidate release evidence is unavailable. Automatic updates are held."
     },
     "maturityBadge": {
       "new": "Detected {duration} ago"

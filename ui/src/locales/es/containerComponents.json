@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Ventana de mantenimiento cerrada",
         "group-notify-only": "El grupo solo permite notificaciones",
         "group-manual-only": "El grupo exige actualizaciones manuales",
-        "dry-run-trigger": "Configuración del trigger en modo dry-run"
+        "dry-run-trigger": "Configuración del trigger en modo dry-run",
+        "maturity-releases-not-reached": "Política de madurez en espera"
       },
       "actions": {
         "editPolicy": "Editar política de actualización",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Configurar autoactualización",
         "configureMaintenance": "Configurar ventana de mantenimiento",
         "editGroupPolicy": "Editar política de grupo"
-      }
+      },
+      "releaseMaturityCount": "Esperando versiones estables de la familia {family}: hay {count} de {required} versiones anteriores disponibles.",
+      "releaseMaturityUnavailable": "No hay datos de versiones para este candidato. Las actualizaciones automáticas quedan retenidas."
     },
     "maturityBadge": {
       "new": "Detectado hace {duration}"

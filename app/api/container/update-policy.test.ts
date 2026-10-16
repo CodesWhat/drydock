@@ -223,6 +223,102 @@ describe('api/container/update-policy', () => {
   });
 
   describe('maturity policy actions', () => {
+    test.each(['clear-maturity-policy', 'clear'])('clears release overrides on %s', (action) => {
+      const harness = createLayeredHarness({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+        updatePolicyOverrides: { maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 },
+      });
+      callPatchContainerUpdatePolicy(harness.handlers, { action });
+      const policy = getUpdatedPolicy(harness.storeContainer);
+      expect(policy).not.toHaveProperty('maturitySkipReleases');
+      expect(policy).not.toHaveProperty('maturityReleaseFallbackDays');
+      expect(policy.maturityMode).toBe('all');
+    });
+    test.each([false, true])('sets release maturity on layered=%s policies', (layered) => {
+      const harness = layered ? createLayeredHarness() : createHarness();
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'mature',
+        minAgeDays: 5,
+        skipReleases: 2,
+        releaseFallbackDays: 10,
+      });
+      expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
+        maturityMode: 'mature',
+        maturityMinAgeDays: 5,
+        maturitySkipReleases: 2,
+        maturityReleaseFallbackDays: 10,
+      });
+    });
+
+    test.each([false, true])(
+      'preserves omitted release settings for older clients on layered=%s',
+      (layered) => {
+        const factory = layered ? createLayeredHarness : createHarness;
+        const harness = factory({
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 5,
+            maturitySkipReleases: 2,
+            maturityReleaseFallbackDays: 10,
+          },
+          ...(layered
+            ? {
+                updatePolicyOverrides: { maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 },
+              }
+            : {}),
+        });
+        callPatchContainerUpdatePolicy(harness.handlers, {
+          action: 'set-maturity-policy',
+          mode: 'mature',
+          minAgeDays: 7,
+        });
+        expect(getUpdatedPolicy(harness.storeContainer)).toMatchObject({
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        });
+      },
+    );
+
+    test.each([
+      { skipReleases: -1 },
+      { skipReleases: 101 },
+      { skipReleases: 1.5 },
+      { skipReleases: null },
+      { releaseFallbackDays: -1 },
+      { releaseFallbackDays: 366 },
+      { releaseFallbackDays: true },
+    ])('rejects unusable release policy settings %j without writing', (fields) => {
+      const harness = createLayeredHarness();
+      const res = callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'mature',
+        ...fields,
+      });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(harness.deps.recordAuditEvent).not.toHaveBeenCalled();
+    });
+
+    test('reverting the whole policy removes release overrides and reveals declarations', () => {
+      const harness = createLayeredHarness({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+        updatePolicyOverrides: { maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 },
+      });
+      callPatchContainerUpdatePolicy(harness.handlers, { action: 'revert-to-declarative' });
+      expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      });
+    });
     test('sets mature-only policy with default threshold when minAgeDays is omitted', () => {
       const harness = createHarness({
         updatePolicy: {

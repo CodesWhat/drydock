@@ -3,6 +3,29 @@ import type { Container, ContainerGroupPolicySnapshot } from './container.js';
 import { resolveEffectiveContainerPolicy } from './effective-policy.js';
 import { applyGroupUpdatePolicyLayer } from './update-policy.js';
 
+test('effective policy reports both release maturity settings without shifting the skip lists', () => {
+  const policy = resolve(
+    container({
+      updatePolicyOverrides: {
+        maturitySkipReleases: 2,
+        maturityReleaseFallbackDays: 10,
+        skipTags: ['2.0.0'],
+      },
+    }),
+  ).updatePolicy;
+  expect(policy.maturitySkipReleases).toEqual({
+    value: 2,
+    source: 'override',
+    layers: { override: 2 },
+  });
+  expect(policy.maturityReleaseFallbackDays).toEqual({
+    value: 10,
+    source: 'override',
+    layers: { override: 10 },
+  });
+  expect(policy.skipTags.value).toEqual(['2.0.0']);
+});
+
 vi.mock('../log/index.js', () => ({
   default: {
     warn: vi.fn(),
@@ -93,6 +116,8 @@ describe('update policy fields', () => {
     expect(resolve(container()).updatePolicy).toEqual({
       maturityMode: { value: 'all', source: 'default', layers: {} },
       maturityMinAgeDays: { value: 7, source: 'default', layers: {} },
+      maturitySkipReleases: { value: 0, source: 'default', layers: {} },
+      maturityReleaseFallbackDays: { value: 0, source: 'default', layers: {} },
       skipTags: { value: [], source: 'default', layers: {} },
       skipDigests: { value: [], source: 'default', layers: {} },
       snoozeUntil: { value: null, source: 'default' },

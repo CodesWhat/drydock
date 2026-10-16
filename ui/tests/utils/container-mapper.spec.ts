@@ -5,6 +5,32 @@ vi.mock('@/services/image-icon', () => ({
 import { computeSecurityDelta, mapApiContainer, mapApiContainers } from '@/utils/container-mapper';
 import { daysToMs } from '@/utils/maturity-policy';
 
+it('retains release maturity blockers when mapping API containers', () => {
+  const c = mapApiContainer(
+    makeApiContainer({
+      updateAvailable: false,
+      result: { tag: '2.0.2' },
+      updateKind: { kind: 'tag', localValue: '1.25', remoteValue: '2.0.2', semverDiff: 'major' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+      updateEligibility: {
+        eligible: true,
+        evaluatedAt: '2026-08-20T00:00:00.000Z',
+        blockers: [
+          {
+            reason: 'maturity-releases-not-reached',
+            severity: 'soft',
+            actionable: true,
+            message: 'Waiting for releases',
+            details: { requiredReleases: 2, evidenceAvailable: false },
+          },
+        ],
+      },
+    }),
+  );
+  expect(c.updateEligibility?.blockers[0]?.reason).toBe('maturity-releases-not-reached');
+  expect(c.updatePolicyState).toBe('maturity-blocked');
+});
+
 function makeApiContainer(overrides: Record<string, any> = {}) {
   return {
     id: 'c1',

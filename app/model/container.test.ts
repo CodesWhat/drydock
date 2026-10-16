@@ -94,6 +94,33 @@ test('validate retains the candidate software version independently of the insta
   expect(result.image.softwareVersion).toBe('2026.7.5');
 });
 
+test.each(['updatePolicy', 'updatePolicyOverrides'])(
+  'validate bounds release maturity in %s',
+  (field) => {
+    for (const policy of [
+      { maturitySkipReleases: -1 },
+      { maturitySkipReleases: 101 },
+      { maturitySkipReleases: 1.5 },
+      { maturityReleaseFallbackDays: -1 },
+      { maturityReleaseFallbackDays: 366 },
+    ]) {
+      expect(() => container.validate(createValidContainer({ [field]: policy }))).toThrow();
+    }
+  },
+);
+
+test('validate rejects malformed candidate release evidence', () => {
+  for (const releaseMaturity of [
+    { version: '2.0.2', family: '2', earlierReleases: -1 },
+    { version: '2.0.2', family: '2', earlierReleases: 1.5 },
+    { earlierReleases: 2 },
+  ]) {
+    expect(() =>
+      container.validate(createValidContainer({ result: { releaseMaturity } })),
+    ).toThrow();
+  }
+});
+
 test.each([{}, [], true, 'v'.repeat(257)])(
   'validate rejects unusable candidate software version %j',
   (softwareVersion) => {
@@ -430,6 +457,21 @@ test('testable_isUpdateSuppressed should return false when no suppression rule a
       },
     ),
   ).toBe(false);
+});
+
+test('release maturity suppresses automatic updates even after the day gate passes', () => {
+  const current = createValidContainer({
+    updateDetectedAt: new Date(Date.now() - daysToMs(20)).toISOString(),
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+    result: {
+      tag: '2.0.2',
+      releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 1 },
+    },
+  });
+  const updateKind = { kind: 'tag', remoteValue: '2.0.2', semverDiff: 'patch' };
+  expect(container.testable_isUpdateSuppressed(current, updateKind)).toBe(true);
+  current.result.releaseMaturity.earlierReleases = 2;
+  expect(container.testable_isUpdateSuppressed(current, updateKind)).toBe(false);
 });
 
 test('testable_isUpdateSuppressed should ignore skip lists without matching kinds and remote values', () => {

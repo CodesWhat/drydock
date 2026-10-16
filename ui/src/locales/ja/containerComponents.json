@@ -507,7 +507,8 @@
         "maintenance-window-closed": "メンテナンスウィンドウは終了しています",
         "group-notify-only": "グループは通知のみ許可しています",
         "group-manual-only": "グループは手動更新を必須にしています",
-        "dry-run-trigger": "トリガー構成がドライランモードです"
+        "dry-run-trigger": "トリガー構成がドライランモードです",
+        "maturity-releases-not-reached": "成熟度ポリシー待機中"
       },
       "actions": {
         "editPolicy": "更新ポリシーを編集",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "自己更新を構成",
         "configureMaintenance": "メンテナンスウィンドウを構成",
         "editGroupPolicy": "グループポリシーを編集"
-      }
+      },
+      "releaseMaturityCount": "ファミリー {family} の安定版を待機中です。必要な先行リリース {required} 件のうち {count} 件が利用可能です。",
+      "releaseMaturityUnavailable": "候補のリリース情報を取得できません。自動更新を保留しています。"
     },
     "maturityBadge": {
       "new": "{duration}前に検出"

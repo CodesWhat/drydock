@@ -507,7 +507,8 @@
         "maintenance-window-closed": "Onderhoudsvenster gesloten",
         "group-notify-only": "Groep staat alleen meldingen toe",
         "group-manual-only": "Groep vereist handmatige updates",
-        "dry-run-trigger": "Triggerconfiguratie in dry-run-modus"
+        "dry-run-trigger": "Triggerconfiguratie in dry-run-modus",
+        "maturity-releases-not-reached": "Volwassenheidsbeleid wachtend"
       },
       "actions": {
         "editPolicy": "Updatebeleid bewerken",
@@ -521,7 +522,9 @@
         "configureSelfUpdate": "Zelfupdate configureren",
         "configureMaintenance": "Onderhoudsvenster configureren",
         "editGroupPolicy": "Groepsbeleid bewerken"
-      }
+      },
+      "releaseMaturityCount": "Wachten op stabiele releases in familie {family}: {count} van {required} eerdere releases beschikbaar.",
+      "releaseMaturityUnavailable": "Releasegegevens voor deze kandidaat zijn niet beschikbaar. Automatische updates blijven tegengehouden."
     },
     "maturityBadge": {
       "new": "{duration} geleden gedetecteerd"
