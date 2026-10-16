@@ -26,6 +26,7 @@ interface ContainerTagLookupProvider {
   ) => Promise<{
     digest?: string;
     created?: string;
+    softwareVersion?: string;
     version?: number;
   }>;
   getImagePublishedAt?: (
@@ -275,6 +276,9 @@ async function handleDigestWatch(
 
   result.digest = remoteDigest.digest;
   result.created = remoteDigest.created;
+  if (remoteDigest.softwareVersion) {
+    result.softwareVersion = remoteDigest.softwareVersion;
+  }
 
   if (remoteDigest.version !== 2) {
     container.image.digest.value = container.image.digest.repo;

@@ -82,6 +82,130 @@ const ALL_MANIFEST_ACCEPT =
 const registry = new Registry();
 registry.register('registry', 'hub', 'test', {});
 
+describe('remote software-version metadata', () => {
+  test.each([undefined, 'invalid-date', '2026-08-02T12:00:00.000Z'])(
+    'reads the remote OCI version independently of created=%s without extra requests',
+    async (created) => {
+      const instance = createMockedRegistry();
+      instance.callRegistry = vi.fn((options) => {
+        if (options.method === 'head') {
+          return { headers: { 'docker-content-digest': 'sha256:candidate' } };
+        }
+        if (options.url.endsWith('/blobs/sha256:config')) {
+          return {
+            created,
+            config: { Labels: { 'org.opencontainers.image.version': ' 2026.8.2 ' } },
+          };
+        }
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          config: { digest: 'sha256:config' },
+        };
+      });
+
+      const result = await instance.getImageManifestDigest(imageInput());
+
+      expect(result).toEqual({
+        digest: 'sha256:candidate',
+        version: 2,
+        softwareVersion: '2026.8.2',
+        ...(created?.startsWith('2026') ? { created } : {}),
+      });
+      expect(instance.callRegistry).toHaveBeenCalledTimes(4);
+    },
+  );
+
+  test.each([undefined, null, true, 42, {}, [], '', '   ', 'v'.repeat(257)])(
+    'omits unusable OCI version metadata %j',
+    async (softwareVersion) => {
+      const instance = createMockedRegistry();
+      instance.callRegistry = vi.fn((options) => {
+        if (options.method === 'head') {
+          return { headers: { 'docker-content-digest': 'sha256:candidate' } };
+        }
+        if (options.url.endsWith('/blobs/sha256:config')) {
+          return {
+            created: '2026-08-02T12:00:00.000Z',
+            config: { Labels: { 'org.opencontainers.image.version': softwareVersion } },
+          };
+        }
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          config: { digest: 'sha256:config' },
+        };
+      });
+
+      expect(await instance.getImageManifestDigest(imageInput())).toEqual({
+        digest: 'sha256:candidate',
+        version: 2,
+        created: '2026-08-02T12:00:00.000Z',
+      });
+    },
+  );
+
+  test('uses the selected platform config rather than a sibling platform', async () => {
+    const instance = createMockedRegistry();
+    instance.callRegistry = vi.fn((options) => {
+      if (options.url.endsWith('/manifests/tag')) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'sha256:amd',
+            'application/vnd.oci.image.manifest.v1+json',
+          ),
+          platformManifest(
+            'arm64',
+            'linux',
+            'sha256:arm',
+            'application/vnd.oci.image.manifest.v1+json',
+          ),
+        ]);
+      }
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:arm' } };
+      }
+      if (options.url.endsWith('/manifests/sha256:arm')) {
+        return { config: { digest: 'sha256:arm-config' } };
+      }
+      if (options.url.endsWith('/blobs/sha256:arm-config')) {
+        return { config: { Labels: { 'org.opencontainers.image.version': '9.0.2' } } };
+      }
+      throw new Error(`Unexpected request: ${options.url}`);
+    });
+
+    expect(await instance.getImageManifestDigest(imageInput({ architecture: 'arm64' }))).toEqual({
+      digest: 'sha256:arm',
+      version: 2,
+      softwareVersion: '9.0.2',
+    });
+  });
+
+  test('reads the OCI version from legacy config-blob manifests', async () => {
+    const instance = createMockedRegistry();
+    instance.callRegistry = vi.fn((options) => {
+      if (options.url.endsWith('/blobs/sha256:config')) {
+        return { config: { Labels: { 'org.opencontainers.image.version': '2.0.2' } } };
+      }
+      return manifestListResponse([
+        platformManifest(
+          'amd64',
+          'linux',
+          'sha256:config',
+          'application/vnd.docker.container.image.v1+json',
+        ),
+      ]);
+    });
+    expect(await instance.getImageManifestDigest(imageInput())).toEqual({
+      digest: 'sha256:config',
+      version: 1,
+      softwareVersion: '2.0.2',
+    });
+  });
+});
+
 test('base64Encode should decode credentials', async () => {
   expect(Registry.base64Encode('username', 'password')).toEqual('dXNlcm5hbWU6cGFzc3dvcmQ=');
 });

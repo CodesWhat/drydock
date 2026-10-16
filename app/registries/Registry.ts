@@ -16,6 +16,7 @@ interface RegistryManifest {
   digest?: string;
   version?: number;
   created?: string;
+  softwareVersion?: string;
 }
 
 export interface RegistryLookupOptions {
@@ -52,6 +53,7 @@ interface RegistryManifestResponse {
 
 interface RegistryManifestConfigResponse {
   created?: string;
+  config?: { Labels?: Record<string, unknown> };
 }
 
 /** Media types representing a manifest list / OCI index (multi-platform). */
@@ -528,11 +530,11 @@ class Registry<
       return this.fetchManifestDigestFromHead(image, manifestDigest, manifestMediaType);
     }
     if (manifestDigest && isLegacyImageConfig(manifestMediaType)) {
-      const created = await this.fetchImageCreatedFromBlob(image, manifestDigest);
+      const metadata = await this.fetchImageMetadataFromBlob(image, manifestDigest);
       const result = {
         digest: manifestDigest,
         version: 1,
-        ...(created ? { created } : {}),
+        ...metadata,
       };
       this.log.debug(
         `${image.name} - Manifest found with [digest=${result.digest}, version=${result.version}]`,
@@ -562,7 +564,7 @@ class Registry<
     });
     const resolvedManifestDigest =
       responseManifest.headers['docker-content-digest'] || manifestDigest;
-    const created = await this.fetchImageCreatedFromManifestConfig(
+    const metadata = await this.fetchImageMetadataFromManifestConfig(
       image,
       resolvedManifestDigest,
       mediaType,
@@ -570,7 +572,7 @@ class Registry<
     const result = {
       digest: resolvedManifestDigest,
       version: 2,
-      ...(created ? { created } : {}),
+      ...metadata,
     };
     this.log.debug(
       `${image.name} - Manifest found with [digest=${result.digest}, version=${result.version}]`,
@@ -578,11 +580,11 @@ class Registry<
     return result;
   }
 
-  private async fetchImageCreatedFromManifestConfig(
+  private async fetchImageMetadataFromManifestConfig(
     image: ContainerImage,
     manifestDigest: string,
     mediaType: string,
-  ): Promise<string | undefined> {
+  ): Promise<Pick<RegistryManifest, 'created' | 'softwareVersion'> | undefined> {
     let manifestResponse: RegistryManifestResponse;
     try {
       manifestResponse = await this.callRegistry<RegistryManifestResponse>({
@@ -609,13 +611,13 @@ class Registry<
     if (!configDigest) {
       return undefined;
     }
-    return this.fetchImageCreatedFromBlob(image, configDigest);
+    return this.fetchImageMetadataFromBlob(image, configDigest);
   }
 
-  private async fetchImageCreatedFromBlob(
+  private async fetchImageMetadataFromBlob(
     image: ContainerImage,
     digest: string,
-  ): Promise<string | undefined> {
+  ): Promise<Pick<RegistryManifest, 'created' | 'softwareVersion'> | undefined> {
     try {
       const configResponse = await this.callRegistry<RegistryManifestConfigResponse>({
         image,
@@ -626,10 +628,21 @@ class Registry<
             'application/vnd.oci.image.config.v1+json, application/vnd.docker.container.image.v1+json, application/json',
         },
       });
-      if (typeof configResponse?.created !== 'string') {
-        return undefined;
+      const metadata: Pick<RegistryManifest, 'created' | 'softwareVersion'> = {};
+      if (
+        typeof configResponse?.created === 'string' &&
+        !Number.isNaN(Date.parse(configResponse.created))
+      ) {
+        metadata.created = configResponse.created;
       }
-      return Number.isNaN(Date.parse(configResponse.created)) ? undefined : configResponse.created;
+      const version = configResponse?.config?.Labels?.['org.opencontainers.image.version'];
+      if (typeof version === 'string') {
+        const trimmedVersion = version.trim();
+        if (trimmedVersion.length > 0 && trimmedVersion.length <= 256) {
+          metadata.softwareVersion = trimmedVersion;
+        }
+      }
+      return metadata;
     } catch (error: unknown) {
       if (isRedirectError(error)) {
         const status = (error as { response: { status: number } }).response.status;
