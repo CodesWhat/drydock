@@ -2,7 +2,7 @@ import { createHash, createPublicKey, generateKeyPairSync, sign, verify } from '
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type RotationIdentity,
   type RotationRequest,
@@ -11,6 +11,7 @@ import {
 
 const directories: string[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of directories.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -172,4 +173,215 @@ describe('Standard controller key rotation', () => {
     expect(a).toEqual(b);
     expect(peer.calls.filter((c) => c.startsWith('commit:'))).toHaveLength(1);
   });
+});
+
+test.each([0o500, 0o600, 0o750])('refuses unusable or shared managed directory mode %o', (mode) => {
+  const f = fixture();
+  fs.chmodSync(f.directory, mode);
+  try {
+    expect(f.create).toThrow('0700');
+  } finally {
+    fs.chmodSync(f.directory, 0o700);
+  }
+});
+
+function managedFile(f: ReturnType<typeof fixture>) {
+  return path.join(
+    f.directory,
+    createHash('sha256').update(`remote/production\n${f.bootstrap.keyId}`).digest('hex') + '.json',
+  );
+}
+
+test('rejects an empty persisted pending private key before accepting traffic', () => {
+  const f = fixture();
+  fs.writeFileSync(
+    managedFile(f),
+    JSON.stringify({
+      version: 1,
+      rootKeyId: f.bootstrap.keyId,
+      currentPem: f.bootstrap.privatePem,
+      pendingPem: '',
+    }),
+    { mode: 0o600 },
+  );
+  expect(f.create).toThrow();
+});
+
+test('rejects malformed remote status without changing the active signer', async () => {
+  const f = fixture();
+  const manager = f.create();
+  await expect(manager.rotate(async () => null as never)).rejects.toThrow('status did not match');
+  expect(manager.identity.keyId).toBe(f.bootstrap.keyId);
+  expect(manager.hasPending).toBe(true);
+});
+
+test.each([
+  null,
+  { version: 2 },
+  { version: 1, rootKeyId: 'different' },
+  { version: 1, currentPem: 7 },
+  { version: 1, pendingPem: 7 },
+])('refuses incompatible managed state %j', (overrides) => {
+  const f = fixture();
+  const state =
+    overrides === null
+      ? null
+      : {
+          version: 1,
+          rootKeyId: f.bootstrap.keyId,
+          currentPem: f.bootstrap.privatePem,
+          ...overrides,
+        };
+  fs.writeFileSync(managedFile(f), JSON.stringify(state), { mode: 0o600 });
+  expect(f.create).toThrow('Invalid managed');
+});
+
+test('refuses malformed JSON, oversized or exposed private state and duplicate keys', () => {
+  const f = fixture();
+  const file = managedFile(f);
+  fs.writeFileSync(file, '{', { mode: 0o600 });
+  expect(f.create).toThrow('Invalid managed');
+  fs.writeFileSync(file, ' '.repeat(65537));
+  expect(f.create).toThrow('regular private file');
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      version: 1,
+      rootKeyId: f.bootstrap.keyId,
+      currentPem: f.bootstrap.privatePem,
+      pendingPem: f.bootstrap.privatePem,
+    }),
+  );
+  expect(f.create).toThrow('must differ');
+  fs.chmodSync(file, 0o644);
+  expect(f.create).toThrow('regular private file');
+});
+
+test('refuses a mismatched bootstrap ID and a symlink directory', () => {
+  const f = fixture();
+  expect(
+    () => new StandardKeyRotation(f.directory, 'host', { ...f.bootstrap, keyId: 'wrong' }),
+  ).toThrow('does not match');
+  const link = `${f.directory}-link`;
+  fs.symlinkSync(f.directory, link);
+  try {
+    expect(() => new StandardKeyRotation(link, 'host', f.bootstrap)).toThrow('0700');
+  } finally {
+    fs.unlinkSync(link);
+  }
+});
+
+test('an unreadable managed file fails closed', () => {
+  const f = fixture();
+  const file = managedFile(f);
+  fs.writeFileSync(file, '{}', { mode: 0o000 });
+  try {
+    expect(f.create).toThrow();
+  } finally {
+    fs.chmodSync(file, 0o600);
+  }
+});
+
+test('a failed local stage does not send any remote request or leak a temporary credential', async () => {
+  const f = fixture();
+  const manager = f.create();
+  const request = vi.fn();
+  const write = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
+    throw new Error('disk full');
+  });
+  await expect(manager.rotate(request)).rejects.toThrow('disk full');
+  write.mockRestore();
+  expect(request).not.toHaveBeenCalled();
+  expect(manager.hasPending).toBe(false);
+  expect(fs.readdirSync(f.directory)).toEqual([]);
+});
+
+test('a failed final local write keeps the accepted replacement usable and recovers after restart', async () => {
+  const f = fixture();
+  const manager = f.create();
+  const peer = remote(f);
+  let committedId = '';
+  await expect(
+    manager.rotate(async (identity, action, body) => {
+      const status = await peer.request(identity, action, body);
+      if (action === 'commit') {
+        committedId = identity.keyId;
+        vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+          throw new Error('disk unavailable');
+        });
+      }
+      return status;
+    }),
+  ).rejects.toThrow('disk unavailable');
+  vi.restoreAllMocks();
+  expect(manager.identity.keyId).toBe(committedId);
+  const recovered = f.create();
+  expect((await recovered.rotate(peer.request)).current_key_id).toBe(committedId);
+});
+
+test('a replaced controller instance cannot overwrite newer staged credentials', async () => {
+  const f = fixture();
+  const stale = f.create();
+  const owner = f.create();
+  await expect(
+    owner.rotate(async () => {
+      throw new Error('offline');
+    }),
+  ).rejects.toThrow('offline');
+  const pending = owner.status().pending_key_id;
+  await expect(
+    stale.rotate(async () => {
+      throw new Error('must not call');
+    }),
+  ).rejects.toThrow('changed');
+  expect(f.create().status().pending_key_id).toBe(pending);
+});
+
+test('refuses a different remote pending key without replacing either credential', async () => {
+  const f = fixture();
+  const manager = f.create();
+  await expect(
+    manager.rotate(async () => ({
+      root_key_id: f.bootstrap.keyId,
+      current_key_id: f.bootstrap.keyId,
+      pending_key_id: 'different',
+    })),
+  ).rejects.toThrow('different pending');
+  expect(manager.identity.keyId).toBe(f.bootstrap.keyId);
+});
+
+test.each(['root', 'current', 'pending'])('refuses remote %s identity mismatch', async (field) => {
+  const f = fixture();
+  const manager = f.create();
+  const peer = remote(f);
+  await expect(
+    manager.rotate(async (identity, action, body) => {
+      const status = await peer.request(identity, action, body);
+      if (action === 'prepare') {
+        if (field === 'root') status.root_key_id = 'wrong';
+        if (field === 'current') status.current_key_id = 'wrong';
+        if (field === 'pending') status.pending_key_id = 'wrong';
+      }
+      return status;
+    }),
+  ).rejects.toThrow('status did not match');
+  expect(peer.keys.has(f.bootstrap.keyId)).toBe(true);
+});
+
+test('refuses abort during an in-flight rotation and shares concurrent recovery work', async () => {
+  const f = fixture();
+  const manager = f.create();
+  const peer = remote(f);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const a = manager.rotate(async (identity, action, body) => {
+    await gate;
+    return peer.request(identity, action, body);
+  });
+  const b = manager.rotate(peer.request);
+  await expect(manager.abort(peer.request)).rejects.toThrow('already running');
+  release();
+  expect(await a).toEqual(await b);
 });

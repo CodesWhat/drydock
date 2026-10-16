@@ -89,6 +89,28 @@ const { MockAgentClient } = vi.hoisted(() => {
   return { MockAgentClient: _MockAgentClient };
 });
 
+test('managed Edge rotation requires both the advertised capability and authenticated key identity', async () => {
+  for (const options of [
+    {},
+    { capabilities: ['edge-key-rotation'] },
+    { keyId: '0123456789abcdef' },
+  ]) {
+    const { adapter } = createAdapter(undefined, options);
+    expect(adapter.getSigningKeyRotationStatus()).toEqual({ enabled: false });
+    await expect(adapter.rotateSigningKey('rotate')).rejects.toThrow('not enabled');
+  }
+  const { adapter } = createAdapter(undefined, {
+    capabilities: ['edge-key-rotation'],
+    keyId: '0123456789abcdef',
+  });
+  expect(adapter.getSigningKeyRotationStatus()).toMatchObject({
+    enabled: true,
+    current_key_id: '0123456789abcdef',
+  });
+  await adapter.onDisconnect();
+  await expect(adapter.rotateSigningKey('rotate')).rejects.toThrow('connection closed');
+});
+
 vi.mock('./AgentClient.js', () => ({
   AgentClient: MockAgentClient,
 }));
@@ -3980,3 +4002,42 @@ test.skipIf(!process.env.PORTWING_BINARY)(
   },
   15000,
 );
+
+test('managed Edge rotation uses correlated RPC and closes the current tunnel only after activation', async () => {
+  const keys = await import('../store/agent-keys.js');
+  const bindings = await import('../store/name-bindings.js');
+  const { createMigratedMemoryDatabase } = await import('../test/sqlite-db.js');
+  const db = createMigratedMemoryDatabase();
+  keys.createCollections(db);
+  bindings.createCollections(db);
+  const raw = () =>
+    generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).subarray(-32);
+  const old = keys.addKey(raw(), 'host');
+  const next = raw();
+  const { createHash } = await import('node:crypto');
+  const nextId = createHash('sha256').update(next).digest('hex').slice(0, 16);
+  const { adapter, ws, client } = createAdapter(undefined, {
+    keyId: old.keyId,
+    capabilities: ['edge-key-rotation'],
+  });
+  bindings.upsertBinding(client.name, old.keyId, Date.now());
+  const request = vi.spyOn(adapter, 'sendRequest').mockImplementation(async (_method, target) => ({
+    statusCode: 200,
+    body: {
+      current_key_id: old.keyId,
+      pending_key_id: nextId,
+      pending_public_key: next.toString('base64'),
+      activation_pending: target.endsWith('/activate'),
+    },
+  }));
+  try {
+    expect((await adapter.rotateSigningKey('rotate')).phase).toBe('awaiting-reconnect');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(ws.close).toHaveBeenCalledWith(1012, 'key rotation');
+    expect(keys.getKey(old.keyId)).not.toBeNull();
+  } finally {
+    request.mockRestore();
+    db.close();
+    bindings.clearCollectionForTesting();
+  }
+});

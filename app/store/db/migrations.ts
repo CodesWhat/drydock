@@ -52,6 +52,8 @@ export const TOTP_SUBJECT_STATE_MIGRATION_VERSION = 12;
 /** Wrong confirmation codes counted per pending enrollment. */
 export const TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION = 13;
 
+export const AGENT_KEY_ROTATION_MIGRATION_VERSION = 14;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -223,6 +225,18 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
     // wrong ones are counted on the enrollment and the fifth deletes it.
     note: 'add totp_enrollments.failed_attempts (spec 11.1.2 slice 4)',
     sql: TOTP_ENROLLMENT_FAILURES_SQL,
+  },
+  {
+    version: AGENT_KEY_ROTATION_MIGRATION_VERSION,
+    note: 'bind staged Portwing key replacements to their parent key and agent name',
+    sql: `
+      ALTER TABLE agent_keys ADD COLUMN rotation_parent_id TEXT REFERENCES agent_keys(key_id);
+      ALTER TABLE agent_keys ADD COLUMN rotation_agent_name TEXT
+        CHECK ((rotation_parent_id IS NULL AND rotation_agent_name IS NULL)
+          OR (rotation_parent_id IS NOT NULL AND rotation_agent_name IS NOT NULL));
+      CREATE UNIQUE INDEX agent_keys_pending_rotation ON agent_keys(rotation_parent_id)
+        WHERE rotation_parent_id IS NOT NULL AND revoked_at IS NULL;
+    `,
   },
 ];
 

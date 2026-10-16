@@ -2,6 +2,7 @@ import { createMemoryDatabase } from '../../test/sqlite-db.js';
 import type { Database } from './driver.js';
 import { StoreConstraintError } from './driver.js';
 import {
+  AGENT_KEY_ROTATION_MIGRATION_VERSION,
   GROUP_POLICIES_MIGRATION_VERSION,
   getAppliedSchemaVersions,
   LABEL_OVERRIDES_MIGRATION_VERSION,
@@ -39,6 +40,48 @@ describe('store/db/migrations', () => {
     expect(logMock.info).toHaveBeenCalledWith(expect.stringContaining('initial schema'));
   });
 
+  test('rotation migration preserves existing keys, revocations and name bindings', () => {
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < AGENT_KEY_ROTATION_MIGRATION_VERSION),
+    );
+    db.prepare(
+      'INSERT INTO agent_keys (key_id, pubkey, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('active', 'public-a', 'agent', 'created', null);
+    db.prepare(
+      'INSERT INTO agent_keys (key_id, pubkey, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('revoked', 'public-b', 'old', 'created', 'revoked-at');
+    db.prepare('INSERT INTO name_bindings (agent_name, key_id, last_seen_at) VALUES (?, ?, ?)').run(
+      'production',
+      'active',
+      42,
+    );
+    expect(migrate(db)).toEqual([AGENT_KEY_ROTATION_MIGRATION_VERSION]);
+    expect(db.prepare('SELECT * FROM agent_keys ORDER BY key_id').all()).toEqual([
+      {
+        key_id: 'active',
+        pubkey: 'public-a',
+        label: 'agent',
+        created_at: 'created',
+        revoked_at: null,
+        rotation_parent_id: null,
+        rotation_agent_name: null,
+      },
+      {
+        key_id: 'revoked',
+        pubkey: 'public-b',
+        label: 'old',
+        created_at: 'created',
+        revoked_at: 'revoked-at',
+        rotation_parent_id: null,
+        rotation_agent_name: null,
+      },
+    ]);
+    expect(db.prepare('SELECT * FROM name_bindings').all()).toEqual([
+      { agent_name: 'production', key_id: 'active', last_seen_at: 42 },
+    ]);
+  });
+
   test('is idempotent: a second run applies nothing', () => {
     migrate(db);
     expect(migrate(db)).toEqual([]);
@@ -68,6 +111,7 @@ describe('store/db/migrations', () => {
       TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+      AGENT_KEY_ROTATION_MIGRATION_VERSION,
     ]);
   });
 
@@ -98,6 +142,7 @@ describe('store/db/migrations', () => {
       TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+      AGENT_KEY_ROTATION_MIGRATION_VERSION,
     ]);
 
     const rows = db
@@ -127,6 +172,7 @@ describe('store/db/migrations', () => {
     expect(migrate(db)).toEqual([
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+      AGENT_KEY_ROTATION_MIGRATION_VERSION,
     ]);
 
     expect(
@@ -162,12 +208,15 @@ describe('store/db/migrations', () => {
        VALUES ('pending', 1, 'subject', 'basic.one', 'scott', 0, NULL, 'k1', 'n', 'c', 'a', 't', 't')`,
     ).run();
 
-    expect(migrate(db)).toEqual([TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION]);
+    expect(migrate(db)).toEqual([
+      TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+      AGENT_KEY_ROTATION_MIGRATION_VERSION,
+    ]);
 
     expect(db.prepare('SELECT enrollment_id, failed_attempts FROM totp_enrollments').all()).toEqual(
       [{ enrollment_id: 'pending', failed_attempts: 0 }],
     );
-    expect(MIGRATIONS.at(-1)?.version).toBe(TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION);
+    expect(MIGRATIONS.at(-1)?.version).toBe(AGENT_KEY_ROTATION_MIGRATION_VERSION);
   });
 
   test('records the version, the note and when it was applied', () => {
@@ -234,6 +283,7 @@ describe('store/db/migrations', () => {
         TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
         TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+        AGENT_KEY_ROTATION_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -296,6 +346,7 @@ describe('store/db/migrations', () => {
         TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
         TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+        AGENT_KEY_ROTATION_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -370,6 +421,7 @@ describe('store/db/migrations', () => {
         TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
         TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
+        AGENT_KEY_ROTATION_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,

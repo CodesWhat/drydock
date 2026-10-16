@@ -262,7 +262,12 @@ async function changeSigningKeyRotation(req: Request<AgentLogEntriesRequestParam
     return;
   }
   try {
-    res.json(await agent.rotateSigningKey(body.action));
+    if (!agent.getSigningKeyRotationStatus().enabled) {
+      sendErrorResponse(res, 409, 'Managed key rotation is not enabled for this agent');
+      return;
+    }
+    const result = await agent.rotateSigningKey(body.action);
+    res.status('phase' in result && result.phase === 'awaiting-reconnect' ? 202 : 200).json(result);
   } catch {
     sendErrorResponse(
       res,

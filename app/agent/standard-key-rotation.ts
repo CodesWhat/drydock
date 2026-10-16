@@ -102,7 +102,7 @@ export class StandardKeyRotation {
       throw new Error('Bootstrap signing key ID does not match its private key');
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     const stat = fs.lstatSync(directory);
-    if (!stat.isDirectory() || (stat.mode & 0o077) !== 0) {
+    if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700) {
       throw new Error('Managed signing credential directory requires mode 0700');
     }
     this.rootKeyId = root.keyId;
@@ -130,7 +130,7 @@ export class StandardKeyRotation {
     }
     this.active = identityFromPem(this.state.currentPem);
     if (
-      this.state.pendingPem &&
+      this.state.pendingPem !== undefined &&
       identityFromPem(this.state.pendingPem).keyId === this.active.keyId
     ) {
       throw new Error('Pending signing key must differ from the active key');
@@ -196,7 +196,7 @@ export class StandardKeyRotation {
       this.requireStatus(result, pending.keyId, undefined);
       return this.promote(pending);
     }
-    this.requireStatus(result, current.keyId, result.pending_key_id);
+    this.requireStatus(result, current.keyId, result?.pending_key_id);
     if (result.pending_key_id && result.pending_key_id !== pending.keyId) {
       throw new Error('The agent has a different pending key; reconcile it before rotating');
     }

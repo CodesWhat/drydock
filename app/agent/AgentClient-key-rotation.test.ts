@@ -3,13 +3,15 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { AgentClient } from './AgentClient.js';
+import { StandardKeyRotation } from './standard-key-rotation.js';
 
 const directories: string[] = [];
 const servers: http.Server[] = [];
 const clients: AgentClient[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const client of clients.splice(0)) client.stop();
   for (const server of servers.splice(0)) {
     server.closeAllConnections();
@@ -93,6 +95,9 @@ test('AgentClient rotates and resumes ordinary signed Docker requests after rest
   };
   const client = new AgentClient('remote', config);
   clients.push(client);
+  await expect(client.requestDockerApi('GET', '/_portwing/auth/rotation')).rejects.toThrow(
+    'reserved',
+  );
   const result = await client.rotateSigningKey('rotate');
   expect(result.current_key_id).not.toBe(originalId);
   expect(config.signingkey).toBe(pem);
@@ -112,3 +117,71 @@ test('AgentClient keeps managed rotation disabled unless explicitly configured',
   expect(client.getSigningKeyRotationStatus()).toEqual({ enabled: false });
   await expect(client.rotateSigningKey('rotate')).rejects.toThrow('not enabled');
 });
+
+test('rotation requires configured Ed25519 credentials and refuses stopped clients', async () => {
+  expect(
+    () =>
+      new AgentClient('bad', { host: 'localhost', port: 3000, secret: '', rotationdir: '/unused' }),
+  ).toThrow('requires Ed25519');
+  const client = new AgentClient('edge', { host: 'localhost', port: 3000, secret: '' });
+  const status = { enabled: true, current_key_id: 'public' };
+  const rotate = vi.fn().mockResolvedValue(status);
+  client.edgeAdapter = {
+    getSigningKeyRotationStatus: () => status,
+    rotateSigningKey: rotate,
+  } as never;
+  expect(client.getSigningKeyRotationStatus()).toEqual(status);
+  expect(await client.rotateSigningKey('abort')).toEqual(status);
+  expect(rotate).toHaveBeenCalledWith('abort');
+  client.edgeAdapter = undefined;
+  client.stop();
+  await expect(client.rotateSigningKey('rotate')).rejects.toThrow('not enabled');
+});
+
+test.each([false, true])(
+  'SSE waits for one pending rotation recovery before opening, recovery failure=%s',
+  async (fail) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-recovery-'));
+    directories.push(directory);
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const keyId = createHash('sha256')
+      .update(publicKey.export({ type: 'spki', format: 'der' }).subarray(-32))
+      .digest('hex')
+      .slice(0, 16);
+    const manager = new StandardKeyRotation(directory, 'recover', { keyId, privatePem: pem });
+    await expect(
+      manager.rotate(async () => {
+        throw new Error('offline');
+      }),
+    ).rejects.toThrow('offline');
+    const client = new AgentClient('recover', {
+      host: 'localhost',
+      port: 3000,
+      secret: '',
+      authmode: 'ed25519',
+      signingkeyid: keyId,
+      signingkey: pem,
+      rotationdir: directory,
+    });
+    clients.push(client);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const recover = vi.spyOn(client, 'rotateSigningKey').mockImplementation(async () => {
+      await gate;
+      if (fail) throw new Error('offline');
+      return manager.status();
+    });
+    const open = vi
+      .spyOn(client as unknown as { openSse(): void }, 'openSse')
+      .mockImplementation(() => {});
+    client.startSse();
+    client.startSse();
+    expect(recover).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
+    release();
+    await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+  },
+);

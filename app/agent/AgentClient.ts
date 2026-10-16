@@ -360,11 +360,7 @@ export class AgentClient {
       this.ed25519PrivateKey = this.loadSigningKey();
     }
     if (this.config.rotationdir) {
-      if (
-        this.config.authmode !== 'ed25519' ||
-        !this.config.signingkey ||
-        !this.config.signingkeyid
-      ) {
+      if (this.config.authmode !== 'ed25519') {
         throw new Error('Managed key rotation requires Ed25519 authentication');
       }
       this.keyRotation = new StandardKeyRotation(
@@ -372,7 +368,7 @@ export class AgentClient {
           label: `${name} signing credential directory`,
         }),
         name,
-        { keyId: this.config.signingkeyid, privatePem: this.config.signingkey },
+        { keyId: this.config.signingkeyid as string, privatePem: this.config.signingkey as string },
       );
     }
 
@@ -638,10 +634,12 @@ export class AgentClient {
   }
 
   getSigningKeyRotationStatus() {
+    if (this.edgeAdapter) return this.edgeAdapter.getSigningKeyRotationStatus();
     return this.keyRotation ? { enabled: true, ...this.keyRotation.status() } : { enabled: false };
   }
 
   async rotateSigningKey(action: 'rotate' | 'abort') {
+    if (this.edgeAdapter) return this.edgeAdapter.rotateSigningKey(action);
     if (!this.keyRotation || this.stopped) {
       throw new Error('Managed key rotation is not enabled or the agent is stopped');
     }
@@ -662,6 +660,10 @@ export class AgentClient {
   ): Promise<DockerApiProxyResponse> {
     if (!target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {
       throw new Error('Docker API request target must be an origin-form path');
+    }
+    const decodedPath = decodeURIComponent(new URL(target, 'http://agent.invalid').pathname);
+    if (decodedPath.startsWith('/_portwing/auth/rotation')) {
+      throw new Error('The key rotation namespace is reserved for credential management');
     }
 
     if (this.edgeAdapter) {
