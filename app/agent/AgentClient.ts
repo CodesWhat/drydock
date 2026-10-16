@@ -46,6 +46,7 @@ import {
 } from '../model/container-update-operation.js';
 import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
 import { stripAgentLabelOwnedState, toAgentPayload } from '../model/label-owned.js';
+import { shouldCollectReleaseMaturity } from '../model/maturity-policy.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
@@ -2678,10 +2679,15 @@ export class AgentClient {
   async watch(watcherType: string, watcherName: string) {
     try {
       const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`;
+      const requested = storeContainer
+        .getContainers({ agent: this.name, watcher: watcherName })
+        .filter(shouldCollectReleaseMaturity)
+        .map((container) => container.id);
+      const body = requested.length > 0 ? { collectReleaseMaturityFor: requested } : {};
       const response = await axios.post<ContainerReport[]>(
         `${this.baseUrl}${target}`,
-        {},
-        this.buildRequestConfig('POST', target, {}),
+        body,
+        this.buildRequestConfig('POST', target, body),
       );
       const reports = response.data;
       const containers = reports.map((report) => report.container);
@@ -2714,10 +2720,11 @@ export class AgentClient {
   async watchContainer(watcherType: string, watcherName: string, container: Container) {
     try {
       const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}/container/${encodeURIComponent(container.id)}`;
+      const body = shouldCollectReleaseMaturity(container) ? { collectReleaseMaturity: true } : {};
       const response = await axios.post<ContainerReport>(
         `${this.baseUrl}${target}`,
-        {},
-        this.buildRequestConfig('POST', target, {}),
+        body,
+        this.buildRequestConfig('POST', target, body),
       );
       const report = response.data;
 

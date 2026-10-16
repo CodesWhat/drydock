@@ -273,6 +273,20 @@ test('getWatcherConfiguration should normalize declarative maturity defaults to 
   delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS;
 });
 
+test('getWatcherConfiguration normalizes release-count defaults for readable environment and YAML names', () => {
+  configuration.ddEnvVars.DD_WATCHER_MY_REMOTE_MATURITY_SKIP_RELEASES = '2';
+  configuration.ddEnvVars.DD_WATCHER_MY_REMOTE_MATURITY_RELEASE_FALLBACK_DAYS = '30';
+  try {
+    const watchers = configuration.getWatcherConfigurations();
+    expect(watchers.my_remote.maturityskipreleases).toBe('2');
+    expect(watchers.my_remote.maturityreleasefallbackdays).toBe('30');
+    expect(watchers.my_remote.maturity).toBeUndefined();
+  } finally {
+    delete configuration.ddEnvVars.DD_WATCHER_MY_REMOTE_MATURITY_SKIP_RELEASES;
+    delete configuration.ddEnvVars.DD_WATCHER_MY_REMOTE_MATURITY_RELEASE_FALLBACK_DAYS;
+  }
+});
+
 test('getWatcherConfiguration should not apply maturity aliases without a watcher name', () => {
   configuration.ddEnvVars.DD_WATCHER__MATURITY_MODE = 'mature';
 

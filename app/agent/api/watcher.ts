@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import pLimit from 'p-limit';
 import { mapComponentsToList, mapComponentToItem } from '../../api/component.js';
 import { sendErrorResponse } from '../../api/error-response.js';
 import logger from '../../log/index.js';
@@ -83,8 +84,32 @@ export async function watchWatcher(req: Request, res: Response) {
     // so an older or newer AgentClient on either side of that skew keeps
     // working unchanged.
     const { reports, coalesced } = await triggerManualWatch(watcher, 'agent-poll');
+    const requested = new Set(
+      Array.isArray(req.body?.collectReleaseMaturityFor) ? req.body.collectReleaseMaturityFor : [],
+    );
+    const limit = pLimit(10);
+    const enrichedReports = await Promise.all(
+      reports.map((report) => {
+        const container = report.container;
+        if (!requested.has(container.id) || container.result?.releaseMaturity) return report;
+        return limit(async () => {
+          const completedReport = structuredClone(report);
+          try {
+            return await watcher.watchContainer(container, {
+              collectReleaseMaturity: true,
+              emitBatchEvent: false,
+            });
+          } catch (error: unknown) {
+            log.error(
+              `Error collecting release maturity for ${sanitizeLogParam(container.id)}: ${sanitizeLogParam(normalizeErrorMessage(error))}`,
+            );
+            return completedReport;
+          }
+        });
+      }),
+    );
     res.set('X-Drydock-Watch-Coalesced', String(coalesced));
-    res.json(reports);
+    res.json(enrichedReports);
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);
     log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(message)}`);
@@ -114,7 +139,10 @@ export async function watchContainer(req: Request, res: Response) {
   }
 
   try {
-    const result = await watcher.watchContainer(container);
+    const result =
+      req.body?.collectReleaseMaturity === true
+        ? await watcher.watchContainer(container, { collectReleaseMaturity: true })
+        : await watcher.watchContainer(container);
     res.json(result);
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);

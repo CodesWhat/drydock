@@ -86,6 +86,13 @@ interface MaturityPolicyContainer {
   };
 }
 
+export function shouldCollectReleaseMaturity(container: MaturityPolicyContainer): boolean {
+  return (
+    container.updatePolicy?.maturityMode === 'mature' &&
+    (parseMaturitySkipReleases(container.updatePolicy.maturitySkipReleases) ?? 0) > 0
+  );
+}
+
 export interface MaturityClock {
   startMs: number | undefined;
   source: MaturityClockSource | undefined;

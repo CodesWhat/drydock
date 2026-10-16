@@ -62,12 +62,12 @@ The policy gate suppresses an update until the image has aged past a minimum thr
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `maturityMode` | string | `all` | `all` = no gate (updates fire immediately); `mature` = enable the age gate |
+| `maturityMode` | string | `all` | `all` = no gate (updates fire immediately); `mature` = enable the age and configured release-count gates |
 | `maturityMinAgeDays` | integer | `7` | Minimum age in days an update must reach before the gate passes. Valid range: 1–365. |
 
 The gate clock starts from the **earliest point** at which the update is known to have existed:
 
-- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` is immediately mature, regardless of when this Drydock instance first noticed it.
+- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` clears the day minimum immediately, regardless of when this Drydock instance first noticed it. Any configured release-count requirement still applies.
 - Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update — falling back to `firstSeenAt` when `updateDetectedAt` is missing or fails to parse (a legacy/partial-record case; in steady state the two are stamped together).
 - If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`/`firstSeenAt` the same way.
 
@@ -81,6 +81,22 @@ When the gate blocks an update the blocker reason is `maturity-not-reached`. The
 | `details.clockStartAt` | string (ISO 8601) | The start timestamp the countdown is measured from |
 
 The UI's Update Status panel renders these two fields (alongside `details.minAgeDays` and `details.remainingMs`) as a single clock-sourced sentence — e.g. "Candidate published Jul 12 — 3 more days until the 7-day minimum" — instead of re-deriving its own countdown.
+
+#### Release-count maturity (unreleased v1.8)
+
+With `maturityMode: mature`, `maturitySkipReleases` adds a second gate to the day minimum. Its default is `0` (disabled), and it accepts integers from `0` to `100`. Setting it to `2` holds the first two observed stable versions in each family: `2.0.0` has zero earlier releases, `2.0.1` has one, and `2.0.2` has two. The candidate must also satisfy `maturityMinAgeDays`.
+
+A SemVer family is one major version. A numeric major of at least `1000` is treated as CalVer, with a family per year/month, so `2026.8.2` counts earlier releases only in `2026.8`. Counts use distinct stable three-part versions actually present in the filtered registry tag population. Gaps are not filled, later versions do not count, and `v` prefixes or build metadata do not count twice. Existing include/exclude filters, tag transforms, numeric padding and pinned tracks still apply. Prereleases and unversioned digests do not become stable releases.
+
+For floating aliases such as `latest`, `:2` and `:9`, Drydock first uses the remote candidate's OCI version label when available. If release counting is enabled and that evidence is unavailable, it tries at most eight recent stable version tags, including alternate raw spellings within that shared limit, and requires an exact digest match for the selected platform. It keeps the configured deploy tag and lookup-image boundaries. Missing digests, failed lookups or a candidate outside this bounded window leave evidence unavailable. Omitted or disabled release counting adds no proof lookups.
+
+The API exposes evidence as `result.releaseMaturity`: `{version, family, earlierReleases}`. A count that is too small, or unavailable evidence, produces the soft blocker `maturity-releases-not-reached`. Its details include `requiredReleases` and `evidenceAvailable`, plus the candidate version, family and earlier count when known. There is no predicted date for a future release.
+
+`maturityReleaseFallbackDays` is an explicit age escape for this count gate, from `0` to `365` days. The default `0` disables it. A positive value uses the same trusted-publish/detection clock as the day gate and bypasses only the count requirement. The day minimum still applies, and an unknown clock never clears the gate. `liftableAt` is supplied only when an enabled fallback has a known clock. Manual updates retain the existing soft-blocker confirmation.
+
+Both fields follow the usual watcher → group → label → UI/API override precedence. Their Docker labels are `dd.updatePolicy.maturitySkipReleases` and `dd.updatePolicy.maturityReleaseFallbackDays`; watcher defaults are `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` and `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS`. An explicit `0` overrides an inherited value.
+
+Controller overrides remain on the controller. A new traditional agent can receive a collection-only hint during a controller watch request, without policy values. Older agents can ignore that hint; missing evidence holds the count gate unless its explicit age fallback has elapsed. A later report without evidence holds again. Portwing's controller-owned Docker transport uses the controller's native watcher. Historical digest counting for unversioned channels remains future work.
 
 #### `publishedAt` source by registry
 
@@ -442,8 +458,8 @@ This operation controls the UI/API override tier of per-container update policy.
 - `snooze`: suppress update notifications until a date (supports `days` or explicit `snoozeUntil`)
 - `unsnooze`: remove `snoozeUntil`
 - `clear`: remove all update policy
-- `set-maturity-policy`: require updates to be at least N days old before triggering (requires `mode` and optionally `minAgeDays`)
-- `clear-maturity-policy`: remove `maturityMode` and `maturityMinAgeDays`
+- `set-maturity-policy`: set `mode`, optional `minAgeDays` (1–365), `skipReleases` (0–100) and `releaseFallbackDays` (0–365). Omitted count/fallback settings are preserved for older clients.
+- `clear-maturity-policy`: turn off maturity gating (`mode: all` for layered policies) and remove the minimum-age, release-count and fallback overrides
 - `revert-to-declarative`: remove one override (`field`) or all declarative-field overrides when `field` is omitted, revealing the label, group, watcher, or built-in value
 
 `clear-skips`, `clear-maturity-policy`, and `clear` express operational UI choices. They are not the same as reverting: an explicit empty skip-list override can hide a label-provided list, while `revert-to-declarative` reveals the current label, group, watcher, or built-in value. `skip-current` and `remove-skip` start from the effective skip list, so a list inherited from a group is copied into the override, and later edits to the group's list no longer reach that field on that container until it is reverted. `snoozeUntil` is always UI/API-only.
@@ -478,7 +494,7 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
 # Require updates to be at least 14 days old before triggering
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
-  -d '{"action":"set-maturity-policy","mode":"mature","minAgeDays":14}'
+  -d '{"action":"set-maturity-policy","mode":"mature","minAgeDays":14,"skipReleases":2,"releaseFallbackDays":30}'
 ```
 
 ```bash

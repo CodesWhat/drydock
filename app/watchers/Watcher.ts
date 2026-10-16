@@ -38,7 +38,10 @@ abstract class Watcher<
    * @param container
    * @returns {Promise<ContainerReport>}
    */
-  abstract watchContainer(container: Container): Promise<ContainerReport>;
+  abstract watchContainer(
+    container: Container,
+    options?: { emitBatchEvent?: boolean; collectReleaseMaturity?: boolean },
+  ): Promise<ContainerReport>;
 }
 
 export default Watcher;

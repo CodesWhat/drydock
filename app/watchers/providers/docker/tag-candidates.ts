@@ -1,4 +1,5 @@
 import { RE2JS } from 're2js';
+import semver from 'semver';
 
 import type { Container, ContainerResult } from '../../../model/container.js';
 import { isPinGateGoverned, type TagFamilyPolicy } from '../../../tag/family.js';
@@ -118,12 +119,11 @@ function hasLeadingZero(value: string): boolean {
 
 export const getNumericTagShape = getSharedNumericTagShape;
 
-export function getReleaseMaturityEvidenceForContainer(
+function getReleaseMaturitySourcesForContainer(
   container: Container,
   tags: string[],
-  result: ContainerResult,
   logger: TagCandidatesLogger,
-): ReleaseMaturityEvidence | undefined {
+): VersionTagSource[] {
   const { filteredTags } = applyIncludeExcludeFilters(container, tags, logger);
   const currentShape = getNumericTagShape(container.image.tag.value, container.transformTags);
   const normalizePrefix = (value: string) => (value === 'v' || value === 'V' ? '' : value);
@@ -134,7 +134,7 @@ export function getReleaseMaturityEvidenceForContainer(
         numericSegments: [...currentShape.numericSegments, '0', '0'].slice(0, 3),
       }
     : null;
-  const sources = filteredTags
+  return filteredTags
     .map((tag) => ({
       tag,
       versionTag: transformTag(container.transformTags, tag),
@@ -147,21 +147,57 @@ export function getReleaseMaturityEvidenceForContainer(
         isStrictFamilyMatch(referenceShape, { ...shape, prefix: normalizePrefix(shape.prefix) })
       );
     });
+}
+
+function isReleaseVersionInPin(container: Container, version: string): boolean {
+  const currentShape = getNumericTagShape(container.image.tag.value, container.transformTags);
+  const parts = version.split('.');
+  return (
+    !currentShape ||
+    currentShape.numericSegments.length >= 3 ||
+    currentShape.numericSegments.every((part, index) => Number(part) === Number(parts[index]))
+  );
+}
+
+export function getReleaseMaturityLookupCandidates(
+  container: Container,
+  tags: string[],
+  logger: TagCandidatesLogger,
+): VersionTagSource[] {
+  const versions = new Map<string, VersionTagSource[]>();
+  const seenTags = new Set<string>();
+  for (const source of getReleaseMaturitySourcesForContainer(container, tags, logger)) {
+    const evidence = getReleaseMaturityEvidence(source.versionTag, []);
+    if (
+      evidence &&
+      isReleaseVersionInPin(container, evidence.version) &&
+      !seenTags.has(source.tag)
+    ) {
+      const aliases = versions.get(evidence.version) ?? [];
+      aliases.push({ tag: source.tag, versionTag: evidence.version });
+      versions.set(evidence.version, aliases);
+      seenTags.add(source.tag);
+    }
+  }
+  return [...versions.values()]
+    .sort((left, right) => semver.rcompare(left[0].versionTag, right[0].versionTag))
+    .flat()
+    .slice(0, 8);
+}
+
+export function getReleaseMaturityEvidenceForContainer(
+  container: Container,
+  tags: string[],
+  result: ContainerResult,
+  logger: TagCandidatesLogger,
+): ReleaseMaturityEvidence | undefined {
+  const sources = getReleaseMaturitySourcesForContainer(container, tags, logger);
   const evidence =
     getReleaseMaturityEvidence(transformTag(container.transformTags, result.tag), sources) ??
     (result.softwareVersion
       ? getReleaseMaturityEvidence(result.softwareVersion, sources)
       : undefined);
-  if (evidence && currentShape && currentShape.numericSegments.length < 3) {
-    const candidateParts = evidence.version.split('.');
-    if (
-      currentShape.numericSegments.some(
-        (part, index) => Number(part) !== Number(candidateParts[index]),
-      )
-    ) {
-      return undefined;
-    }
-  }
+  if (evidence && !isReleaseVersionInPin(container, evidence.version)) return undefined;
   return evidence;
 }
 

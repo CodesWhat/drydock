@@ -11,6 +11,13 @@ import * as storeContainer from '../../../store/container.js';
 import { getErrorMessage } from './docker-helpers.js';
 import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
 
+export interface DockerContainerWatchOptions {
+  emitBatchEvent?: boolean;
+  useRegistryPollCache?: boolean;
+  collectReleaseMaturity?: boolean;
+  scanGeneration?: number;
+}
+
 interface ContainerWatchLogger {
   error: (message: string) => void;
   warn: (message: string) => void;
