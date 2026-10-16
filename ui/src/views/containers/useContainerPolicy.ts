@@ -28,6 +28,7 @@ type ContainerListPolicyState = {
   snoozeUntil?: string;
   maturityBlocked: boolean;
   releaseMaturityBlocker?: UpdateBlocker;
+  ageMaturityBlocked?: boolean;
   updateDetectedAt?: string;
 } & (
   | {
@@ -203,6 +204,10 @@ function buildContainerListPolicyStateFromPolicy(
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
   const backendMaturityBlocked = findBackendMaturityBlocked(metaRecord);
   const releaseMaturityBlocker = findBackendReleaseMaturityBlocker(metaRecord);
+  const blockers = asRecord(metaRecord.updateEligibility)?.blockers;
+  const ageMaturityBlocked =
+    Array.isArray(blockers) &&
+    blockers.some((blocker) => asRecord(blocker)?.reason === 'maturity-not-reached');
   const fallbackMaturityStartMs = resolveFallbackMaturityClockStartMs(metaRecord, updateDetectedAt);
   const maturityBlocked =
     backendMaturityBlocked !== undefined
@@ -224,6 +229,7 @@ function buildContainerListPolicyStateFromPolicy(
     snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
     ...(updateDetectedAt ? { updateDetectedAt } : {}),
     maturityBlocked,
+    ...(ageMaturityBlocked ? { ageMaturityBlocked } : {}),
     ...(releaseMaturityBlocker ? { releaseMaturityBlocker } : {}),
   };
 
@@ -267,7 +273,7 @@ function buildSnoozedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTra
 }
 
 function buildMaturityPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
-  if (state.releaseMaturityBlocker)
+  if (state.releaseMaturityBlocker && !state.ageMaturityBlocked)
     return formatReleaseMaturityMessage(state.releaseMaturityBlocker, t);
   if (state.maturityMode === 'mature') {
     const minAgeDays = state.maturityMinAgeDays;

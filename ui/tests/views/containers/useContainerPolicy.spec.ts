@@ -101,6 +101,29 @@ function createPolicyHarness(
 }
 
 describe('useContainerPolicy', () => {
+  it('keeps the age requirement visible while both maturity gates are pending', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5 },
+          updateEligibility: {
+            blockers: [
+              { reason: 'maturity-not-reached', message: 'Waiting for age' },
+              {
+                reason: 'maturity-releases-not-reached',
+                message: 'Waiting for releases',
+                details: { evidenceAvailable: false },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity')).toBe(
+      'Mature-only policy blocks updates younger than 5 days',
+    );
+    harness.wrapper.unmount();
+  });
   it('uses the release-count explanation in list tooltips after the day gate passes', () => {
     const harness = createPolicyHarness({
       containerMetaMap: {
