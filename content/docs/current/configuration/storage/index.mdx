@@ -19,7 +19,7 @@ For a full backup that includes SBOM documents, stop Drydock and copy the store 
 
 When the SQLite database does not exist, startup imports an existing `DD_STORE_FILE` through a temporary database before putting the completed database in place. Import failure stops startup. An existing SQLite database is opened without re-importing JSON, and a fresh install with no legacy file creates no JSON store.
 
-Published v1.6 and v1.7 builds already store sessions in a separate JSON file (`dd-sessions.json` by default). The v1.8 importer prefers `dd-sessions.json` when present, otherwise reading the legacy `Sessions` collection in `dd.json`. It leaves the session JSON file untouched.
+Published v1.6.1 and v1.7.0-rc.24 builds already store sessions in a separate JSON file (`dd-sessions.json` by default). The v1.8 importer prefers `dd-sessions.json` when present, otherwise reading the legacy `Sessions` collection in `dd.json`. It leaves the session JSON file untouched.
 
 After import, the main JSON file is renamed to `<DD_STORE_FILE>.pre-1.8.bak` unless that backup already exists. An existing backup is never overwritten: Drydock logs a warning and leaves the imported JSON file in place. These are pre-upgrade snapshots, not live copies of the SQLite store.
 
@@ -71,7 +71,7 @@ docker run \
 
 Rolling back from v1.8 to v1.7 or earlier needs `dd.json` back, not `dd.sqlite`: stop drydock, rename `<DD_STORE_PATH>/<DD_STORE_FILE>.pre-1.8.bak` back to `<DD_STORE_FILE>` (`dd.json.pre-1.8.bak` → `dd.json` with the defaults), then start the older build. It only has what existed at the moment of the v1.8 upgrade's one-time import — anything written afterward (new containers, settings changes, sessions) lived in `dd.sqlite` alone and does not roll back with it.
 
-Keep any pre-upgrade session JSON file with the main JSON snapshot (`dd-sessions.json` with the default filename on v1.6/v1.7). The importer leaves it in place, but it does not receive session changes made by v1.8.
+Keep any pre-upgrade session JSON file with the main JSON snapshot (`dd-sessions.json` with the default filename on v1.6.1 and v1.7.0-rc.24). The importer leaves it in place, but it does not receive session changes made by v1.8.
 
 If the importer warned that a backup already existed, it left the imported JSON file in place. Preserve both files and identify the intended snapshot before restoring; the existing `.pre-1.8.bak` may belong to an earlier upgrade. A fresh v1.8 installation has no pre-upgrade JSON snapshot to restore.
 
