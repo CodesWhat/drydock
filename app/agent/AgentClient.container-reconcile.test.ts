@@ -144,6 +144,54 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
   });
 
   describe('watch()', () => {
+    test('requests release evidence only for controller-owned enabled policies without sending policy values', async () => {
+      seedOldContainerWithPolicy();
+      storeContainer.insertContainer(
+        buildIncomingContainer({
+          id: 'enabled',
+          agent: AGENT_NAME,
+          updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+        }),
+      );
+      storeContainer.insertContainer(
+        buildIncomingContainer({
+          id: 'disabled',
+          name: 'disabled',
+          agent: AGENT_NAME,
+          updatePolicy: { maturityMode: 'all', maturitySkipReleases: 2 },
+        }),
+      );
+      storeContainer.insertContainer(
+        buildIncomingContainer({
+          id: 'foreign',
+          name: 'foreign',
+          agent: 'another',
+          updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+        }),
+      );
+      vi.mocked(axios.post).mockResolvedValue({ data: [] });
+      await client.watch(WATCHER_NAME, WATCHER_NAME);
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.any(String),
+        { collectReleaseMaturityFor: ['enabled'] },
+        expect.any(Object),
+      );
+    });
+
+    test('requests evidence for a single enabled container without sending its policy', async () => {
+      const container = buildIncomingContainer({
+        agent: AGENT_NAME,
+        updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+      });
+      vi.mocked(axios.post).mockResolvedValue({ data: { container } });
+      await client.watchContainer(WATCHER_NAME, WATCHER_NAME, container);
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.any(String),
+        { collectReleaseMaturity: true },
+        expect.any(Object),
+      );
+    });
+
     test('retains updatePolicy when a same-identity container arrives under a new id', async () => {
       seedOldContainerWithPolicy();
       vi.mocked(axios.post).mockResolvedValueOnce({

@@ -461,6 +461,8 @@ function normalizeWatcherMaturityEnvAliases(
   watcherConfigurations: Record<string, Record<string, unknown>>,
 ) {
   const aliases = [
+    ['_MATURITY_SKIP_RELEASES', 'maturityskipreleases'],
+    ['_MATURITY_RELEASE_FALLBACK_DAYS', 'maturityreleasefallbackdays'],
     ['_MATURITY_MIN_AGE_DAYS', 'maturityminagedays'],
     ['_MATURITY_MODE', 'maturitymode'],
   ] as const;

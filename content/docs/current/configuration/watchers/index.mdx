@@ -67,6 +67,8 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
 | `DD_WATCHER_{watcher_name}_MATURITY_MODE` | ⚪ | Default maturity policy for containers discovered by this watcher; a container label or UI/API override can replace it | `all`, `mature` | `all` (no gate) |
 | `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
+| `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` | ⚪ | Unreleased v1.8: skip the first N distinct stable releases in each candidate family when mature mode is enabled | integer (`0` to `100`) | `0` (disabled) |
+| `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS` | ⚪ | Unreleased v1.8: optional age fallback for unavailable or insufficient release evidence; the day minimum still applies | integer (`0` to `365`) | `0` (disabled) |
 | `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
@@ -889,6 +891,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
 | `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
+| `dd.updatePolicy.maturitySkipReleases` | ⚪ | Unreleased v1.8: distinct earlier stable releases required in the candidate family | integer (`0` to `100`) | Watcher default → `0` |
+| `dd.updatePolicy.maturityReleaseFallbackDays` | ⚪ | Unreleased v1.8: explicit age fallback for the release-count gate | integer (`0` to `365`) | Watcher default → `0` |
 | `dd.updatePolicy.skipTags` | ⚪ | Declarative comma-separated list of remote tags to suppress | CSV tags | Empty list |
 | `dd.updatePolicy.skipDigests` | ⚪ | Declarative comma-separated list of remote digests to suppress | CSV digests | Empty list |
 | `dd.action.exclude` | ⚪ | Exclude specific action triggers from this container. An explicit exclude match always wins, even against a more permissive trigger. | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
@@ -974,7 +978,7 @@ If you're trying to restrict which containers a trigger can touch at all, set `A
 
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
-<Callout type="info">**Declarative per-container update policy** is supported through the four `dd.updatePolicy.*` labels above. The same four fields can also be set for a whole group of containers with a [group policy](/docs/configuration/groups), which sits between the labels and the watcher environment. Watcher environment defaults are available for the two maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+<Callout type="info">**Declarative per-container update policy** is supported through the six `dd.updatePolicy.*` labels above. The same six fields can also be set for a whole group of containers with a [group policy](/docs/configuration/groups), which sits between the labels and the watcher environment. Watcher environment defaults are available for the four maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
 
 ### Override labels with the API
 
@@ -1530,7 +1534,7 @@ The containers table has two distinct columns for version information:
 - **Tag** (column key `version`) — the image tag used for update detection (e.g. `latest`, `1.4.5`). This column was called "Version" in releases before v1.5.1; the column key is unchanged so saved column preferences keep working.
 - **Version** (column key `softwareVersion`) — the application version surfaced from `image.softwareVersion` (the `org.opencontainers.image.version` OCI label, a `dd.inspect.tag.path` extract, or other runtime metadata). Falls back to the image tag when `softwareVersion` is not available. Visible by default for new installs; added automatically to saved column lists on upgrade.
 
-In unreleased v1.8, digest checks also retain the remote candidate's OCI version label in the API's `result.softwareVersion` field when the selected platform's image config provides it. This optional field is separate from the installed `image.softwareVersion` shown in the Version column. Missing or unusable labels leave it absent. It does not change update eligibility or enable release-count maturity.
+In unreleased v1.8, digest checks also retain the remote candidate's OCI version label in the API's `result.softwareVersion` field when the selected platform's image config provides it. This optional field is separate from the installed `image.softwareVersion` shown in the Version column. Missing or unusable labels leave it absent. The label alone does not enable a gate. [Release-count maturity](/docs/api/container#release-count-maturity-unreleased-v18) uses this candidate version or bounded digest proof only when its policy is configured.
 
 ### Version column display
 

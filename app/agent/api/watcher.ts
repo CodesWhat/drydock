@@ -83,6 +83,15 @@ export async function watchWatcher(req: Request, res: Response) {
     // so an older or newer AgentClient on either side of that skew keeps
     // working unchanged.
     const { reports, coalesced } = await triggerManualWatch(watcher, 'agent-poll');
+    const requested = new Set(
+      Array.isArray(req.body?.collectReleaseMaturityFor) ? req.body.collectReleaseMaturityFor : [],
+    );
+    for (let index = 0; index < reports.length; index += 1) {
+      const container = reports[index].container;
+      if (requested.has(container.id) && !container.result?.releaseMaturity) {
+        reports[index] = await watcher.watchContainer(container, { collectReleaseMaturity: true });
+      }
+    }
     res.set('X-Drydock-Watch-Coalesced', String(coalesced));
     res.json(reports);
   } catch (error: unknown) {
@@ -114,7 +123,10 @@ export async function watchContainer(req: Request, res: Response) {
   }
 
   try {
-    const result = await watcher.watchContainer(container);
+    const result =
+      req.body?.collectReleaseMaturity === true
+        ? await watcher.watchContainer(container, { collectReleaseMaturity: true })
+        : await watcher.watchContainer(container);
     res.json(result);
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);

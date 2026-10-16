@@ -20,16 +20,18 @@ Drydock derives a container's group from its labels, in this order: `dd.group`, 
 
 ## What a policy sets
 
-A policy carries the four declarative update-policy fields, with the same values the `dd.updatePolicy.*` labels accept:
+A policy carries the six declarative update-policy fields, with the same values the `dd.updatePolicy.*` labels accept:
 
 | Field | Values |
 | --- | --- |
 | `maturityMode` | `all` or `mature` |
 | `maturityMinAgeDays` | integer from 1 to 365 |
+| `maturitySkipReleases` | integer from 0 to 100; 0 disables release counting |
+| `maturityReleaseFallbackDays` | integer from 0 to 365; 0 disables the count gate age fallback |
 | `skipTags` | list of tags to skip |
 | `skipDigests` | list of digests to skip |
 
-A policy has to set at least one field. An empty `skipTags` or `skipDigests` list is dropped, because the only layer below a group is the watcher environment, which has no skip lists. `maturityMode: all` is kept, since it deliberately overrides a watcher default of `mature`. `snoozeUntil` is not a group field: a snooze stays a per-container override.
+A policy has to set at least one field. An empty `skipTags` or `skipDigests` list is dropped, because the only layer below a group is the watcher environment, which has no skip lists. `maturityMode: all` is kept, since it deliberately overrides a watcher default of `mature`. An explicit `0` in either release-count field overrides the watcher default. See [release-count maturity](/docs/api/container#release-count-maturity-unreleased-v18) for family and evidence rules. `snoozeUntil` is not a group field: a snooze stays a per-container override.
 
 ## Action rules
 

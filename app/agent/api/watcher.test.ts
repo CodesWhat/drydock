@@ -110,6 +110,27 @@ describe('agent API watcher', () => {
       expect(res.json).toHaveBeenCalledWith(reports);
     });
 
+    test('collects missing proof only for requested containers in the completed watcher reports', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      req.body = { collectReleaseMaturityFor: ['c1', 'c2', 'foreign'] };
+      const c1 = { id: 'c1' };
+      const c2 = {
+        id: 'c2',
+        result: { releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 } },
+      };
+      const resolved = { container: { ...c1, result: c2.result }, changed: true };
+      const watcher = {
+        watch: vi.fn().mockResolvedValue([{ container: c1 }, { container: c2 }]),
+        watchContainer: vi.fn().mockResolvedValue(resolved),
+      };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      await watcherApi.watchWatcher(req, res);
+      expect(watcher.watchContainer).toHaveBeenCalledExactlyOnceWith(c1, {
+        collectReleaseMaturity: true,
+      });
+      expect(res.json).toHaveBeenCalledWith([resolved, { container: c2 }]);
+    });
+
     test('should return 500 when watcher throws', async () => {
       req.params = { type: 'docker', name: 'local' };
       const mockWatcher = {
@@ -238,6 +259,19 @@ describe('agent API watcher', () => {
       await watcherApi.watchContainer(req, res);
       expect(mockWatcher.watchContainer).toHaveBeenCalledWith(container);
       expect(res.json).toHaveBeenCalledWith({ container });
+    });
+
+    test('passes only the collection flag to a single-container watch', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'c1' };
+      req.body = { collectReleaseMaturity: true, maturitySkipReleases: 99 };
+      const container = { id: 'c1' };
+      const watcher = { watchContainer: vi.fn().mockResolvedValue({ container }) };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      storeContainer.getContainer.mockReturnValue(container);
+      await watcherApi.watchContainer(req, res);
+      expect(watcher.watchContainer).toHaveBeenCalledWith(container, {
+        collectReleaseMaturity: true,
+      });
     });
 
     test('should return 500 when watchContainer throws', async () => {

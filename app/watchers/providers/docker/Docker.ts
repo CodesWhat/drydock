@@ -60,6 +60,7 @@ import {
   resolveTriggerLabelOverrides,
 } from './container-init.js';
 import {
+  type DockerContainerWatchOptions,
   mapContainerToContainerReport as mapContainerToContainerReportState,
   watchContainer as watchContainerState,
 } from './container-processing.js';
@@ -128,6 +129,7 @@ import {
 import { createStderrFallbackLogger, serializeFallbackLogValue } from './fallback-logger.js';
 import {
   type ContainerWatchLogger,
+  type FindNewVersionOptions,
   findNewVersion as findNewVersionState,
   normalizeContainer,
 } from './image-comparison.js';
@@ -1386,24 +1388,22 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    *   mid-scan) skips the store write and report emission (DR-72).
    * @returns {Promise<*>}
    */
-  async watchContainer(
-    container: Container,
-    {
+  async watchContainer(container: Container, options: DockerContainerWatchOptions = {}) {
+    const {
       emitBatchEvent = false,
       useRegistryPollCache = false,
+      collectReleaseMaturity,
       scanGeneration,
-    }: {
-      emitBatchEvent?: boolean;
-      useRegistryPollCache?: boolean;
-      scanGeneration?: number;
-    } = {},
-  ) {
+    } = options;
     this.ensureLogger();
     return watchContainerState(container, {
       ensureLogger: () => this.ensureLogger(),
       log: this.log,
       findNewVersion: (containerToCheck, logContainer) =>
-        this.findNewVersion(containerToCheck, logContainer, { useRegistryPollCache }),
+        this.findNewVersion(containerToCheck, logContainer, {
+          useRegistryPollCache,
+          collectReleaseMaturity,
+        }),
       mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
         this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
       emitBatchEvent,
@@ -1679,7 +1679,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async findNewVersion(
     container: Container,
     logContainer: ContainerWatchLogger,
-    { useRegistryPollCache = false }: { useRegistryPollCache?: boolean } = {},
+    options: FindNewVersionOptions = {},
   ) {
     const tagPolicy = resolveEffectiveContainerTagPolicy(
       container,
@@ -1687,8 +1687,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       (image) => this.getMatchingImgsetConfiguration(image),
     );
     return findNewVersionState({ ...container, tagFamily: tagPolicy.tagFamily }, logContainer, {
+      ...options,
       pinInfoEnabled: tagPolicy.tagPinInfo,
-      useRegistryPollCache,
     });
   }
 
