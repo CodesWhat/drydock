@@ -67,7 +67,7 @@ The policy gate suppresses an update until the image has aged past a minimum thr
 
 The gate clock starts from the **earliest point** at which the update is known to have existed:
 
-- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` is immediately mature, regardless of when this Drydock instance first noticed it.
+- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` clears the day minimum immediately, regardless of when this Drydock instance first noticed it. Any configured release-count requirement still applies.
 - Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update — falling back to `firstSeenAt` when `updateDetectedAt` is missing or fails to parse (a legacy/partial-record case; in steady state the two are stamped together).
 - If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`/`firstSeenAt` the same way.
 
