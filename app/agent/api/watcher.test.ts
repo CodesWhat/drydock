@@ -127,8 +127,83 @@ describe('agent API watcher', () => {
       await watcherApi.watchWatcher(req, res);
       expect(watcher.watchContainer).toHaveBeenCalledExactlyOnceWith(c1, {
         collectReleaseMaturity: true,
+        emitBatchEvent: false,
       });
       expect(res.json).toHaveBeenCalledWith([resolved, { container: c2 }]);
+    });
+
+    test('collects requested proofs with concurrency ten and preserves report order', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const reports = Array.from({ length: 12 }, (_, index) => ({
+        container: { id: `c${index}` },
+      }));
+      req.body = { collectReleaseMaturityFor: reports.map((report) => report.container.id) };
+      let release: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let active = 0;
+      let peak = 0;
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(reports),
+        watchContainer: vi.fn().mockImplementation(async (container) => {
+          active += 1;
+          peak = Math.max(peak, active);
+          await gate;
+          active -= 1;
+          return {
+            container: {
+              ...container,
+              result: { releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 } },
+            },
+          };
+        }),
+      };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      const pending = watcherApi.watchWatcher(req, res);
+      try {
+        await vi.waitFor(() => expect(watcher.watchContainer).toHaveBeenCalledTimes(10), {
+          timeout: 500,
+          interval: 5,
+        });
+      } finally {
+        release();
+        await pending;
+      }
+      expect(peak).toBe(10);
+      expect(res.json.mock.calls[0][0].map((report) => report.container.id)).toEqual(
+        reports.map((report) => report.container.id),
+      );
+      expect(
+        watcher.watchContainer.mock.calls.every(([, options]) => options.emitBatchEvent === false),
+      ).toBe(true);
+    });
+
+    test('returns completed reports when one optional proof re-watch rejects', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      req.body = { collectReleaseMaturityFor: ['failed', 'healthy'] };
+      const failed = { container: { id: 'failed' } };
+      const healthy = { container: { id: 'healthy' } };
+      const resolved = {
+        container: {
+          ...healthy.container,
+          result: { releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 } },
+        },
+      };
+      const reports = [failed, healthy];
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(reports),
+        watchContainer: vi.fn().mockImplementation(async (container) => {
+          if (container.id === 'failed') throw new Error('report handler rejected');
+          return resolved;
+        }),
+      };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      await watcherApi.watchWatcher(req, res);
+      expect(res.status).not.toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith([failed, resolved]);
+      expect(reports).toEqual([failed, healthy]);
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('failed'));
     });
 
     test('should return 500 when watcher throws', async () => {

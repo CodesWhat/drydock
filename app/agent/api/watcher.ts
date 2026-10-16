@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import pLimit from 'p-limit';
 import { mapComponentsToList, mapComponentToItem } from '../../api/component.js';
 import { sendErrorResponse } from '../../api/error-response.js';
 import logger from '../../log/index.js';
@@ -86,14 +87,28 @@ export async function watchWatcher(req: Request, res: Response) {
     const requested = new Set(
       Array.isArray(req.body?.collectReleaseMaturityFor) ? req.body.collectReleaseMaturityFor : [],
     );
-    for (let index = 0; index < reports.length; index += 1) {
-      const container = reports[index].container;
-      if (requested.has(container.id) && !container.result?.releaseMaturity) {
-        reports[index] = await watcher.watchContainer(container, { collectReleaseMaturity: true });
-      }
-    }
+    const limit = pLimit(10);
+    const enrichedReports = await Promise.all(
+      reports.map((report) => {
+        const container = report.container;
+        if (!requested.has(container.id) || container.result?.releaseMaturity) return report;
+        return limit(async () => {
+          try {
+            return await watcher.watchContainer(container, {
+              collectReleaseMaturity: true,
+              emitBatchEvent: false,
+            });
+          } catch (error: unknown) {
+            log.error(
+              `Error collecting release maturity for ${sanitizeLogParam(container.id)}: ${sanitizeLogParam(normalizeErrorMessage(error))}`,
+            );
+            return report;
+          }
+        });
+      }),
+    );
     res.set('X-Drydock-Watch-Coalesced', String(coalesced));
-    res.json(reports);
+    res.json(enrichedReports);
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);
     log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(message)}`);
