@@ -33,6 +33,17 @@ describe('release-family maturity evidence', () => {
     ).toEqual({ version: '2.0.2', family: '2', earlierReleases: 2 });
   });
 
+  test.each(['V9.0.2', 'v9.0.2', '9.0.2'])(
+    'normalizes uppercase version aliases for candidate %s and earlier releases',
+    (version) => {
+      expect(evidence(version, ['V9.0.0', 'V9.0.1', 'v9.0.1+build.1'])).toEqual({
+        version: '9.0.2',
+        family: '9',
+        earlierReleases: 2,
+      });
+    },
+  );
+
   test('does not invent releases in version gaps or count later releases', () => {
     expect(evidence('2.0.8', ['2.0.0', '2.0.8', '2.0.9'])).toEqual({
       version: '2.0.8',

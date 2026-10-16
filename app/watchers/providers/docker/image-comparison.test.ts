@@ -422,6 +422,34 @@ describe('image-comparison', () => {
     expect(result.releaseMaturity).toBeUndefined();
   });
 
+  test('proves uppercase-prefixed release tags using their exact registry spelling', async () => {
+    const lookup = vi.fn().mockImplementation(async (image) => ({
+      digest: ['9', 'V9.0.2'].includes(image.tag.value) ? 'sha256:remote' : 'sha256:other',
+      version: 1,
+    }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', 'V9.0.0', 'V9.0.1', 'V9.0.2', 'V9.0.3']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    current.image.tag.value = '9';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('9');
+    expect(result.releaseMaturity).toEqual({ version: '9.0.2', family: '9', earlierReleases: 2 });
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual(['9', 'V9.0.3', 'V9.0.2']);
+  });
+
   test('warns and ignores invalid digest include filters', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({

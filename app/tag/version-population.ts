@@ -49,7 +49,7 @@ export function getReleaseMaturityEvidence(
   if (!CONCRETE_RELEASE_PATTERN.test(candidateTag)) {
     return undefined;
   }
-  const candidate = semver.parse(candidateTag, { loose: true });
+  const candidate = semver.parse(candidateTag.replace(/^v/i, ''), { loose: true });
   if (!candidate) {
     return undefined;
   }
@@ -61,7 +61,7 @@ export function getReleaseMaturityEvidence(
     if (!CONCRETE_RELEASE_PATTERN.test(versionTag)) {
       continue;
     }
-    const release = semver.parse(versionTag, { loose: true });
+    const release = semver.parse(versionTag.replace(/^v/i, ''), { loose: true });
     if (
       !release ||
       release.major !== candidate.major ||
