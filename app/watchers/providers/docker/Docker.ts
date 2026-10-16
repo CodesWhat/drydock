@@ -8,6 +8,7 @@ import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
+import { getDockerMaturityConfigurationSchema } from './update-policy.js';
 
 type DebounceFn = <T extends (...args: any[]) => void>(
   fn: T,
@@ -187,6 +188,8 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   maintenancewindowscope: MaintenanceWindowScope;
   maturitymode?: 'all' | 'mature';
   maturityminagedays?: number;
+  maturityskipreleases?: number;
+  maturityreleasefallbackdays?: number;
   imgset?: Record<string, Record<string, unknown>>;
   tag?: {
     family?: 'strict' | 'loose';
@@ -452,8 +455,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         .string()
         .valid(...MAINTENANCE_WINDOW_SCOPES)
         .default(DEFAULT_MAINTENANCE_WINDOW_SCOPE),
-      maturitymode: this.joi.string().valid('all', 'mature'),
-      maturityminagedays: this.joi.number().integer().min(1).max(365),
+      ...getDockerMaturityConfigurationSchema(this.joi),
       discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),

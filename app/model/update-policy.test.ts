@@ -15,6 +15,24 @@ function groupSnapshot(
 }
 
 describe('update policy layers', () => {
+  test('resolves release maturity fields independently through every layer, including explicit zero', () => {
+    expect(
+      resolveUpdatePolicyLayers(
+        {
+          env: { maturitySkipReleases: 1, maturityReleaseFallbackDays: 30 },
+          label: { maturityReleaseFallbackDays: 10 },
+        },
+        { maturitySkipReleases: 0 },
+        { maturitySkipReleases: 2, maturityReleaseFallbackDays: 20 },
+      ),
+    ).toEqual({
+      updatePolicy: { maturitySkipReleases: 0, maturityReleaseFallbackDays: 10 },
+      updatePolicySources: {
+        maturitySkipReleases: 'override',
+        maturityReleaseFallbackDays: 'label',
+      },
+    });
+  });
   test('resolves each field independently from env, label, and override tiers', () => {
     const result = resolveUpdatePolicyLayers(
       {

@@ -32,6 +32,29 @@ describe('isValidGroupPolicyName', () => {
 });
 
 describe('normalizeGroupPolicyUpdatePolicy', () => {
+  test('preserves release maturity values including explicit disabling values', () => {
+    expect(
+      normalizeGroupPolicyUpdatePolicy({
+        maturitySkipReleases: 2,
+        maturityReleaseFallbackDays: 10,
+      }),
+    ).toEqual({ maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 });
+    expect(
+      normalizeGroupPolicyUpdatePolicy({ maturitySkipReleases: 0, maturityReleaseFallbackDays: 0 }),
+    ).toEqual({ maturitySkipReleases: 0, maturityReleaseFallbackDays: 0 });
+  });
+
+  test.each([
+    { maturitySkipReleases: -1 },
+    { maturitySkipReleases: 101 },
+    { maturitySkipReleases: 1.5 },
+    { maturitySkipReleases: '2' },
+    { maturityReleaseFallbackDays: -1 },
+    { maturityReleaseFallbackDays: 366 },
+    { maturityReleaseFallbackDays: true },
+  ])('rejects invalid release maturity settings %j', (policy) => {
+    expect(() => normalizeGroupPolicyUpdatePolicy(policy)).toThrow(GroupPolicyValidationError);
+  });
   test('keeps every declarative field in canonical order', () => {
     const normalized = normalizeGroupPolicyUpdatePolicy({
       skipDigests: ['sha256:b'],

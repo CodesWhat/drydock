@@ -1,5 +1,24 @@
 import { openApiSchemas } from './schemas.js';
 
+test('documents release maturity settings, sources and the soft release blocker', () => {
+  for (const schema of [
+    openApiSchemas.ContainerDeclarativeUpdatePolicy,
+    openApiSchemas.ContainerUpdatePolicy,
+  ]) {
+    expect(schema.properties).toMatchObject({
+      maturitySkipReleases: { type: 'integer', minimum: 0, maximum: 100 },
+      maturityReleaseFallbackDays: { type: 'integer', minimum: 0, maximum: 365 },
+    });
+  }
+  expect(openApiSchemas.ContainerUpdatePolicySources.properties.maturitySkipReleases).toEqual({
+    type: 'string',
+    enum: ['env', 'group', 'label', 'override'],
+  });
+  expect(openApiSchemas.UpdateBlocker.properties.reason.enum).toContain(
+    'maturity-releases-not-reached',
+  );
+});
+
 describe('scanner runtime OpenAPI schemas', () => {
   test('documents each runtime provider with its tool status, provider, and role', () => {
     expect(openApiSchemas.SecurityRuntimeProviderStatus).toStrictEqual({

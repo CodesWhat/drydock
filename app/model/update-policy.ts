@@ -11,6 +11,8 @@ import type {
 export const DECLARATIVE_UPDATE_POLICY_FIELDS = [
   'maturityMode',
   'maturityMinAgeDays',
+  'maturitySkipReleases',
+  'maturityReleaseFallbackDays',
   'skipTags',
   'skipDigests',
 ] as const;

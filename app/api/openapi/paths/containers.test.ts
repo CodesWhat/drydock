@@ -21,12 +21,25 @@ describe('containerPaths', () => {
     expect(schema.properties.action.enum).toContain('revert-to-declarative');
     expect(schema.properties.field).toEqual({
       type: 'string',
-      enum: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'],
+      enum: [
+        'maturityMode',
+        'maturityMinAgeDays',
+        'maturitySkipReleases',
+        'maturityReleaseFallbackDays',
+        'skipTags',
+        'skipDigests',
+      ],
       description: 'Override field to revert; omit to revert all declarative policy overrides.',
     });
     expect(schema.properties.minAgeDays).toEqual({
       type: 'integer',
       minimum: 1,
+      maximum: 365,
+    });
+    expect(schema.properties.skipReleases).toEqual({ type: 'integer', minimum: 0, maximum: 100 });
+    expect(schema.properties.releaseFallbackDays).toEqual({
+      type: 'integer',
+      minimum: 0,
       maximum: 365,
     });
   });

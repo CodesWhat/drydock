@@ -101,6 +101,119 @@ describe('image-comparison', () => {
     expect(current.image).toHaveProperty('softwareVersion', '2026.7.5');
   });
 
+  test.each([
+    {
+      tag: 'latest',
+      semver: false,
+      version: '2026.8.2',
+      tags: ['2026.7.9', '2026.8.0', 'v2026.8.0', '2026.8.1', '2026.8.2'],
+      family: '2026.8',
+    },
+    {
+      tag: '9',
+      semver: true,
+      version: '9.0.2',
+      tags: ['8.0.0', '9.0.0', 'v9.0.0', 'V9.0.0', '9.0.1', '9.0.2', '10.0.0'],
+      family: '9',
+    },
+  ])(
+    'discovers release evidence behind $tag without changing its deploy tag or adding requests',
+    async ({ tag, semver, version, tags, family }) => {
+      const lookup = vi
+        .fn()
+        .mockResolvedValue({ digest: 'sha256:remote', version: 2, softwareVersion: version });
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue([tag, ...tags]),
+            getImageManifestDigest: lookup,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const current = createFloatingAliasContainer();
+      Object.assign(current.image.tag, { value: tag, semver });
+      const result = await findNewVersion(current as never, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+      expect(result.tag).toBe(tag);
+      expect(result.releaseMaturity).toEqual({ version, family, earlierReleases: 2 });
+      expect(lookup).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  test('release evidence uses all filtered releases, including releases older than the install', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['2.0.0', '2.0.1', '2.0.2', '2.0.3', '2.0.4']),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      excludeTags: '^2\\.0\\.[01]$',
+      tagFamily: 'loose',
+    });
+    Object.assign(current.image.tag, { value: '2.0.3', tagPrecision: 'specific' });
+    current.image.digest.watch = false;
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('2.0.4');
+    expect(result.releaseMaturity).toEqual({ version: '2.0.4', family: '2', earlierReleases: 2 });
+  });
+
+  test('release evidence preserves the strict numeric padding constraint', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['5.01.4', '5.1.5']),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({ includeTags: '^5\\.' });
+    Object.assign(current.image.tag, { value: '5.1.4', tagPrecision: 'specific' });
+    current.image.digest.watch = false;
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('5.1.5');
+    expect(result.releaseMaturity).toEqual({ version: '5.1.5', family: '5', earlierReleases: 0 });
+  });
+
+  test('does not use installed version or a remote version outside a pinned alias track as release evidence', async () => {
+    const lookup = vi
+      .fn()
+      .mockResolvedValue({ digest: 'sha256:remote', version: 2, softwareVersion: '10.0.2' });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', '9.0.0', '9.0.1', '10.0.0', '10.0.1']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer();
+    current.image.tag.value = '9';
+    Object.assign(current.image, { softwareVersion: '9.0.2' });
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('9');
+    expect(result.releaseMaturity).toBeUndefined();
+  });
+
   test('warns and ignores invalid digest include filters', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({

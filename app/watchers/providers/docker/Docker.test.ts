@@ -437,6 +437,30 @@ describe('Docker Watcher', () => {
       ).toThrow();
     });
 
+    test('validates bounded release maturity watcher defaults without enabling them by default', () => {
+      const defaults = docker.validateConfiguration({ socket: '/var/run/docker.sock' });
+      expect(defaults.maturityskipreleases).toBeUndefined();
+      expect(defaults.maturityreleasefallbackdays).toBeUndefined();
+      const configured = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        maturityskipreleases: '2',
+        maturityreleasefallbackdays: '10',
+      });
+      expect(configured.maturityskipreleases).toBe(2);
+      expect(configured.maturityreleasefallbackdays).toBe(10);
+      for (const values of [
+        { maturityskipreleases: -1 },
+        { maturityskipreleases: 101 },
+        { maturityskipreleases: 1.5 },
+        { maturityreleasefallbackdays: -1 },
+        { maturityreleasefallbackdays: 366 },
+      ]) {
+        expect(() =>
+          docker.validateConfiguration({ socket: '/var/run/docker.sock', ...values }),
+        ).toThrow();
+      }
+    });
+
     test('defaults maintenancewindowscope to install and accepts scan (#946)', () => {
       expect(
         docker.validateConfiguration({ socket: '/var/run/docker.sock' }).maintenancewindowscope,

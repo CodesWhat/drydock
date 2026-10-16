@@ -22,6 +22,8 @@ import {
 } from './group-policy.js';
 import { describeRoutingOrigin } from './label-owned.js';
 import {
+  daysToMs,
+  isReleaseMaturityGatePending,
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
@@ -37,6 +39,7 @@ export type UpdateBlockerReason =
   | 'skip-tag'
   | 'skip-digest'
   | 'maturity-not-reached'
+  | 'maturity-releases-not-reached'
   | 'threshold-not-reached'
   | 'trigger-excluded'
   | 'trigger-not-included'
@@ -71,6 +74,7 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'skip-tag': 'soft',
   'skip-digest': 'soft',
   'maturity-not-reached': 'soft',
+  'maturity-releases-not-reached': 'soft',
   'threshold-not-reached': 'soft',
   // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
   'trigger-excluded': 'hard',
@@ -514,6 +518,37 @@ export function computeUpdateEligibility(
         }),
       );
     }
+  }
+
+  if (isReleaseMaturityGatePending(container, now)) {
+    const evidence = container.result?.releaseMaturity;
+    const requiredReleases = container.updatePolicy.maturitySkipReleases;
+    const policySource = container.updatePolicySources?.maturitySkipReleases;
+    const fallbackDays = container.updatePolicy.maturityReleaseFallbackDays ?? 0;
+    const clock = resolveMaturityClock(container, now);
+    const fallbackAt =
+      fallbackDays > 0 && clock.startMs !== undefined
+        ? new Date(clock.startMs + daysToMs(fallbackDays)).toISOString()
+        : undefined;
+    blockers.push(
+      makeBlocker({
+        reason: 'maturity-releases-not-reached',
+        message: evidence
+          ? `Maturity policy requires ${requiredReleases} earlier stable releases in family ${evidence.family}; ${evidence.earlierReleases} are available.`
+          : 'Release maturity evidence is unavailable for this candidate. Automatic updates are held.',
+        actionable: true,
+        actionHint:
+          "Wait for releases, configure an age fallback or change maturity mode to 'all'.",
+        ...(fallbackAt ? { liftableAt: fallbackAt } : {}),
+        details: {
+          requiredReleases,
+          evidenceAvailable: evidence !== undefined,
+          ...(evidence ?? {}),
+          ...(policySource ? { policySource } : {}),
+          ...(fallbackDays > 0 ? { fallbackDays } : {}),
+        },
+      }),
+    );
   }
 
   // Resolve a candidate docker/dockercompose/portainer trigger for trigger-level checks.

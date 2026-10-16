@@ -722,6 +722,93 @@ describe('computeUpdateEligibility', () => {
   });
 
   describe('maturity-not-reached', () => {
+    test('reports release count holds as soft blockers without inventing a completion date', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 20 * 86_400_000).toISOString(),
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+        updatePolicySources: { maturitySkipReleases: 'group' },
+        result: {
+          tag: '2.0.8',
+          releaseMaturity: { version: '2.0.8', family: '2', earlierReleases: 1 },
+        },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find(
+        (entry) => entry.reason === 'maturity-releases-not-reached',
+      );
+      expect(blocker).toMatchObject({
+        severity: 'soft',
+        actionable: true,
+        details: {
+          requiredReleases: 2,
+          earlierReleases: 1,
+          version: '2.0.8',
+          family: '2',
+          evidenceAvailable: true,
+          policySource: 'group',
+        },
+      });
+      expect(blocker?.liftableAt).toBeUndefined();
+      expect(
+        result.blockers.find((entry) => entry.reason === 'maturity-not-reached'),
+      ).toBeUndefined();
+    });
+
+    test('reports missing evidence honestly and only supplies a deadline for an explicit fallback', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 6 * 86_400_000).toISOString(),
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 5,
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+      });
+      const blocker = computeUpdateEligibility(
+        container,
+        makeContext({ now: FIXED_NOW }),
+      ).blockers.find((entry) => entry.reason === 'maturity-releases-not-reached');
+      expect(blocker).toMatchObject({
+        severity: 'soft',
+        liftableAt: new Date(FIXED_NOW + 4 * 86_400_000).toISOString(),
+        details: { requiredReleases: 2, evidenceAvailable: false, fallbackDays: 10 },
+      });
+      expect(blocker?.message).toContain('unavailable');
+    });
+
+    test('release evidence or reached fallback clears only the release blocker', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 2 * 86_400_000).toISOString(),
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+        result: {
+          tag: '2.0.2',
+          releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 },
+        },
+      });
+      const eligible = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(
+        eligible.blockers.find((entry) => entry.reason === 'maturity-releases-not-reached'),
+      ).toBeUndefined();
+      expect(
+        eligible.blockers.find((entry) => entry.reason === 'maturity-not-reached'),
+      ).toBeDefined();
+    });
+
+    test('does not invent a fallback deadline when the candidate has no maturity clock', () => {
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+      });
+      const blocker = computeUpdateEligibility(
+        container,
+        makeContext({ now: FIXED_NOW }),
+      ).blockers.find((entry) => entry.reason === 'maturity-releases-not-reached');
+      expect(blocker).toMatchObject({ details: { evidenceAvailable: false, fallbackDays: 10 } });
+      expect(blocker?.liftableAt).toBeUndefined();
+    });
     test('emits blocker when maturityMode=mature and update is not old enough', () => {
       // Update detected 2 days ago, min age is 7 days
       const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();

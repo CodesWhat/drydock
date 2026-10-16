@@ -1076,7 +1076,10 @@ describe('Docker Watcher', () => {
       expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image, {
         usePollCycleCache: false,
       });
-      expect(result).toEqual({ tag: '1.0.0' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '1', version: '1.0.0' },
+        tag: '1.0.0',
+      });
     });
 
     test('should include result publishedAt when registry can resolve publish date', async () => {
@@ -1103,6 +1106,7 @@ describe('Docker Watcher', () => {
         usePollCycleCache: false,
       });
       expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '1', version: '1.0.0' },
         tag: '1.0.0',
         publishedAt: '2026-03-10T10:00:00.000Z',
       });
@@ -1155,7 +1159,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.0.0' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '1', version: '1.0.0' },
+        tag: '1.0.0',
+      });
     });
 
     test('should continue when publish date lookup fails', async () => {
@@ -1178,7 +1185,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.0.0' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '1', version: '1.0.0' },
+        tag: '1.0.0',
+      });
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('publish date lookup failed'),
       );
@@ -1204,7 +1214,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.0.0' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '1', version: '1.0.0' },
+        tag: '1.0.0',
+      });
     });
 
     test('should handle unsupported registry', async () => {
@@ -1422,7 +1435,10 @@ describe('Docker Watcher', () => {
       const mockLogChild = { error: vi.fn(), warn: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '5.1.5' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 1, family: '5', version: '5.1.5' },
+        tag: '5.1.5',
+      });
     });
 
     test('should keep updates within inferred suffix family by default', async () => {
@@ -1631,7 +1647,10 @@ describe('Docker Watcher', () => {
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: 'v2.0.0' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '2', version: '2.0.0' },
+        tag: 'v2.0.0',
+      });
       expect(mockLogChild.debug).toHaveBeenCalledWith(
         expect.stringContaining(
           'Tag candidate filter counters (strict): input=5, prefix=3, semver=3, family=3, greater=2, output=2',
@@ -1682,7 +1701,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.9.0' });
+      expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 1, family: '1', version: '1.9.0' },
+        tag: '1.9.0',
+      });
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('does not match includeTags regex'),
       );
@@ -1727,6 +1749,7 @@ describe('Docker Watcher', () => {
       const result = await docker.findNewVersion(container, mockLogChild);
 
       expect(result).toEqual({
+        releaseMaturity: { earlierReleases: 0, family: '3', version: '3.0.0' },
         tag: '3.0.0',
         suggestedTag: expect.stringMatching(/^\d+\.\d+\.\d+$/),
       });

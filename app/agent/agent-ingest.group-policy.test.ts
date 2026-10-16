@@ -126,6 +126,48 @@ describe('AgentClient ingest', () => {
     vi.useRealTimers();
   });
 
+  test('controller release overrides survive agent reports and missing evidence holds automatic updates', async () => {
+    const updateDetectedAt = new Date(Date.now() - 20 * 86_400_000).toISOString();
+    const report = reported({
+      image: {
+        ...reported().image,
+        tag: { value: '2.0.0', semver: true },
+        digest: { watch: false },
+      },
+      result: {
+        tag: '2.0.2',
+        releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 1 },
+      },
+      updateDetectedAt,
+    });
+    await client.processContainer(report);
+    setOverride('edge-member', {
+      maturityMode: 'mature',
+      maturityMinAgeDays: 5,
+      maturitySkipReleases: 2,
+    });
+    await client.processContainer(report);
+    const held = storeContainer.getContainer('edge-member');
+    expect(held.updatePolicy.maturitySkipReleases).toBe(2);
+    expect(held.updatePolicySources.maturitySkipReleases).toBe('override');
+    expect(held.updateAvailable).toBe(false);
+
+    await client.processContainer({
+      ...report,
+      result: {
+        tag: '2.0.2',
+        releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 },
+      },
+    });
+    expect(storeContainer.getContainer('edge-member').updateAvailable).toBe(true);
+
+    await client.processContainer({ ...report, result: { tag: '2.0.2' } });
+    const olderAgentReport = storeContainer.getContainer('edge-member');
+    expect(olderAgentReport.result.releaseMaturity).toBeUndefined();
+    expect(olderAgentReport.updatePolicy.maturitySkipReleases).toBe(2);
+    expect(olderAgentReport.updateAvailable).toBe(false);
+  });
+
   test('the controller adds the group layer to an agent-reported member and keeps its overrides', async () => {
     await client.processContainer(reported());
 
