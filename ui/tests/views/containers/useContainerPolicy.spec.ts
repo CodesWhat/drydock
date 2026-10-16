@@ -218,6 +218,29 @@ describe('useContainerPolicy', () => {
     );
     harness.wrapper.unmount();
   });
+  it('resets unsaved maturity drafts when selecting another container with identical saved values', async () => {
+    const updatePolicy = {
+      maturityMode: 'mature',
+      maturityMinAgeDays: 5,
+      maturitySkipReleases: 2,
+      maturityReleaseFallbackDays: 10,
+    };
+    const harness = createPolicyHarness({
+      selectedContainer: makeContainer(),
+      containerMetaMap: { 'container-1': { updatePolicy }, 'container-2': { updatePolicy } },
+    });
+    harness.composable.maturityModeInput.value = 'all';
+    harness.composable.maturityMinAgeDaysInput.value = 8;
+    harness.composable.maturitySkipReleasesInput.value = 7;
+    harness.composable.maturityReleaseFallbackDaysInput.value = 14;
+    harness.selectedContainer.value = makeContainer({ id: 'container-2', name: 'other' });
+    await nextTick();
+    expect(harness.composable.maturitySkipReleasesInput.value).toBe(2);
+    expect(harness.composable.maturityReleaseFallbackDaysInput.value).toBe(10);
+    expect(harness.composable.maturityModeInput.value).toBe('mature');
+    expect(harness.composable.maturityMinAgeDaysInput.value).toBe(5);
+    harness.wrapper.unmount();
+  });
   it('seeds release maturity controls from the effective policy and resets them on selection changes', async () => {
     const harness = createPolicyHarness({
       selectedContainer: makeContainer(),

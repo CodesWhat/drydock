@@ -709,6 +709,7 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
   );
 
+  const selectedContainerId = computed(() => input.selectedContainer.value?.id);
   const snoozeDateInput = ref('');
   const maturityModeInput = ref<'all' | 'mature'>('all');
   const maturityMinAgeDaysInput = ref<number>(DEFAULT_MATURITY_MIN_AGE_DAYS);
@@ -724,31 +725,31 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   );
 
   watch(
-    () => selectedMaturityMode.value,
-    (mode) => {
+    [selectedContainerId, selectedMaturityMode],
+    ([, mode]) => {
       maturityModeInput.value = mode ?? 'all';
     },
     { immediate: true },
   );
 
   watch(
-    () => selectedMaturityMinAgeDays.value,
-    (minAgeDays) => {
+    [selectedContainerId, selectedMaturityMinAgeDays],
+    ([, minAgeDays]) => {
       maturityMinAgeDaysInput.value = minAgeDays;
     },
     { immediate: true },
   );
 
   watch(
-    selectedMaturitySkipReleases,
-    (value) => {
+    [selectedContainerId, selectedMaturitySkipReleases],
+    ([, value]) => {
       maturitySkipReleasesInput.value = value;
     },
     { immediate: true },
   );
   watch(
-    selectedMaturityReleaseFallbackDays,
-    (value) => {
+    [selectedContainerId, selectedMaturityReleaseFallbackDays],
+    ([, value]) => {
       maturityReleaseFallbackDaysInput.value = value;
     },
     { immediate: true },

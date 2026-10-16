@@ -160,12 +160,12 @@ function summary(row: GroupPolicyRow): string[] {
     ...(updatePolicy.maturitySkipReleases === undefined
       ? []
       : [
-          `${t('containerComponents.fullPageActions.skipReleases')}: ${updatePolicy.maturitySkipReleases}`,
+          `${t('containerComponents.fullPageActions.skipReleases')}: ${updatePolicy.maturitySkipReleases === 0 ? t('configView.general.fields.disabled') : updatePolicy.maturitySkipReleases}`,
         ]),
     ...(updatePolicy.maturityReleaseFallbackDays === undefined
       ? []
       : [
-          `${t('containerComponents.fullPageActions.releaseFallbackDays')}: ${updatePolicy.maturityReleaseFallbackDays}`,
+          `${t('containerComponents.fullPageActions.releaseFallbackDays')}: ${updatePolicy.maturityReleaseFallbackDays === 0 ? t('configView.general.fields.disabled') : updatePolicy.maturityReleaseFallbackDays}`,
         ]),
     ...(updatePolicy.skipTags
       ? [t('groupPolicyEditor.summary.skipTags', { count: updatePolicy.skipTags.length })]

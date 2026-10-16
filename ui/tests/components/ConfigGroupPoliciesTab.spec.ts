@@ -73,20 +73,24 @@ async function mountTab() {
   return wrapper;
 }
 
-it('shows release count and explicit disabled fallback values in the policy summary', async () => {
-  vi.mocked(listGroupPolicies).mockResolvedValue([
-    policy({
-      updatePolicy: {
-        maturitySkipReleases: 2,
-        maturityReleaseFallbackDays: 0,
-      },
-    }),
-  ]);
-  const wrapper = await mountTab();
-  expect(wrapper.text()).toContain('Early releases to skip: 2');
-  expect(wrapper.text()).toContain('Age fallback (days): 0');
-  expect(wrapper.text()).not.toContain('Release-count fallback after 0 days');
-});
+it.each([
+  { count: 2, fallback: 0, countSummary: '2', fallbackSummary: 'Disabled' },
+  { count: 0, fallback: 10, countSummary: 'Disabled', fallbackSummary: '10' },
+])(
+  'describes zero release policy values as disabled: %j',
+  async ({ count, fallback, countSummary, fallbackSummary }) => {
+    vi.mocked(listGroupPolicies).mockResolvedValue([
+      policy({
+        updatePolicy: { maturitySkipReleases: count, maturityReleaseFallbackDays: fallback },
+      }),
+    ]);
+    const wrapper = await mountTab();
+    expect(wrapper.text()).toContain(`Early releases to skip: ${countSummary}`);
+    expect(wrapper.text()).toContain(`Age fallback (days): ${fallbackSummary}`);
+    expect(wrapper.text()).not.toContain('Release-count fallback after 0 days');
+    wrapper.unmount();
+  },
+);
 
 beforeEach(() => {
   vi.mocked(listGroupPolicies).mockReset().mockResolvedValue([policy()]);
