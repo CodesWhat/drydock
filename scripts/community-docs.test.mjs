@@ -56,10 +56,12 @@ test('the roadmap preserves unfinished community requests', () => {
   const document = readFileSync('README.md', 'utf8');
   const section = document.split('Open community requirements')[1]?.split('</details>')[0];
   assert.ok(section, 'unfinished requests must not be described as shipped');
-  for (const number of [219, 558, 657, 897]) {
+  for (const number of [219, 558, 897]) {
     assert.ok(section.includes(`/discussions/${number}`), `missing discussion ${number}`);
   }
   assert.match(section, /not implemented/u);
+  assert.match(section, /DD_DEFAULTS_WATCH_DIGEST/u);
+  assert.match(section, /implemented for unreleased v1\.8/u);
 });
 
 test('the current translation guide matches the UI-only Crowdin mapping', () => {

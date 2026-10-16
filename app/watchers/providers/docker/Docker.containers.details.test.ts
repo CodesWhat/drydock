@@ -1,3 +1,4 @@
+import * as configuration from '../../../configuration/index.js';
 import {
   createDockerContainer,
   createHaParseMock,
@@ -697,6 +698,62 @@ describe('Docker Watcher', () => {
       expect(result.updatePolicy?.maturityMode).toBeUndefined();
       expect(result.updatePolicyDeclarative?.label.maturityMode).toBeUndefined();
       expect(result.updatePolicySources?.maturityMode).toBeUndefined();
+    });
+
+    describe('installation digest default through real discovery', () => {
+      afterEach(() => {
+        delete configuration.ddEnvVars.DD_DEFAULTS_WATCH_DIGEST;
+      });
+
+      const cases = [true, false].flatMap((defaultValue) =>
+        [undefined, 'true', 'false'].flatMap((imageValue) =>
+          [undefined, 'true', 'false'].map((labelValue) => ({
+            defaultValue,
+            imageValue,
+            labelValue,
+            expected: labelValue
+              ? labelValue === 'true'
+              : imageValue
+                ? imageValue === 'true'
+                : defaultValue,
+          })),
+        ),
+      );
+
+      test.each(cases)(
+        'default=$defaultValue image=$imageValue label=$labelValue discovers watch=$expected',
+        async ({ defaultValue, imageValue, labelValue, expected }) => {
+          configuration.ddEnvVars.DD_DEFAULTS_WATCH_DIGEST = String(defaultValue);
+          const container = await setupContainerDetailTest(docker, {
+            registerConfig:
+              imageValue === undefined
+                ? {}
+                : {
+                    imgset: {
+                      homeassistant: {
+                        image: 'ghcr.io/home-assistant/home-assistant',
+                        watch: { digest: imageValue },
+                      },
+                    },
+                  },
+            container: {
+              Image: 'ghcr.io/home-assistant/home-assistant:2026.2.1',
+              Names: ['/homeassistant'],
+              Labels: labelValue === undefined ? {} : { 'dd.watch.digest': labelValue },
+            },
+            imageDetails: {
+              Variant: 'v8',
+              RepoDigests: ['ghcr.io/home-assistant/home-assistant@sha256:abc123'],
+            },
+            parseImpl: createHaParseMock(),
+            semverValue: { major: 2026, minor: 2, patch: 1 },
+            registryId: 'ghcr',
+          });
+
+          const result = await docker.addImageDetailsToContainer(container);
+          expect(result.image.digest.watch).toBe(expected);
+        },
+      );
     });
 
     test('should apply imgset watchDigest when label is missing', async () => {

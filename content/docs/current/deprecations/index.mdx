@@ -135,6 +135,8 @@ Per-watcher digest watching via environment variable has been removed.
 | **Removed since** | v1.6.0 |
 | **Migration** | Use the `dd.watch.digest=true` label on individual containers instead |
 
+In v1.8, `DD_DEFAULTS_WATCH_DIGEST` adds a process-wide default beneath container labels and matching image sets. This is a new setting; the removed per-watcher variable above remains rejected. Agent processes must configure their own default. See [Digest-watch default](/docs/configuration/watchers#digest-watch-default).
+
 ### `DD_WATCHER_*_WATCHATSTART` environment variable {#watchatstart}
 
 Watching at startup is always scheduled. `WATCHATSTART` is no longer part of watcher configuration, including the former `false` suppression behavior.

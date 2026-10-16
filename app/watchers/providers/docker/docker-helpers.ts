@@ -625,16 +625,18 @@ function shouldWatchDigestForUnlabeledImage(context: DigestWatchContext) {
  * @param {TagPrecision} tagPrecision - whether the tag is specific or floating
  * @param {string} currentTag - the resolved current tag value, if any
  * @param {string} summaryImageReference - the raw image reference from container summary, if any
+ * @param {boolean} digestWatchDefault - the installation default, if configured
  * @returns {boolean}
  */
 export function isDigestToWatch(
   watchDigestLabelValue: string,
-  ...[parsedImage, isSemver, tagPrecision, currentTag, summaryImageReference]: [
+  ...[parsedImage, isSemver, tagPrecision, currentTag, summaryImageReference, digestWatchDefault]: [
     ParsedImageLike,
     boolean,
     TagPrecision,
     string | undefined,
     string | undefined,
+    boolean?,
   ]
 ) {
   const digestWatchContext: DigestWatchContext = {
@@ -654,7 +656,7 @@ export function isDigestToWatch(
     }
     return shouldWatch;
   }
-  return shouldWatchDigestForUnlabeledImage(digestWatchContext);
+  return digestWatchDefault ?? shouldWatchDigestForUnlabeledImage(digestWatchContext);
 }
 
 export function shouldUpdateDisplayNameFromContainerName(

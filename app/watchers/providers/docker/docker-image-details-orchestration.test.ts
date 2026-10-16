@@ -1,3 +1,4 @@
+import * as configuration from '../../../configuration/index.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import {
@@ -118,9 +119,29 @@ function createErroredStoredContainer(
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete configuration.ddEnvVars.DD_DEFAULTS_WATCH_DIGEST;
 });
 
 describe('docker image details orchestration module', () => {
+  test('recomputes the digest default for an already persisted container', async () => {
+    configuration.ddEnvVars.DD_DEFAULTS_WATCH_DIGEST = 'false';
+    const stored = createErroredStoredContainer({ repo: 'sha256:new', value: 'sha256:new' });
+    stored.image.digest.watch = true;
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+    const { watcher } = createWatcher();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toBe(stored);
+    expect(result?.image.digest.watch).toBe(false);
+    expect(result?.image.digest.value).toBe('sha256:new');
+  });
+
   describe('errored-container slow-path rebuild integrity', () => {
     // #542 routing update: an errored-but-known container now takes the fast
     // path (refreshContainerAlreadyInStore) instead of this slow rebuild.
