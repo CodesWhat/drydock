@@ -73,6 +73,21 @@ async function mountTab() {
   return wrapper;
 }
 
+it('shows release count and explicit disabled fallback values in the policy summary', async () => {
+  vi.mocked(listGroupPolicies).mockResolvedValue([
+    policy({
+      updatePolicy: {
+        maturitySkipReleases: 2,
+        maturityReleaseFallbackDays: 0,
+      },
+    }),
+  ]);
+  const wrapper = await mountTab();
+  expect(wrapper.text()).toContain('Early releases to skip: 2');
+  expect(wrapper.text()).toContain('Age fallback (days): 0');
+  expect(wrapper.text()).not.toContain('Release-count fallback after 0 days');
+});
+
 beforeEach(() => {
   vi.mocked(listGroupPolicies).mockReset().mockResolvedValue([policy()]);
   vi.mocked(getContainerGroups)

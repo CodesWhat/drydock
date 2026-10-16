@@ -157,6 +157,16 @@ function summary(row: GroupPolicyRow): string[] {
     ...(updatePolicy.maturityMinAgeDays === undefined
       ? []
       : [t('groupPolicyEditor.summary.minAge', { days: updatePolicy.maturityMinAgeDays })]),
+    ...(updatePolicy.maturitySkipReleases === undefined
+      ? []
+      : [
+          `${t('containerComponents.fullPageActions.skipReleases')}: ${updatePolicy.maturitySkipReleases}`,
+        ]),
+    ...(updatePolicy.maturityReleaseFallbackDays === undefined
+      ? []
+      : [
+          `${t('containerComponents.fullPageActions.releaseFallbackDays')}: ${updatePolicy.maturityReleaseFallbackDays}`,
+        ]),
     ...(updatePolicy.skipTags
       ? [t('groupPolicyEditor.summary.skipTags', { count: updatePolicy.skipTags.length })]
       : []),

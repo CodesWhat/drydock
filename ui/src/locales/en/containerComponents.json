@@ -145,7 +145,13 @@
       "versionLabel": "Version:",
       "rollbackReasonLabel": "Rollback reason:",
       "lastErrorLabel": "Last error:",
-      "noUpdateOperations": "No update operations recorded yet"
+      "noUpdateOperations": "No update operations recorded yet",
+      "skipReleases": "Early releases to skip",
+      "skipReleasesHint": "Skip the first N distinct stable releases per family: a SemVer major or CalVer month. 0 disables this gate.",
+      "releaseFallbackDays": "Age fallback (days)",
+      "releaseFallbackHint": "Allow after this many days if release evidence is missing or the count is unmet. 0 disables this fallback. The minimum age still applies.",
+      "releasePolicySummary": "Skip first {count} releases per family.",
+      "releaseFallbackSummary": "Release-count fallback after {days} days."
     },
     "fullPageDetail": {
       "statusUpdating": "Updating",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Select a valid snooze date",
-        "maturityAge": "Enter a maturity age between {min} and {max} days"
+        "maturityAge": "Enter a maturity age between {min} and {max} days",
+        "maturityReleases": "Use a whole release count from 0 to 100.",
+        "maturityFallback": "Use whole fallback days from 0 to 365."
       }
     },
     "triggers": {

@@ -145,7 +145,13 @@
       "versionLabel": "Sürüm:",
       "rollbackReasonLabel": "Geri alma nedeni:",
       "lastErrorLabel": "Son hata:",
-      "noUpdateOperations": "Henüz hiçbir güncelleme işlemi kaydedilmedi"
+      "noUpdateOperations": "Henüz hiçbir güncelleme işlemi kaydedilmedi",
+      "skipReleases": "Atlanacak ilk sürümler",
+      "skipReleasesHint": "Her ailedeki ilk N farklı kararlı sürümü atlar: SemVer ana sürümü veya CalVer ayı. 0 bu engeli kapatır.",
+      "releaseFallbackDays": "Yaşa göre istisna (gün)",
+      "releaseFallbackHint": "Sürüm verileri eksikse veya gereken sayıya ulaşılmadıysa bu kadar gün sonra izin verir. 0 istisnayı kapatır. Asgari yaş yine geçerlidir.",
+      "releasePolicySummary": "Her ailede ilk {count} sürümü atla.",
+      "releaseFallbackSummary": "{days} gün sonra sürüm sayısı istisnası."
     },
     "fullPageDetail": {
       "statusUpdating": "Güncelleniyor",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Geçerli bir erteleme tarihi seçin",
-        "maturityAge": "{min} ile {max} gün arasında bir olgunluk yaşı girin"
+        "maturityAge": "{min} ile {max} gün arasında bir olgunluk yaşı girin",
+        "maturityReleases": "0 ile 100 arasında tam sayı sürüm adedi girin.",
+        "maturityFallback": "İstisna için 0 ile 365 arasında tam sayı gün girin."
       }
     },
     "triggers": {

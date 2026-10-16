@@ -29,6 +29,8 @@ type GroupPolicyFailureField =
   | 'group'
   | 'maturityMode'
   | 'maturityMinAgeDays'
+  | 'maturitySkipReleases'
+  | 'maturityReleaseFallbackDays'
   | 'skipTags'
   | 'skipDigests'
   | 'updateMode'
@@ -55,6 +57,8 @@ interface GroupPolicyRow {
 interface GroupPolicyDraft {
   maturityMode: '' | GroupPolicyMaturityMode;
   minAgeDays: string;
+  skipReleases: string;
+  releaseFallbackDays: string;
   skipTags: string;
   skipDigests: string;
   updateMode: '' | GroupPolicyUpdateMode;
@@ -93,6 +97,14 @@ function draftFromPolicy(policy: GroupPolicy | undefined): GroupPolicyDraft {
     maturityMode: updatePolicy.maturityMode ?? '',
     minAgeDays:
       updatePolicy.maturityMinAgeDays === undefined ? '' : String(updatePolicy.maturityMinAgeDays),
+    skipReleases:
+      updatePolicy.maturitySkipReleases === undefined
+        ? ''
+        : String(updatePolicy.maturitySkipReleases),
+    releaseFallbackDays:
+      updatePolicy.maturityReleaseFallbackDays === undefined
+        ? ''
+        : String(updatePolicy.maturityReleaseFallbackDays),
     skipTags: (updatePolicy.skipTags ?? []).join('\n'),
     skipDigests: (updatePolicy.skipDigests ?? []).join('\n'),
     updateMode: actions.updateMode ?? '',
@@ -105,10 +117,14 @@ function buildGroupPolicyBody(draft: GroupPolicyDraft): GroupPolicyBody {
   const skipDigests = parseListText(draft.skipDigests);
   const exclude = parseListText(draft.exclude);
   const minAge = draft.minAgeDays.trim();
+  const skipReleases = draft.skipReleases.trim();
+  const releaseFallbackDays = draft.releaseFallbackDays.trim();
   return {
     updatePolicy: {
       ...(draft.maturityMode ? { maturityMode: draft.maturityMode } : {}),
       ...(minAge ? { maturityMinAgeDays: Number(minAge) } : {}),
+      ...(skipReleases ? { maturitySkipReleases: Number(skipReleases) } : {}),
+      ...(releaseFallbackDays ? { maturityReleaseFallbackDays: Number(releaseFallbackDays) } : {}),
       ...(skipTags.length > 0 ? { skipTags } : {}),
       ...(skipDigests.length > 0 ? { skipDigests } : {}),
     },
@@ -125,6 +141,8 @@ function buildGroupPolicyBody(draft: GroupPolicyDraft): GroupPolicyBody {
  */
 function groupPolicyFailureField(message: string): GroupPolicyFailureField {
   if (/maturityMinAgeDays/.test(message)) return 'maturityMinAgeDays';
+  if (/maturitySkipReleases/.test(message)) return 'maturitySkipReleases';
+  if (/maturityReleaseFallbackDays/.test(message)) return 'maturityReleaseFallbackDays';
   if (/maturityMode/.test(message)) return 'maturityMode';
   if (/skipTags/.test(message)) return 'skipTags';
   if (/skipDigests/.test(message)) return 'skipDigests';

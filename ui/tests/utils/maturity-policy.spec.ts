@@ -1,3 +1,4 @@
+import * as maturity from '@/utils/maturity-policy';
 import {
   DEFAULT_MATURITY_MIN_AGE_DAYS,
   daysToMs,
@@ -8,6 +9,21 @@ import {
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from '@/utils/maturity-policy';
+
+describe('release maturity bounds', () => {
+  it.each([
+    { value: 0, skip: 0, fallback: 0 },
+    { value: ' 2 ', skip: 2, fallback: 2 },
+    { value: 100, skip: 100, fallback: 100 },
+    { value: 365, skip: undefined, fallback: 365 },
+    ...[-1, 366, 1.5, '', ' ', true, null, undefined, {}, [], Number.NaN, Infinity].map(
+      (value) => ({ value, skip: undefined, fallback: undefined }),
+    ),
+  ])('accepts only bounded whole counts for $value', ({ value, skip, fallback }) => {
+    expect(maturity.parseMaturitySkipReleases?.(value)).toBe(skip);
+    expect(maturity.parseMaturityReleaseFallbackDays?.(value)).toBe(fallback);
+  });
+});
 
 describe('maturity-policy utils', () => {
   it('normalizes supported maturity modes', () => {

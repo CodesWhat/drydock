@@ -252,6 +252,11 @@ describe('groupPolicyFailureField', () => {
   it.each([
     ['Invalid group update policy: "maturityMode" must be one of [all, mature]', 'maturityMode'],
     ['Invalid group update policy: "maturityMinAgeDays" must be >= 1', 'maturityMinAgeDays'],
+    ['Invalid group update policy: "maturitySkipReleases" must be <= 100', 'maturitySkipReleases'],
+    [
+      'Invalid group update policy: "maturityReleaseFallbackDays" must be <= 365',
+      'maturityReleaseFallbackDays',
+    ],
     ['Invalid group update policy: "skipTags[0]" is not allowed', 'skipTags'],
     ['Invalid group update policy: "skipDigests" must be an array', 'skipDigests'],
     [
@@ -309,6 +314,8 @@ describe('draft helpers', () => {
     expect(draft).toEqual({
       maturityMode: 'all',
       minAgeDays: '7',
+      skipReleases: '',
+      releaseFallbackDays: '',
       skipTags: '1.0\n2.0',
       skipDigests: 'sha256:a',
       updateMode: 'notify',
@@ -325,6 +332,8 @@ describe('draft helpers', () => {
     expect(draft).toEqual({
       maturityMode: '',
       minAgeDays: '',
+      skipReleases: '',
+      releaseFallbackDays: '',
       skipTags: '',
       skipDigests: '',
       updateMode: '',

@@ -145,7 +145,13 @@
       "versionLabel": "版本：",
       "rollbackReasonLabel": "回滾原因：",
       "lastErrorLabel": "最後錯誤：",
-      "noUpdateOperations": "暫無更新操作記錄"
+      "noUpdateOperations": "暫無更新操作記錄",
+      "skipReleases": "略過的初始版本數",
+      "skipReleasesHint": "略過每個系列最初 N 個不同的穩定版。系列指 SemVer 主要版本或 CalVer 年月。0 表示停用此條件。",
+      "releaseFallbackDays": "按時間放行（天）",
+      "releaseFallbackHint": "若缺少發行資訊或未達所需數量，則在這些天數後放行。0 表示停用此例外。最短等待天數仍適用。",
+      "releasePolicySummary": "略過每個系列最初的 {count} 個版本。",
+      "releaseFallbackSummary": "{days} 天後免除版本數量條件。"
     },
     "fullPageDetail": {
       "statusUpdating": "更新中",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "請選擇有效的推遲日期",
-        "maturityAge": "請輸入介於 {min} 至 {max} 天之間的成熟度天數"
+        "maturityAge": "請輸入介於 {min} 至 {max} 天之間的成熟度天數",
+        "maturityReleases": "請輸入 0 到 100 之間的整數版本數。",
+        "maturityFallback": "請輸入 0 到 365 之間的整數天數作為放行時間。"
       }
     },
     "triggers": {

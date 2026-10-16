@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import ContainerMaturityPolicyEditor from './ContainerMaturityPolicyEditor.vue';
 import { getPreviewUpdateKind } from '../../services/preview';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
@@ -123,10 +124,6 @@ const {
   selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
-  maturityModeInput,
-  maturityMinAgeDaysInput,
-  setMaturityPolicySelected,
-  clearMaturityPolicySelected,
   confirmClearPolicy,
   revertPolicySelected,
   policyMessage,
@@ -811,48 +808,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   </AppButton>
                 </div>
               </div>
-              <!-- Maturity group -->
-              <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.maturityGroup') }}</div>
-                <div class="flex flex-wrap gap-1.5 items-center">
-                  <div class="flex items-center gap-1">
-                    <select
-                      v-model="maturityModeInput"
-                      class="px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
-                      :disabled="policyInProgress !== null"
-                    >
-                      <option value="all">{{ t('containerComponents.fullPageActions.allowNewMature') }}</option>
-                      <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
-                    </select>
-                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('maturityMode')" data-test="policy-group-maturityMode" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
-                    <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMode')" data-test="policy-overridden-maturityMode" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMode')" data-test="policy-revert-maturityMode" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMode')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <input
-                      v-model.number="maturityMinAgeDaysInput"
-                      type="number"
-                      min="1"
-                      max="365"
-                      class="w-[92px] px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
-                      :disabled="policyInProgress !== null"
-                    />
-                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('maturityMinAgeDays')" data-test="policy-group-maturityMinAgeDays" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
-                    <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMinAgeDays')" data-test="policy-overridden-maturityMinAgeDays" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMinAgeDays')" data-test="policy-revert-maturityMinAgeDays" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMinAgeDays')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
-                  </div>
-                  <AppButton size="sm" variant="outlined"
-                          :disabled="policyInProgress !== null"
-                          @click="setMaturityPolicySelected(maturityModeInput)">
-                    {{ t('containerComponents.fullPageActions.applyMaturity') }}
-                  </AppButton>
-                  <AppButton size="sm" variant="outlined"
-                          :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
-                          @click="clearMaturityPolicySelected">
-                    {{ t('containerComponents.fullPageActions.clearMaturity') }}
-                  </AppButton>
-                </div>
-              </div>
+              <ContainerMaturityPolicyEditor />
               <!-- Reset group -->
               <div>
                 <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.resetGroup') }}</div>

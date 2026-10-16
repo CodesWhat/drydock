@@ -145,7 +145,13 @@
       "versionLabel": "Versión:",
       "rollbackReasonLabel": "Motivo del rollback:",
       "lastErrorLabel": "Último error:",
-      "noUpdateOperations": "Aún no hay operaciones de actualización registradas"
+      "noUpdateOperations": "Aún no hay operaciones de actualización registradas",
+      "skipReleases": "Versiones iniciales que omitir",
+      "skipReleasesHint": "Omite las primeras N versiones estables distintas de cada familia: versión mayor de SemVer o mes de CalVer. 0 desactiva este filtro.",
+      "releaseFallbackDays": "Excepción por antigüedad (días)",
+      "releaseFallbackHint": "Permite la actualización tras estos días si faltan datos de versiones o no se alcanza la cantidad. 0 desactiva la excepción. La antigüedad mínima sigue aplicándose.",
+      "releasePolicySummary": "Omitir las primeras {count} versiones de cada familia.",
+      "releaseFallbackSummary": "Excepción al recuento de versiones tras {days} días."
     },
     "fullPageDetail": {
       "statusUpdating": "Actualizando",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Selecciona una fecha de posposición válida",
-        "maturityAge": "Introduce una antigüedad de madurez entre {min} y {max} días"
+        "maturityAge": "Introduce una antigüedad de madurez entre {min} y {max} días",
+        "maturityReleases": "Introduce un número entero de versiones entre 0 y 100.",
+        "maturityFallback": "Introduce un número entero de días para la excepción entre 0 y 365."
       }
     },
     "triggers": {

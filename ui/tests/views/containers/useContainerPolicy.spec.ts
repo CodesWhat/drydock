@@ -124,6 +124,73 @@ describe('useContainerPolicy', () => {
     );
     harness.wrapper.unmount();
   });
+  it('compares release overrides against group values and retains explicit zero ownership', async () => {
+    const baseline = { maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 };
+    const meta = {
+      groupPolicy: {
+        id: 'p1',
+        group: 'payments',
+        revision: 1,
+        updatePolicy: baseline,
+        actions: {},
+      },
+      updatePolicyDeclarative: { env: {}, label: {} },
+      updatePolicy: {
+        maturityMode: 'mature',
+        maturitySkipReleases: 0,
+        maturityReleaseFallbackDays: 20,
+      },
+      updatePolicyOverrides: { maturitySkipReleases: 0, maturityReleaseFallbackDays: 20 },
+      updatePolicySources: {
+        maturitySkipReleases: 'override',
+        maturityReleaseFallbackDays: 'override',
+      },
+    };
+    const harness = createPolicyHarness({
+      selectedContainer: makeContainer(),
+      containerMetaMap: { 'container-1': meta },
+    });
+    expect(harness.composable.selectedPolicyOverriddenFields.value).toEqual(
+      new Set(['maturitySkipReleases', 'maturityReleaseFallbackDays']),
+    );
+    harness.containerMetaMap.value = {
+      'container-1': { ...meta, updatePolicyOverrides: baseline },
+    };
+    await nextTick();
+    expect(harness.composable.selectedPolicyOverriddenFields.value.size).toBe(0);
+    expect(harness.composable.selectedPolicyOverrideFields.value.size).toBe(2);
+    harness.containerMetaMap.value = {
+      'container-1': {
+        ...meta,
+        updatePolicyOverrides: {},
+        updatePolicySources: {
+          maturitySkipReleases: 'group',
+          maturityReleaseFallbackDays: 'group',
+        },
+      },
+    };
+    await nextTick();
+    expect(harness.composable.selectedPolicyGroupFields.value).toEqual(
+      new Set(['maturitySkipReleases', 'maturityReleaseFallbackDays']),
+    );
+    harness.wrapper.unmount();
+  });
+  it.each(['maturitySkipReleases', 'maturityReleaseFallbackDays'])(
+    'compares an invalid %s override against the disabled default',
+    (field) => {
+      const harness = createPolicyHarness({
+        selectedContainer: makeContainer(),
+        containerMetaMap: {
+          'container-1': {
+            updatePolicyOverrides: { [field]: 'invalid' },
+          },
+        },
+      });
+      expect(harness.composable.selectedPolicyOverrideFields.value).toEqual(new Set([field]));
+      expect(harness.composable.selectedPolicyOverriddenFields.value.size).toBe(0);
+      harness.wrapper.unmount();
+    },
+  );
   it('uses the release-count explanation in list tooltips after the day gate passes', () => {
     const harness = createPolicyHarness({
       containerMetaMap: {
@@ -149,6 +216,29 @@ describe('useContainerPolicy', () => {
     expect(harness.composable.containerPolicyTooltip('container-1', 'maturity')).toBe(
       'Waiting for stable releases in family 2: 1 of 2 earlier releases available.',
     );
+    harness.wrapper.unmount();
+  });
+  it('seeds release maturity controls from the effective policy and resets them on selection changes', async () => {
+    const harness = createPolicyHarness({
+      selectedContainer: makeContainer(),
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturitySkipReleases: 2,
+            maturityReleaseFallbackDays: 10,
+          },
+        },
+      },
+    });
+    expect(harness.composable.selectedMaturitySkipReleases?.value).toBe(2);
+    expect(harness.composable.selectedMaturityReleaseFallbackDays?.value).toBe(10);
+    expect(harness.composable.maturitySkipReleasesInput?.value).toBe(2);
+    expect(harness.composable.maturityReleaseFallbackDaysInput?.value).toBe(10);
+    harness.selectedContainer.value = makeContainer({ id: 'other', name: 'other' });
+    await nextTick();
+    expect(harness.composable.maturitySkipReleasesInput?.value).toBe(0);
+    expect(harness.composable.maturityReleaseFallbackDaysInput?.value).toBe(0);
     harness.wrapper.unmount();
   });
   beforeEach(() => {

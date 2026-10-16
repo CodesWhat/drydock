@@ -145,7 +145,13 @@
       "versionLabel": "Wersja:",
       "rollbackReasonLabel": "Powód wycofania:",
       "lastErrorLabel": "Ostatni błąd:",
-      "noUpdateOperations": "Nie zarejestrowano jeszcze żadnych operacji aktualizacji"
+      "noUpdateOperations": "Nie zarejestrowano jeszcze żadnych operacji aktualizacji",
+      "skipReleases": "Początkowe wydania do pominięcia",
+      "skipReleasesHint": "Pomiń pierwszych N różnych stabilnych wydań w każdej rodzinie: głównej wersji SemVer lub miesiącu CalVer. 0 wyłącza tę blokadę.",
+      "releaseFallbackDays": "Wyjątek według wieku (dni)",
+      "releaseFallbackHint": "Zezwól po tylu dniach, gdy brakuje danych wydań lub nie osiągnięto wymaganej liczby. 0 wyłącza wyjątek. Minimalny wiek nadal obowiązuje.",
+      "releasePolicySummary": "Pomiń pierwszych {count} wydań w każdej rodzinie.",
+      "releaseFallbackSummary": "Wyjątek od liczby wydań po {days} dniach."
     },
     "fullPageDetail": {
       "statusUpdating": "Aktualizowanie",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Wybierz prawidłową datę odłożenia",
-        "maturityAge": "Podaj wiek dojrzałości między {min} a {max} dni"
+        "maturityAge": "Podaj wiek dojrzałości między {min} a {max} dni",
+        "maturityReleases": "Podaj całkowitą liczbę wydań od 0 do 100.",
+        "maturityFallback": "Podaj całkowitą liczbę dni dla wyjątku od 0 do 365."
       }
     },
     "triggers": {

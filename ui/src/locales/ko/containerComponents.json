@@ -145,7 +145,13 @@
       "versionLabel": "버전:",
       "rollbackReasonLabel": "롤백 사유:",
       "lastErrorLabel": "마지막 오류:",
-      "noUpdateOperations": "아직 기록된 업데이트 작업이 없습니다"
+      "noUpdateOperations": "아직 기록된 업데이트 작업이 없습니다",
+      "skipReleases": "건너뛸 초기 릴리스 수",
+      "skipReleasesHint": "계열마다 처음 N개의 서로 다른 안정 릴리스를 건너뜁니다. 계열은 SemVer 주 버전 또는 CalVer 연월입니다. 0은 이 조건을 끕니다.",
+      "releaseFallbackDays": "경과 일수 예외 (일)",
+      "releaseFallbackHint": "릴리스 정보가 없거나 필요한 수에 미달하면 이 일수가 지난 뒤 허용합니다. 0은 예외를 끕니다. 최소 경과 일수 조건은 계속 적용됩니다.",
+      "releasePolicySummary": "계열마다 처음 {count}개 릴리스를 건너뜁니다.",
+      "releaseFallbackSummary": "{days}일 후 릴리스 수 조건을 면제합니다."
     },
     "fullPageDetail": {
       "statusUpdating": "업데이트 중",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "유효한 일시 중지 날짜를 선택하세요",
-        "maturityAge": "{min}일에서 {max}일 사이의 성숙도 기간을 입력하세요"
+        "maturityAge": "{min}일에서 {max}일 사이의 성숙도 기간을 입력하세요",
+        "maturityReleases": "릴리스 수는 0~100의 정수로 입력하세요.",
+        "maturityFallback": "예외 적용 일수는 0~365의 정수로 입력하세요."
       }
     },
     "triggers": {

@@ -145,7 +145,13 @@
       "versionLabel": "Versie:",
       "rollbackReasonLabel": "Reden voor terugdraaien:",
       "lastErrorLabel": "Laatste fout:",
-      "noUpdateOperations": "Er zijn nog geen updatebewerkingen geregistreerd"
+      "noUpdateOperations": "Er zijn nog geen updatebewerkingen geregistreerd",
+      "skipReleases": "Vroege releases overslaan",
+      "skipReleasesHint": "Sla de eerste N verschillende stabiele releases per familie over: een SemVer-hoofdversie of CalVer-maand. 0 schakelt deze blokkade uit.",
+      "releaseFallbackDays": "Uitzondering op leeftijd (dagen)",
+      "releaseFallbackHint": "Sta na dit aantal dagen toe als releasegegevens ontbreken of het aantal niet is bereikt. 0 schakelt de uitzondering uit. De minimumleeftijd blijft gelden.",
+      "releasePolicySummary": "Sla de eerste {count} releases per familie over.",
+      "releaseFallbackSummary": "Uitzondering op het aantal releases na {days} dagen."
     },
     "fullPageDetail": {
       "statusUpdating": "Updaten",
@@ -665,7 +671,9 @@
       },
       "validation": {
         "snoozeDate": "Selecteer een geldige snoozedatum",
-        "maturityAge": "Voer een volwassenheidsleeftijd in tussen {min} en {max} dagen"
+        "maturityAge": "Voer een volwassenheidsleeftijd in tussen {min} en {max} dagen",
+        "maturityReleases": "Voer een geheel aantal releases van 0 tot 100 in.",
+        "maturityFallback": "Voer voor de uitzondering een geheel aantal dagen van 0 tot 365 in."
       }
     },
     "triggers": {
