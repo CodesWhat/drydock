@@ -93,6 +93,7 @@ export async function watchWatcher(req: Request, res: Response) {
         const container = report.container;
         if (!requested.has(container.id) || container.result?.releaseMaturity) return report;
         return limit(async () => {
+          const completedReport = structuredClone(report);
           try {
             return await watcher.watchContainer(container, {
               collectReleaseMaturity: true,
@@ -102,7 +103,7 @@ export async function watchWatcher(req: Request, res: Response) {
             log.error(
               `Error collecting release maturity for ${sanitizeLogParam(container.id)}: ${sanitizeLogParam(normalizeErrorMessage(error))}`,
             );
-            return report;
+            return completedReport;
           }
         });
       }),
