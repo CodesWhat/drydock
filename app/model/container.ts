@@ -93,6 +93,7 @@ export interface ContainerResult {
   suggestedTag?: string;
   digest?: string;
   created?: string;
+  softwareVersion?: string;
   publishedAt?: string;
   publishedAtTrusted?: boolean;
   link?: string;
@@ -522,6 +523,7 @@ const schema = joi.object({
     suggestedTag: joi.string().min(1),
     digest: joi.string(),
     created: joi.string().isoDate(),
+    softwareVersion: joi.string().max(256),
     publishedAt: joi.string().isoDate(),
     publishedAtTrusted: joi.boolean(),
     link: joi.string(),

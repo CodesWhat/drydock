@@ -73,6 +73,34 @@ describe('image-comparison', () => {
     mockSuggestTag.mockReturnValue(null);
   });
 
+  test('retains the remote candidate version separately from the installed alias version', async () => {
+    const getImageManifestDigest = vi.fn().mockResolvedValue({
+      digest: 'sha256:remote',
+      version: 2,
+      softwareVersion: '2026.8.2',
+    });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest', '2026.8.2']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer();
+    current.image.tag.value = 'latest';
+    current.image.tag.semver = false;
+    Object.assign(current.image, { softwareVersion: '2026.7.5' });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(current as never, log);
+
+    expect(result).toHaveProperty('softwareVersion', '2026.8.2');
+    expect(result.tag).toBe('latest');
+    expect(current.image).toHaveProperty('softwareVersion', '2026.7.5');
+  });
+
   test('warns and ignores invalid digest include filters', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({

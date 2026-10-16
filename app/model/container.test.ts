@@ -86,6 +86,23 @@ test.each(['starting', 'healthy', 'unhealthy'])('validate round-trips health=%s'
   expect(container.validate(createValidContainer({ health })).health).toBe(health);
 });
 
+test('validate retains the candidate software version independently of the installed version', () => {
+  const input = createValidContainer({ result: { tag: 'latest', softwareVersion: '2026.8.2' } });
+  Object.assign(input.image, { softwareVersion: '2026.7.5' });
+  const result = container.validate(input);
+  expect(result.result).toHaveProperty('softwareVersion', '2026.8.2');
+  expect(result.image.softwareVersion).toBe('2026.7.5');
+});
+
+test.each([{}, [], true, 'v'.repeat(257)])(
+  'validate rejects unusable candidate software version %j',
+  (softwareVersion) => {
+    expect(() =>
+      container.validate(createValidContainer({ result: { softwareVersion } })),
+    ).toThrow();
+  },
+);
+
 test.each([true, false])('validate round-trips effective tagPinInfo=%s (#498)', (tagPinInfo) => {
   expect(container.validate(createValidContainer({ tagPinInfo })).tagPinInfo).toBe(tagPinInfo);
 });

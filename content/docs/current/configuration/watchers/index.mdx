@@ -1530,6 +1530,8 @@ The containers table has two distinct columns for version information:
 - **Tag** (column key `version`) — the image tag used for update detection (e.g. `latest`, `1.4.5`). This column was called "Version" in releases before v1.5.1; the column key is unchanged so saved column preferences keep working.
 - **Version** (column key `softwareVersion`) — the application version surfaced from `image.softwareVersion` (the `org.opencontainers.image.version` OCI label, a `dd.inspect.tag.path` extract, or other runtime metadata). Falls back to the image tag when `softwareVersion` is not available. Visible by default for new installs; added automatically to saved column lists on upgrade.
 
+In unreleased v1.8, digest checks also retain the remote candidate's OCI version label in the API's `result.softwareVersion` field when the selected platform's image config provides it. This optional field is separate from the installed `image.softwareVersion` shown in the Version column. Missing or unusable labels leave it absent. It does not change update eligibility or enable release-count maturity.
+
 ### Version column display
 
 The **Tag** column adapts based on `tagPrecision`:
