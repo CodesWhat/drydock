@@ -164,19 +164,24 @@ export function getReleaseMaturityLookupCandidates(
   tags: string[],
   logger: TagCandidatesLogger,
 ): VersionTagSource[] {
-  const versions = new Map<string, VersionTagSource>();
+  const versions = new Map<string, VersionTagSource[]>();
+  const seenTags = new Set<string>();
   for (const source of getReleaseMaturitySourcesForContainer(container, tags, logger)) {
     const evidence = getReleaseMaturityEvidence(source.versionTag, []);
     if (
       evidence &&
       isReleaseVersionInPin(container, evidence.version) &&
-      !versions.has(evidence.version)
+      !seenTags.has(source.tag)
     ) {
-      versions.set(evidence.version, { tag: source.tag, versionTag: evidence.version });
+      const aliases = versions.get(evidence.version) ?? [];
+      aliases.push({ tag: source.tag, versionTag: evidence.version });
+      versions.set(evidence.version, aliases);
+      seenTags.add(source.tag);
     }
   }
   return [...versions.values()]
-    .sort((left, right) => semver.rcompare(left.versionTag, right.versionTag))
+    .sort((left, right) => semver.rcompare(left[0].versionTag, right[0].versionTag))
+    .flat()
     .slice(0, 8);
 }
 

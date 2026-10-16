@@ -270,7 +270,7 @@ describe('image-comparison', () => {
     },
   );
 
-  test('limits alias proof lookups to eight distinct stable releases and ignores excluded or foreign tracks', async () => {
+  test('limits alias proof lookups to eight stable tags and ignores excluded or foreign tracks', async () => {
     const lookup = vi
       .fn()
       .mockImplementation(async (image) => ({ digest: `sha256:${image.tag.value}`, version: 1 }));
@@ -448,6 +448,73 @@ describe('image-comparison', () => {
     expect(result.tag).toBe('9');
     expect(result.releaseMaturity).toEqual({ version: '9.0.2', family: '9', earlierReleases: 2 });
     expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual(['9', 'V9.0.3', 'V9.0.2']);
+  });
+
+  test('tries alternate raw tags for one canonical version without counting the release twice', async () => {
+    const lookup = vi.fn().mockImplementation(async (image) => ({
+      digest: ['9', 'v9.0.2'].includes(image.tag.value) ? 'sha256:remote' : 'sha256:other',
+      version: 1,
+    }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', '9.0.0', '9.0.1', '9.0.2', 'v9.0.2']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    current.image.tag.value = '9';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.releaseMaturity).toEqual({ version: '9.0.2', family: '9', earlierReleases: 2 });
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual(['9', '9.0.2', 'v9.0.2']);
+  });
+
+  test('shares the eight-proof budget across alternate spellings and ignores duplicate raw tags', async () => {
+    const aliases = [
+      '9.0.9',
+      'v9.0.9',
+      'V9.0.9',
+      '09.0.9',
+      '9.00.9',
+      '9.0.09',
+      '09.00.9',
+      '09.0.09',
+      '09.00.09',
+    ];
+    const lookup = vi
+      .fn()
+      .mockImplementation(async (image) => ({ digest: `sha256:${image.tag.value}`, version: 1 }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest', aliases[0], ...aliases, '9.0.8']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    Object.assign(current.image.tag, { value: 'latest', semver: false });
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.releaseMaturity).toBeUndefined();
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual([
+      'latest',
+      ...aliases.slice(0, 8),
+    ]);
   });
 
   test('warns and ignores invalid digest include filters', async () => {
