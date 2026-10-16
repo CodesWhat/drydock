@@ -17,6 +17,8 @@ export interface AgentKeyRecord {
   label: string; // human-readable name supplied by operator
   createdAt: string; // ISO-8601 UTC
   revokedAt: string | null; // ISO-8601 UTC or null when active
+  rotationParentId?: string;
+  rotationAgentName?: string;
 }
 
 /**
@@ -49,6 +51,12 @@ function rowToRecord(row: Row): AgentKeyRecord {
     label: String(row.label),
     createdAt: String(row.created_at),
     revokedAt: row.revoked_at === null ? null : String(row.revoked_at),
+    ...(typeof row.rotation_parent_id === 'string'
+      ? {
+          rotationParentId: row.rotation_parent_id,
+          rotationAgentName: String(row.rotation_agent_name),
+        }
+      : {}),
   };
 }
 
@@ -115,7 +123,7 @@ export function getKey(keyId: string): AgentKeyRecord | null {
   }
   const row = db
     .prepare(
-      'SELECT key_id, pubkey, label, created_at, revoked_at FROM agent_keys WHERE key_id = ?',
+      'SELECT key_id, pubkey, label, created_at, revoked_at, rotation_parent_id, rotation_agent_name FROM agent_keys WHERE key_id = ?',
     )
     .get(keyId);
   if (!row || row.revoked_at !== null) {
@@ -134,8 +142,10 @@ export function revokeKey(keyId: string): boolean {
     return false;
   }
   const result = db
-    .prepare('UPDATE agent_keys SET revoked_at = ? WHERE key_id = ? AND revoked_at IS NULL')
-    .run(new Date().toISOString(), keyId);
+    .prepare(
+      'UPDATE agent_keys SET revoked_at = ? WHERE (key_id = ? OR rotation_parent_id = ?) AND revoked_at IS NULL',
+    )
+    .run(new Date().toISOString(), keyId, keyId);
   if (result.changes === 0) {
     return false;
   }
@@ -154,6 +164,109 @@ export function listKeys(): AgentKeyRecord[] {
     .prepare('SELECT key_id, pubkey, label, created_at, revoked_at FROM agent_keys')
     .all()
     .map(rowToRecord);
+}
+
+export function assertExclusiveRotationOwner(parentId: string, agentName: string): void {
+  const parent = getKey(parentId);
+  const names = db?.prepare('SELECT agent_name FROM name_bindings WHERE key_id = ?').all(parentId);
+  if (
+    !parent ||
+    parent.rotationParentId ||
+    names?.length !== 1 ||
+    names[0].agent_name !== agentName
+  ) {
+    throw new AgentKeyConflictError(
+      'Key rotation requires an exclusive active key for this agent name',
+    );
+  }
+}
+
+export function getPendingRotation(parentId: string, agentName: string): AgentKeyRecord | null {
+  const row = db
+    ?.prepare(
+      'SELECT * FROM agent_keys WHERE rotation_parent_id = ? AND rotation_agent_name = ? AND revoked_at IS NULL',
+    )
+    .get(parentId, agentName);
+  return row ? rowToRecord(row) : null;
+}
+
+function durableRotationWrite<T>(database: Database, operation: () => T): T {
+  const ordinarySync = database.pragma('synchronous');
+  if (typeof ordinarySync !== 'number')
+    throw new Error('Cannot determine credential durability setting');
+  // Credential changes must survive power loss before either peer retires a key.
+  database.pragma('synchronous', 3);
+  try {
+    return database.transaction(operation);
+  } finally {
+    database.pragma('synchronous', ordinarySync);
+  }
+}
+
+export function addRotationKey(
+  parentId: string,
+  agentName: string,
+  publicKey: Buffer,
+): AgentKeyRecord {
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    assertExclusiveRotationOwner(parentId, agentName);
+    const existing = getPendingRotation(parentId, agentName);
+    if (existing) {
+      if (existing.pubkey !== publicKey.toString('base64')) {
+        throw new AgentKeyConflictError('A different replacement key is already pending');
+      }
+      return existing;
+    }
+    const record = addKey(publicKey, `rotation:${agentName}`);
+    database
+      .prepare(
+        'UPDATE agent_keys SET rotation_parent_id = ?, rotation_agent_name = ? WHERE key_id = ?',
+      )
+      .run(parentId, agentName, record.keyId);
+    return { ...record, rotationParentId: parentId, rotationAgentName: agentName };
+  });
+}
+
+export function confirmRotationKey(keyId: string, agentName: string): string | undefined {
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    const key = getKey(keyId);
+    if (!key) throw new AgentKeyConflictError('Replacement key is not active');
+    if (!key.rotationParentId) return undefined;
+    if (key.rotationAgentName !== agentName)
+      throw new AgentKeyConflictError('Replacement belongs to a different agent');
+    const parentId = key.rotationParentId;
+    assertExclusiveRotationOwner(parentId, agentName);
+    const revoked = database
+      .prepare('UPDATE agent_keys SET revoked_at = ? WHERE key_id = ? AND revoked_at IS NULL')
+      .run(new Date().toISOString(), parentId);
+    const rebound = database
+      .prepare(
+        'UPDATE name_bindings SET key_id = ?, last_seen_at = ? WHERE agent_name = ? AND key_id = ?',
+      )
+      .run(keyId, Date.now(), agentName, parentId);
+    if (revoked.changes !== 1 || rebound.changes !== 1)
+      throw new AgentKeyConflictError('Rotation ownership changed');
+    database
+      .prepare(
+        'UPDATE agent_keys SET rotation_parent_id = NULL, rotation_agent_name = NULL WHERE key_id = ?',
+      )
+      .run(keyId);
+    log.info({ parentId, keyId, agentName }, 'Confirmed agent key rotation');
+    return parentId;
+  });
+}
+
+export function cancelRotationKey(parentId: string, agentName: string): boolean {
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    const pending = getPendingRotation(parentId, agentName);
+    return pending ? revokeKey(pending.keyId) : false;
+  });
 }
 
 /**

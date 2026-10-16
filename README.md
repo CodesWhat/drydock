@@ -429,6 +429,22 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | **v1.8.0** | Fleet Management & Live Config | **Landed on `dev/v1.8`, unreleased:** SQLite storage, approval queue, YAML config, scoped watcher/notification/action policy editors and security digest templates, concurrent updates, selective bulk updates ([#232](https://github.com/CodesWhat/drydock/discussions/232)), dependency-ordering UI, images inventory/prune, fleet health and inventory refresh, shareable label grouping, notification-only exact group routing ([#1251](https://github.com/CodesWhat/drydock/pull/1251)), persistent group policies with restrict-only action rules, an effective-policy view and a Settings editor, Drydock-side overrides for label-owned container settings, TOTP two-factor sign-in with recovery codes, install-only maintenance windows ([#946](https://github.com/CodesWhat/drydock/discussions/946)), first-party auth, scoped API keys ([#469](https://github.com/CodesWhat/drydock/discussions/469)), and Home Assistant update progress/devices ([#210](https://github.com/CodesWhat/drydock/discussions/210)). **Remaining:** broader live configuration needs ownership decisions; the static image list watcher is held until after GA. |
 | **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps sync, volume browser, locally-built images watched against a declared upstream base ([#897](https://github.com/CodesWhat/drydock/discussions/897)), health gates, canary deploys, web terminal, RBAC, LDAP/AD, basic Podman support over its Docker-compatible API, CLI, Wolfi hardened image, socket proxy |
 
+**Release documentation alignment before the v1.8 candidate:**
+
+- Reconcile the published v1.7 RC changelog history and candidate identity with
+  the development branch. The latest stable is v1.6.1; v1.7.0-rc.24 is a
+  candidate, and v1.8 features are unreleased. Preserve the production v1.7
+  docs before moving the active docs mapping to v1.8.
+- Align `DEPRECATIONS.md`, current upgrade/deprecation docs and translated
+  READMEs with those release boundaries, including the v1.7 removals and the
+  unreleased v1.8 SQLite, MQTT identity and auth-strategies changes. Keep
+  `PUT /api/v1/settings` available until API v2; its `Sunset` date is not
+  permission to remove a method from the frozen `/api/v1` contract.
+- Add controller-assisted Portwing rotation to the Unreleased changelog and
+  assign the first released versions supporting it on both sides. Matching
+  development builds are required today; Edge `202` means awaiting reconnect,
+  not completed rotation. Do not rewrite archived release behavior.
+
 **Open community requirements:** Cross-host dependency updates/restarts ([#219](https://github.com/CodesWhat/drydock/discussions/219)) and maturity based on release counts ([#558](https://github.com/CodesWhat/drydock/discussions/558)) are not implemented. Same-host dependency ordering and its new UI do not fulfill the remote-host request. Local-build detection and safe rebuild routing remain future work ([#897](https://github.com/CodesWhat/drydock/discussions/897)); none of these entries is a release-date commitment. A process-wide digest default ([#657](https://github.com/CodesWhat/drydock/discussions/657)) is implemented for unreleased v1.8 through `DD_DEFAULTS_WATCH_DIGEST`; configure each agent separately.
 
 </details>

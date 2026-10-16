@@ -8,7 +8,8 @@ import {
   projectStatsBucket,
 } from '../util/container-summary.js';
 import { sendErrorResponse } from './error-response.js';
-import { scoped } from './route-scopes.js';
+import { refuseRecoveryAssuranceSession } from './recovery-assurance.js';
+import { SESSION_ONLY, scoped } from './route-scopes.js';
 
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
@@ -234,9 +235,53 @@ function getAgentRoster(_req: Request, res: Response) {
   res.status(200).json({ data, total: data.length });
 }
 
+function getSigningKeyRotation(req: Request<AgentLogEntriesRequestParams>, res: Response) {
+  const agent = getAgent(req.params.name);
+  if (!agent) {
+    sendErrorResponse(res, 404, 'Agent not found');
+    return;
+  }
+  res.json(agent.getSigningKeyRotationStatus());
+}
+
+async function changeSigningKeyRotation(req: Request<AgentLogEntriesRequestParams>, res: Response) {
+  if (refuseRecoveryAssuranceSession(req, res, 'rotate agent keys')) return;
+  const body = req.body as { action?: unknown } | null | undefined;
+  if (
+    !body ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    (body.action !== 'rotate' && body.action !== 'abort')
+  ) {
+    sendErrorResponse(res, 400, 'Provide action rotate or abort');
+    return;
+  }
+  const agent = getAgent(req.params.name);
+  if (!agent) {
+    sendErrorResponse(res, 404, 'Agent not found');
+    return;
+  }
+  try {
+    if (!agent.getSigningKeyRotationStatus().enabled) {
+      sendErrorResponse(res, 409, 'Managed key rotation is not enabled for this agent');
+      return;
+    }
+    const result = await agent.rotateSigningKey(body.action);
+    res.status('phase' in result && result.phase === 'awaiting-reconnect' ? 202 : 200).json(result);
+  } catch {
+    sendErrorResponse(
+      res,
+      502,
+      'Key rotation could not be confirmed. Check rotation status before retrying.',
+    );
+  }
+}
+
 export function init() {
   router.get('/', scoped('read', getAgentsList));
   router.get('/roster', scoped('read', getAgentRoster));
   router.get('/:name/log/entries', scoped('read', getAgentLogEntries));
+  router.get('/:name/key-rotation', scoped(SESSION_ONLY, getSigningKeyRotation));
+  router.post('/:name/key-rotation', scoped(SESSION_ONLY, changeSigningKeyRotation));
   return router;
 }

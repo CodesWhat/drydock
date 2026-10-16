@@ -7,6 +7,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import { getVersion } from '../configuration/index.js';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
+import * as persistedAgentKeys from '../store/agent-keys.js';
 import type { Database } from '../store/db/driver.js';
 import * as nameBindingsStore from '../store/name-bindings.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
@@ -264,6 +265,7 @@ function createGateway(
   options: {
     isRateLimited?: () => boolean;
     getAgent?: () => unknown;
+    keyStore?: typeof persistedAgentKeys;
   } = {},
 ) {
   const mockKeyStore = {
@@ -291,7 +293,7 @@ function createGateway(
     >[0]['webSocketServer'],
     isRateLimited: options.isRateLimited ?? (() => false),
     serverConfiguration: {},
-    getAgentKeys: mockKeyStore,
+    getAgentKeys: options.keyStore ?? mockKeyStore,
   });
 
   return { gateway, mockWsServer, mockKeyStore, getUpgradedWs: () => upgradedWs };
@@ -3757,5 +3759,115 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     expect(nameBindingsSizeForTesting()).toBe(1);
     expect(nameBindingsStore.listBindings()).toHaveLength(1);
     expect(nameBindingsStore.listBindings()[0].agentName).toBe('new-cap-agent');
+  });
+});
+
+describe('managed Edge key handoff', () => {
+  let db: Database;
+  beforeEach(() => {
+    clearNonceCacheForTesting();
+    mockSaveStore.mockResolvedValue(undefined);
+    db = createMigratedMemoryDatabase();
+    persistedAgentKeys.createCollections(db);
+    nameBindingsStore.createCollections(db);
+  });
+  afterEach(() => {
+    clearNonceCacheForTesting();
+    nameBindingsStore.clearCollectionForTesting();
+    db.close();
+    vi.restoreAllMocks();
+  });
+
+  function rotationPair() {
+    const old = generateKeyPair();
+    const next = generateKeyPair();
+    persistedAgentKeys.addKey(old.rawPublicKey, 'owner');
+    nameBindingsStore.upsertBinding('test-agent', old.keyId, Date.now());
+    fillNameBindingsForTesting(
+      new Map([['test-agent', { keyId: old.keyId, lastSeenAt: Date.now() }]]),
+    );
+    persistedAgentKeys.addRotationKey(old.keyId, 'test-agent', next.rawPublicKey);
+    return { old, next };
+  }
+
+  async function trial(
+    pair: ReturnType<typeof rotationPair>,
+    options: { wrongSignature?: boolean; wrongName?: boolean } = {},
+  ) {
+    const { gateway, getUpgradedWs } = createGateway(undefined, { keyStore: persistedAgentKeys });
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = pair.next.keyId + pair.old.keyId;
+    sendMessageToGateway(
+      ws,
+      buildHello(
+        pair.next.keyId,
+        ts,
+        nonce,
+        signHello(options.wrongSignature ? pair.old.privateKey : pair.next.privateKey, ts, nonce),
+        { agentName: options.wrongName ? 'another-agent' : 'test-agent' },
+      ),
+    );
+    await vi.waitFor(() => expect(ws.sentMessages.length).toBeGreaterThan(0));
+    return ws;
+  }
+
+  test('a fresh signed hello commits the replacement and preserves the bound agent name', async () => {
+    const pair = rotationPair();
+    const ws = await trial(pair);
+    expect(JSON.parse(ws.sentMessages[0]).type).toBe('welcome');
+    expect(persistedAgentKeys.getKey(pair.old.keyId)).toBeNull();
+    expect(persistedAgentKeys.getKey(pair.next.keyId)).not.toHaveProperty('rotationParentId');
+    expect(nameBindingsStore.listBindings()[0]).toMatchObject({
+      agentName: 'test-agent',
+      keyId: pair.next.keyId,
+    });
+  });
+
+  test.each([{ wrongSignature: true }, { wrongName: true }])(
+    'unproven or misnamed replacements cannot retire their parent: %j',
+    async (options) => {
+      const pair = rotationPair();
+      const confirm = vi.spyOn(persistedAgentKeys, 'confirmRotationKey');
+      const ws = await trial(pair, options);
+      expect(JSON.parse(ws.sentMessages[0]).type).toBe('error');
+      expect(confirm).not.toHaveBeenCalled();
+      expect(persistedAgentKeys.getKey(pair.old.keyId)).not.toBeNull();
+      expect(nameBindingsStore.listBindings()[0].keyId).toBe(pair.old.keyId);
+    },
+  );
+
+  test.each([false, true])(
+    'changed ownership during admission never welcomes a staged key, explicit conflict=%s',
+    async (explicit) => {
+      const pair = rotationPair();
+      vi.spyOn(persistedAgentKeys, 'confirmRotationKey').mockImplementation(() => {
+        if (explicit) throw new persistedAgentKeys.AgentKeyConflictError('ownership changed');
+        return undefined;
+      });
+      const ws = await trial(pair);
+      expect(JSON.parse(ws.sentMessages[0]).data.code).toBe(
+        explicit ? 'agent-name-claimed' : 'internal-error',
+      );
+      expect(persistedAgentKeys.getKey(pair.old.keyId)).not.toBeNull();
+      expect(nameBindingsStore.listBindings()[0].keyId).toBe(pair.old.keyId);
+    },
+  );
+
+  test('a failed durable handoff keeps the old key and binding intact', async () => {
+    const pair = rotationPair();
+    db.exec(
+      "CREATE TRIGGER reject_handoff BEFORE UPDATE ON name_bindings BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;",
+    );
+    const ws = await trial(pair);
+    expect(JSON.parse(ws.sentMessages[0]).data.code).toBe('internal-error');
+    expect(persistedAgentKeys.getKey(pair.old.keyId)).not.toBeNull();
+    expect(persistedAgentKeys.getKey(pair.next.keyId)?.rotationParentId).toBe(pair.old.keyId);
+    expect(nameBindingsStore.listBindings()[0].keyId).toBe(pair.old.keyId);
   });
 });

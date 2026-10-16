@@ -552,6 +552,71 @@ export const openApiPaths = {
       },
     },
   },
+  '/api/v1/agents/{name}/key-rotation': {
+    get: {
+      tags: ['Agents'],
+      summary: 'Get public managed signing key status',
+      operationId: 'getAgentKeyRotation',
+      description:
+        'Existing session access policy. API keys are rejected. Reports controller state without private credentials.',
+      parameters: [agentNamePathParam],
+      responses: {
+        200: jsonResponse('Public rotation status', {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            root_key_id: { type: 'string' },
+            current_key_id: { type: 'string' },
+            pending_key_id: { type: 'string' },
+            phase: { type: 'string', enum: ['idle', 'pending', 'awaiting-reconnect', 'aborted'] },
+          },
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API keys are not permitted'),
+        404: errorResponse('Agent not found'),
+      },
+    },
+    post: {
+      tags: ['Agents'],
+      summary: 'Rotate or abort an opted-in Portwing signing key',
+      operationId: 'changeAgentKeyRotation',
+      description:
+        'Existing session access policy. API keys and recovery-assurance writes are rejected. Edge 202 means a fresh signed reconnect is still pending. Check status after reconnect or an uncertain result.',
+      parameters: [agentNamePathParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['action'],
+              additionalProperties: false,
+              properties: { action: { type: 'string', enum: ['rotate', 'abort'] } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Completed Standard rotation or cancellation; public key IDs only', {
+          type: 'object',
+        }),
+        202: jsonResponse('Edge activation pending signed reconnect; public key IDs only', {
+          type: 'object',
+          properties: {
+            current_key_id: { type: 'string' },
+            pending_key_id: { type: 'string' },
+            phase: { type: 'string', enum: ['awaiting-reconnect'] },
+          },
+        }),
+        400: errorResponse('Provide exactly action rotate or abort'),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Credential management is not permitted'),
+        404: errorResponse('Agent not found'),
+        409: errorResponse('Managed rotation is disabled'),
+        502: errorResponse('Remote result could not be confirmed; check status before retrying'),
+      },
+    },
+  },
   '/api/v1/agents/{name}/log/entries': {
     get: {
       tags: ['Agents'],

@@ -268,6 +268,10 @@ export function disconnectByKeyId(keyId: string): number {
     // best-effort — see above
   }
 
+  return terminateKeySessions(keyId);
+}
+
+function terminateKeySessions(keyId: string): number {
   const sessions = liveSessionsByKeyId.get(keyId);
   const adapters = liveAdaptersByKeyId.get(keyId);
   liveAdaptersByKeyId.delete(keyId);
@@ -771,7 +775,15 @@ async function processHello(
   // Bind on first use; a name already bound to a DIFFERENT key is rejected.
   // A key that already owns the name (reconnect) is always admitted.
   const existingBinding = nameToKeyId.get(agentName);
-  if (existingBinding !== undefined && existingBinding.keyId !== pubKeyId) {
+  const rotationParentId = keyRecord.rotationParentId;
+  const intendedHandoff =
+    rotationParentId !== undefined &&
+    keyRecord.rotationAgentName === agentName &&
+    existingBinding?.keyId === rotationParentId;
+  if (
+    (rotationParentId !== undefined && !intendedHandoff) ||
+    (existingBinding !== undefined && existingBinding.keyId !== pubKeyId && !intendedHandoff)
+  ) {
     sendErrorAndClose(
       ws,
       'agent-name-claimed',
@@ -798,11 +810,32 @@ async function processHello(
     return;
   }
   inFlightAgents.add(agentName);
+  if (rotationParentId !== undefined) {
+    try {
+      if (keyStore.confirmRotationKey(pubKeyId, agentName) !== rotationParentId) {
+        throw new Error('Replacement key ownership changed');
+      }
+    } catch (error) {
+      inFlightAgents.delete(agentName);
+      const ownershipChanged = error instanceof agentKeys.AgentKeyConflictError;
+      sendErrorAndClose(
+        ws,
+        ownershipChanged ? 'agent-name-claimed' : 'internal-error',
+        'could not confirm key rotation',
+        ownershipChanged ? 1008 : 1011,
+      );
+      return;
+    }
+  }
   const bindingSeenAt = Date.now();
   nameToKeyId.set(agentName, { keyId: pubKeyId, lastSeenAt: bindingSeenAt });
   // Write-through to the durable store so this binding survives a restart —
   // see the nameToKeyId doc comment and rehydrateNameBindings().
-  nameBindingsStore.upsertBinding(agentName, pubKeyId, bindingSeenAt);
+  if (rotationParentId !== undefined) {
+    terminateKeySessions(rotationParentId);
+  } else {
+    nameBindingsStore.upsertBinding(agentName, pubKeyId, bindingSeenAt);
+  }
 
   // Step 10c: Flush the binding to disk NOW, but only for a brand-new binding
   // (existingBinding === undefined) — a reconnect under an already-owned name
@@ -866,6 +899,7 @@ async function processHello(
   };
 
   const adapter = new EdgeAgentAdapter(client, ws, {
+    keyId: pubKeyId,
     reconnected: existingBinding !== undefined,
     capabilities: Array.isArray(hello.capabilities)
       ? hello.capabilities.filter((value): value is string => typeof value === 'string')

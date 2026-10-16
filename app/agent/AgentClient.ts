@@ -66,6 +66,8 @@ import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+import { StandardKeyRotation } from './standard-key-rotation.js';
+import { createRotationRequest } from './standard-key-rotation-client.js';
 
 let controllerSbomStorage: SbomStorage | undefined;
 
@@ -93,6 +95,7 @@ export interface AgentClientConfig {
   signingkeyid?: string;
   // Required when authmode is 'ed25519': PEM-encoded PKCS#8 Ed25519 private key.
   signingkey?: string;
+  rotationdir?: string;
 }
 
 interface AgentClientRuntimeInfo {
@@ -305,6 +308,8 @@ export class AgentClient {
   private readonly axiosOptions: AxiosRequestConfig;
   // Parsed once at construction when authmode is 'ed25519'; undefined in token mode.
   private readonly ed25519PrivateKey?: KeyObject;
+  private readonly keyRotation?: StandardKeyRotation;
+  private rotationRecovery?: Promise<void>;
   public isConnected: boolean;
   /**
    * True only while this agent's components are being replaced — the span
@@ -353,6 +358,18 @@ export class AgentClient {
     this.axiosOptions = this.buildAxiosOptions();
     if (this.config.authmode === 'ed25519') {
       this.ed25519PrivateKey = this.loadSigningKey();
+    }
+    if (this.config.rotationdir) {
+      if (this.config.authmode !== 'ed25519') {
+        throw new Error('Managed key rotation requires Ed25519 authentication');
+      }
+      this.keyRotation = new StandardKeyRotation(
+        resolveConfiguredPath(this.config.rotationdir, {
+          label: `${name} signing credential directory`,
+        }),
+        name,
+        { keyId: this.config.signingkeyid as string, privatePem: this.config.signingkey as string },
+      );
     }
 
     this.isConnected = false;
@@ -567,15 +584,17 @@ export class AgentClient {
     path: string,
     data?: unknown,
   ): AxiosRequestConfig {
-    if (!this.ed25519PrivateKey || !this.config.signingkeyid) {
+    const privateKey = this.keyRotation?.identity.privateKey ?? this.ed25519PrivateKey;
+    const keyId = this.keyRotation?.identity.keyId ?? this.config.signingkeyid;
+    if (!privateKey || !keyId) {
       return this.axiosOptions;
     }
     const signedHeaders = signRequest({
       method,
       path,
       body: this.serializeBodyForSigning(data),
-      keyId: this.config.signingkeyid,
-      privateKey: this.ed25519PrivateKey,
+      keyId,
+      privateKey,
     });
     return {
       ...this.axiosOptions,
@@ -614,6 +633,20 @@ export class AgentClient {
     this.startSse();
   }
 
+  getSigningKeyRotationStatus() {
+    if (this.edgeAdapter) return this.edgeAdapter.getSigningKeyRotationStatus();
+    return this.keyRotation ? { enabled: true, ...this.keyRotation.status() } : { enabled: false };
+  }
+
+  async rotateSigningKey(action: 'rotate' | 'abort') {
+    if (this.edgeAdapter) return this.edgeAdapter.rotateSigningKey(action);
+    if (!this.keyRotation || this.stopped) {
+      throw new Error('Managed key rotation is not enabled or the agent is stopped');
+    }
+    const request = createRotationRequest(this.baseUrl, this.axiosOptions);
+    return action === 'abort' ? this.keyRotation.abort(request) : this.keyRotation.rotate(request);
+  }
+
   /**
    * Forward one Docker Engine API request through a standard or edge Portwing
    * connection. The exact origin-form target is preserved for Docker routing
@@ -627,6 +660,10 @@ export class AgentClient {
   ): Promise<DockerApiProxyResponse> {
     if (!target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {
       throw new Error('Docker API request target must be an origin-form path');
+    }
+    const decodedPath = decodeURIComponent(new URL(target, 'http://agent.invalid').pathname);
+    if (decodedPath.startsWith('/_portwing/auth/rotation')) {
+      throw new Error('The key rotation namespace is reserved for credential management');
     }
 
     if (this.edgeAdapter) {
@@ -1527,6 +1564,24 @@ export class AgentClient {
   }
 
   startSse() {
+    if (this.keyRotation?.hasPending) {
+      if (!this.rotationRecovery) {
+        this.rotationRecovery = this.rotateSigningKey('rotate')
+          .then(() => undefined)
+          .catch(() => {
+            this.log.warn('Managed signing key rotation is pending recovery');
+          })
+          .finally(() => {
+            this.rotationRecovery = undefined;
+            this.openSse();
+          });
+      }
+      return;
+    }
+    this.openSse();
+  }
+
+  private openSse() {
     if (this.stopped) {
       return;
     }

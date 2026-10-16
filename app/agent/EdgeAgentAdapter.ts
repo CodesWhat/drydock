@@ -14,6 +14,7 @@ import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
+import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
 
 const MAX_REQUEST_BODY_BYTES = 512 * 1024 * 1024;
@@ -111,6 +112,7 @@ export type WebSocketLike = {
 };
 
 export interface EdgeAgentAdapterOptions {
+  keyId?: string;
   capabilities?: string[];
   reconnected?: boolean;
 }
@@ -131,6 +133,7 @@ export function buildEdgeSentinelConfig(agentId: string): AgentClientConfig {
 }
 
 export class EdgeAgentAdapter {
+  private readonly keyRotation?: EdgeKeyRotationController;
   readonly supportsRequestBodyStream: boolean;
   private uploadingBytes = 0;
   private readonly client: AgentClient;
@@ -176,6 +179,14 @@ export class EdgeAgentAdapter {
     this.client = client;
     this.ws = ws;
     this.agentName = client.name;
+    if (options.keyId && options.capabilities?.includes('edge-key-rotation')) {
+      this.keyRotation = new EdgeKeyRotationController(
+        this.agentName,
+        options.keyId,
+        (method, target, body) => this.sendRequest(method, target, undefined, body),
+        () => this.ws.close(1012, 'key rotation'),
+      );
+    }
     this.reconnected = options.reconnected ?? false;
     this.execSessions = new Map();
     this.pendingRequests = new Map();
@@ -194,6 +205,16 @@ export class EdgeAgentAdapter {
       log.error(`WebSocket error on ${this.agentName}: ${getErrorMessage(err)}`);
       void this.onDisconnect();
     };
+  }
+
+  getSigningKeyRotationStatus() {
+    return this.keyRotation ? this.keyRotation.status() : { enabled: false as const };
+  }
+
+  async rotateSigningKey(action: 'rotate' | 'abort') {
+    if (this.disconnected) throw new Error('connection closed');
+    if (!this.keyRotation) throw new Error('Managed key rotation is not enabled');
+    return this.keyRotation.rotate(action);
   }
 
   /**

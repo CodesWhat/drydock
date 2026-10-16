@@ -536,3 +536,54 @@ Agent connections are driven entirely from the controller, so the controller log
 The agent also exposes an unauthenticated `GET /health` on its port: it returns `200` once at least one watcher is registered, or `503` with `{"status":"unhealthy","reason":"no watchers registered"}` otherwise. Use it for a compose `healthcheck` or an uptime probe.
 
 Still stuck? Set `DD_LOG_LEVEL=debug` on the controller for the full `agent-client` handshake trace, and open a [Q&A discussion](https://github.com/CodesWhat/drydock/discussions) with those lines.
+
+## Controller-assisted key rotation (development)
+
+Use matching Drydock and Portwing development builds for this feature. The
+published Portwing v1.0.0-rc.1 and Drydock v1.6.x releases do not include it.
+Rotation is off by default and does not rewrite deployment-owned bootstrap
+credentials.
+
+On Portwing, set `KEY_ROTATION_DIR` to persistent private storage with mode
+`0700`. Container images prepare `/data/credentials` owned by UID/GID `65532`;
+explicitly mount a named volume there and set the variable to that path. Bind
+mounts need correct ownership and mode on the host. This mount must remain
+writable when the container root filesystem is read-only. Back up managed
+storage as credentials and keep the bootstrap files mounted read-only.
+
+For a Standard agent, configure Ed25519 signing as usual and set
+`DD_AGENT_<name>_ROTATIONDIR` to a persistent controller-side directory with mode
+`0700`. Each agent/root pair gets a separate private `0600` file. Run one
+controller writer per directory. Portwing requires `AUTHORIZED_KEYS`; Drydock
+requires the corresponding signing key and ID. Drydock persists a new private
+key before preparing it remotely, proves it through a signed request, and
+retires the old key only after that proof. A lost commit response is reconciled
+with the durable staged key, including before SSE reconnects after restart.
+
+For an Edge agent, configure `PRIVATE_KEY_FILE` and a unique registered public
+key as usual. Only the agent needs `KEY_ROTATION_DIR`; Drydock uses its existing
+persistent SQLite store for public-key staging and name ownership. The agent
+generates its new private key locally. Drydock stages the public key for that
+agent's exact name, requests a reconnect, then retires the predecessor only
+after a fresh signed hello succeeds. Existing keys bound to multiple agent
+names cannot rotate. Reuse by an agent that has never connected cannot be
+detected, so always provision one key per agent. TLS continues to authenticate
+the controller.
+
+Trigger rotation through the [Agent API](/docs/api/agent#rotate-a-portwing-signing-key-development).
+Edge returns `202` while the signed reconnect is pending; confirm the new
+current ID after reconnect. No UI action or scheduled rotation is included.
+If proof fails, the old key remains active. Retry reuses the staged key; abort
+cancels only an uncommitted replacement. Preserve managed storage while
+recovering an uncertain result. After a local storage failure, restart the
+controller to reconcile its managed file before trying another rotation.
+A staged private key is checked and durably saved again before remote proof. After an Edge terminal handshake rejection,
+Portwing restores its old signer and retains the replacement for retry.
+
+For Standard mode, keep the original root line in Portwing's operator-owned
+`AUTHORIZED_KEYS`: managed replacements overlay that root. Remove the root and
+reload to revoke its descendants. Disabling managed rotation or deleting its
+state restores deployment bootstrap authority. After rotation that can break
+connectivity or re-enable an old key, so reset only as a coordinated operator
+recovery with trust updated at both ends. Revoked Edge public keys remain
+revoked in Drydock's store even when still present in its bootstrap keys file.
