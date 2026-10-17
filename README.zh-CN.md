@@ -37,6 +37,8 @@
 > [!WARNING]
 > **v1.8.0-rc.1 是需主动选择的测试版本。** 测试前请停止 Drydock 并备份整个存储目录。首次启动会将 JSON 数据导入 SQLite。降级需要恢复升级前的备份，仅写入 SQLite 的更改不会迁回。请参阅[迁移与弃用说明](DEPRECATIONS.md)。
 
+<!-- separate release and upgrade alerts -->
+
 > [!WARNING]
 > **从旧版本更新？首先阅读升级说明。** 三个安全强化修复程序首先在 **1.4.6** 中发布，并贯穿整个 **1.5** 系列，因此从早于 1.4.6 的版本进行更新的任何人都会受到影响，无论他们登陆的是哪个版本（1.4.6、任何 1.5.x 或更高版本）。它们不是弃用，也没有宽限期：OIDC 现在要求您的提供商的发现元数据中包含 `authorization_endpoint`，TCP 对等地址上未经身份验证的速率限制密钥（反向代理后面的共享存储桶），并且 HTTP 触发代理 URL 必须使用 `http(s)://`。更新前请参阅 **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)**。
 

@@ -37,6 +37,8 @@
 > [!WARNING]
 > **v1.8.0-rc.1 est une version de test facultative.** Arrêtez Drydock et sauvegardez tout le répertoire de stockage avant de la tester. Le premier démarrage importe les données JSON dans SQLite. Revenir à une ancienne version exige de restaurer la sauvegarde préalable ; les changements effectués uniquement dans SQLite ne sont pas repris. Voir [migration et dépréciations](DEPRECATIONS.md).
 
+<!-- separate release and upgrade alerts -->
+
 > [!WARNING]
 > **Vous effectuez une mise à jour à partir d'une ancienne version ? Lisez d'abord les notes de mise à niveau.** Trois correctifs de renforcement de la sécurité ont été livrés pour la première fois dans **1.4.6** et sont exécutés sur toute la ligne **1.5**, de sorte que toute mise à jour à partir d'une version antérieure à 1.4.6 est affectée quelle que soit la version sur laquelle elle atterrit (1.4.6, toute version 1.5.x ou ultérieure). Ce ne sont pas des dépréciations et n'ont pas de période de grâce : OIDC nécessite désormais `authorization_endpoint` dans les métadonnées de découverte de votre fournisseur, des clés de limitation de débit non authentifiées sur l'adresse homologue TCP (compartiment partagé derrière un proxy inverse) et les URL de proxy déclencheur HTTP doivent utiliser `http(s)://`. Voir **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)** avant la mise à jour.
 

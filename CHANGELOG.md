@@ -18,7 +18,6 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 This is the first public v1.8 candidate; v1.8 GA is not released. Some fixes listed here were already published on the v1.7 candidate train; their original release records are preserved below.
 
-
 ### Added
 
 - **Controller-assisted Portwing key rotation.** Drydock v1.8.0-rc.1 adds opt-in staged rotation for compatible Portwing development builds. Published Portwing v1.0.0-rc.1 does not implement the companion feature, so no compatible published Portwing version is claimed. Standard completion returns `200`; Edge `202` means waiting for reconnect, not completed rotation. Deployment-owned bootstrap credentials remain separate.

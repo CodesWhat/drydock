@@ -1,5 +1,5 @@
 {
-  "reason": "Replace published sample credentials with explicit placeholders. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs.",
+  "reason": "Replace published sample credentials with explicit placeholders, preserving both Google registry examples and their MDX spacing. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs.",
   "changes": [
     {
       "path": "configuration/authentications/oidc/index.mdx",
@@ -11,9 +11,9 @@
     {
       "path": "configuration/registries/gcr/index.mdx",
       "startLine": 40,
-      "endLine": 48,
-      "beforeSha256": "bcd1765b2d70fe23e9bfa9aa452f0d244928755dacaf2528832729e059b506a5",
-      "replacement": "      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY\n"
+      "endLine": 51,
+      "beforeSha256": "c64d48df4365c1366948bd244952e07c200f5ea0abc3efb86efe221cbcf859c5",
+      "replacement": "      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY \n```\n\n</Tab>\n<Tab value=\"Docker\">\n```bash\ndocker run \\\n  -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=\"johndoe@mysuperproject.iam.gserviceaccount.com\" \\\n  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=\"YOUR_SERVICE_ACCOUNT_PRIVATE_KEY\" \\\n  ...\n  codeswhat/drydock\n```\n\n"
     },
     {
       "path": "configuration/registries/docr/index.mdx",

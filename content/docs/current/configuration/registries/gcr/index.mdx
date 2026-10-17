@@ -37,10 +37,19 @@ services:
     ...
     environment:
       - DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=johndoe@mysuperproject.iam.gserviceaccount.com
-      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY
+      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY 
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="johndoe@mysuperproject.iam.gserviceaccount.com" \
+  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY="YOUR_SERVICE_ACCOUNT_PRIVATE_KEY" \
   ...
   codeswhat/drydock
 ```
+
 </Tab>
 </Tabs>
 

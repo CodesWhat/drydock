@@ -347,6 +347,11 @@ test('current and archived registry and trigger examples remain operational', ()
     const registryApi = read(`${root}/api/registry.mdx`);
     const triggers = read(`${root}/configuration/triggers/index.mdx`);
 
+    assert.match(gcr, /<Tab value="Docker Compose">[\s\S]*?```yaml[\s\S]*?<\/Tab>/u);
+    assert.match(gcr, /<Tab value="Docker">[\s\S]*?```bash[\s\S]*?docker run/u);
+    if (root === 'content/docs/current' || root === 'content/docs/v1.7') {
+      assert.equal(gcr.match(/YOUR_SERVICE_ACCOUNT_PRIVATE_KEY/gu)?.length, 2);
+    }
     assert.match(gcr, /Effective March 18, 2025/u);
     assert.doesNotMatch(gcr, /All `gcr\.io` traffic is now transparently served/u);
     assert.match(gcr, /Artifact Registry Reader \(`roles\/artifactregistry\.reader`\)/u);
