@@ -148,7 +148,7 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
     [...sourceFiles.map(([path]) => path), 'changelog/index.mdx'].sort(),
   );
   const errata = JSON.parse(readFileSync('content/docs/v1.7-errata.json', 'utf8'));
-  assert.equal(errata.changes.length, 14);
+  assert.equal(errata.changes.length, 15);
   assert.equal(new Set(errata.changes.map((entry) => entry.path)).size, 8);
   for (const [path, blob] of sourceFiles) {
     const changes = errata.changes.filter((entry) => entry.path === path);

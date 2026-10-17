@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import * as marketing from "../src/lib/site-content.ts";
 
 const heroSource = readFileSync(new URL("../src/components/hero.tsx", import.meta.url), "utf8");
 const siteContent = readFileSync(new URL("../src/lib/site-content.ts", import.meta.url), "utf8");
@@ -28,4 +29,16 @@ test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
   assert.match(milestone, /Landed:.*fleet.*bulk/i);
   assert.match(milestone, /Landed:.*SQLite/);
   assert.doesNotMatch(milestone, /status: "released"|Config file and API foundation/);
+});
+
+test("roadmap HEAD follows the active RC while retaining older candidates", () => {
+  assert.equal(typeof marketing.getRoadmapHead, "function");
+  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.1");
+  assert.equal(marketing.roadmap.find((item) => item.version === "v1.7.0-rc.24").status, "next");
+  assert.equal(
+    marketing.getRoadmapHead(marketing.roadmap.filter((item) => item.status === "released"))
+      .version,
+    "v1.6.1",
+  );
+  assert.equal(marketing.getRoadmapHead([]), undefined);
 });

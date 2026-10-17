@@ -351,6 +351,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.match(gcr, /<Tab value="Docker">[\s\S]*?```bash[\s\S]*?docker run/u);
     if (root === 'content/docs/current' || root === 'content/docs/v1.7') {
       assert.equal(gcr.match(/YOUR_SERVICE_ACCOUNT_PRIVATE_KEY/gu)?.length, 2);
+      assert.doesNotMatch(gcr, /^### .*\[[^\]]+\]\(https:/mu);
     }
     assert.match(gcr, /Effective March 18, 2025/u);
     assert.doesNotMatch(gcr, /All `gcr\.io` traffic is now transparently served/u);

@@ -409,3 +409,10 @@ export const roadmap: Milestone[] = [
     ],
   },
 ];
+
+export function getRoadmapHead(milestones: Milestone[] = roadmap): Milestone | undefined {
+  return (
+    milestones.findLast((milestone) => milestone.status === "next") ??
+    milestones.findLast((milestone) => milestone.status === "released")
+  );
+}

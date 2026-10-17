@@ -1,5 +1,5 @@
 {
-  "reason": "Replace published sample credentials with explicit placeholders, preserving both Google registry examples and their MDX spacing. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs.",
+  "reason": "Replace published sample credentials with explicit placeholders, preserve both Google registry examples and spacing, and move the Google service-account link outside its heading to prevent nested-anchor hydration failure. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs.",
   "changes": [
     {
       "path": "configuration/authentications/oidc/index.mdx",
@@ -98,6 +98,13 @@
       "endLine": 109,
       "beforeSha256": "b6d96bd9757e6818edbd54913888b41df18cec024e31bf22f9575ab9c33c8b95",
       "replacement": "  -e DD_REGISTRY_HUB_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/gcr/index.mdx",
+      "startLine": 57,
+      "endLine": 57,
+      "beforeSha256": "6f1f22c795d86fd89b0b840ced35315b12cad45105b18d9bfeaf16bd4aa59cd9",
+      "replacement": "### 1. Go to the Service Account page {#1-go-to-theservice-account-page}\n\n[Open the Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts).\n"
     }
   ]
 }
