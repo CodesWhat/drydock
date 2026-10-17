@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { parse as parseYaml } from 'yaml';
 
 const RC_VERSION = '1.8.0-rc.1';
 const PREV_RC_VERSION = '1.7.0-rc.24';
@@ -27,6 +28,26 @@ test('the current self-tracking example stays on the v1.8 release-candidate trai
   }
   for (const candidate of ['latest', '1.6.1', '1.7.0-rc.24', '1.8.0', '1.9.0-rc.1']) {
     assert.ok(!filter.test(candidate), `self-tracking must stay off ${candidate}`);
+  }
+});
+
+test('self-update examples allow manual updates within the candidate train', () => {
+  const guide = read('content/docs/current/configuration/self-update/index.mdx');
+  const examples = [...guide.matchAll(/```yaml\n([\s\S]*?)\n```/gu)]
+    .map((match) => parseYaml(match[1]).services?.drydock)
+    .filter(Boolean);
+  assert.equal(examples.length, 3);
+  for (const example of examples) {
+    assert.equal(example.image, `codeswhat/drydock:${RC_VERSION}`);
+    assert.ok((example.labels ?? []).includes('dd.action.include=local'));
+    assert.ok(example.environment.includes('DD_ACTION_DOCKER_LOCAL_PRUNE=true'));
+    assert.ok(example.environment.includes('DD_ACTION_DOCKER_LOCAL_AUTO=onauto'));
+    const pattern = example.labels.find((label) => label.startsWith('dd.tag.include='));
+    assert.ok(pattern, 'self-update must opt into candidate tag discovery');
+    const filter = new RegExp(pattern.slice('dd.tag.include='.length).replaceAll('$$', '$'), 'u');
+    assert.ok(filter.test('1.8.0-rc.2'));
+    assert.ok(!filter.test('1.8.0'));
+    assert.ok(!filter.test('1.9.0-rc.1'));
   }
 });
 

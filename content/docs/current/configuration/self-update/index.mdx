@@ -18,6 +18,8 @@ Drydock detects when its own container image has an update available, just like 
 - The Docker trigger must be enabled
 - Drydock must be able to create temporary helper containers
 
+The examples below pin the opt-in `1.8.0-rc.1` image and explicitly discover newer `1.8.0-rc.N` tags. Their `local` Docker action uses `AUTO=onauto` with `dd.action.include=local`, so self-updates are manually available and automatic installs remain opt-in through `dd.action.auto=local`. Other update eligibility and security gates still apply. See [action execution policy](/docs/configuration/triggers#common-trigger-configuration).
+
 <Callout type="warn">Lifecycle hooks (`dd.hook.pre` / `dd.hook.post`) are NOT executed during self-update.</Callout>
 
 <Callout type="info">When self-update cannot run (socket not bind-mounted and no TCP watcher configured), the per-container Update button is locked with a **Self-update unavailable** tooltip and `POST /api/v1/containers/:id/update` returns `409`.</Callout>
@@ -135,9 +137,15 @@ services:
 
   drydock:
     image: codeswhat/drydock:1.8.0-rc.1
+    labels:
+      - dd.watch=true
+      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
+      - dd.action.include=local
     environment:
       - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_AUTO=onauto
     volumes:
       - drydock-data:/store
 ```
@@ -176,8 +184,11 @@ services:
     container_name: drydock
     labels:
       - dd.watch=true
+      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
+      - dd.action.include=local
     environment:
       - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_AUTO=onauto
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - drydock-data:/store
@@ -200,10 +211,13 @@ services:
     container_name: drydock
     labels:
       - dd.watch=true
+      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
+      - dd.action.include=local
     environment:
       - DD_WATCHER_LOCAL_HOST=my-docker-host
       - DD_WATCHER_LOCAL_PORT=2375
       - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_AUTO=onauto
     volumes:
       - drydock-data:/store
     ports:
