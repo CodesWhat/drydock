@@ -110,6 +110,8 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+          SOAK_OVERRIDE_REASON: ${{ inputs.soak_override_reason }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -190,6 +192,24 @@ jobs:
             first_line="$(printf '%s\n' "${source_line}" "${main_line}" | sort -V | head -1)"
             if [ "${first_line}" != "${source_line}" ]; then
               echo "::error::Retained minor GA line ${source_line} must be older than main's ${main_line}."
+              exit 1
+            fi
+            if [ -n "${SOAK_OVERRIDE_REASON}" ]; then
+              echo "::error::Retained minor GA requires the full seven-day soak; soak_override_reason is not supported on this path."
+              exit 1
+            fi
+            # This path is for a pending initial GA while the new line is an
+            # RC. Refuse publication once any newer GA exists rather than move
+            # stable minor/major/latest tags back to this older candidate.
+            newer_ga="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq -sr --arg release "${RELEASE_TAG}" '
+                  add
+                  | map(select(.draft == false and .prerelease == false and .published_at != null)
+                      | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")))
+                  | any(.[]; (.tag_name | ltrimstr("v") | split(".") | map(tonumber))
+                      > ($release | ltrimstr("v") | split(".") | map(tonumber)))')"
+            if [ "${newer_ga}" = "true" ]; then
+              echo "::error::A newer GA is already published; refusing a retained promotion that would roll stable tags back."
               exit 1
             fi
             {
@@ -529,6 +549,28 @@ jobs:
           max-attempts: '18'
           sleep-seconds: '300'
           allow-dispatch-events: ${{ steps.source_ref.outputs.source_branch != '' }}
+
+      - name: Wait for successful retained metadata CI
+        if: steps.source_ref.outputs.is_retained_ga == 'true'
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
+          target-sha: ${{ steps.target.outputs.sha }}
+          max-attempts: '18'
+          sleep-seconds: '300'
+          allow-dispatch-events: 'true'
+
+      - name: Wait for successful retained metadata E2E Playwright
+        if: steps.source_ref.outputs.is_retained_ga == 'true'
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
+          target-sha: ${{ steps.target.outputs.sha }}
+          max-attempts: '18'
+          sleep-seconds: '300'
+          allow-dispatch-events: 'true'
 
       - name: Checkout exact release source
         env:
